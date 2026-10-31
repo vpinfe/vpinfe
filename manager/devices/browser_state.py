@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from common.host import frontend_browser
 from common.i18n import t
-from manager.kit import panel
+from manager.kit import panel, states
 
 # `plays` is not here: the normal case draws nothing.
 STATES = {
@@ -19,6 +20,25 @@ STATES = {
     "unknown": {"label": t("manager.devices.browser_not_checked"), "tier": "unknown",
                 "why": t("manager.devices.browser_checked_when")},
 }
+
+
+def _one(key: str, tone: str) -> states.State:
+    return states.State(key, STATES[key]["label"], STATES[key]["why"], tone=tone)
+
+
+# The grid draws every row, so unlike `STATES` it has the normal case: Plays is a tick.
+TABLE = states.Table(
+    covers=t("manager.devices.browser.help"),
+    states=(
+        states.State(frontend_browser.PLAYS, t("manager.devices.browser_plays"),
+                     t("manager.devices.browser_plays.help"), glyph=states.TICK),
+        _one(frontend_browser.NO_H264, states.WARN),
+        _one(frontend_browser.NO_VIDEO, states.BAD),
+        _one(frontend_browser.NO_BROWSER, states.BAD),
+        states.State(frontend_browser.UNKNOWN, STATES[frontend_browser.UNKNOWN]["label"],
+                     STATES[frontend_browser.UNKNOWN]["why"], glyph=states.UNKNOWN)),
+    blank=states.State("", t("manager.devices.browser_unreported"),
+                       t("manager.devices.browser_unreported.help")))
 
 
 def value(name: str, state: str, unnamed: str) -> Any:

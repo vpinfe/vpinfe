@@ -26,7 +26,18 @@ from common.games.collection_store import (
 )
 from common.i18n import t
 from manager.extensions import ext_lists
-from manager.kit import confirm, grid, offload, panel, rename, thumbnails, verbs, views, walks
+from manager.kit import (
+    confirm,
+    grid,
+    offload,
+    panel,
+    rename,
+    states,
+    thumbnails,
+    verbs,
+    views,
+    walks,
+)
 from manager.kit.on_page import on_page
 from manager.library import collection_adds
 from manager.library.games import view_control
@@ -87,6 +98,22 @@ _GAMES = (
     " return said + chip(d.missing_said) + chip(d.hidden_said); }"
 )
 
+MENU_IN, ATTENTION_NEEDED = "in", "needed"
+
+IN_MENU = states.Table(
+    covers=t("manager.collections.in_menu.help"),
+    states=(states.State(MENU_IN, t("manager.collections.in_menu"),
+                         t("manager.collections.in_menu.meaning"), glyph=states.TICK),),
+    blank=states.State("", t("manager.collections.out_menu"),
+                       t("manager.collections.out_menu.meaning")))
+
+ATTENTION = states.Table(
+    covers=t("manager.collections.needs_attention.help"),
+    states=(states.State(ATTENTION_NEEDED, t("manager.collections.needs_attention"),
+                         t("manager.collections.attention.meaning"), tone=states.WARN),),
+    blank=states.State("", t("manager.collections.in_order"),
+                       t("manager.collections.in_order.meaning")))
+
 COLUMNS = [
     grid.identifier("name", t("word.name"), 240, pinned="left",
                     help=t("manager.collections.name.help"),
@@ -119,20 +146,8 @@ COLUMNS = [
                 help=t("manager.collections.missing.help")),
     grid.column("hidden", t("word.hidden"), **_NUMERIC,
                 help=t("manager.collections.hidden.help")),
-    grid.column("in_frontend", t("manager.collections.in_menu"),
-                help=t("manager.collections.in_menu.help"),
-                **{":valueFormatter": "params => params.value ? '\u2713' : ''",
-                   "cellClass": "manager-tick", ":cellRenderer": None,
-                   **grid.choice_filter([{"value": True, "label": t("word.yes")},
-                                         {"value": False, "label": t("word.no")}],
-                                        formatted=True)}),
-    grid.column("attention", t("manager.collections.needs_attention"),
-                help=t("manager.collections.needs_attention.help"),
-                **{":valueFormatter": "params => params.value ? '\u2713' : ''",
-                   "cellClass": "manager-tick", ":cellRenderer": None,
-                   **grid.choice_filter([{"value": True, "label": t("word.yes")},
-                                         {"value": False, "label": t("word.no")}],
-                                        formatted=True)}),
+    IN_MENU.column("in_menu", t("manager.collections.in_menu"), 110),
+    ATTENTION.column("attention", t("manager.collections.needs_attention"), 150),
 ]
 
 # Keeps the All Games row first however the grid is sorted.
@@ -174,7 +189,7 @@ COLLECTION_VIEWS: dict[str, list[str] | views.Preset] = {
         help=t("manager.view.collections_everything.help")),
     "manager.collections.needs_attention": views.Preset(
         columns=("name", "kind", "count", "added", "matched", "excluded", "missing", "hidden"),
-        filters={"attention": {"values": [True]}},
+        filters={"attention": {"values": [ATTENTION_NEEDED]}},
         help=t("manager.view.collections_needs_attention.help")),
 }
 
@@ -215,9 +230,10 @@ def rows(collections: list[dict[str, Any]], opens_on: str = "",
             "excluded": excluded,
             "missing": missing,
             "hidden": hidden,
-            "attention": bool(missing or hidden or excluded),
+            "attention": ATTENTION_NEEDED if missing or hidden or excluded else "",
             "opens_on": bool(opens_on) and row.get("name") == opens_on,
             "in_frontend": row.get("in_frontend") is not False,
+            "in_menu": MENU_IN if row.get("in_frontend") is not False else "",
             "unsaved": row.get("name") in unsaved,
             "order": _order_line(row),
             "limit": row.get("limit") or None,
@@ -235,7 +251,7 @@ def all_games_row(count: int, opens_on: str = "") -> dict[str, Any]:
     return {"id": BUILTIN_ALL, "name": t("manager.collections.all_games"), "kind": "",
             "count": count, "games_said": str(count), "missing_said": "", "hidden_said": "",
             "added": 0, "matched": 0, "excluded": 0, "missing": 0, "hidden": 0,
-            "attention": False, "opens_on": not opens_on, "in_frontend": True,
+            "attention": "", "opens_on": not opens_on, "in_frontend": True, "in_menu": MENU_IN,
             "unsaved": False, "order": "", "limit": None, "pinned": True, "_raw": {}}
 
 

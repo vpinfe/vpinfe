@@ -101,10 +101,10 @@ class MatchedColumn(unittest.TestCase):
 
         self.assertEqual("no", row[discovery.HELD])
 
-    def test_it_is_blank_until_the_library_is_counted(self) -> None:
+    def test_it_is_not_compared_until_the_library_is_counted(self) -> None:
         row = _row(_entry(releases={"tableFiles": [_release("t1", held=True)]}), counted=False)
 
-        self.assertEqual("", row[discovery.HELD])
+        self.assertEqual("not_compared", row[discovery.HELD])
 
     def test_rows_of_reads_what_the_launchers_play(self) -> None:
         library = mock.Mock(spec=Library)
@@ -155,13 +155,14 @@ class KindColumns(unittest.TestCase):
 
         self.assertEqual("", row["kind_backglass"])
 
-    def test_every_kind_is_blank_until_the_library_is_counted(self) -> None:
+    def test_every_kind_is_not_compared_until_the_library_is_counted(self) -> None:
         row = _row(_entry(releases={"tableFiles": [_release("t1", held=True)]},
                           held=["tableFiles"]), counted=False)
 
-        self.assertEqual({""}, {row[field] for field in discovery._KIND_FIELDS})
+        self.assertEqual({"not_compared", ""}, {row[field] for field in discovery._KIND_FIELDS})
+        self.assertEqual(("not_compared", ""), (row["kind_table"], row["kind_pov"]))
 
-    def test_each_kind_column_filters_on_its_three_states_with_a_row_each_in_the_tooltip(
+    def test_each_kind_column_filters_on_its_states_with_a_line_each_in_the_tooltip(
             self) -> None:
         by_field = {one["field"]: one for one in discovery.COLUMNS}
 
@@ -169,13 +170,15 @@ class KindColumns(unittest.TestCase):
             with self.subTest(field):
                 column = by_field[field]
                 choices = column["filterParams"]["choices"]
-                self.assertEqual(["matched", "unmatched", "missing"],
+                self.assertEqual(["matched", "unmatched", "missing", "not_compared", ""],
                                  [one["value"] for one in choices])
-                self.assertEqual(["Matched", "Unmatched", "Missing"],
+                self.assertEqual(["Matched", "Unmatched", "Missing", "Not Compared Yet",
+                                  "Not Listed"],
                                  [one["label"] for one in choices])
                 rows = column["headerTooltip"].split("\n")
-                self.assertEqual(["Matched", "Unmatched", "Missing", "Blank"],
-                                 [one.split(":")[0] for one in rows[1:]])
+                self.assertEqual(["Matched", "Unmatched", "Missing", "Not Compared Yet",
+                                  "Not Listed"],
+                                 [one.split(" - ")[0] for one in rows[1:]])
 
     def test_no_kind_has_a_column_of_its_own_for_what_is_held(self) -> None:
         fields = {one["field"] for one in discovery.COLUMNS}
@@ -230,12 +233,12 @@ class TheColumnsAreNoViewsOwn(unittest.TestCase):
 
         self.assertIn("kind_backglass", view.columns)
 
-    def test_all_are_yes_or_no(self) -> None:
-        for field in (discovery.PLAYABLE, discovery.HELD):
+    def test_each_filters_on_yes_and_no_then_what_it_cannot_say(self) -> None:
+        for field, last in ((discovery.PLAYABLE, [""]), (discovery.HELD, ["not_compared"])):
             with self.subTest(field):
                 column = next(one for one in discovery.COLUMNS if one["field"] == field)
                 choices = column["filterParams"]["choices"]
-                self.assertEqual(["yes", "no"], [one["value"] for one in choices])
+                self.assertEqual(["yes", "no", *last], [one["value"] for one in choices])
 
 
 class OpenInGridCarries(unittest.TestCase):

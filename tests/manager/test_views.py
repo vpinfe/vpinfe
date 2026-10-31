@@ -63,8 +63,20 @@ class GameRowTests(unittest.TestCase):
 
         rows = library.game_rows()
 
-        self.assertEqual([row["vps_unmatched"] for row in rows],
-                         [False, True, True])
+        self.assertEqual([row["vps_match"] for row in rows],
+                         ["matched", "unmatched", "unmatched"])
+
+    def test_a_cleared_match_is_not_the_same_as_none_made(self) -> None:
+        library = data.Library.__new__(data.Library)
+        library.games = [{"id": "g1", "name": "A", "vps_id": "",
+                          "overrides": {"alt_vps_id": None}},
+                         {"id": "g2", "name": "B", "vps_id": "",
+                          "overrides": {"alt_vps_id": ""}}]
+        library.media = {}
+
+        rows = library.game_rows()
+
+        self.assertEqual([row["vps_match"] for row in rows], ["cleared", "unmatched"])
 
 
 class UnmatchedColumnTests(unittest.TestCase):
@@ -73,22 +85,19 @@ class UnmatchedColumnTests(unittest.TestCase):
     def _column(self, field: str) -> dict:
         return next(one for one in games.COLUMNS if one["field"] == field)
 
-    def test_the_funnel_offers_the_pair_notable_first(self) -> None:
-        """Unmatched first, because that is the state somebody comes here to find -
-        and because every pair in this vocabulary reads that way."""
-        choices = self._column("vps_unmatched")["filterParams"]["choices"]
+    def test_the_funnel_offers_every_state_most_in_place_first(self) -> None:
+        choices = self._column("vps_match")["filterParams"]["choices"]
 
-        self.assertEqual([one["label"] for one in choices],
-                         list(game_tables.VPS_WORDS))
-        self.assertEqual([one["value"] for one in choices], [True, False])
+        self.assertEqual([(one["value"], one["label"]) for one in choices],
+                         [("matched", "Matched"), ("cleared", "Cleared"),
+                          ("unmatched", "Unmatched")])
 
-    def test_only_the_unmatched_cell_carries_a_word(self) -> None:
-        """A word on every row would say nothing. The formatter is JavaScript, so
-        this asserts the shape rather than running it."""
-        drawn = self._column("vps_unmatched")[":valueFormatter"]
+    def test_every_row_draws_its_state(self) -> None:
+        """The formatter is JavaScript, so this asserts the shape rather than running it."""
+        drawn = self._column("vps_match")[":valueFormatter"]
 
-        self.assertIn(f'"{game_tables.VPS_WORDS[0]}"', drawn)
-        self.assertNotIn(game_tables.VPS_WORDS[1], drawn)
+        for word in ("Matched", "Cleared", "Unmatched"):
+            self.assertIn(f'"{word}"', drawn)
 
     def test_the_column_click_opens_a_section_that_exists(self) -> None:
         """The click is only worth taking if it lands somewhere - a section key that
@@ -424,8 +433,16 @@ class TagRowTests(unittest.TestCase):
                               {"name": "VR", "games": 0, "tables": 2},
                               {"name": "Wide Body", "games": 2, "tables": 0}]).tag_rows()
 
-        self.assertEqual({"Someday": True, "VR": False, "Wide Body": False},
-                         {r["tag"]: r["unused"] for r in rows})
+        self.assertEqual({"Someday": data.TAG_UNUSED, "VR": data.TAG_IN_USE,
+                          "Wide Body": data.TAG_IN_USE},
+                         {r["tag"]: r["use"] for r in rows})
+
+    def test_a_tag_spelled_two_ways_says_so_and_the_others_say_one(self) -> None:
+        rows = self._library([{"name": "Sci-Fi", "games": 1}, {"name": "sci-fi", "games": 1},
+                              {"name": "VR", "games": 1}]).tag_rows()
+
+        self.assertEqual({"Sci-Fi": data.TAG_TWO, "sci-fi": data.TAG_TWO, "VR": data.TAG_ONE},
+                         {r["tag"]: r["spelling"] for r in rows})
 
     def test_every_tag_view_filters_on_a_column_the_grid_has(self) -> None:
         from manager.library import tageditor
@@ -469,7 +486,7 @@ class ArrivalTests(unittest.TestCase):
     FIELDS = [definition["field"] for definition in games.COLUMNS]
     SORT = ({"colId": "name", "sort": "asc", "sortIndex": 0},)
     VIEW = views.View(id="v", name="Mine", columns=("name", "year"), sort=SORT)
-    ARRIVED = ("name", "year", "vps_unmatched")
+    ARRIVED = ("name", "year", "vps_match")
 
     def _baseline(self):
         return views.arrived(self.VIEW, games.UNMATCHED, self.FIELDS)

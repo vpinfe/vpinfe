@@ -28,7 +28,18 @@ from common.devices import install_identity
 from common.failures import why
 from common.i18n import t
 from manager.backups import backup_rows
-from manager.kit import busy, confirm, folder_picker, grid, offload, panel, verbs, views, walks
+from manager.kit import (
+    busy,
+    confirm,
+    folder_picker,
+    grid,
+    offload,
+    panel,
+    states,
+    verbs,
+    views,
+    walks,
+)
 from manager.kit import dialog as frame
 from manager.kit.data import Library
 from manager.kit.failed_together import Failures
@@ -38,13 +49,20 @@ logger = logging.getLogger("vpinfe.manager.frontend.launchers")
 
 SCOPE = "manager.launchers.columns"
 
-STATE_READY = ""
-STATE_OFF = "manager.launchers.switched_off"
-STATE_MISSING = "manager.launchers.program_missing"
-STATE_NO_PROGRAM = "manager.launchers.no_program"
+STATE_READY, STATE_OFF, STATE_MISSING, STATE_NO_PROGRAM = "ready", "off", "missing", "no_program"
 
-_STATE_CHOICES = [{"value": one, "label": one}
-                  for one in (t(STATE_NO_PROGRAM), t(STATE_MISSING), t(STATE_OFF))]
+# Switched Off is a choice; the two below it are launchers that cannot run their tables.
+STATES = states.Table(
+    covers=t("manager.launchers.state.help"),
+    states=(
+        states.State(STATE_READY, t("manager.launchers.ready"),
+                     t("manager.launchers.state.ready"), glyph=states.TICK),
+        states.State(STATE_OFF, t("manager.launchers.switched_off"),
+                     t("manager.launchers.state.off"), tone=states.QUIET),
+        states.State(STATE_NO_PROGRAM, t("manager.launchers.no_program"),
+                     t("manager.launchers.state.no_program"), tone=states.BAD),
+        states.State(STATE_MISSING, t("manager.launchers.program_missing"),
+                     t("manager.launchers.state.missing"), tone=states.BAD)))
 
 _NUMERIC: dict[str, Any] = {"type": "numericColumn", "filter": "agNumberColumnFilter"}
 
@@ -53,8 +71,7 @@ COLUMNS: list[dict[str, Any]] = [
                     help=t("manager.launchers.name.help")),
     grid.column("tables", t("manager.launchers.tables"),
                 help=t("manager.launchers.tables.help"), **_NUMERIC),
-    grid.column("state", t("word.state"), 150, **grid.choice_filter(_STATE_CHOICES),
-                help=t("manager.launchers.state.help")),
+    STATES.column("state", t("word.state"), 150),
     grid.column("default", t("word.default"), 110,
                 help=t("manager.launchers.default.help")),
     grid.column("app", t("word.runs"), 180, help=t("manager.launchers.app.help")),
@@ -94,7 +111,7 @@ def rows(held: list[dict], defaults: dict,
         "name": one["display_name"],
         "tables": int((plays or {}).get(one["launcher_id"]) or 0),
         "app": one["app_name"],
-        "state": t(found) if (found := state_of(one)) else "",
+        "state": state_of(one),
         # Blank on every other row rather than "No": a column that says the same thing
         # everywhere but once is a column about the exception.
         "default": t("word.default") if defaults.get(one["app"]) ==
@@ -112,7 +129,7 @@ def launcher_offer(held: list[dict], app: str, named: str = "") -> list[dict[str
                + [one for one in shown if one.get("app") != app])
     return [{"id": one["launcher_id"], "name": one["display_name"],
              "other": one.get("app") != app,
-             "mark": (t(STATE_OFF) if not one.get("enabled")
+             "mark": (STATES.word(STATE_OFF) if not one.get("enabled")
                       else t("word.default") if one.get("app") == app and one.get("is_default")
                       else "")}
             for one in ordered]

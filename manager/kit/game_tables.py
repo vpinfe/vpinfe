@@ -95,6 +95,9 @@ DEFAULT_WORDS = {
 # One name and one direction per fact, read by the column, the panel, the funnel and the
 # row menu. Notable is first; docs/conventions.md has why.
 HIDDEN_WORDS = (t("word.hidden"), t("manager.game_tables.offered"))
+# What a grid row holds where a game or table is hidden or private, and "" where it is not:
+# the grid draws the token as its word.
+HIDDEN_CELL, PRIVATE_CELL = "hidden", "private"
 FILE_WORDS = (t("manager.game_tables.missing"), t("word.present"))
 # Which script runs, not how the file got there: VPX loads a `<table>.vbs` sidecar in
 # place of the one inside the .vpx, so the sidecar is an override and "Extracted" named
@@ -106,10 +109,22 @@ SCRIPT_WORDS = (t("manager.game_tables.external"), t("manager.game_tables.intern
 # Three-valued, so the unknown has its own word: a table nothing has parsed cannot be
 # called ready and has not been found wanting either.
 LAUNCH_WORDS = (t("manager.game_tables.blocked"), t("word.ready"))
-# Whether the catalog knows this machine. Notable first, and unmatched is the notable
-# half by a long way - a matched game is the ordinary case, and it is the unmatched one
-# that can look nothing up: no art, no release list, no update.
-VPS_WORDS = (t("manager.game_tables.unmatched"), t("manager.game_tables.matched"))
+# What a game's match to VPS is: made, deliberately declined, or not made.
+VPS_MATCHED, VPS_CLEARED, VPS_UNMATCHED = "matched", "cleared", "unmatched"
+VPS_SHARED = "shared"
+ASSET_PRESENT, ASSET_MISSING = "present", "missing"
+
+
+def vps_match(game: dict[str, Any]) -> str:
+    """The token for a game's match to VPS. A cleared match is the user saying there is
+    none, which `alt_vps_id` holds as null."""
+    if game.get("vps_id"):
+        return VPS_MATCHED
+    if (game.get("overrides") or {}).get("alt_vps_id", "") is None:
+        return VPS_CLEARED
+    return VPS_UNMATCHED
+
+
 # Whether a game is kept from every community service. Private is the notable half.
 COMMUNITY = t("manager.game_tables.community")
 PRIVATE_WORDS = (t("manager.game_tables.private"), t("manager.game_tables.not_private"))

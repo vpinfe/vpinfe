@@ -32,7 +32,7 @@ from manager.kit import (
     grid,
     offload,
     panel,
-    renderers,
+    states,
     thumbnails,
     verbs,
     views,
@@ -51,23 +51,32 @@ SCOPE = "manager.themes.columns"
 
 ACTIVE, UPDATE, INSTALLED, AVAILABLE = "active", "update", "installed", "available"
 
-# What each state is called, and the tier of the ones worth noticing.
-STATES = {
-    ACTIVE: {"label": t("manager.themes.active"), "tier": "on"},
-    UPDATE: {"label": t("manager.themes.update_available"), "tier": "warn"},
-    INSTALLED: {"label": t("word.installed")},
-    AVAILABLE: {"label": t("manager.themes.not_installed")},
-}
+STATUS = states.Table(
+    covers=t("manager.themes.status.help"),
+    states=(
+        states.State(ACTIVE, t("manager.themes.active"), t("manager.themes.status.active"),
+                     tone=states.ACCENT),
+        states.State(UPDATE, t("manager.themes.update_available"),
+                     t("manager.themes.status.update"), tone=states.WARN),
+        states.State(INSTALLED, t("word.installed"), t("manager.themes.status.installed")),
+        states.State(AVAILABLE, t("manager.themes.not_installed"),
+                     t("manager.themes.status.available"), tone=states.QUIET)))
 
 # The two ways a theme that is not from the VPinFE Theme List is marked: stopped until it is
-# accepted, and accepted. A theme from the list has neither.
+# accepted, and unofficial. A theme from the list has neither and is Listed.
 UNACCEPTED, UNOFFICIAL = "unaccepted", "unofficial"
-TRUST = {
-    UNACCEPTED: {"label": t("manager.themes.not_accepted"), "tier": "bad",
-                 "why": t("manager.themes.unofficial_tip")},
-    UNOFFICIAL: {"label": t("manager.themes.unofficial"), "tier": "warn",
-                 "why": t("manager.themes.unofficial_tip")},
-}
+TRUST = states.Table(
+    covers=t("manager.themes.trust.help"),
+    states=(
+        states.State(UNACCEPTED, t("manager.themes.not_accepted"),
+                     t("manager.themes.trust.not_accepted"), tone=states.BAD),
+        states.State(UNOFFICIAL, t("manager.themes.unofficial"),
+                     t("manager.themes.trust.unofficial"), tone=states.WARN)),
+    blank=states.State("", t("manager.themes.trust.listed"),
+                       t("manager.themes.trust.listed.help")))
+
+# The panel's chip colors, which are the tiers `panel.state` names.
+_PANEL_TIER = {ACTIVE: "on", UPDATE: "warn", UNACCEPTED: "bad", UNOFFICIAL: "warn"}
 
 # What a theme says it is made for.
 MADE_FOR = {"cab": t("manager.themes.cabinet"), "desktop": t("manager.themes.desktop"),
@@ -80,14 +89,8 @@ COLUMNS: list[dict[str, Any]] = [
     grid.identifier("name", t("manager.themes.theme"), 320, subtitle="said",
                     help=t("manager.themes.theme.help"),
                     picture="preview", glyph=theme_card.GLYPH, frame=thumbnails.PREVIEW),
-    grid.column("status", t("word.status"), 150, help=t("manager.themes.status.help"),
-                **grid.choice_filter([{"value": key, "label": one["label"]}
-                                      for key, one in STATES.items()], formatted=True),
-                **renderers.drawable("state", states=STATES)),
-    grid.column("trust", t("manager.themes.trust"), 140, help=t("manager.themes.trust.help"),
-                **grid.choice_filter([{"value": key, "label": one["label"]}
-                                      for key, one in TRUST.items()], formatted=True),
-                **renderers.drawable("state", states=TRUST)),
+    STATUS.column("status", t("word.status"), 160),
+    TRUST.column("trust", t("manager.themes.trust"), 140),
     grid.column("updated", t("manager.themes.updated"), 150,
                 help=t("manager.themes.updated.help"), **when.cell("updated")),
     grid.column("made_for", t("manager.themes.made_for"), 150,
@@ -497,7 +500,7 @@ _STATUS_HINTS = {
 
 def _status_value(context: dict[str, Any], library: Library,
                   theme: dict[str, Any]) -> Callable[[], None]:
-    state_of = STATES[status(theme)]
+    kind = status(theme)
 
     async def again() -> None:
         await changed(context)
@@ -506,7 +509,7 @@ def _status_value(context: dict[str, Any], library: Library,
 
     def draw() -> None:
         with ui.row().classes("items-center gap-2 no-wrap"):
-            panel.state(state_of["label"], state_of.get("tier", "off"))()
+            panel.state(STATUS.word(kind), _PANEL_TIER.get(kind, "off"))()
             if waiting is not None:
                 panel.action(waiting.label, waiting.run, icon=waiting.icon, inline=True,
                              hint=t(_STATUS_HINTS.get(waiting.icon, "")))()
@@ -516,12 +519,13 @@ def _status_value(context: dict[str, Any], library: Library,
 def _trust_value(theme: dict[str, Any]) -> Callable[[], None]:
     """The chip a theme carries when it is not from the VPinFE Theme List, with where it
     comes from beside it."""
-    look = TRUST[trust_state(theme)]
+    kind = trust_state(theme)
     trust = theme.get("trust") or {}
     where = (str(trust.get("source_name") or "")
              or (repo_name(str(trust["source"])) if trust.get("source") else "")
              or t("manager.themes.in_folder"))
-    return panel.state(look["label"], look["tier"], beside=where, hint=look["why"])
+    return panel.state(TRUST.word(kind), _PANEL_TIER[kind], beside=where,
+                       hint=t("manager.themes.unofficial_tip"))
 
 
 async def settings_section(context: dict[str, Any]) -> None:

@@ -281,11 +281,11 @@ class BrowseViewTests(unittest.TestCase):
             {**self.FOUND, "rows": [FOUND["rows"][0]]})}
         self.assertEqual(alone["h1"][discovery.OTHER_HELD], discovery.NO)
 
-    def test_the_column_is_blank_until_the_library_is_compared(self) -> None:
+    def test_the_column_is_not_compared_until_the_library_is_compared(self) -> None:
         rows = discovery.rows({**self.FOUND, "counted": ""}, discovery_kept(), self.MARKS,
                               self.PLAYS)
 
-        self.assertEqual({row[discovery.OTHER_HELD] for row in rows}, {""})
+        self.assertEqual({row[discovery.OTHER_HELD] for row in rows}, {"not_compared"})
 
     def test_before_the_library_is_compared_only_the_table_filter_is_set(self) -> None:
         self.assertEqual(list(discovery.family_opening(counted=False)["filters"]),
@@ -315,11 +315,11 @@ class ColumnTests(unittest.TestCase):
 
         self.assertEqual(column["headerName"].replace("\n", " "), "Have Other Version")
         self.assertTrue(column["headerTooltip"])
-        self.assertLessEqual(len(column["headerTooltip"]), 80)
+        self.assertLessEqual(len(column["headerTooltip"].split("\n")[0]), 80)
         self.assertEqual([one["label"] for one in column["filterParams"]["choices"]],
-                         ["Yes", "No"])
+                         ["Yes", "No", "Not Compared Yet"])
 
-    def test_it_is_blank_until_compared(self) -> None:
+    def test_it_is_not_compared_until_compared(self) -> None:
         self.assertIn(discovery.OTHER_HELD, discovery.COUNTED_FIELDS)
 
     def test_everything_leaves_it_to_the_column_picker(self) -> None:

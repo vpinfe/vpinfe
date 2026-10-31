@@ -25,19 +25,34 @@ from manager.kit import (
     panel,
     rename,
     renderers,
+    states,
     tag_chips,
     verbs,
     views,
     walks,
 )
 from manager.kit import dialog as frame
-from manager.kit.data import Library
+from manager.kit.data import TAG_IN_USE, TAG_ONE, TAG_TWO, TAG_UNUSED, Library
 from manager.kit.on_page import on_page
 
 SUBJECT = "tag"
 LABEL = t("manager.tageditor.tags")
 
 SCOPE = "manager.tags"
+
+USE = states.Table(
+    covers=t("manager.tageditor.unused.help"),
+    states=(states.State(TAG_IN_USE, t("manager.tageditor.in_use"),
+                         t("manager.tageditor.in_use.meaning"), glyph=states.TICK),
+            states.State(TAG_UNUSED, t("manager.tageditor.unused"),
+                         t("manager.tageditor.unused.meaning"), tone=states.QUIET)))
+
+SPELLING = states.Table(
+    covers=t("manager.tageditor.two_spellings.help"),
+    states=(states.State(TAG_ONE, t("manager.tageditor.one_spelling"),
+                         t("manager.tageditor.one_spelling.meaning"), glyph=states.TICK),
+            states.State(TAG_TWO, t("manager.tageditor.two_spellings"),
+                         t("manager.tageditor.two_spellings.meaning"), tone=states.WARN)))
 
 COLUMNS = [
     grid.identifier("tag", t("manager.tageditor.tag"), 220, pinned="left",
@@ -53,17 +68,8 @@ COLUMNS = [
     grid.column("tables", t("manager.tageditor.tables"), type="numericColumn",
                 help=t("manager.tageditor.tables.help")),
     grid.column("source", t("manager.tags.from"), 200, help=t("manager.tags.from.help")),
-    grid.column("unused", t("manager.tageditor.unused"), 120,
-                help=t("manager.tageditor.unused.help"),
-                **grid.choice_filter([{"value": True, "label": t("manager.tageditor.unused")},
-                                      {"value": False, "label": t("manager.tageditor.in_use")}],
-                                     formatted=True)),
-    grid.column("duplicate", t("manager.tageditor.two_spellings"), 140,
-                help=t("manager.tageditor.two_spellings.help"),
-                **grid.choice_filter(
-                    [{"value": True, "label": t("manager.tageditor.two_spellings")},
-                     {"value": False, "label": t("manager.tageditor.one_spelling")}],
-                    formatted=True)),
+    USE.column("use", t("manager.tageditor.use"), 120),
+    SPELLING.column("spelling", t("manager.tageditor.spelling"), 140),
 ]
 _ALL = [one["field"] for one in COLUMNS]
 _SHOWN = ("tag", "description", "games", "tables", "source")
@@ -72,10 +78,10 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.everything": views.Preset(
         columns=_SHOWN, help=t("manager.view.tags_everything.help")),
     "manager.tageditor.unused": views.Preset(
-        columns=_SHOWN, filters={"unused": {"values": [True]}},
+        columns=_SHOWN, filters={"use": {"values": [TAG_UNUSED]}},
         help=t("manager.view.tags_unused.help")),
     "manager.tageditor.two_spellings": views.Preset(
-        columns=("tag", "same", *_SHOWN[1:]), filters={"duplicate": {"values": [True]}},
+        columns=("tag", "same", *_SHOWN[1:]), filters={"spelling": {"values": [TAG_TWO]}},
         sort=({"colId": "same", "sort": "asc", "sortIndex": 0},
               {"colId": "games", "sort": "desc", "sortIndex": 1}),
         help=t("manager.view.tags_two_spellings.help")),

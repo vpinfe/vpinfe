@@ -45,10 +45,10 @@ class TheRomStateColumn(unittest.TestCase):
 
         self.assertEqual("missing", built[0]["rom_state"])
 
-    def test_the_filter_offers_the_three_states(self) -> None:
+    def test_the_filter_offers_the_three_states_and_the_blank(self) -> None:
         column = next(one for one in games.TABLE_COLUMNS if one["field"] == "rom_state")
 
-        self.assertEqual(["installed", "missing", "unknown"], _filter_values(column))
+        self.assertEqual(["installed", "missing", "unknown", ""], _filter_values(column))
 
     def test_launch_and_assets_both_show_it(self) -> None:
         launch = games.TABLE_VIEWS["manager.game_tables.launch"]

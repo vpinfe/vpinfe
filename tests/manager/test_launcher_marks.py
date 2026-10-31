@@ -77,15 +77,16 @@ class StateTests(unittest.TestCase):
 
 
 class RowTests(unittest.TestCase):
-    def test_a_ready_launcher_says_nothing(self) -> None:
+    def test_a_ready_launcher_holds_the_ready_token(self) -> None:
         rows = launchers.rows([_launcher(bin_path=(path_state.OK, ""))], {})
 
-        self.assertEqual(rows[0]["state"], "")
+        self.assertEqual(rows[0]["state"], launchers.STATE_READY)
 
-    def test_an_exception_is_said(self) -> None:
+    def test_an_exception_holds_its_token_and_the_column_says_the_word(self) -> None:
         rows = launchers.rows([_launcher(bin_path=(path_state.UNSET, ""))], {})
 
-        self.assertEqual(rows[0]["state"], "No Program")
+        self.assertEqual(rows[0]["state"], launchers.STATE_NO_PROGRAM)
+        self.assertEqual(launchers.STATES.word(rows[0]["state"]), "No Program")
 
     def test_a_row_counts_the_tables_it_plays(self) -> None:
         rows = launchers.rows([_launcher(bin_path=(path_state.OK, ""))], {}, {"l1": 12})

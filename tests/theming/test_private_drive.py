@@ -34,7 +34,7 @@ CHIPS = ("Object.fromEntries([...document.querySelectorAll("
          "'.ag-center-cols-container .ag-row, .ag-pinned-left-cols-container .ag-row')]"
          ".filter(row => row.querySelector('.ag-cell[col-id=private]'))"
          ".map(row => { const chip = row.querySelector("
-         "'.ag-cell[col-id=private] .manager-member-chip');"
+         "'.ag-cell[col-id=private] .manager-state');"
          " return [row.getAttribute('row-id'), chip ? [chip.innerText.trim(),"
          " chip.className, chip.title] : null]; }))")
 MENU = ("[...document.querySelectorAll('.q-menu .manager-menu-item')]"
@@ -168,13 +168,13 @@ class PrivateDrive(unittest.TestCase):
         self.assertEqual(self.seen["panel_one"],
                          {"alpha": True, "bravo": None, "charlie": None, "delta": None})
 
-    def test_only_a_private_row_carries_the_chip(self) -> None:
+    def test_only_a_private_row_draws_the_word(self) -> None:
         chips = self.seen["chips_one"]
         self.assertEqual({key for key, chip in chips.items() if chip}, {"alpha"})
         label, classes, tip = chips["alpha"]
         self.assertEqual(label, "Private")
-        self.assertIn("manager-chip-quiet", classes)
-        self.assertEqual(tip, "Never sent to VPinPlay or any community service")
+        self.assertIn("manager-state--quiet", classes)
+        self.assertEqual(tip, "Private - Never sent to VPinPlay or any community service")
         self.assertEqual(self.seen["header"], "Community")
 
     def test_the_funnel_filters_to_the_private_games(self) -> None:

@@ -209,6 +209,7 @@ if (!window.HubChoiceFilter) {
         row.appendChild(slot);
         const word = document.createElement('span');
         word.textContent = choice.label;
+        if (choice.tone) word.className = 'manager-state manager-state--' + choice.tone;
         row.appendChild(word);
         const tally = document.createElement('span');
         tally.className = 'manager-filter-count';
@@ -430,7 +431,9 @@ def window_filter(windows: list[tuple[str, int]]) -> dict[str, Any]:
                              "words": {"any": t("manager.grid.any_time")}}}
 
 
-DERIVED_FACETS = ("manufacturer", "game_type")
+DERIVED_FACETS = {"manufacturer": "manager.games.not_recorded",
+                  "game_type": "manager.games.not_recorded",
+                  "match": "manager.media.match.not_set"}
 FACET_CEILING = 300
 
 
@@ -455,7 +458,7 @@ def with_derived_facets(columns: list[dict[str, Any]], rows: list[dict[str, Any]
             continue
         choices = [{"value": value, "label": value} for value in seen]
         if "" in said:
-            choices.append({"value": "", "label": t("manager.games.not_recorded")})
+            choices.append({"value": "", "label": t(DERIVED_FACETS[field])})
         built.append(definition | choice_filter(choices))
     return built
 

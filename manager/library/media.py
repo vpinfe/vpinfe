@@ -21,22 +21,10 @@ from common.games import asset_origin
 from common.i18n import t
 from common.media.media_specs import media_label_map
 from manager.kit import game_tables, grid, media_ownership, offload, panel, thumbnails, views
-from manager.library import file_acts
+from manager.library import file_acts, file_states
 from manager.library.games import view_control
 
 SCOPE = "manager.media.columns"
-
-_ORPHAN = media_ownership.tier_for(media_ownership.ORPHAN).noun
-_UNUSED = media_ownership.tier_for(media_ownership.UNUSED).noun
-_MISSING = media_ownership.tier_for(media_ownership.MISSING).noun
-
-# Why a file on disk is not the one being used, blank while it is doing its job. The
-# blank is a choice like any other in the funnel, and it needs a word there because
-# "match the empty ones" is not something a checkbox can say by being unlabelled.
-_REASON = {media_ownership.ORPHAN: _ORPHAN, media_ownership.UNUSED: _UNUSED}
-_REASON_CHOICES = ([{"value": "", "label": t("word.in_use")}]
-                   + [{"value": word, "label": t(word)}
-                      for word in (_MISSING, _ORPHAN, _UNUSED)])
 
 _SCOPE_CHOICES = [{"value": "game", "label": t("word.game")},
                   {"value": "table", "label": t("word.table")}]
@@ -75,6 +63,13 @@ def _standing_in(via: str) -> str:
 
 
 
+def _reason(row: dict[str, Any]) -> str:
+    via = str(row.get("via") or "")
+    if via in (file_states.ORPHAN, file_states.UNUSED):
+        return via
+    return file_states.IN_USE if row.get("present") else file_states.MISSING
+
+
 def rows(found: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The API's media, flattened for a grid.
 
@@ -91,8 +86,7 @@ def rows(found: list[dict[str, Any]]) -> list[dict[str, Any]]:
              # thing on nearly every row.
              "path": row.get("path") or "",
              "used_by": row.get("serves"),
-             "reason": _REASON.get(str(row.get("via") or ""),
-                                   "" if row.get("present") else _MISSING),
+             "reason": _reason(row),
              "source": media_ownership.source_name(str(row.get("origin") or "")),
              "match": str(row.get("matched_to") or ""),
              "covered_by": _standing_in(str(row.get("standing_in") or "")),
@@ -125,9 +119,8 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.media.source.help")),
     grid.column("used_by", t("word.used_by"), type="numericColumn", group=t(_FILE),
                 help=t("manager.media.used_by.help")),
-    grid.column("reason", t("word.unused_reason"), 150, group=t(_FILE),
-                **grid.choice_filter(_REASON_CHOICES),
-                help=t("manager.media.reason.help")),
+    file_states.table("manager.media.unused_meaning").column(
+        "reason", t("word.in_use"), 150, help=t("manager.media.reason.help"), group=t(_FILE)),
     grid.column("match", t("manager.media.match"), 140, group=t(_SOURCE),
                 help=t("manager.media.match.help")),
     grid.column("covered_by", t("manager.media.covered"), 130, group=t(_FILE),
@@ -162,28 +155,29 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.have": views.Preset(
         columns=("game", "label", "path", "source", "used_by", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": ["", _ORPHAN, _UNUSED]}},
+        filters={"reason": {"values": [file_states.IN_USE, file_states.ORPHAN,
+                                       file_states.UNUSED]}},
         help=t("manager.media.view_have.help")),
     "manager.view.missing": views.Preset(
         columns=("game", "label", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": [_MISSING]}},
+        filters={"reason": {"values": [file_states.MISSING]}},
         help=t("manager.media.view_missing.help")),
     "manager.view.orphans": views.Preset(
         columns=("game", "label", "path", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": [_ORPHAN]}},
+        filters={"reason": {"values": [file_states.ORPHAN]}},
         help=t("manager.media.view_orphans.help")),
     "manager.view.unused": views.Preset(
         columns=("game", "label", "path", "source", "used_by", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": [_UNUSED]}},
+        filters={"reason": {"values": [file_states.UNUSED]}},
         help=t("manager.media.view_unused.help")),
     SOURCES: views.Preset(
         columns=("game", "label", "path", "source", "used_by", "match"),
         sort=({"colId": "source", "sort": "asc", "sortIndex": 0},
               {"colId": "game", "sort": "asc", "sortIndex": 1}),
-        filters={"reason": {"values": [""]}},
+        filters={"reason": {"values": [file_states.IN_USE]}},
         help=t("manager.media.view_sources.help")),
     "manager.view.everything": views.Preset(
         columns=tuple(_ALL),

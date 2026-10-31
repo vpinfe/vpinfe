@@ -312,7 +312,7 @@ class ColumnTests(unittest.TestCase):
         choices = self._column(discovery_marks.FIELD)["filterParams"]["choices"]
 
         self.assertEqual([(one["value"], one["label"]) for one in choices],
-                         [("", "None"), ("ignored", "Ignored"), ("wanted", "Wanted")])
+                         [("wanted", "Wanted"), ("ignored", "Ignored"), ("", "None")])
 
 
 def _labels(entries: list[Any]) -> list[str]:

@@ -15,7 +15,7 @@ from nicegui import run, ui
 
 from common import icons
 from common.config.labels import humanize
-from common.games import asset_registry, identity_claims, ties
+from common.games import asset_registry, ties
 from common.i18n import t
 from common.media.media_specs import media_label_map
 from manager.kit import (
@@ -31,6 +31,7 @@ from manager.kit import (
     renderers,
     report_groups,
     stars,
+    states,
     table_features,
     tag_chips,
     thumbnails,
@@ -39,7 +40,7 @@ from manager.kit import (
 )
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import collection_adds, game_acts, mediaview, row_drag
+from manager.library import collection_adds, game_acts, game_states, mediaview, row_drag
 from manager.settings import sections
 from manager.settings import settings as settings_page
 from manager.workbench import all_settings
@@ -95,29 +96,6 @@ _RATING_CHOICES = ([{"value": 0, "label": t("manager.games.unrated")}]
                        "repeat": n} for n in range(1, 6)])
 
 
-def _two(words: tuple[str, str]) -> list[dict[str, Any]]:
-    """A fact's own pair as the funnel's two choices, true first - which is the notable
-    state, because that is the direction every one of these columns reads."""
-    return [{"value": True, "label": words[0]}, {"value": False, "label": words[1]}]
-
-
-# AG Grid infers `cellDataType: boolean` from the data and draws a checkbox for it,
-# and that renderer wins over any formatter - a boolean column meant to print a word or
-# a tick comes out blank without this. Every boolean column here turns it off.
-_NO_CHECKBOX: dict[str, Any] = {":cellRenderer": None}
-
-_TICK = {
-    ":valueFormatter": "params => params.value ? '\u2713' : ''",
-    "cellClass": "manager-tick",
-    **_NO_CHECKBOX,
-    # Yes and No, because the column's own header is the noun: "Hidden" answers yes or
-    # no, and a pair naming the thing again would read as "Hidden: Present". A column
-    # whose subject has better words passes its own.
-    **grid.choice_filter([{"value": True, "label": t("word.yes")},
-                          {"value": False, "label": t("manager.games.no")}]),
-}
-
-
 # Delegated once, in the capture phase for the same reason the enlarge is: the cell's
 # own click would move the focused row, and rating a row you can see is not a request
 # to go and look at it.
@@ -132,30 +110,11 @@ COLUMNS = [
     # game, and it belongs with the game's other facts.
     grid.column("table_count", t("word.table_count"), type="numericColumn", group=t(_GAME),
                 filter="agNumberColumnFilter", help=t("manager.games.table_count.help")),
-    # The word only where it is missing, and a blank cell everywhere else: most of a
-    # library is matched, so a mark on every row says nothing and the few that are not
-    # are the whole point of the column.
-    grid.column("vps_unmatched", t("manager.games.vps_match"), group=t(_GAME),
-                help=t("manager.games.vps_match.help"),
-                **_NO_CHECKBOX,
-                **{":valueFormatter":
-                   "params => params.value ? "
-                   + json.dumps(game_tables.VPS_WORDS[0]) + " : ''",
-                   **grid.choice_filter(_two(game_tables.VPS_WORDS),
-                                        formatted=True)}),
-    grid.column("vps_shared", t("manager.games.vps_entry"), group=t(_GAME),
-                help=t("manager.games.vps_entry.help"),
-                **_NO_CHECKBOX,
-                **{":valueFormatter":
-                   "params => params.value ? " + json.dumps(t("manager.games.vps_shared"))
-                   + " : ''",
-                   **grid.choice_filter(_two((t("manager.games.vps_shared"),
-                                              t("manager.games.vps_alone"))),
-                                        formatted=True)}),
-    grid.column("vps_matched_by", t("manager.games.how_matched"), 160, group=t(_GAME),
-                help=t("manager.games.how_matched.help"),
-                **grid.choice_filter([{"value": token, "label": word} for token, word
-                                      in game_tables.HOW_MATCHED.items()])),
+    game_states.vps_match().column("vps_match", t("manager.games.vps_match"), group=t(_GAME)),
+    game_states.vps_entry().column("vps_shared", t("manager.games.vps_entry"),
+                                   group=t(_GAME)),
+    game_states.how_matched().column("vps_matched_by", t("manager.games.how_matched"), 160,
+                                     group=t(_GAME)),
     # No ROM or Version here: ROM is an asset (`asset_registry`), Version has no
     # game-level meaning, and both were the default table's shown as the game's.
     # Named for whose rating it is, because the tables grid has one too and "Rating"
@@ -181,27 +140,8 @@ COLUMNS = [
                 help=t("help.who_made_it")),
     grid.year_column("year", t("word.year"), group=t(_GAME),
                      help=t("help.year_released")),
-    grid.column("hidden", game_tables.FRONTEND, group=t(_GAME),
-                help=t("manager.games.hidden_game.help"),
-                **{":valueFormatter":
-                   "params => params.value ? "
-                   + json.dumps(game_tables.HIDDEN_WORDS[0]) + " : ''",
-                   **grid.choice_filter(_two(game_tables.HIDDEN_WORDS), formatted=True)},
-                **renderers.drawable("state", states={True: {
-                    "label": game_tables.HIDDEN_WORDS[0],
-                    "why": t("manager.game_tables.hidden_game.help"),
-                    "chip": "manager-chip-warn"}})),
-    # Quiet where Hidden is amber: Private is a choice somebody made, not something to fix.
-    grid.column("private", game_tables.COMMUNITY, group=t(_GAME),
-                help=t("manager.games.private_game.help"),
-                **{":valueFormatter":
-                   "params => params.value ? "
-                   + json.dumps(game_tables.PRIVATE_WORDS[0]) + " : ''",
-                   **grid.choice_filter(_two(game_tables.PRIVATE_WORDS), formatted=True)},
-                **renderers.drawable("state", states={True: {
-                    "label": game_tables.PRIVATE_WORDS[0],
-                    "why": game_tables.PRIVATE_HELP,
-                    "chip": "manager-chip-quiet"}})),
+    game_states.hidden(game=True).column("hidden", game_tables.FRONTEND, group=t(_GAME)),
+    game_states.private().column("private", game_tables.COMMUNITY, group=t(_GAME)),
 ]
 
 # Presets, not a replacement for choosing columns: a view sets which columns are
@@ -217,11 +157,11 @@ VIEW_SECTIONS = {views.builtin_id(_MEDIA): "media"}
 # A column that reports a state, and the panel section that changes it. Clicking the
 # word is the only thing to do with it, so the click lands where it is changed rather
 # than on Details and one more click.
-COLUMN_SECTIONS = {"vps_unmatched": "game_details", "vps_shared": "game_details",
+COLUMN_SECTIONS = {"vps_match": "game_details", "vps_shared": "game_details",
                    "hidden": "game_details", "private": "game_details"}
 
 # The grid on its Unmatched filter, as `state["arriving"]`.
-UNMATCHED = {"vps_unmatched": {"values": [True]}}
+UNMATCHED = {"vps_match": {"values": [game_tables.VPS_UNMATCHED]}}
 UNMATCHED_VIEW = "manager.view.unmatched"
 
 # Games with no table, such as ones added from Discovery or whose last table was removed.
@@ -229,7 +169,7 @@ NO_TABLES_VIEW = "manager.view.no_tables"
 NO_TABLES = {"table_count": {"filterType": "number", "type": "equals", "filter": 0}}
 
 DUPLICATES_VIEW = "manager.view.duplicates"
-DUPLICATES = {"vps_shared": {"values": [True]}}
+DUPLICATES = {"vps_shared": {"values": [game_tables.VPS_SHARED]}}
 
 # The key in `Opens.keys` naming the built-in view Games should open on.
 ARRIVE_VIEW = "arrive_view"
@@ -242,7 +182,7 @@ def arrive_on(library: Any, key: str) -> None:
 
 GAME_VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.details": views.Preset(
-        columns=("name", "table_count", "vps_unmatched", "rating", "tags", "collections",
+        columns=("name", "table_count", "vps_match", "rating", "tags", "collections",
                  "game_type", "themes", "manufacturer", "year"),
         help=t("manager.view.details.help")),
     # Media and Assets are built from what the library reports it has, so both are
@@ -252,13 +192,13 @@ GAME_VIEWS: dict[str, list[str] | views.Preset] = {
     _MEDIA: views.Preset(help=t("manager.view.game_media.help")),
     _ASSETS: views.Preset(help=t("manager.view.game_assets.help")),
     NO_TABLES_VIEW: views.Preset(
-        columns=("name", "table_count", "vps_unmatched", "game_type", "manufacturer", "year"),
+        columns=("name", "table_count", "vps_match", "game_type", "manufacturer", "year"),
         filters=NO_TABLES, help=t("manager.view.no_tables.help")),
     DUPLICATES_VIEW: views.Preset(
         columns=("name", "table_count", "vps_shared", "manufacturer", "year"),
         filters=DUPLICATES, help=t("manager.view.duplicates.help")),
     UNMATCHED_VIEW: views.Preset(
-        columns=("name", "vps_unmatched", "manufacturer", "year"),
+        columns=("name", "vps_match", "manufacturer", "year"),
         filters=UNMATCHED, help=t("manager.view.unmatched.help")),
     "manager.view.frontend": views.Preset(
         columns=("name", "collections", "hidden", "private"),
@@ -272,12 +212,6 @@ _ALL = [definition["field"] for definition in COLUMNS]
 # launchable file inside it, and the asset that resolved for it. Everything here has to
 # be something the workbench can answer for, which is what keeps a catalog out.
 
-# An asset column asks whether the game has one, and "Missing" is the word the media
-# vocabulary already uses for the same absence.
-_HAS_CHOICES = [{"value": True, "label": t("word.present")},
-                {"value": False, "label": t("manager.games.missing")}]
-
-
 def asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     """One column per asset kind, availability only.
 
@@ -286,10 +220,10 @@ def asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     """
     labels = {key: _asset_label(key) for key in keys}
     width = max((grid.header_width(label) for label in labels.values()), default=92)
-    return [grid.column(f"asset_{key}", label, width, group=t(_ASSETS),
-                        help=t("help.asset_kind", label=(label)),
-                        cellStyle={"textAlign": "center"},
-                        **{**_TICK, **grid.choice_filter(_HAS_CHOICES)})
+    has = game_states.asset()
+    return [has.column(f"asset_{key}", label, width, group=t(_ASSETS),
+                       help=t("help.asset_kind", label=label),
+                       cellStyle={"textAlign": "center"})
             for key, label in sorted(labels.items(), key=lambda kv: kv[1].lower())]
 
 
@@ -307,6 +241,13 @@ _STATE_CHOICES = [
               else f"manager-mark {media_ownership.tier_for(key).mark}")}
     for key in media_ownership.STATES
 ]
+
+# Only a per-table asset can be Unused: it is named for this table and a more specific file wins.
+_UNUSED_CHOICE = {
+    "value": media_ownership.tier_for(media_ownership.UNUSED).noun,
+    "label": t(media_ownership.tier_for(media_ownership.UNUSED).noun),
+    "mark": f"manager-mark {media_ownership.tier_for(media_ownership.UNUSED).mark}",
+}
 
 
 # Delegated and installed once: NiceGUI strips inline handlers off raw HTML, and a
@@ -773,8 +714,8 @@ _FEATURE_MARKS = {
     key: {"mark": table_features.state_for(key).mark,
           "glyph": table_features.state_for(key).glyph,
           "cls": table_features.state_for(key).glyph_class,
-          "noun": table_features.state_for(key).noun,
-          "why": table_features.state_for(key).why}
+          "why": states.line(table_features.state_for(key).noun,
+                             table_features.state_for(key).why)}
     for key in table_features.STATES
 }
 
@@ -785,11 +726,10 @@ _FEATURE_RENDERER = (
     " const t = m[v === null || v === undefined ? '" + table_features.UNKNOWN
     + "' : (v ? '" + table_features.IN_SCRIPT + "' : '" + table_features.UNUSED + "')];"
     " if (!t) return '';"
-    " const why = t.noun + ' \u2014 ' + t.why;"
-    " if (t.glyph) return '<span class=\"' + t.cls + '\" title=\"' + why + '\">'"
+    " if (t.glyph) return '<span class=\"' + t.cls + '\" title=\"' + t.why + '\">'"
     " + t.glyph + '</span>';"
     " if (!t.mark) return '';"
-    " return '<span class=\"manager-mark ' + t.mark + '\" title=\"' + why"
+    " return '<span class=\"manager-mark ' + t.mark + '\" title=\"' + t.why"
     " + '\"></span>'; }"
 )
 
@@ -797,20 +737,21 @@ _FEATURE_RENDERER = (
 # text box somebody has to know to type "true" into. Null arrives as "" - the component
 # reads an absent value that way, which is what makes "not parsed yet" pickable.
 _FEATURE_CHOICES: list[dict[str, Any]] = [
-    {"value": True, "label": table_features.state_for(table_features.IN_SCRIPT).noun,
-     "glyph": table_features.state_for(table_features.IN_SCRIPT).glyph,
-     "glyphClass": table_features.state_for(table_features.IN_SCRIPT).glyph_class},
-    {"value": False, "label": table_features.state_for(table_features.UNUSED).noun},
-    {"value": "", "label": table_features.state_for(table_features.UNKNOWN).noun,
-     "glyph": table_features.state_for(table_features.UNKNOWN).glyph,
-     "glyphClass": table_features.state_for(table_features.UNKNOWN).glyph_class},
+    {"value": value, "label": table_features.state_for(key).noun,
+     "tip": states.line(table_features.state_for(key).noun, table_features.state_for(key).why),
+     **({"glyph": table_features.state_for(key).glyph,
+         "glyphClass": table_features.state_for(key).glyph_class}
+        if table_features.state_for(key).glyph else {})}
+    for key, value in ((table_features.IN_SCRIPT, True), (table_features.UNKNOWN, ""),
+                       (table_features.UNUSED, False))
 ]
 
 _FEATURES = "manager.games.features"
 
 FEATURE_COLUMNS = [
     grid.column(f"feature_{key}", label, group=t(_FEATURES),
-                help=t("help.table_feature", label=(label)),
+                help="\n".join([t("help.table_feature", label=(label)),
+                                *(choice["tip"] for choice in _FEATURE_CHOICES)]),
                 cellClass="manager-media-cell",
                 **{**grid.choice_filter(_FEATURE_CHOICES),
                    ":cellRenderer": _FEATURE_RENDERER})
@@ -823,17 +764,6 @@ FEATURE_COLUMNS = [
 # row belongs to is the failure this subject exists to fix.
 _TABLE = "manager.games.table"
 _IN_PLAY = "manager.games.library"
-
-# A lock is the exception, so it takes the mark. The value a game with one table holds
-# is in no filter choice and draws nothing.
-_DEFAULT_STATES = {
-    game_tables.CHOSEN: {"label": game_tables.DEFAULT_WORDS[game_tables.CHOSEN][0],
-                         "why": game_tables.DEFAULT_WORDS[game_tables.CHOSEN][1],
-                         "mark": verbs.LOCKED},
-    game_tables.DERIVED: {"label": game_tables.DEFAULT_WORDS[game_tables.DERIVED][0],
-                          "why": game_tables.DEFAULT_WORDS[game_tables.DERIVED][1]},
-}
-_ONLY_TABLE = "only"
 
 # Marks the tables that were deliberately pointed somewhere, so a reader can see what
 # changing the default will and will not move. Only on those: a mark on every row would
@@ -918,19 +848,9 @@ GAME_RATING = "game_rating"
 # A column whose answer a panel section holds, so focusing it opens there.
 TABLE_COLUMN_SECTIONS = {"settings": "table_settings", OWN_SETTINGS_COLUMN: "table_settings"}
 
-_ROM_INSTALLED, _ROM_MISSING, _ROM_UNKNOWN = "installed", "missing", "unknown"
-
 # The Tables grid on the tables whose ROM is missing, as `state["arriving"]`.
-ROM_MISSING = {"rom_state": {"values": [_ROM_MISSING]}}
+ROM_MISSING = {"rom_state": {"values": [game_states.NOT_INSTALLED]}}
 UNTIED = {"release": {"values": [ties.UNTIED]}}
-
-# Tokens, not words: a filter and a saved view store what the cell holds, and the words
-# follow the language. A table that names no ROM holds nothing and is in no choice.
-_ROM_CHOICES = [
-    {"value": _ROM_INSTALLED, "label": t("word.installed")},
-    {"value": _ROM_MISSING, "label": t("manager.workbench.not_installed")},
-    {"value": _ROM_UNKNOWN, "label": t("word.unknown")},
-]
 
 TABLE_COLUMNS = [
     grid.identifier("game", t(_TABLE), 270, pinned="left", group=t(_GAME),
@@ -942,20 +862,7 @@ TABLE_COLUMNS = [
                 help=t("manager.games.version.help")),
     grid.column("on_vps", t("manager.games.on_vps"), group=t(_TABLE),
                 help=t("manager.games.on_vps.help")),
-    grid.column("release", t("manager.games.release"), 150, group=t(_TABLE),
-                help=t("manager.games.release.help"),
-                **grid.choice_filter([
-                    {"value": ties.UNTIED, "label": t("manager.games.release_untied")},
-                    {"value": identity_claims.USER,
-                     "label": t("manager.games.release_user")},
-                    {"value": identity_claims.EXACT,
-                     "label": t("manager.games.release_exact")},
-                    {"value": identity_claims.DECLARED,
-                     "label": t("manager.games.release_declared")},
-                    {"value": identity_claims.CONSTRUCTION,
-                     "label": t("manager.games.release_construction")},
-                    {"value": ties.TIED, "label": t("manager.games.release_tied")},
-                    {"value": "", "label": t("manager.games.release_none")}])),
+    game_states.release().column("release", t("manager.games.release"), 150, group=t(_TABLE)),
     grid.list_column(FIXES_COLUMN, t("manager.games.fix_column"), 120, group=t(_TABLE),
                      help=t("manager.games.fix_column.help")),
     grid.column("mod_of", t("manager.games.mod_of"), 200, group=t(_TABLE),
@@ -968,9 +875,7 @@ TABLE_COLUMNS = [
                 help=t("manager.games.author.help")),
     grid.column("rom", t("manager.games.rom"), 110, group=t(_TABLE),
                 help=t("manager.games.rom.help")),
-    grid.column("rom_state", t("manager.games.rom_state"), 130, group=t(_TABLE),
-                help=t("manager.games.rom_state.help"),
-                **grid.choice_filter(_ROM_CHOICES)),
+    game_states.rom().column("rom_state", t("manager.games.rom_state"), 130, group=t(_TABLE)),
     grid.column("launcher", t("manager.games.launcher"), group=t(_TABLE),
                 help=t("manager.games.launcher.help"),
                 **_LAUNCHER_DRAWN),
@@ -999,24 +904,12 @@ TABLE_COLUMNS = [
     # one of them. Each of these sorts and filters on its own, which is what a list is
     # for. A summary column can be built later, deliberately, from these.
     # Not a tick: a locked default and an automatic one are different facts.
-    grid.column("default_state", game_tables.DEFAULT_LABEL, group=t(_IN_PLAY),
-                help=t("manager.games.default.help"),
-                **grid.choice_filter(
-                    [{"value": kind, "label": word}
-                     for kind, (word, _why) in game_tables.DEFAULT_WORDS.items()]
-                    + [{"value": "", "label": t("manager.games.not_default")}],
-                    formatted=True),
-                **renderers.drawable("state", states=_DEFAULT_STATES)),
+    game_states.default().column("default_state", game_tables.DEFAULT_LABEL,
+                                 group=t(_IN_PLAY)),
     # Each column's own words, not a generic pair: "Hidden: Yes" is a question about a
     # question, where "Hidden / Offered" is the fact and its opposite.
-    grid.column("hidden", t("word.hidden"), group=t(_IN_PLAY),
-                help=t("manager.games.hidden.help"),
-                **{**_TICK, **grid.choice_filter(
-                    _two(game_tables.HIDDEN_WORDS))}),
-    grid.column("missing", t("manager.games.missing"), group=t(_IN_PLAY),
-                help=t("manager.games.missing.help"),
-                **{**_TICK, **grid.choice_filter(
-                    _two(game_tables.FILE_WORDS))}),
+    game_states.hidden(game=False).column("hidden", t("word.hidden"), group=t(_IN_PLAY)),
+    game_states.missing().column("missing", t("manager.games.missing"), group=t(_IN_PLAY)),
     # Last and widest: it is the identifier of record, and the part that tells two
     # tables of one game apart sits at its end.
     grid.column("filename", game_tables.FILE, 420, group=t(_TABLE),
@@ -1060,7 +953,7 @@ def table_asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     return [grid.column(f"asset_{key}", header, width,
                         cellClass="manager-media-cell", group=t(_ASSETS),
                         help=t("help.table_asset_kind", label=(header)),
-                        **grid.choice_filter(_STATE_CHOICES),
+                        **grid.choice_filter([*_STATE_CHOICES, _UNUSED_CHOICE]),
                         **renderers.drawable("mark"))
             for key, header in headers.items()]
 
@@ -1167,16 +1060,16 @@ def _rom_state(row: dict[str, Any]) -> str:
         return ""
     installed = row.get("rom_installed")
     if installed is None:
-        return _ROM_UNKNOWN
-    return _ROM_INSTALLED if installed else _ROM_MISSING
+        return game_states.UNKNOWN
+    return game_states.INSTALLED if installed else game_states.NOT_INSTALLED
 
 
 def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, Any]]:
     """The API's tables, flattened for a grid, each with its thumbnail while `art`.
 
-    `missing` rather than the API's `available`, so all three flags read the same way:
-    true is the notable state and the tick means "this row is one of those". Sorting or
-    filtering on a column where true means nothing is wrong is a trap.
+    `hidden` and `missing` hold their state's token, or "" where the table is offered and
+    on disk: `missing` is the API's `available` turned round, so the notable state is the
+    one with a word.
 
     `rows` holds every table of each game it covers: whether a game has a choice is
     counted from them.
@@ -1184,7 +1077,8 @@ def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, 
     held = Counter(str(row.get("game_id") or "") for row in rows)
     bases = ties.patch_bases(rows)
     return [{**row,
-             "missing": not row.get("available", True),
+             "hidden": game_states.HIDDEN if row.get("hidden") else "",
+             "missing": game_states.MISSING if not row.get("available", True) else "",
              # The file where there is one, and the name its program knows it by where
              # there is not. A blank cell in the column that identifies the row would
              # read as a fault rather than as a different kind of thing.
@@ -1365,7 +1259,7 @@ def setting_their_own(rows: list[dict[str, Any]], launcher_id: str,
 
 def _default_cell(row: dict[str, Any], held: int) -> str:
     kind = str(row.get("default_kind") or "")
-    return _ONLY_TABLE if kind == game_tables.DERIVED and held < 2 else kind
+    return game_states.ONLY_TABLE if kind == game_tables.DERIVED and held < 2 else kind
 
 
 def _tables_said(built: list[dict[str, Any]], shown: int) -> str:

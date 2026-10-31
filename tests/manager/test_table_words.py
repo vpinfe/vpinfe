@@ -211,15 +211,15 @@ class HiddenGameColumnTests(unittest.TestCase):
     def test_only_a_hidden_game_is_drawn(self) -> None:
         states = self.column["cellRendererParams"]["states"]
 
-        self.assertEqual(list(states), [True])
-        self.assertEqual(states[True]["label"], game_tables.HIDDEN_WORDS[0])
+        self.assertEqual(list(states), [game_tables.HIDDEN_CELL])
+        self.assertEqual(states[game_tables.HIDDEN_CELL]["label"], game_tables.HIDDEN_WORDS[0])
 
     def test_the_funnel_offers_the_pair_notable_first(self) -> None:
         choices = self.column["filterParams"]["choices"]
 
         self.assertEqual([one["label"] for one in choices],
                          list(game_tables.HIDDEN_WORDS))
-        self.assertEqual([one["value"] for one in choices], [True, False])
+        self.assertEqual([one["value"] for one in choices], [game_tables.HIDDEN_CELL, ""])
 
     def test_the_frontend_view_shows_it(self) -> None:
         preset = games.GAME_VIEWS["manager.view.frontend"]
@@ -232,7 +232,8 @@ class HiddenGameColumnTests(unittest.TestCase):
                          {"id": "g2", "name": "B"}]
         library.media = {}
 
-        self.assertEqual([row["hidden"] for row in library.game_rows()], [True, False])
+        self.assertEqual([row["hidden"] for row in library.game_rows()],
+                         [game_tables.HIDDEN_CELL, ""])
 
 
 class ReferenceNameTests(unittest.TestCase):
@@ -339,7 +340,7 @@ class HowMatchedTests(unittest.TestCase):
 
     def test_each_state_has_its_word(self) -> None:
         self.assertEqual(list(game_tables.HOW_MATCHED.values()),
-                         ["Auto-matched", "Matched on import", "Matched by you"])
+                         ["Auto-Matched", "Matched on Import", "Matched by You"])
 
 
 if __name__ == "__main__":

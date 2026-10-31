@@ -57,8 +57,8 @@ class TheMarkOnATheme(unittest.TestCase):
         self.assertFalse(themes.stopped(theme))
 
     def test_the_words_are_the_ones_the_catalog_keeps(self) -> None:
-        self.assertEqual(themes.TRUST[themes.UNACCEPTED]["label"], "Not Accepted")
-        self.assertEqual(themes.TRUST[themes.UNOFFICIAL]["label"], "Unofficial")
+        self.assertEqual(themes.TRUST.word(themes.UNACCEPTED), "Not Accepted")
+        self.assertEqual(themes.TRUST.word(themes.UNOFFICIAL), "Unofficial")
 
     def test_the_row_carries_it_for_the_grid(self) -> None:
         theme = _theme(installed=True, trust=_trust(accepted.SOURCE, accepted_=False))

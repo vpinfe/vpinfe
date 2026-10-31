@@ -12,7 +12,7 @@ from nicegui import ui
 from common import icons
 from common.failures import why
 from common.i18n import t
-from manager.kit import art, confirm, deeplink, panel, thumbnails, verbs, when
+from manager.kit import art, confirm, deeplink, panel, states, thumbnails, verbs, when
 from manager.library import (
     discovery,
     discovery_ext,
@@ -187,9 +187,9 @@ def corner(context: dict[str, Any], holder: Any, key: str) -> None:
 
 
 def _mark(scene: Scene, kind: Kind) -> None:
-    """Failed, then Needs you, then downloading, then where the game stands with the kind:
-    Have, Missing or Blank, as the grid reads them. A game the library says nothing about
-    wears nothing."""
+    """Failed, then Needs You, then downloading, then where the game stands with the kind:
+    Have, Missing, Not Listed or Unknown, as the grid reads them. A game the library says
+    nothing about wears nothing."""
     said = [one for key in kind.picks if (one := standing_of(scene.tray, key)) is not None]
     for level, glyph, word, hint in (
             ("bad", verbs.JOB_FAILED, "manager.discovery.state.failed",
@@ -207,17 +207,31 @@ def _mark(scene: Scene, kind: Kind) -> None:
                 t("manager.discovery.corner.downloading"), percent=percent)
         return
     if kind.standing == discovery.HAVE:
-        _corner("have", t("manager.view.have"), t("manager.discovery.corner.have"),
-                glyph=verbs.DONE)
+        _corner("have", t("manager.view.have"), t(_have_meaning(kind)), glyph=verbs.DONE)
     elif kind.standing == discovery.MISSING:
-        _corner("missing", t("manager.view.missing"), t("manager.discovery.corner.missing"))
+        _corner("missing", t("manager.view.missing"),
+                t("manager.discovery.corner.missing_media" if kind.media
+                  else "manager.discovery.corner.missing"))
+    elif kind.standing == discovery.BLANK and kind.unread:
+        _corner("unknown", t("manager.discovery.state.unknown"),
+                t("manager.discovery.corner.unknown"))
     elif kind.standing == discovery.BLANK:
-        _corner("blank", t("manager.discovery.state.blank"),
-                t("manager.discovery.corner.blank"))
+        _corner("blank", t("manager.discovery.state.not_listed"),
+                t("manager.discovery.corner.not_listed", kind=kind.label))
 
 
-def _corner(level: str, word: str, hint: str, *, glyph: str = "",
+def _have_meaning(kind: Kind) -> str:
+    """The key of what Have says: whether the file is matched to a VPS release, which only a
+    file kind can tell."""
+    if kind.media:
+        return "manager.discovery.corner.have_media"
+    return ("manager.discovery.corner.have" if any(one.get("held") for one in kind.records)
+            else "manager.discovery.corner.have_unmatched")
+
+
+def _corner(level: str, word: str, meaning: str, *, glyph: str = "",
             percent: int | None = None) -> None:
+    hint = states.line(word, meaning)
     with ui.element("span").classes(f"manager-corner manager-corner--{level}") as mark:
         if glyph:
             ui.icon(glyph, size="18px")
@@ -227,6 +241,8 @@ def _corner(level: str, word: str, hint: str, *, glyph: str = "",
             ui.spinner(size="xs")
         elif level == "blank":
             ui.element("span").classes("manager-corner-bar")
+        elif level == "unknown":
+            ui.label("?").classes("manager-unknown")
         else:
             ui.element("span").classes("manager-corner-dash")
         ui.label(word).classes("manager-corner-word")

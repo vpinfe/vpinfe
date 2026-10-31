@@ -34,6 +34,7 @@ from manager.kit import (
     offload,
     panel,
     renderers,
+    states,
     tag_chips,
     thumbnails,
     verbs,
@@ -208,18 +209,28 @@ def columns(declared: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+# An extension names a state's cost as a tier; the Manager draws it as a tone. `unknown` is
+# the question mark, and a state with neither a tier nor an icon is a plain word.
+_TONES = {"on": states.ON, "off": states.QUIET, "warn": states.WARN, "bad": states.BAD}
+
+
+def _state_of(value: str, look: dict[str, Any]) -> states.State:
+    tier = look.get("tier") or ""
+    return states.State(value, look["label"], look.get("why") or "",
+                        tone=_TONES.get(tier, states.PLAIN),
+                        glyph=states.UNKNOWN if tier == "unknown" else "",
+                        icon=look.get("icon") or "")
+
+
 def _drawn(kind: str, column: dict[str, Any], header: str) -> dict[str, Any]:
     if kind == "state":
-        states = {value: {"label": look["label"], "why": look.get("why") or "",
-                          **({"tier": look["tier"]} if look.get("tier") else {}),
-                          **({"mark": look["icon"]} if look.get("icon") else {})}
-                  for value, look in column["states"].items()}
-        return {**grid.choice_filter([{"value": value, "label": look["label"]}
-                                      for value, look in states.items()], formatted=True),
+        table = states.Table(covers="", states=tuple(
+            _state_of(value, look) for value, look in column["states"].items()))
+        return {**grid.choice_filter(table.choices(), formatted=True),
                 ":valueFormatter": "params => (("
-                + json.dumps({value: look["label"] for value, look in states.items()})
+                + json.dumps({one.token: one.word for one in table.states})
                 + ")[params.value] ?? params.value ?? '')",
-                **renderers.drawable("state", states=states, plain=True)}
+                **renderers.drawable("state", states=table.looks(), plain=True)}
     if kind == "link":
         return renderers.drawable("link", says=column.get("name_from") or "", header=header)
     if kind == "picture":

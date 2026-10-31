@@ -84,7 +84,7 @@ class RefillTests(unittest.TestCase):
 
         filled = self.by_id["g1:wheel:wheel.png"]
         self.assertTrue(filled["present"])
-        self.assertEqual(filled["reason"], "")
+        self.assertEqual(filled["reason"], "in_use")
         self.assertNotIn("g1:wheel:", self.by_id)
 
     def test_the_cache_is_dropped_for_each_game_and_read_once(self) -> None:

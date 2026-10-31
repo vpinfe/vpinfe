@@ -45,14 +45,15 @@ DISPATCH = (
 # `manager/kit/data.py` has why.
 _MARK_BY_WORD = {
     tier.noun: {"mark": tier.mark, "why": t(tier.why), "word": t(tier.noun)}
-    for tier in (media_ownership.tier_for(key) for key in media_ownership.STATES)
+    for tier in (media_ownership.tier_for(key)
+                 for key in (*media_ownership.STATES, media_ownership.UNUSED))
 }
 
 MARK = Renderer("mark", "manager.renderers.mark", (
     "params => {"
     " const m = " + json.dumps(_MARK_BY_WORD) + ";"
     " const t = m[params.value]; if (!t) return '';"
-    " const tip = t.word + ' \u2014 ' + t.why;"
+    " const tip = t.word + ' - ' + t.why;"
     " return '<span class=\"manager-mark ' + t.mark + '\" title=\"' + tip"
     " + '\"></span>'; }"
 ))
@@ -74,22 +75,20 @@ PICTURE = Renderer("picture", "manager.renderers.picture", (
 _ESCAPE = ("const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')"
            ".replace(/\"/g, '&quot;');")
 
-# A state as a chip where it is worth noticing and as a quiet word where it is not.
-# `params.states` maps each value to its label and, for the ones worth noticing, a tier,
-# a chip class or a mark drawn before the word. `why` is the tooltip.
+# A state as a word colored by what it costs, or as the character a state of this kind is
+# drawn as: a tick for in place, a question mark for not known yet. `params.states` maps each
+# token to its `label`, `tone`, `glyph` and `why`, the tooltip. A token it does not hold draws
+# nothing, or the value itself, quiet, where the column says `plain`.
 STATE = Renderer("state", "manager.renderers.state", (
     "params => {" + _ESCAPE +
     " const one = (params.states || {})[params.value];"
     " if (!one) return params.plain && params.value ? '<span class=\"manager-cell-quiet\">'"
     " + esc(params.value) + '</span>' : '';"
     " const tip = one.why ? ' title=\"' + esc(one.why) + '\"' : '';"
-    " if (one.chip) return '<span class=\"manager-member-chip ' + esc(one.chip) + '\"'"
-    " + tip + '>' + esc(one.label) + '</span>';"
-    " if (one.tier) return '<span class=\"manager-member-chip manager-tier manager-tier--'"
-    " + one.tier + '\"' + tip + '>' + esc(one.label) + '</span>';"
-    " if (one.mark) return '<span' + tip + '><i class=\"material-icons manager-cell-mark\">'"
-    " + esc(one.mark) + '</i> ' + esc(one.label) + '</span>';"
-    " return '<span class=\"manager-cell-quiet\"' + tip + '>' + esc(one.label) + '</span>'; }"
+    " const tone = one.tone ? ' manager-state--' + esc(one.tone) : '';"
+    " const body = one.icon ? '<i class=\"material-icons manager-cell-mark\">' + esc(one.icon)"
+    " + '</i>' : esc(one.glyph || one.label);"
+    " return '<span class=\"manager-state' + tone + '\"' + tip + '>' + body + '</span>'; }"
 ))
 
 # The order chips are drawn in, which is also the order a list column sorts by.

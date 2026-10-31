@@ -21,16 +21,15 @@ from manager.kit import grid as grid_module
 from manager.kit import panel, thumbnails, views, when
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
-from manager.library import discovery_ask, discovery_marks
+from manager.library import discovery_ask, discovery_marks, discovery_states
 
 SCOPE = "discovery_releases"
 # The name of this tab in the address and in the view a page sends it to.
 TAB = "releases"
 
-HAVE = "have"
-MOD = "mod"
-YES = "yes"
-NO = "no"
+HAVE, MOD = discovery_states.HAVE, discovery_states.MOD
+MISSING = discovery_states.MISSING
+NOT_COMPARED = discovery_states.NOT_COMPARED
 
 _ADDED_SAID: dict[str, Any] = {
     ":valueFormatter": "params => (params.data || {}).added_said || ''"}
@@ -51,20 +50,10 @@ def _formats(release_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
     return choices
 
 
-def columns(kind_words: Mapping[str, str], release_rows: Sequence[Mapping[str, Any]] = (),
-            *, counted: bool = True) -> list[dict[str, Any]]:
+def columns(kind_words: Mapping[str, str],
+            release_rows: Sequence[Mapping[str, Any]] = ()) -> list[dict[str, Any]]:
     """The grid's columns; `kind_words` is the VPS kinds the library collects, to the word
-    each is called, and `release_rows` the rows the format filter is made from. Have and
-    In Library mean nothing until the library has been counted."""
-    held_options: dict[str, Any] = {
-        ":cellClass": "params => params.value ? 'manager-have' : ''"}
-    library_options: dict[str, Any] = {}
-    if counted:
-        library_options.update(grid_module.choice_filter(
-            [{"value": YES, "label": t("word.yes")}, {"value": NO, "label": t("word.no")}]))
-        held_options.update(grid_module.choice_filter(
-            [{"value": HAVE, "label": t("manager.view.have")},
-             {"value": "", "label": t("manager.view.missing")}]))
+    each is called, and `release_rows` the rows the format filter is made from."""
     return [
         grid_module.identifier(
             "name", t("word.game"), 260, pinned="left", subtitle="said",
@@ -89,23 +78,19 @@ def columns(kind_words: Mapping[str, str], release_rows: Sequence[Mapping[str, A
             **grid_module.window_filter([(t(word), days)
                                          for word, days in discovery_ask.SINCE_DAYS]),
             **_ADDED_SAID),
-        grid_module.column(
-            "held", t("manager.view.have"), help=t("manager.discovery.releases.held.help"),
-            **held_options),
+        discovery_states.held().column(
+            "held", t("manager.view.have"), help=t("manager.discovery.releases.held.help")),
         grid_module.column("format", t("manager.discovery.ask.format_pick"),
                            help=t("manager.discovery.releases.format.help"),
                            **grid_module.choice_filter(_formats(release_rows))),
         grid_module.list_column(
             "features", t("manager.games.features"), 200,
             help=t("manager.discovery.releases.features.help"), plain=True),
-        grid_module.column(
-            "mod", t("manager.games.mod"), help=t("manager.discovery.releases.mod.help"),
-            **grid_module.choice_filter([{"value": MOD, "label": t("manager.games.mod")},
-                                         {"value": "",
-                                          "label": t("manager.discovery.ask.original")}])),
-        grid_module.column(
+        discovery_states.mod().column(
+            "mod", t("manager.games.mod"), help=t("manager.discovery.releases.mod.help")),
+        discovery_states.in_library().column(
             "in_library", t("manager.discovery.in_library"),
-            help=t("manager.discovery.in_library.help"), **library_options),
+            help=t("manager.discovery.in_library.help")),
     ]
 
 
@@ -133,9 +118,9 @@ def arrival_filters(question: Mapping[str, Any], *, counted: bool,
                     filed: Collection[str] | None = None) -> dict[str, Any]:
     """A question about releases (`vps_question`'s keys) as filters on the columns.
 
-    Have and In Library are left out before the library has been counted: the columns hold
-    nothing then, and a filter on them would empty the grid. `filed`, where it is known, is
-    every format the releases are filed under: a format question then keeps the releases
+    Have and In Library are left out before the library has been counted: the columns read
+    Not Compared Yet then, and a filter on them would empty the grid. `filed`, where it is
+    known, is every format the releases are filed under: a format question then keeps the releases
     that fit it as `vps_formats.fits` reads it, so one filed under no format stays."""
     out: dict[str, Any] = {}
     if question.get("since"):
@@ -149,7 +134,7 @@ def arrival_filters(question: Mapping[str, Any], *, counted: bool,
     if question.get("mod"):
         out["mod"] = {"values": [MOD if question["mod"] == "mods" else ""]}
     if counted and question.get("held"):
-        out["held"] = {"values": [HAVE if question["held"] == "have" else ""]}
+        out["held"] = {"values": [HAVE if question["held"] == "have" else MISSING]}
     if counted and question.get("owned"):
         out["in_library"] = {"values": [question["owned"]]}
     return out
@@ -190,11 +175,12 @@ def rows(found: Mapping[str, Sequence[tuple[str, Mapping[str, Any]]]],
                 "authors": [names[at] for at in release.get("by") or ()],
                 "added": added,
                 "added_said": said,
-                "held": HAVE if counted and release.get("held") else "",
+                "held": (NOT_COMPARED if not counted
+                         else HAVE if release.get("held") else MISSING),
                 "format": release.get("format") or "",
                 "features": list(release.get("features") or ()),
                 "mod": MOD if release.get("mod") else "",
-                "in_library": game.get("in_library") or "",
+                "in_library": game.get("in_library") or NOT_COMPARED,
                 discovery_marks.OWN: own,
                 discovery_marks.FIELD: discovery_marks.IGNORED if marks.release_ignored(
                     str(release["id"]), game_id) else own,
@@ -250,7 +236,7 @@ async def fill(
         shown["count"] = len(built)
 
     load()
-    grid_columns = grid_module.with_art(columns(kind_words, held, counted=counted),
+    grid_columns = grid_module.with_art(columns(kind_words, held),
                                         library.thumbnail_look())
     fields = list(_FIELDS)
     arrival = discovery_ask.opening_on(state, TAB)

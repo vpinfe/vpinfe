@@ -24,6 +24,7 @@ from manager.kit import (
     offload,
     panel,
     renderers,
+    states,
     thumbnails,
     verbs,
     views,
@@ -731,7 +732,20 @@ SCOPE = "manager.devices.columns"
 KIND_LABELS = {"vpinfe": "VPinFE", "vpx_mobile": "VPX Mobile"}
 
 _KIND_CHOICES = [{"value": label, "label": label} for label in KIND_LABELS.values()]
-_STATE_CHOICES = [{"value": text, "label": t(text)} for text, _l, _c in _REACH.values()]
+
+# A device the probes have not reached yet holds `UNASKED`, which is a ? until they land.
+UNASKED = "unasked"
+REACH = states.Table(
+    covers=t("manager.devices.state.help"),
+    states=(
+        states.State(device_client.ANSWERING, t(_REACH[device_client.ANSWERING][0]),
+                     t("manager.devices.state.answering"), glyph=states.TICK),
+        states.State(device_client.UNREACHABLE, t(_REACH[device_client.UNREACHABLE][0]),
+                     t("manager.devices.state.unreachable"), tone=states.BAD),
+        states.State(device_client.UNASKABLE, t(_REACH[device_client.UNASKABLE][0]),
+                     t("manager.devices.state.unaskable"), tone=states.QUIET),
+        states.State(UNASKED, t("manager.devices.not_asked"),
+                     t("manager.devices.state.unasked"), glyph=states.UNKNOWN)))
 
 COLUMNS: list[dict[str, Any]] = [
     # Never shown - it exists so every built-in view can sort this device to the top.
@@ -743,8 +757,7 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.devices.name.help")),
     grid.column("kind", t("word.kind"), 120, **grid.choice_filter(_KIND_CHOICES),
                 help=t("manager.devices.kind.help")),
-    grid.column("state", t("word.state"), 140, **grid.choice_filter(_STATE_CHOICES),
-                help=t("manager.devices.state.help")),
+    REACH.column("state", t("word.state"), 150),
     grid.column("last_seen", t("word.last_seen"), 170,
                 help=t("manager.devices.last_seen.help"),
                 **when.cell("last_seen")),
@@ -752,12 +765,7 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.devices.address.help")),
     grid.column("version", t("word.version"), 160,
                 help=t("manager.devices.version.help")),
-    grid.column("browser", t("manager.devices.browser"), 150,
-                help=t("manager.devices.browser.help"),
-                **grid.choice_filter([{"value": key, "label": one["label"]}
-                                      for key, one in browser_state.STATES.items()],
-                                     formatted=True),
-                **renderers.drawable("state", states=browser_state.STATES)),
+    browser_state.TABLE.column("browser", t("manager.devices.browser"), 150),
     grid.list_column("features", t("manager.devices.features"), 150,
                      help=t("manager.devices.features.help"),
                      looks=renderers.FEATURE_LOOKS),
@@ -781,13 +789,12 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.answering": views.Preset(
         columns=("name", "kind", "address", "version", "browser", "features"),
         sort=(_SELF_FIRST, {"colId": "name", "sort": "asc", "sortIndex": 1}),
-        filters={"state": {"values": [_REACH[device_client.ANSWERING][0]]}},
+        filters={"state": {"values": [device_client.ANSWERING]}},
         help=t("manager.devices.answering_view.help")),
     "manager.devices.not_answering": views.Preset(
         columns=("name", "kind", "state", "last_seen", "address"),
         sort=(_SELF_FIRST, {"colId": "last_seen", "sort": "asc", "sortIndex": 1}),
-        filters={"state": {"values": [_REACH[device_client.UNREACHABLE][0],
-                                      _REACH[device_client.UNASKABLE][0]]}},
+        filters={"state": {"values": [device_client.UNREACHABLE, device_client.UNASKABLE]}},
         help=t("manager.devices.unreached_view.help")),
 }
 
@@ -806,15 +813,13 @@ def rows(devices: list[dict[str, Any]],
     for device in devices:
         device_id = str(device.get("device_id") or "")
         probe = found.get(device_id) or {}
-        state = _REACH.get(str(probe.get("state") or ""))
+        state = str(probe.get("state") or "")
         out.append({
             "id": device_id,
             "self": device_id == (local_device_id or ""),
             "name": device_label(device),
             "kind": KIND_LABELS.get(str(device.get("kind") or "vpinfe"), "VPinFE"),
-            # Blank until the probes land, rather than a word meaning "not yet": a
-            # grid filter over "Checking" is a filter over how fast the page loaded.
-            "state": state[0] if state else "",
+            "state": state if state in _REACH else UNASKED,
             "version": str(probe.get("version") or ""),
             "browser": str(_browser_of(device, probe).get("state") or ""),
             "address": str(device.get("address") or ""),
@@ -880,8 +885,8 @@ def build(found: list[dict[str, Any]], library: Any, state: dict[str, Any],
         if selected:
             return grid.selection_said(table, len(selected), t(
                 "manager.devices.selected", picked=len(selected), shown=on_screen["rows"]))
-        away = sum(1 for row in built if row["state"]
-                   and row["state"] != _REACH[device_client.ANSWERING][0])
+        away = sum(1 for row in built
+                   if row["state"] in (device_client.UNREACHABLE, device_client.UNASKABLE))
         if on_screen["rows"] != len(built):
             return t("manager.devices.devices_2", shown=(on_screen["rows"]),
                      count=(len(built)))

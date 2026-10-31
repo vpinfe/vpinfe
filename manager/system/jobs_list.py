@@ -11,7 +11,7 @@ from typing import Any
 
 from common.i18n import t
 from common.runtime import jobs
-from manager.kit import grid, when
+from manager.kit import grid, states, when
 
 SCOPE = "manager.jobs"
 
@@ -50,6 +50,21 @@ WITH_ERRORS = "with_errors"
 OUTCOMES = (jobs.RUNNING, jobs.DONE, WITH_ERRORS, jobs.FAILED, STOPPED)
 
 
+def _outcome(one: str, tone: str, glyph: str = "") -> states.State:
+    return states.State(one, t(f"manager.jobs.outcome.{one}"),
+                        t(f"manager.jobs.outcome.{one}.help"), tone=tone, glyph=glyph)
+
+
+# In the order a job lives: running, then how it ended.
+OUTCOME_STATES = states.Table(
+    covers=t("manager.jobs.outcome.help"),
+    states=(_outcome(jobs.RUNNING, states.ACCENT),
+            _outcome(jobs.DONE, states.PLAIN, states.TICK),
+            _outcome(WITH_ERRORS, states.WARN),
+            _outcome(jobs.FAILED, states.BAD),
+            _outcome(STOPPED, states.QUIET)))
+
+
 def _said(field: str) -> dict[str, Any]:
     """A column whose cell holds a number to sort by, and shows the row's `<field>_said`."""
     return {":valueFormatter": f"params => (params.data || {{}}).{field}_said || ''"}
@@ -62,10 +77,7 @@ COLUMNS = [
                 help=t("manager.jobs.started.help"), **_said("started"), **OPENS_REPORT),
     grid.column("took", t("manager.jobs.took"), 130, filter=False,
                 help=t("manager.jobs.took.help"), **_said("took"), **OPENS_REPORT),
-    grid.column("outcome", t("manager.jobs.outcome"), 120,
-                help="\n".join(t(f"manager.jobs.outcome.{one}.help") for one in OUTCOMES),
-                **grid.choice_filter([{"value": one, "label": t(f"manager.jobs.outcome.{one}")}
-                                      for one in OUTCOMES]), **OPENS_REPORT),
+    OUTCOME_STATES.column("outcome", t("manager.jobs.outcome"), 140, **OPENS_REPORT),
     grid.column("detail", t("manager.jobs.detail"), 420,
                 help=t("manager.jobs.detail.help"),
                 **{":cellRenderer": _DETAIL_RENDERER}, **OPENS_REPORT),

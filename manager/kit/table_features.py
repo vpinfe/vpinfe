@@ -72,9 +72,8 @@ _STATES = {
                    glyph_class="manager-unknown"),
 }
 
-# All three, unlike a media legend: "not used" is drawn as nothing, so it is exactly the
-# one a reader has to look up.
-STATES = (IN_SCRIPT, UNUSED, UNKNOWN)
+# In place, then unknown, then the blank: the order a header and a filter list them.
+STATES = (IN_SCRIPT, UNKNOWN, UNUSED)
 
 
 def key_of(value: Any) -> str:

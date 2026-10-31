@@ -655,7 +655,7 @@ async def _draw_theme(container: ui.column, title: ui.column, library: Library,
     title.clear()
     with container:
         _title(title, str(theme.get("name") or key),
-               themes_page.STATES[themes_page.status(theme)]["label"])
+               themes_page.STATUS.word(themes_page.status(theme)))
         context: dict[str, Any] = {"library": library, "theme": theme, "state": state,
                                    "redraws": [], "dock": None}
         context["rebuild"] = _rebuilds(

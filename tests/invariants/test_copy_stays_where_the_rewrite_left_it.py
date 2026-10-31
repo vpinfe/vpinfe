@@ -13,10 +13,7 @@ OVER = 80
 
 OVER_EIGHTY = 117
 
-TOO_LONG_TODAY = frozenset({
-    "manager.media.reason.help",
-    "manager.assets.reason.help",
-})
+TOO_LONG_TODAY: frozenset[str] = frozenset()
 
 NUMBER_MARK = re.compile(r"\{(\w+):n\}")
 

@@ -15,9 +15,11 @@ from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk
 
-# The panel's State and the grid's cell, each by its words.
+# The panel's State by its word, and the grid's cell by the tick it draws, which carries the
+# word in its tooltip.
 PANEL = "[...document.querySelectorAll('.manager-tier')].map(el => el.innerText.trim())"
-GRID = "[...document.querySelectorAll('.ag-cell')].map(el => el.innerText.trim())"
+GRID = ("[...document.querySelectorAll('.ag-cell[col-id=state] .manager-state')]"
+        ".map(el => el.title.split(' - ')[0])")
 PANEL_ANSWERS = f"{GRID}.includes('Answering') && {PANEL}.includes('Answering')"
 CHIPS = "[...document.querySelectorAll('.manager-chips .manager-tier')]"
 FEATURES = f"{CHIPS}.map(el => el.innerText.trim())"

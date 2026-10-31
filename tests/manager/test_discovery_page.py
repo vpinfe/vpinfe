@@ -70,12 +70,15 @@ class Rows(unittest.TestCase):
                                        cells["kind_rom"]})
         self.assertEqual("", cells["kind_pov"])
 
-    def test_nothing_is_said_while_the_library_has_never_been_counted(self) -> None:
+    def test_what_the_library_holds_is_not_compared_until_it_has_been_counted(self) -> None:
         row = discovery.rows(_found(_entry(in_library=None, held=[]), counted=""))[0]
 
-        self.assertEqual("", row["in_library"])
-        self.assertEqual({""}, set(_cells(row).values()))
-        self.assertEqual("", row["gap"])
+        cells = _cells(row)
+        self.assertEqual("not_compared", row["in_library"])
+        self.assertEqual({"not_compared"}, {cells["kind_table"], cells["kind_backglass"],
+                                            cells["kind_rom"]})
+        self.assertEqual("", cells["kind_pov"])
+        self.assertEqual("not_compared", row["gap"])
 
     def test_the_gap_column_says_missing_only_where_something_is(self) -> None:
         complete = _entry("a", listed=["tableFiles"], held=["tableFiles"])

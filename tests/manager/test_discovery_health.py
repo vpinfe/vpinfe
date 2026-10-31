@@ -253,7 +253,7 @@ class GamesViewTests(unittest.TestCase):
 
     def test_a_game_is_shared_where_another_is_matched_to_its_entry(self) -> None:
         self.assertEqual({row["id"]: row["vps_shared"] for row in self._rows()},
-                         {"g1": True, "g2": True, "g3": False, "g4": False, "g5": False})
+                         {"g1": "shared", "g2": "shared", "g3": "", "g4": "", "g5": ""})
 
     def test_games_matched_to_nothing_do_not_share_it(self) -> None:
         shared = {row["id"] for row in self._rows() if row["vps_shared"]}
@@ -296,7 +296,7 @@ class GamesViewTests(unittest.TestCase):
         self.assertIn('"Shared"', column[":valueFormatter"])
         self.assertEqual([(one["value"], one["label"])
                           for one in column["filterParams"]["choices"]],
-                         [(True, "Shared"), (False, "Not shared")])
+                         [("shared", "Shared"), ("", "Not Shared")])
         self.assertEqual(games.COLUMN_SECTIONS["vps_shared"], "game_details")
 
 

@@ -256,9 +256,11 @@ class TheGrid(unittest.TestCase):
 
         self.assertEqual("state", shown["cellRendererParams"]["drawn"])
         self.assertEqual(
-            {"live": {"label": "Live", "why": "Taking requests", "tier": "on"},
-             "late": {"label": "Late", "why": "", "mark": "schedule"},
-             "gone": {"label": "Gone", "why": ""}},
+            {"live": {"label": "Live", "why": "Live - Taking requests", "tone": "on",
+                      "glyph": "", "icon": ""},
+             "late": {"label": "Late", "why": "Late", "tone": "", "glyph": "",
+                      "icon": "schedule"},
+             "gone": {"label": "Gone", "why": "Gone", "tone": "", "glyph": "", "icon": ""}},
             shown["cellRendererParams"]["states"])
 
     def test_a_state_an_extension_does_not_list_is_drawn_plain_there_only(self) -> None:

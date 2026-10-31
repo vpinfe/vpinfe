@@ -108,7 +108,7 @@ class TheWalk(unittest.TestCase):
                 patch.object(vps_match.ui, "notify", lambda *a, **k: None), \
                 patch.object(vps_match.run, "io_bound", _ran_here):
             asyncio.run(vps_match.walk(library, [{"id": "id-A", "name": "A",
-                                                  "vps_unmatched": False}]))
+                                                  "vps_match": "matched"}]))
 
         self.assertEqual(asked[0].get("vps_id"), "vps-1")
 

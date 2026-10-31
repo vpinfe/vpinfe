@@ -18,17 +18,18 @@ class PrivateColumnTests(unittest.TestCase):
     def test_only_a_private_game_is_drawn_and_as_a_quiet_chip(self) -> None:
         states = self.column["cellRendererParams"]["states"]
 
-        self.assertEqual(list(states), [True])
-        self.assertEqual(states[True]["label"], game_tables.PRIVATE_WORDS[0])
-        self.assertEqual(states[True]["chip"], "manager-chip-quiet")
-        self.assertEqual(states[True]["why"], game_tables.PRIVATE_HELP)
+        self.assertEqual(list(states), [game_tables.PRIVATE_CELL])
+        drawn = states[game_tables.PRIVATE_CELL]
+        self.assertEqual(drawn["label"], game_tables.PRIVATE_WORDS[0])
+        self.assertEqual(drawn["tone"], "quiet")
+        self.assertIn(game_tables.PRIVATE_HELP, drawn["why"])
 
     def test_the_funnel_offers_the_pair_notable_first(self) -> None:
         choices = self.column["filterParams"]["choices"]
 
         self.assertEqual([one["label"] for one in choices],
                          list(game_tables.PRIVATE_WORDS))
-        self.assertEqual([one["value"] for one in choices], [True, False])
+        self.assertEqual([one["value"] for one in choices], [game_tables.PRIVATE_CELL, ""])
 
     def test_the_frontend_view_shows_it_beside_hidden(self) -> None:
         shown = list(getattr(games.GAME_VIEWS["manager.view.frontend"], "columns", ()))
@@ -53,7 +54,8 @@ class PrivateRowTests(unittest.TestCase):
         library, _client = _library([{"id": "g1", "name": "A", "private": True},
                                      {"id": "g2", "name": "B"}])
 
-        self.assertEqual([row["private"] for row in library.game_rows()], [True, False])
+        self.assertEqual([row["private"] for row in library.game_rows()],
+                         [game_tables.PRIVATE_CELL, ""])
 
     def test_a_selection_is_written_once_and_the_copy_follows_the_answer(self) -> None:
         library, client = _library([{"id": "g1", "private": False},

@@ -245,9 +245,9 @@ class Views(unittest.TestCase):
         assert not isinstance(everything, list)
         assert not isinstance(deleted, list)
 
-        self.assertEqual(("name", "kind", "taken", "reason", "size", "gone"),
+        self.assertEqual(("name", "kind", "taken", "reason", "size", "original"),
                          everything.columns)
-        self.assertEqual({"gone": {"values": [True]}}, deleted.filters)
+        self.assertEqual({"original": {"values": [backups.ORIGINAL_MISSING]}}, deleted.filters)
         self.assertEqual(["manager.view.everything", "manager.view.backups_deleted",
                           "manager.view.backups_yours"], list(backups.VIEWS)[:3])
 

@@ -3891,11 +3891,8 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-tick { text-align: center; color: var(--positive); }
 .manager-unknown { text-align: center; color: var(--ink-3); font-weight: 600; }
 
-/* Discovery's cells: Have is present, so green as everywhere. Missing is quiet, not amber:
-   most of a catalog is missing most kinds, which is a gap to browse, not a fault to fix.
-   Blank is the kind VPS does not list. */
+/* A wall note that says Have is present, so green as everywhere. */
 .manager-have { color: var(--positive); }
-.manager-lack { color: var(--ink-3); }
 
 /* Discovery's pane. The VPS picture shows whole on a plate, and the way to the entry sits
    on its corner. */
@@ -3920,7 +3917,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 .manager-vps-picture--open { cursor: zoom-in; }
 
-/* A rail section's mark: only an exception wears one. Beside the rail the glyph sits in
+/* A rail section's mark: every kind draws its state. Beside the rail the glyph sits in
    the row's reserved right gutter; stacked, the word comes with it and the caret follows. */
 .manager-section-row { position: relative; }
 .manager-section-corner {
@@ -4424,6 +4421,13 @@ svg.manager-cell-noart {
   width: var(--icon-slot-small); height: var(--icon-slot-small); fill: currentColor;
 }
 .manager-cell-quiet { color: var(--ink-3); }
+/* A state column's cell: the word colored by what the state costs, or the character it is
+   drawn as. Plain, with no `--` class, is a neutral fact. */
+.manager-state--on { color: var(--positive); }
+.manager-state--warn { color: var(--warm); }
+.manager-state--bad { color: var(--danger); }
+.manager-state--quiet { color: var(--ink-3); }
+.manager-state--accent { color: var(--accent); }
 /* A chip after a grid cell's value is inline text, so `.manager-member-chip`'s
    `align-self` does nothing for it. On the baseline, the Manager's 12px caption caps
    beside 14px body caps leave it low by half the difference in cap height (about 0.85px);
@@ -4808,8 +4812,8 @@ svg.manager-cell-noart {
   background: var(--surface-1); box-shadow: var(--shadow-drag);
 }
 .manager-suggest-head {
-  padding: 6px 12px 2px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--ink-3);
+  padding: 6px 12px 2px; font-size: 11px; line-height: 1.4; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-3);
 }
 .manager-suggest-row {
   display: flex; align-items: center; gap: 10px; padding: 5px 12px; cursor: pointer;
@@ -4853,7 +4857,6 @@ svg.manager-cell-noart {
 .manager-wall-name { font-size: var(--fs-caption); color: var(--ink); }
 .manager-wall-note { font-size: 11px; color: var(--ink-3); }
 .manager-wall-note--part { color: var(--ink-2); }
-.manager-wall-note--warm { color: var(--warm); }
 /* Underlined where a tooltip says more. */
 .manager-wall-note--tip {
   text-decoration: underline dotted var(--ink-3); text-underline-offset: 3px; width: fit-content;

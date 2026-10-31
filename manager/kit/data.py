@@ -119,6 +119,12 @@ def _kept_of(policy: dict) -> dict[str, set[str]]:
     return library_policy.kept_kinds(policy)
 
 
+# What a tag row holds for whether a game or table carries it, and for whether another tag
+# is the same word in different case or spacing.
+TAG_IN_USE, TAG_UNUSED = "in_use", "unused"
+TAG_ONE, TAG_TWO = "one", "two"
+
+
 def tag_source(said: dict[str, Any]) -> str:
     return t("manager.tags.source", extension=str(said.get("display_name")
                                                  or said.get("extension") or ""),
@@ -2033,11 +2039,9 @@ class Library:
                          "sources": list(one.get("sources") or []),
                          "source": ", ".join(tag_source(said)
                                              for said in one.get("sources") or []),
-                         # Only where there is another spelling of it - a mark on every
-                         # row would say nothing, and this is the row people are after.
-                         "duplicate": keys[key] > 1,
-                         "unused": not (int(one.get("games") or 0)
-                                        or int(one.get("tables") or 0))})
+                         "spelling": TAG_TWO if keys[key] > 1 else TAG_ONE,
+                         "use": TAG_IN_USE if (int(one.get("games") or 0)
+                                               or int(one.get("tables") or 0)) else TAG_UNUSED})
         return rows
 
     def vps_search(self, term: str, limit: int = 40) -> list[dict]:
@@ -2420,11 +2424,12 @@ class Library:
                 # The absence, not the id: the grid marks what needs attention, and
                 # nobody reads a VPS id down a column. The id itself is one click away
                 # in the panel, which is where it can be checked against the catalog.
-                "vps_unmatched": not game.get("vps_id"),
-                "vps_shared": on_entry[game.get("vps_id") or ""] > 1,
+                "vps_match": game_tables.vps_match(game),
+                "vps_shared": game_tables.VPS_SHARED
+                if on_entry[game.get("vps_id") or ""] > 1 else "",
                 "vps_matched_by": game_tables.how_matched(game),
-                "hidden": bool(game.get("hidden")),
-                "private": bool(game.get("private")),
+                "hidden": game_tables.HIDDEN_CELL if game.get("hidden") else "",
+                "private": game_tables.PRIVATE_CELL if game.get("private") else "",
                 "rating": game.get("rating") or 0,
                 "themes": list(game.get("themes") or []),
                 "tags": [*((game.get("user") or {}).get("tags") or []),
@@ -2435,7 +2440,8 @@ class Library:
                 # to sit here was a single "Assets" count computed from `entries` -
                 # the *media* map - so the column read as assets and counted media,
                 # beside a Media group showing the same thing per kind.
-                **{f"asset_{key}": bool(entry.get("present"))
+                **{f"asset_{key}": game_tables.ASSET_PRESENT if entry.get("present")
+                   else game_tables.ASSET_MISSING
                    for key, entry in (game.get("assets") or {}).items()},
                 # One field per kind, so media reads as columns over game rows. Blank
                 # rather than a cross when absent: a sparse matrix stays scannable,

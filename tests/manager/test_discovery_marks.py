@@ -98,7 +98,7 @@ class ColumnTests(unittest.TestCase):
 
         self.assertEqual((column["field"], column["headerName"]), ("mark", "Status"))
         self.assertEqual([one["value"] for one in column["filterParams"]["choices"]],
-                         [IGNORED, WANTED])
+                         [WANTED, IGNORED])
 
     def test_both_grids_carry_it_and_the_everything_views_show_it(self) -> None:
         self.assertIn("mark", [one["field"] for one in discovery.COLUMNS])

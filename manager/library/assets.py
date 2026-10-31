@@ -24,7 +24,7 @@ from common import icons
 from common.games import asset_lens
 from common.i18n import t
 from manager.kit import game_tables, grid, media_ownership, offload, panel, thumbnails, views
-from manager.library import file_acts, text_editor
+from manager.library import file_acts, file_states, text_editor
 from manager.library.games import view_control
 
 logger = logging.getLogger("vpinfe.manager.library.assets")
@@ -34,13 +34,7 @@ SCOPE = "manager.assets.columns"
 # What the wire's binding is called on screen. Three of the four are the words the media
 # lens already uses for the same question - whose file is this - and `orphaned` is the
 # one assets have and media does not: a file named for a table that is not there.
-ORPHAN = media_ownership.tier_for(media_ownership.ORPHAN).noun
-UNUSED = media_ownership.tier_for(media_ownership.UNUSED).noun
-MISSING = media_ownership.tier_for(media_ownership.MISSING).noun
-
-_REASON_CHOICES = ([{"value": "", "label": t("word.in_use")}]
-                   + [{"value": word, "label": t(word)}
-                      for word in (MISSING, ORPHAN, UNUSED)])
+ORPHAN, UNUSED, MISSING = file_states.ORPHAN, file_states.UNUSED, file_states.MISSING
 
 _SCOPE_CHOICES = [{"value": "game", "label": t("word.game")},
                   {"value": "table", "label": t("word.table")}]
@@ -67,7 +61,7 @@ def _with_kind_filter(columns: list[dict[str, Any]], library: Any) -> list[dict[
 
 
 def _reason(row: dict[str, Any]) -> str:
-    """Why this file is not the one being used, blank while it is.
+    """Whether this file is the one being used, and if not why.
 
     An asset has a second way to be unused that media does not: VPX resolves a script
     and a point of view by table stem only, so one named for the folder is correctly
@@ -78,7 +72,7 @@ def _reason(row: dict[str, Any]) -> str:
         return ORPHAN
     if not row.get("present"):
         return MISSING
-    return UNUSED if row.get("serves") == 0 else ""
+    return UNUSED if row.get("serves") == 0 else file_states.IN_USE
 
 
 def rows(found: list[dict[str, Any]],
@@ -134,9 +128,8 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.assets.source.help")),
     grid.column("used_by", t("word.used_by"), type="numericColumn", group=t(_FILE),
                 help=t("manager.assets.used_by.help")),
-    grid.column("reason", t("word.unused_reason"), 150, group=t(_FILE),
-                **grid.choice_filter(_REASON_CHOICES),
-                help=t("manager.assets.reason.help")),
+    file_states.table("manager.assets.unused_meaning").column(
+        "reason", t("word.in_use"), 150, help=t("manager.assets.reason.help"), group=t(_FILE)),
     grid.column("match", t("manager.assets.match"), 140, group=t(_SOURCE),
                 help=t("manager.assets.match.help")),
     grid.column("manufacturer", t("word.manufacturer"), 150, group=t(_GAME),
@@ -151,7 +144,7 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.have": views.Preset(
         columns=("game", "label", "path", "source", "used_by", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": ["", ORPHAN, UNUSED]}},
+        filters={"reason": {"values": [file_states.IN_USE, ORPHAN, UNUSED]}},
         help=t("manager.assets.have_view.help")),
     "manager.view.missing": views.Preset(
         columns=("game", "label", "reason"),
@@ -172,7 +165,7 @@ VIEWS: dict[str, list[str] | views.Preset] = {
         columns=("game", "label", "path", "source", "used_by", "match"),
         sort=({"colId": "source", "sort": "asc", "sortIndex": 0},
               {"colId": "game", "sort": "asc", "sortIndex": 1}),
-        filters={"reason": {"values": [""]}},
+        filters={"reason": {"values": [file_states.IN_USE]}},
         help=t("manager.assets.sources_view.help")),
     "manager.view.everything": views.Preset(
         columns=tuple(_ALL),

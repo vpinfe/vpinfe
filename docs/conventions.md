@@ -1371,6 +1371,9 @@ to Yes/No.
 State chips are not media tiers. `manager/kit/media_ownership.py` answers "whose file is this", and its amber
 means the exception worth spotting in a map of twenty.
 
+**Chips are for panels.** A grid draws the same state as a colored word (*A state column draws
+every row*), in the same color a chip of that state wears here.
+
 ### A finding leads the panel, with its fix
 
 What is wrong with a subject comes before anything merely true about it: one
@@ -1431,9 +1434,11 @@ sense it can live with: a dashed circle means **Missing** in media ownership, so
 nobody has parsed cannot wear one — it is not missing. Where no shape fits, a character often
 says it outright; `?` needs no legend at all.
 
-**Nothing explains a blank.** A state drawn as nothing gets no legend entry — a blank cell is
-not something anybody looks up, and a legend line beside empty space reads as a mark that
-failed to render. The legend names what is drawn, and only that.
+**Nothing explains a blank in a legend.** A state drawn as nothing gets no legend entry — a
+blank cell is not something anybody looks up, and a legend line beside empty space reads as a
+mark that failed to render. The legend names what is drawn, and only that. A *state column*
+is the one place a blank is named, in its header tooltip and as the last row of its filter,
+because there it means one thing: the fact does not apply to the row.
 
 **A legend names the states the library has**, not every state the vocabulary declares. Build
 it from the rows on screen: a state that never occurs is a line spent on every visit
@@ -1443,6 +1448,42 @@ does.
 **A filter offers the marks the grid draws.** If a cell renders nothing for a state, its entry
 in the funnel carries no mark either — otherwise the filter promises a drawing that is never
 on screen. The choice itself stays: what it loses is a picture, not the ability to pick it.
+
+### A state column draws every row
+
+A column that holds one of a few states of one fact - a match, a ROM, a file in use - follows
+one rule, so a reader who has learned one grid has learned them all. `manager/kit/states.py`
+builds it from one `Table` per fact, which gives the cell, the formatter, the header tooltip,
+the filter, the sort and the legend, so they cannot drift.
+
+1. **Name the column for the fact,** in the panel's words: VPS Match, In Use, ROM State. Never
+   for one of its states, and never *Status* on a page with more than one such column.
+2. **One set of words per fact,** title case, owned by the module that owns the fact and used
+   by every page that shows it. The act produces its state: Match gives Matched, Clear Match
+   gives Cleared.
+3. **Every row draws its state, the good one included.** In place is a tick, not known yet is
+   a question mark, and every other state is a word.
+4. **Blank means one thing per column: the fact does not apply to the row.** A two-state
+   column named for its true state, Hidden or Shared, may leave false blank.
+5. **A tick means in place and nothing else,** always green. A choice or a fault is a word,
+   even in a two-state column.
+6. **Color by consequence,** as the panel's chips already do: green for a tick; amber where
+   VPinFE needs you and you can fix it; red where play breaks; quiet for a choice or for
+   coverage; plain for a neutral fact. A grid colors the word, and chips stay in panels.
+7. **Values run from most in place to least,** then Unknown, then blank. A lifecycle keeps
+   its own order. Sort, filter and legend follow it.
+8. **The filter is the checkbox list,** one row per state in that order, with the cell's tick,
+   question mark and color, the whole library's count beside it (none at zero), and a last row
+   for blank, named for what blank means: No ROM, Not Listed, Not Set. A state the column
+   cannot hold gets no row. A count appears only inside an open filter, never in a cell, a
+   header or the nav: a count that is always lit is noise.
+9. **Tooltips:** the header says what the column covers, then one line per state in order,
+   *Word - meaning*, with the blank's line last. A cell's tooltip is *Word - why*, on every
+   tick and question mark and on any word with a reason of its own. A filter row's tooltip is
+   that state's header line. The separator is a spaced hyphen everywhere.
+10. **A boolean is a token.** A column's value is the state's token, never `true` or `false`,
+    which AG Grid draws as a checkbox. `states.Table.column` draws no checkbox, and a page that
+    builds a column some other way turns it off.
 
 ### An icon at the end of a row
 

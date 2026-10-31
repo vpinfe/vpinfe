@@ -54,8 +54,9 @@ class TheRows(unittest.TestCase):
         self.assertIn("d.hidden_said", _column("count")[":cellRenderer"])
 
     def test_needing_attention_is_a_game_taken_out_gone_or_hidden(self) -> None:
-        self.assertEqual({"90s Bally": True, "Five Bally": False, "Friday Night": True,
-                          "Tournament": True},
+        needed = collections.ATTENTION_NEEDED
+        self.assertEqual({"90s Bally": needed, "Five Bally": "", "Friday Night": needed,
+                          "Tournament": needed},
                          {one["name"]: one["attention"] for one in self.built})
         preset = collections.COLLECTION_VIEWS["manager.collections.needs_attention"]
         assert not isinstance(preset, list)
@@ -73,6 +74,8 @@ class TheRows(unittest.TestCase):
 
         self.assertEqual({"90s Bally": False, "Friday Night": True},
                          {one["name"]: one["in_frontend"] for one in built})
+        self.assertEqual({"90s Bally": "", "Friday Night": collections.MENU_IN},
+                         {one["name"]: one["in_menu"] for one in built})
         self.assertIn(verbs.HIDE, _column("name")[":cellRenderer"])
 
     def test_an_order_reads_in_its_field_s_own_words(self) -> None:
@@ -168,7 +171,8 @@ class TheViews(unittest.TestCase):
 
     def test_needs_attention_filters_on_a_column_the_grid_has(self) -> None:
         wanted = self.built[1]
-        self.assertEqual({"attention": {"values": [True]}}, wanted.filters)
+        self.assertEqual({"attention": {"values": [collections.ATTENTION_NEEDED]}},
+                         wanted.filters)
         self.assertLessEqual(set(wanted.filters) | set(wanted.columns), self.fields)
         self.assertEqual(grid.CHOICE_FILTER, _column("attention")[":filter"])
 

@@ -85,9 +85,11 @@ STANDING_WORD = {HAVE: "manager.view.have", OTHER: "manager.discovery.ask.have_o
                  UNKNOWN: "manager.discovery.ask.have_unknown",
                  MISSING: "manager.discovery.ask.missing"}
 _STANDING_CLASS = {HAVE: "manager-have", OTHER: "manager-wall-note--part",
-                   UNKNOWN: "manager-wall-note--part", MISSING: "manager-wall-note--warm"}
+                   UNKNOWN: "manager-wall-note--part", MISSING: ""}
 # What a game's cell for a kind reads when the library has a file of that kind.
 MATCHED, UNMATCHED = "matched", "unmatched"
+# What a counted column reads before the library has been compared with VPS.
+NOT_COMPARED = "not_compared"
 FILES = (MATCHED, UNMATCHED)
 
 
@@ -340,7 +342,7 @@ def page(*, subject: Mapping[str, str], state: dict[str, Any],
         own.clear()
         own["for"] = (kind, name)
     by_id = {str(row["id"]): row for row in rows}
-    counted = any(row.get("in_library") for row in rows)
+    counted = any(row.get("in_library") not in (None, "", NOT_COMPARED) for row in rows)
     playable = launchers.playable_formats(launchers.get_launcher_store().launchers())
     found_for: dict[tuple[str, bool, bool], dict[str, Fitting]] = {}
     typed = {"text": ""}

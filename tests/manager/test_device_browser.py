@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import requests
 
+from common.devices import device_client
 from common.host import frontend_browser as fb
 from common.i18n import t
 from manager.devices import browser_state, devices
@@ -56,10 +57,11 @@ class GridTests(unittest.TestCase):
                  for index, state in enumerate(devices._REACH)}
         built = devices.rows([{"device_id": key, "display_name": key, "kind": "vpinfe"}
                               for key in found], found)
-        order = sorted(built, key=lambda row: row["state"],
+        rank = devices.REACH.rank()
+        order = sorted(built, key=lambda row: rank[row["state"]],
                        reverse=by_state["sort"] == "desc")
 
-        self.assertEqual(order[0]["state"], "manager.devices.answering")
+        self.assertEqual(order[0]["state"], device_client.ANSWERING)
         self.assertEqual(t("manager.devices.all_view.help"), "Every device, answering first")
 
 

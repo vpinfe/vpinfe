@@ -41,7 +41,7 @@ class OfferTests(unittest.TestCase):
 
         self.assertNotIn("old", [one["id"] for one in launchers.launcher_offer(HELD, "vpx")])
         self.assertEqual(next(one["mark"] for one in named if one["id"] == "old"),
-                         t(launchers.STATE_OFF))
+                         launchers.STATES.word(launchers.STATE_OFF))
 
 
 class NoteTests(unittest.TestCase):

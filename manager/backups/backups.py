@@ -27,6 +27,7 @@ from manager.kit import (
     deeplink,
     offload,
     panel,
+    states,
     undo,
     verbs,
     views,
@@ -117,6 +118,15 @@ def _choices(words: dict[str, str]) -> list[dict[str, Any]]:
     return [{"value": value, "label": t(word)} for value, word in words.items()]
 
 
+ORIGINAL_PRESENT, ORIGINAL_MISSING = "present", "missing"
+
+ORIGINAL = states.Table(
+    covers=t("manager.backups.original.help"),
+    states=(states.State(ORIGINAL_PRESENT, t("manager.backups.present"),
+                         t("manager.backups.present.meaning"), glyph=states.TICK),
+            states.State(ORIGINAL_MISSING, t("manager.backups.gone"),
+                         t("manager.backups.gone.meaning"), tone=states.WARN)))
+
 COLUMNS = [
     grid_module.identifier("name", t("manager.backups.name"), 220, pinned="left",
                            help=t("manager.backups.name.help"),
@@ -137,14 +147,7 @@ COLUMNS = [
     grid_module.column("size", t("word.size"), 100, type="numericColumn",
                        help=t("manager.backups.size.help"),
                        **{":valueFormatter": "params => (params.data || {}).size_text || ''"}),
-    grid_module.column("gone", t("manager.backups.gone"), 130,
-                       help=t("manager.backups.gone.help"),
-                       **{":valueFormatter": "params => params.value ? '✓' : ''",
-                          "cellClass": "manager-tick",
-                          **grid_module.choice_filter(
-                              [{"value": True, "label": t("manager.backups.gone")},
-                               {"value": False, "label": t("manager.backups.present")}],
-                              formatted=True)}),
+    ORIGINAL.column("original", t("manager.backups.original"), 130),
     grid_module.column("note", t("manager.backups.note"), 220,
                        help=t("manager.backups.note.help")),
     grid_module.column("written_by", t("manager.backups.written_by"), 160,
@@ -170,31 +173,33 @@ def _by_kind(kinds: list[str], columns: tuple[str, ...], *, help: str) -> views.
 
 VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.everything": views.Preset(
-        columns=("name", "kind", "taken", "reason", "size", "gone"), sort=_NEWEST_FIRST,
+        columns=("name", "kind", "taken", "reason", "size", "original"), sort=_NEWEST_FIRST,
         help=t("manager.backups.everything_view.help")),
     "manager.view.backups_deleted": views.Preset(
         columns=("name", "kind", "taken", "reason", "size"), sort=_NEWEST_FIRST,
-        filters={"gone": {"values": [True]}}, help=t("manager.backups.deleted_view.help")),
+        filters={"original": {"values": [ORIGINAL_MISSING]}},
+        help=t("manager.backups.deleted_view.help")),
     "manager.view.backups_yours": _by_kind(
-        [kept_copies.KIND_ARCHIVE], ("name", "taken", "size", "gone", "note"),
+        [kept_copies.KIND_ARCHIVE], ("name", "taken", "size", "original", "note"),
         help=t("manager.backups.yours_view.help")),
     "manager.view.backups_games": _by_kind(
-        [kept_copies.KIND_GAME], ("name", "taken", "reason", "size", "gone", "written_by"),
+        [kept_copies.KIND_GAME], ("name", "taken", "reason", "size", "original", "written_by"),
         help=t("manager.backups.games_view.help")),
     "manager.view.backups_media": _by_kind(
-        [kept_copies.KIND_MEDIA], ("name", "taken", "reason", "size", "gone", "file"),
+        [kept_copies.KIND_MEDIA], ("name", "taken", "reason", "size", "original", "file"),
         help=t("manager.backups.media_view.help")),
     "manager.view.backups_assets": _by_kind(
-        [kept_copies.KIND_ASSET], ("name", "taken", "reason", "size", "gone", "file"),
+        [kept_copies.KIND_ASSET], ("name", "taken", "reason", "size", "original", "file"),
         help=t("manager.backups.assets_view.help")),
     "manager.view.backups_tables": _by_kind(
-        [kept_copies.KIND_TABLE], ("name", "table", "taken", "reason", "size", "gone", "file"),
+        [kept_copies.KIND_TABLE],
+        ("name", "table", "taken", "reason", "size", "original", "file"),
         help=t("manager.backups.tables_view.help")),
     "manager.view.backups_launchers": _by_kind(
-        [kept_copies.KIND_LAUNCHER], ("name", "taken", "reason", "size", "gone", "note"),
+        [kept_copies.KIND_LAUNCHER], ("name", "taken", "reason", "size", "original", "note"),
         help=t("manager.backups.launchers_view.help")),
     "manager.view.backups_themes": _by_kind(
-        [kept_copies.KIND_THEME], ("name", "taken", "size", "gone"),
+        [kept_copies.KIND_THEME], ("name", "taken", "size", "original"),
         help=t("manager.backups.themes_view.help")),
     "manager.view.backups_vpinfe": _by_kind(
         _OWN_RECORDS, ("kind", "taken", "reason", "size", "written_by"),
@@ -240,6 +245,7 @@ def rows(found: list[dict[str, Any]], *, parts: bool = False) -> list[dict[str, 
         "size": int(one.get("size") or 0),
         "size_text": i18n.size(int(one.get("size") or 0)),
         "gone": bool(one.get("gone")),
+        "original": ORIGINAL_MISSING if one.get("gone") else ORIGINAL_PRESENT,
         "holds_records": one["id"] in with_records,
     } for one in (found if parts else parts_of(found))]
 

@@ -19,10 +19,10 @@ from common.failures import why
 from common.i18n import t
 from common.media.media_specs import media_label_map
 from common.online import picture_changes, vps_marked, vps_marks
-from manager.kit import grid as grid_module
-from manager.kit import offload, panel, renderers, undo, verbs
+from manager.kit import offload, panel, undo, verbs
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
+from manager.library import discovery_states
 
 logger = logging.getLogger("vpinfe.manager.library.discovery_marks")
 
@@ -62,27 +62,12 @@ async def refresh(library: Library) -> None:
 # The chip
 
 
-def _states() -> dict[str, dict[str, str]]:
-    return {IGNORED: {"label": t("manager.discovery.mark.ignored"),
-                      "why": t("manager.discovery.mark.ignored.help"),
-                      "chip": "manager-chip-quiet"},
-            WANTED: {"label": t("manager.discovery.mark.wanted"),
-                     "why": t("manager.discovery.mark.wanted.help"),
-                     "mark": verbs.WANTED}}
-
-
 def column(neither: str = "") -> dict[str, Any]:
-    """The Status column of both grids: Ignored as a chip, Wanted with the bookmark, and
-    nothing on the rows that are neither. `neither` names those rows in the filter, for a
+    """The Status column of both grids: Wanted with the bookmark, Ignored as the quiet word,
+    and nothing on the rows that are neither. `neither` names those rows in the filter, for a
     grid whose view keeps them without the Ignored ones; empty offers no such choice."""
-    states = _states()
-    return grid_module.column(
-        FIELD, t("word.status"), help=t("manager.discovery.mark.column.help"),
-        **grid_module.choice_filter(
-            [*([{"value": "", "label": neither}] if neither else []),
-             *({"value": key, "label": one["label"]} for key, one in states.items())],
-            formatted=True),
-        **renderers.drawable("state", states=states))
+    return discovery_states.marks(neither).column(
+        FIELD, t("word.status"), help=t("manager.discovery.mark.column.help"))
 
 
 # ---------------------------------------------------------------------------------------

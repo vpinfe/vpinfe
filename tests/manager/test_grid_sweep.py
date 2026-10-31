@@ -20,13 +20,13 @@ class Games(unittest.TestCase):
         self.assertIn("manager.view.unmatched", games.GAME_VIEWS)
         unmatched = games.GAME_VIEWS["manager.view.unmatched"]
         assert not isinstance(unmatched, list)
-        self.assertEqual({"vps_unmatched": {"values": [True]}}, unmatched.filters)
+        self.assertEqual({"vps_match": {"values": ["unmatched"]}}, unmatched.filters)
 
     def test_a_game_s_facts_lead_with_the_name_and_the_exceptions_come_last(self) -> None:
         fields = [one["field"] for one in games.COLUMNS]
 
         self.assertEqual("name", fields[0])
-        self.assertLess(fields.index("vps_unmatched"), fields.index("manufacturer"))
+        self.assertLess(fields.index("vps_match"), fields.index("manufacturer"))
         self.assertLess(fields.index("rating"), fields.index("manufacturer"))
         self.assertLess(fields.index("manufacturer"), fields.index("hidden"))
 

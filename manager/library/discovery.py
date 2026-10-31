@@ -59,6 +59,7 @@ from manager.library import (
     discovery_releases,
     discovery_search,
     discovery_shelves,
+    discovery_states,
     import_dialog,
     vps_match,
     vps_records,
@@ -79,10 +80,10 @@ VIEW_SCOPES = (SCOPE, discovery_releases.SCOPE, discovery_marks_grid.SCOPE)
 
 HAVE = "have"
 MATCHED, UNMATCHED = discovery_ask.MATCHED, discovery_ask.UNMATCHED
-MISSING = "missing"
+MISSING = discovery_states.MISSING
 BLANK = "blank"
-YES = "yes"
-NO = "no"
+YES, NO = discovery_states.YES, discovery_states.NO
+NOT_COMPARED = discovery_ask.NOT_COMPARED
 
 # VPS's own key for the kind, the field the row carries it in, and the word it is called.
 KINDS: tuple[tuple[str, str, str], ...] = (
@@ -101,25 +102,10 @@ KINDS: tuple[tuple[str, str, str], ...] = (
 _POLL_S = 2.0
 
 
-def _cell_class() -> str:
-    return (f"params => params.value === '{MATCHED}' ? 'manager-have'"
-            f" : params.value === '{MISSING}' ? 'manager-lack' : ''")
-
-
-def _yes_no() -> list[dict[str, Any]]:
-    return [{"value": YES, "label": t("word.yes")}, {"value": NO, "label": t("word.no")}]
-
-
 def _kind_column(listed_as: str, field: str, word: str) -> dict[str, Any]:
     label = t(word)
-    options: dict[str, Any] = {
-        ":cellClass": _cell_class(),
-        **grid_module.choice_filter([
-            {"value": MATCHED, "label": t("manager.discovery.matched")},
-            {"value": UNMATCHED, "label": t("manager.view.unmatched")},
-            {"value": MISSING, "label": t("manager.view.missing")}])}
-    return grid_module.column(field, label,
-                              help=t("manager.discovery.kind.help", kind=label), **options)
+    return discovery_states.kind().column(
+        field, label, help=t("manager.discovery.kind.help", kind=label))
 
 
 CATALOG_FACET_CEILING = 300
@@ -137,24 +123,19 @@ COLUMNS = [
                               "params.data.game_type, ...(params.data.themes || [])]"
                               ".filter(Boolean).join(' ')"}),
     discovery_marks.column(neither=t("word.none")),
-    grid_module.column("in_library", t("manager.discovery.in_library"),
-                       help=t("manager.discovery.in_library.help"),
-                       **grid_module.choice_filter(_yes_no())),
+    discovery_states.in_library().column(
+        "in_library", t("manager.discovery.in_library"),
+        help=t("manager.discovery.in_library.help")),
     *(_kind_column(*kind) for kind in KINDS),
-    grid_module.column("gap", t("manager.discovery.gaps"),
-                       help=t("manager.discovery.gaps.help"),
-                       **{":cellClass": _cell_class(),
-                          **grid_module.choice_filter(
-                              [{"value": MISSING, "label": t("manager.view.missing")}])}),
-    grid_module.column(PLAYABLE, t("manager.discovery.playable"),
-                       help=t("manager.discovery.playable.help"),
-                       **grid_module.choice_filter(_yes_no())),
-    grid_module.column(HELD, t("manager.discovery.matched"),
-                       help=t("manager.discovery.matched.help"),
-                       **grid_module.choice_filter(_yes_no())),
-    grid_module.column(OTHER_HELD, t("manager.discovery.other_version"),
-                       help=t("manager.discovery.other_version.help"),
-                       **grid_module.choice_filter(_yes_no())),
+    discovery_states.gap().column(
+        "gap", t("manager.discovery.gaps"), help=t("manager.discovery.gaps.help")),
+    discovery_states.playable().column(
+        PLAYABLE, t("manager.discovery.playable"), help=t("manager.discovery.playable.help")),
+    discovery_states.matched().column(
+        HELD, t("manager.discovery.matched"), help=t("manager.discovery.matched.help")),
+    discovery_states.other_version().column(
+        OTHER_HELD, t("manager.discovery.other_version"),
+        help=t("manager.discovery.other_version.help")),
     grid_module.column(TABLE_AUTHORS, t("manager.discovery.table_authors"),
                        help=t("manager.discovery.table_authors.help"),
                        **grid_module.NUMBER_COLUMN),
@@ -220,10 +201,13 @@ def _state(kept: bool, listed: bool, counted: bool, in_library: bool, files: boo
            matched: bool) -> str:
     """What a game's cell for one kind reads: Matched for a file tied to a release VPS lists,
     Unmatched for a file tied to none, whether or not VPS lists one of that kind, and
-    Missing for a kind VPS lists that the game has no file of. Blank where the kind is not
-    collected, the library has not been counted, or there is nothing to say."""
-    if not (kept and counted):
+    Missing for a kind VPS lists that the game has no file of. Not compared where VPS lists
+    the kind and the library has not been counted; blank where the kind is not collected or
+    VPS lists none."""
+    if not kept:
         return ""
+    if not counted:
+        return NOT_COMPARED if listed else ""
     if in_library and files:
         return MATCHED if matched else UNMATCHED
     return MISSING if listed else ""
@@ -275,15 +259,15 @@ def rows(found: dict[str, Any], kept: Collection[str] | None = None,
             thumbnails.FIELD: entry.get("img_url") or "",
             "themes": list(entry.get("themes") or []),
             "url": entry.get("url") or "",
-            "in_library": "" if not counted else (YES if in_library else NO),
+            "in_library": NOT_COMPARED if not counted else (YES if in_library else NO),
             "is_in_library": in_library and counted,
             "listed": sorted(listed),
             TABLE_AUTHORS: vps_home.table_authors(entry, formats),
             discovery_marks.FIELD: marks.state(vps_marks.GAME, str(entry["vps_id"])),
             PLAYABLE: "" if kept is not None and vps_releases.TABLES not in kept
             else _playable(releases, formats),
-            HELD: _held(releases, kept) if counted else "",
-            OTHER_HELD: ("" if not counted else YES if len(
+            HELD: _held(releases, kept) if counted else NOT_COMPARED,
+            OTHER_HELD: (NOT_COMPARED if not counted else YES if len(
                 titles.get(vps_home.title_key(entry["name"]), ())) > (1 if in_library else 0)
                 else NO),
         }
@@ -294,7 +278,8 @@ def rows(found: dict[str, Any], kept: Collection[str] | None = None,
                                 _matched(releases, listed_as))
             states.append(row[field])
         row["said"] = game_tables.made(row)
-        row["gap"] = MISSING if MISSING in states else ""
+        row["gap"] = (NOT_COMPARED if not counted
+                      else MISSING if MISSING in states else "")
         out.append(row)
     return out
 
@@ -968,7 +953,7 @@ def acts(library: Library, rows_on: list[dict[str, Any]],
     Add waits for the comparison, which says nothing of why: before one, every entry reads
     as not in the library."""
     absent = [one for one in rows_on if one["in_library"] == NO]
-    uncounted = any(not one["in_library"] for one in rows_on)
+    uncounted = any(one["in_library"] == NOT_COMPARED for one in rows_on)
     hint = "" if absent or uncounted else t("manager.discovery.already_in")
     return [panel.Verb(
         t("manager.discovery.add"),
