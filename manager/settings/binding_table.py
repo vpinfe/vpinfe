@@ -13,6 +13,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import Any
 
 from nicegui import ui
@@ -330,7 +331,8 @@ class Table:
     only shows. Where the program does everything a press is mapped to, `shares`, a press
     another row holds may be used for both and nothing is slowed or left without.
     `refuses` says why a press cannot be mapped, or "" where it can. With `pads_when_heard`
-    the controller buttons are left undrawn until a controller is pressed.
+    the controller buttons are left undrawn until a controller is pressed. `how_open` puts
+    How Mapping Works above the table, open or folded to its title; None leaves it out.
 
     Clicking a row's label or field has that row listen for the next press. Above the rows
     a line names whatever is pressed and what it does, and says what is
@@ -340,7 +342,7 @@ class Table:
     def __init__(self, rows: Sequence[Row], bound: Mapping[str, Any], *, write: Write,
                  source: str, writable: bool = True, shares: bool = False,
                  refuses: Callable[[str], str] | None = None,
-                 pads_when_heard: bool = False) -> None:
+                 pads_when_heard: bool = False, how_open: bool | None = None) -> None:
         self.rows = tuple(rows)
         self.by_name = {row.name: row for row in self.rows}
         self.bound = {row.name: selectors(bound.get(row.name)) for row in self.rows}
@@ -368,7 +370,11 @@ class Table:
         self._rows: dict[str, ui.element] = {}
         self._labels: dict[str, ui.element] = {}
         self._chips: dict[tuple[str, str], ui.element] = {}
+        self._where: ui.label | None = None
+        self._relay: ui.html | None = None
         with ui.element("div").classes("w-full") as self.container:
+            if how_open is not None:
+                self._draw_how(how_open)
             ui.label(t("manager.binding_table.tester")) \
                 .classes("manager-fact-heading manager-binding-tester")
             self.line = ui.element("div")
@@ -537,6 +543,50 @@ class Table:
             if after:
                 ui.label(after)
 
+    def _draw_how(self, open_: bool) -> None:
+        with panel.disclosure(t("manager.binding_table.how_title")) \
+                .classes("manager-binding-how") as how:
+            with ui.column().classes("gap-1 w-full"):
+                ui.label(t("manager.binding_table.how_body")).classes("manager-help")
+                with ui.element("ol").classes("manager-help manager-binding-steps"):
+                    with ui.element("li"):
+                        ui.label(t("manager.binding_table.how_step_1"))
+                    with ui.element("li"):
+                        ui.label(t("manager.binding_table.how_step_2"))
+                    with ui.element("li"):
+                        ui.label(t("manager.binding_table.how_step_3"))
+                if self.elsewhere:
+                    self._draw_relay_words()
+                self._where = ui.label().classes("manager-help manager-binding-where")
+        how.value = open_
+
+    def _draw_relay_words(self) -> None:
+        """What the switch is for, the switch's name in bold wherever the language puts it."""
+        before, _, after = t("manager.binding_table.how_relay", device=self._cab,
+                             switch="\0").partition("\0")
+        switch = t("manager.binding_table.send_events", device=self._cab)
+        self._relay = ui.html(f"{escape(before)}<strong>{escape(switch)}</strong>{escape(after)}",
+                              sanitize=False, tag="p") \
+            .classes("manager-help manager-binding-relay")
+        self._say_relay()
+
+    def _say_relay(self) -> None:
+        """Shown while the switch it names is on the page."""
+        if self._relay is not None and not self._relay.is_deleted:
+            self._relay.set_visibility(self._frontend_up and not self.opening)
+
+    def _where_words(self) -> str:
+        """Where a press is heard from, by the state the switch below is in."""
+        if not self.elsewhere:
+            return t("manager.binding_table.where_here")
+        if self.sending and self._frontend_up and not self.opening and not self._playing:
+            return t("manager.binding_table.where_device", device=self._cab)
+        return t("manager.binding_table.where_browser")
+
+    def _say_where(self) -> None:
+        if self._where is not None and not self._where.is_deleted:
+            self._where.text = self._where_words()
+
     def _draw_send(self) -> None:
         """The switch that sends the cabinet's buttons here, or what stands in its place:
         the offer to open the frontend windows, or that they are opening."""
@@ -553,13 +603,16 @@ class Table:
                              hint=t("action.frontend.start.help"))()
                 words = t("manager.binding_table.frontend_closed", device=self._cab)
             else:
-                ui.label(t("manager.binding_table.send_events")).classes("manager-fact-label")
+                ui.label(t("manager.binding_table.send_events", device=self._cab)) \
+                    .classes("manager-fact-label")
                 panel.switch(self.sending, self._switched,
                              hint=t("manager.binding_table.send_events.help",
                                     device=self._cab))()
                 words = self._words()
             if words:
                 ui.label(words).classes("manager-help manager-binding-send-words")
+        self._say_where()
+        self._say_relay()
 
     def _words(self) -> str:
         """What is worth saying beside the switch. Nothing while all is normal."""

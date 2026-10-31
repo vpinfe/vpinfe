@@ -55,9 +55,10 @@ class AskTests(unittest.TestCase):
             asked = _ran(setup_controls.ask())
 
         self.assertTrue(rows.call_args.kwargs["pads_when_heard"])
+        self.assertTrue(rows.call_args.kwargs["keep_intro_open"])
         self.assertIs(setup_controls.write, rows.call_args.args[2])
         self.assertTrue(callable(asked["draw"]))
-        self.assertTrue(asked["help"])
+        self.assertNotIn("help", asked)
 
     def test_the_rows_it_asks_for_have_no_during_play_setting(self) -> None:
         schema = config_service.schema()["sections"]

@@ -75,8 +75,8 @@ PICK = """(() => {
 })()"""
 # The open section. A page's own name (`panel.header`, Settings) is the page, not a
 # group, and a section bar is the whole section's; both are set aside before either
-# question is asked, and so are a page's intro and the input table's live line and switch,
-# which each speak for the whole page and so read above its first group.
+# question is asked, and so are a page's intro and the input table's mapping intro, live
+# line and switch, which each speak for the whole page and so read above its first group.
 HEADINGS = """(name => {
   const HEAD = '.manager-fact-heading, .manager-card-title,'
     + ' .manager-group:not(.manager-rail-group)';
@@ -89,7 +89,7 @@ HEADINGS = """(name => {
   const problems = [];
   const aside = [...area.querySelectorAll(
     '.manager-panel-heading, .manager-section-bar, .manager-binding-live,'
-    + ' .manager-binding-send, .manager-intro')];
+    + ' .manager-binding-send, .manager-binding-how, .manager-intro')];
   const outside = el => !aside.some(a => a.contains(el));
   const heads = [...area.querySelectorAll(HEAD)].filter(shown).filter(outside);
   const first = [...area.querySelectorAll('*')].filter(outside).find(content);

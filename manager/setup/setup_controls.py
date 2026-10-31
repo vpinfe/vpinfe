@@ -39,14 +39,14 @@ async def ask() -> dict[str, Any]:
     except Exception:
         logger.warning("Could not read the buttons", exc_info=True)
         return {"title": title, "notes": [t("said.settings_unreadable")]}
-    entries = input_page.rows(schema, values, write, pads_when_heard=True)
+    entries = input_page.rows(schema, values, write, pads_when_heard=True, keep_intro_open=True)
     if not entries:
         return {"title": title, "notes": [t("said.settings_unreadable")]}
 
     def draw(_values: dict[str, Any]) -> None:
         panel.facts(ui, entries)
 
-    return {"title": title, "help": t("manager.setup.controls.lead"), "draw": draw}
+    return {"title": title, "draw": draw}
 
 
 async def answer(_values: dict[str, Any]) -> None:

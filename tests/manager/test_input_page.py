@@ -14,7 +14,6 @@ from nicegui import ui
 import httpapi
 from common.config import config_schema, paths, setting_groups
 from common.config.config_store import ConfigStore
-from common.i18n import t
 from manager.kit import panel
 from manager.kit.data import Library
 from manager.settings import input_page, settings
@@ -143,6 +142,32 @@ class MountedTests(unittest.TestCase):
         self.assertIn("M", names)
 
 
+class IntroTests(unittest.TestCase):
+    """How Mapping Works is open until an action is mapped otherwise than the default."""
+
+    def _opened(self, values: dict, **more: Any) -> Any:
+        [(_, draw)] = input_page.rows([{"name": "input", "writable": True, "options": OPTIONS}],
+                                      values, AsyncMock(), **more)
+        with patch.object(input_page, "Table") as built:
+            draw()
+        return built.call_args.kwargs["how_open"]
+
+    def test_it_is_open_while_every_action_is_as_vpinfe_maps_it(self) -> None:
+        self.assertTrue(self._opened({}))
+
+    def test_it_is_open_where_a_stored_value_is_the_default_spelt_another_way(self) -> None:
+        self.assertTrue(self._opened({"input": {"menu": ["key:KeyM"]}}))
+
+    def test_it_folds_to_its_title_once_an_action_is_mapped_otherwise(self) -> None:
+        self.assertFalse(self._opened({"input": {"menu": ["key:KeyN"]}}))
+
+    def test_an_action_with_nothing_by_default_counts_once_it_is_mapped(self) -> None:
+        self.assertFalse(self._opened({"input": {"take_picture": ["key:KeyP"]}}))
+
+    def test_it_stays_open_where_the_caller_asks(self) -> None:
+        self.assertTrue(self._opened({"input": {"menu": ["key:KeyN"]}}, keep_intro_open=True))
+
+
 class WrittenTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_rows_that_change_are_written_to_the_input_section(self) -> None:
         write = AsyncMock(return_value=True)
@@ -167,11 +192,8 @@ class WrittenTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WiredIntoSettingsTests(unittest.TestCase):
-    def test_the_page_says_what_it_is_for(self) -> None:
-        key = settings.PAGE_NOTES[input_page.KEY]
-
-        self.assertEqual(key, "manager.settings.note_input")
-        self.assertIn(key, catalog())
+    def test_the_page_has_no_note_under_its_heading_for_the_table_explains_itself(self) -> None:
+        self.assertNotIn(input_page.KEY, settings.PAGE_NOTES)
 
     def test_the_binding_editor_is_no_longer_one_the_manager_routes_a_setting_to(self) -> None:
         self.assertNotIn(config_schema.EDITOR_BINDING, settings.EDITORS)
@@ -257,10 +279,11 @@ class DrawnOnTheInputPageTests(unittest.IsolatedAsyncioTestCase):
         _, kwargs = self.drawn_by_the_device_page[-1]
         self.assertEqual(kwargs["blocks"], [])
 
-    async def test_the_words_of_the_page_note_are_the_catalogs(self) -> None:
-        self.assertEqual(
-            t(settings.PAGE_NOTES[input_page.KEY]),
-            catalog()["manager.settings.note_input"])
+    async def test_the_words_of_the_intro_are_the_catalogs(self) -> None:
+        for key in ("how_title", "how_body", "how_relay", "how_step_1", "how_step_2",
+                    "how_step_3", "where_here", "where_browser", "where_device"):
+            with self.subTest(key=key):
+                self.assertIn(f"manager.binding_table.{key}", catalog())
 
 
 class _Served:

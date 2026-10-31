@@ -37,8 +37,11 @@ def table_rows(options: Sequence[dict],
 
 def rows(schema: Sequence[dict], values: Mapping[str, Any], write: Write, *,
          findings: Mapping[str, Sequence[Callable[[], None]]] | None = None,
-         pads_when_heard: bool = False) -> list[tuple[Any, Any]]:
-    """The table as one row spanning the page, for a block to place."""
+         pads_when_heard: bool = False,
+         keep_intro_open: bool = False) -> list[tuple[Any, Any]]:
+    """The table as one row spanning the page, for a block to place. How Mapping Works is
+    open until some action is mapped otherwise than VPinFE maps it, or always with
+    `keep_intro_open`."""
     block = next((one for one in schema if one.get("name") == input_registry.SECTION), {})
     options = block.get("options") or []
     if not options:
@@ -51,9 +54,12 @@ def rows(schema: Sequence[dict], values: Mapping[str, Any], write: Write, *,
         return await write({input_registry.SECTION: changes})
 
     def draw() -> None:
+        mapped = any(not input_registry.same_bindings(selectors(bound[str(one["key"])]),
+                                                      selectors(one.get("default")))
+                     for one in options)
         Table(table_rows(options, findings), bound, write=put, writable=writable,
               source=t("manager.binding_table.vpinfe_defaults"),
-              pads_when_heard=pads_when_heard)
+              pads_when_heard=pads_when_heard, how_open=keep_intro_open or not mapped)
 
     return [*([] if writable else [panel.intro(t("manager.settings.not_writable"))]),
             (panel.FULL, draw)]

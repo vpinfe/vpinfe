@@ -872,6 +872,9 @@ body::before {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 8px;
 }
 .manager-binding-send-words { margin: 0; }
+.manager-binding-how { margin-bottom: 12px; max-width: var(--row-measure); }
+.manager-binding-steps { margin: 6px 0; padding-left: 20px; list-style: decimal; }
+.manager-binding-relay, .manager-binding-where { margin: 0; }
 
 /* A list taller than its pane says so: a fade over the last rows and a way down. Placed
    as the last child of the scrolling element; `hidden` once the end is in view. */

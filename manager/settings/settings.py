@@ -1044,7 +1044,6 @@ PAGE_NOTES: dict[str, str] = {
     "vpinfe.logger": "manager.settings.note_logger",
     "frontend.themes": "manager.settings.note_themes",
     "frontend.chromium": "manager.settings.note_chromium",
-    "hardware.input": "manager.settings.note_input",
     "hardware.output": "manager.settings.note_output",
     "frontend.presentation": "manager.settings.note_presentation",
     "vpinfe.tools": "manager.settings.note_tools",

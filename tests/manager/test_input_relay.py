@@ -5,8 +5,10 @@ cabinet can take them back."""
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import unittest
+from html import escape, unescape
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -362,6 +364,22 @@ class _TableCase(_RelayCase):
         return [one.text for one in control.send.descendants() if isinstance(one, ui.label)]
 
     @staticmethod
+    def _switch_label(control: table.Table) -> str:
+        return t("manager.binding_table.send_events", device=control._cab)
+
+    @staticmethod
+    def _relay_words(control: table.Table) -> list[ui.html]:
+        assert control._where is not None and control._where.parent_slot is not None
+        around = control._where.parent_slot.parent
+        assert around is not None
+        return [one for one in around.descendants() if isinstance(one, ui.html)]
+
+    @staticmethod
+    def _where_text(control: table.Table) -> str:
+        assert control._where is not None
+        return control._where.text
+
+    @staticmethod
     def _switch(control: table.Table) -> ui.switch | None:
         found = [one for one in control.send.descendants() if isinstance(one, ui.switch)]
         return found[0] if found else None
@@ -384,13 +402,50 @@ class TheSwitchTests(_TableCase):
 
         assert switch is not None
         self.assertTrue(switch.value)
-        self.assertEqual(self._words(control)[0], t("manager.binding_table.send_events"))
+        self.assertEqual(self._words(control)[0], self._switch_label(control))
         self.assertNotIn(switch, list(control.line.descendants()))
 
     async def test_nothing_is_said_beside_it_while_all_is_normal(self) -> None:
         control = self.drawn()
 
-        self.assertEqual(self._words(control), [t("manager.binding_table.send_events")])
+        self.assertEqual(self._words(control), [self._switch_label(control)])
+
+    async def test_the_intro_says_the_device_s_buttons_are_heard_while_it_is_on(self) -> None:
+        control = self.drawn(how_open=True)
+
+        self.assertEqual(self._where_text(control),
+                         t("manager.binding_table.where_device", device=control._cab))
+
+    async def test_the_intro_names_the_browser_s_keys_when_the_switch_is_off(self) -> None:
+        control = self.drawn(how_open=True)
+        await control._begin()
+
+        control._switched(SimpleNamespace(value=False))
+
+        self.assertEqual(self._where_text(control), t("manager.binding_table.where_browser"))
+
+    async def test_the_intro_says_what_the_switch_is_for_with_its_name_in_bold(self) -> None:
+        control = self.drawn(how_open=True)
+
+        [paragraph] = self._relay_words(control)
+
+        self.assertIn(f"<strong>{escape(self._switch_label(control))}</strong>",
+                      paragraph.content)
+        self.assertEqual(unescape(re.sub(r"</?strong>", "", paragraph.content)),
+                         t("manager.binding_table.how_relay", device=control._cab,
+                           switch=self._switch_label(control)))
+
+    async def test_a_device_name_is_shown_as_text_in_the_intro(self) -> None:
+        with patch.object(table, "display_name", return_value="<i>Cab</i>"):
+            control = self.drawn(how_open=True)
+
+        [paragraph] = self._relay_words(control)
+
+        self.assertNotIn("<i>", paragraph.content)
+        self.assertIn("&lt;i&gt;Cab&lt;/i&gt;", paragraph.content)
+
+    async def test_a_table_drawn_without_the_intro_has_no_where_line(self) -> None:
+        self.assertIsNone(self.drawn()._where)
 
     async def test_turning_it_off_lets_them_go_and_on_asks_again(self) -> None:
         control = self.drawn()
@@ -539,6 +594,15 @@ class WhenItLetsGoTests(_TableCase):
         self.assertTrue(self.asked.seen[-1]["armed"])
         self.assertEqual(input_relay.holders(), 1)
 
+    async def test_the_intro_names_the_browser_s_keys_while_the_buttons_are_paused(self) -> None:
+        control = self.drawn(how_open=True)
+        await control._begin()
+
+        self.playing = True
+        await control._keep()
+
+        self.assertEqual(self._where_text(control), t("manager.binding_table.where_browser"))
+
     async def test_a_table_playing_pauses_it_and_closing_picks_it_up(self) -> None:
         control = self.drawn()
         await control._begin()
@@ -553,7 +617,7 @@ class WhenItLetsGoTests(_TableCase):
         self.playing = False
         await control._keep()
         self.assertTrue(self.asked.seen[-1]["armed"])
-        self.assertEqual(self._words(control), [t("manager.binding_table.send_events")])
+        self.assertEqual(self._words(control), [self._switch_label(control)])
 
 
 class TheOfferTests(_TableCase):
@@ -580,6 +644,27 @@ class TheOfferTests(_TableCase):
                          [t("manager.binding_table.frontend_closed", device=control._cab)])
         buttons = [one for one in control.send.descendants() if isinstance(one, ui.button)]
         self.assertEqual([one.text for one in buttons], [t("action.frontend.start")])
+
+    async def test_the_intro_says_only_the_browser_s_keys_are_heard_when_closed(self) -> None:
+        control = self.drawn(how_open=True)
+
+        self.assertEqual(self._where_text(control), t("manager.binding_table.where_browser"))
+
+    async def test_the_intro_does_not_name_a_switch_that_is_not_drawn(self) -> None:
+        control = self.drawn(how_open=True)
+        [paragraph] = self._relay_words(control)
+        self._ask(confirm.Answer.CONFIRM)
+
+        self.assertFalse(paragraph.visible)
+
+        await press(control._open_windows)
+
+        self.assertFalse(paragraph.visible)
+
+        self.up = True
+        await control._keep()
+
+        self.assertTrue(paragraph.visible)
 
     async def test_cancelling_opens_nothing(self) -> None:
         control = self.drawn()
@@ -669,11 +754,21 @@ class ATableOnTheServingDevice(_TableCase):
         super().setUp()
         self.up = False
 
+    async def test_the_intro_says_this_device_s_own_keys_and_buttons_are_heard(self) -> None:
+        control = self.drawn(how_open=True)
+
+        self.assertEqual(self._where_text(control), t("manager.binding_table.where_here"))
+
+    async def test_the_intro_has_no_paragraph_about_a_switch_that_is_not_there(self) -> None:
+        control = self.drawn(how_open=True)
+
+        self.assertEqual(self._relay_words(control), [])
+
     async def test_it_draws_the_switch_and_no_offer_when_the_frontend_is_closed(self) -> None:
         control = self.drawn()
 
         self.assertIsNotNone(self._switch(control))
-        self.assertEqual(self._words(control), [t("manager.binding_table.send_events")])
+        self.assertEqual(self._words(control), [self._switch_label(control)])
 
     async def test_it_asks_for_the_buttons_too_and_names_no_device(self) -> None:
         with patch.object(table, "holder_of", return_value=("Chrome on Linux", "")):
