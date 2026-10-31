@@ -372,7 +372,7 @@ def build(library: Library, state: dict[str, Any], on_select: Callable[[Any], An
     def switch(event: Any) -> None:
         state["discovery_tab"] = event.value
         state["subject"] = None
-        deeplink.sync(state)
+        deeplink.sync(state, push=True)
         rerender()
 
     with ui.row().classes("w-full items-stretch no-wrap gap-3 shrink-0 manager-tabs-row"):
@@ -444,7 +444,7 @@ async def _fill_home(library: Library, body: Any, state: dict[str, Any],
         await run.io_bound(views.remember, library, SCOPE, custom, view_id)
         discovery_ask.drop_opening(state, BROWSE)
         state["discovery_tab"] = BROWSE
-        deeplink.sync(state)
+        deeplink.sync(state, push=True)
         rerender()
 
     @on_page
@@ -552,7 +552,7 @@ async def _open_view(library: Library, state: dict[str, Any], rerender: Callable
     await run.io_bound(views.remember, library, scope, custom, view_id)
     discovery_ask.drop_opening(state, tab)
     state["discovery_tab"] = tab
-    deeplink.sync(state)
+    deeplink.sync(state, push=True)
     rerender()
 
 
@@ -636,7 +636,7 @@ def open_page(state: dict[str, Any], people: list[dict[str, Any]],
         state["opening"] = {**opening, "tab": tab}
     if tab:
         state["discovery_tab"] = tab
-    deeplink.sync(state)
+    deeplink.sync(state, push=True)
     rerender()
 
 

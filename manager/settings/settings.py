@@ -2108,7 +2108,7 @@ def open_page(state: dict[str, Any], redraw: Callable[[], None], key: str) -> No
     # The address was read on arrival and never written again, so a page opened by
     # hand was lost on the next reload - and a reload is not always something you
     # chose.
-    deeplink.sync(state)
+    deeplink.sync(state, push=True)
 
 
 def _said(items: Any) -> str:

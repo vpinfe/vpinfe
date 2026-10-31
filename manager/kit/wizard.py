@@ -27,6 +27,7 @@ from common.online import sites
 from manager.kit import (
     appearance,
     appearance_picker,
+    deeplink,
     more_below,
     panel,
     report_groups,
@@ -739,7 +740,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
     either way. `hand_off` is given the job's id instead, and the dialog closes at once: a
     run that takes minutes is followed where jobs are followed, not held open here.
     `values` are answers the flow starts with, and `until` a step it is walked to, on
-    them, before the dialog is drawn.
+    them, before the dialog is drawn. The browser's Back presses the dialog's own Back, and
+    closes the dialog only on a step that has none.
 
     True when the flow was run and the dialog closed after it, False when it was cancelled
     before that. In a walk over rows (`walking`, `place` saying where in it) there is no
@@ -806,7 +808,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
                     if walking:
                         frame.leave(dialog, True)
                     if walk.history:
-                        frame.quiet(t("word.back"), _back, icon=verbs.BACK)
+                        frame.quiet(t("word.back"), _back, icon=verbs.BACK) \
+                            .classes(deeplink.BACK_STEP)
                     elif not aside and not walking:
                         frame.cancel(lambda: dialog.submit(False))
                     if summary:
@@ -915,11 +918,19 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
         async def _start() -> None:
             # Escape cannot leave a run: the report it ends on is drawn in this dialog.
             dialog.props("persistent")
+            # Nor can the browser's Back press Back: it falls to Escape, which this refuses.
+            stepping = [one for one in buttons.default_slot.children
+                        if deeplink.BACK_STEP in one.classes]
+            for one in stepping:
+                one.classes(remove=deeplink.BACK_STEP)
             try:
                 await _run()
             finally:
                 if not dialog.is_deleted:
                     dialog.props(remove="persistent")
+                    for one in stepping:
+                        if not one.is_deleted:
+                            one.classes(deeplink.BACK_STEP)
 
         @on_page
         async def _run() -> None:

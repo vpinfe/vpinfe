@@ -163,7 +163,7 @@ def _draw_bar(bar: Any, library: Library, held: dict[str, Any],
             if key != "contains" and find:
                 find[0].value = held["contains"]
             if key == "view":
-                deeplink.sync(state)
+                deeplink.sync(state, push=True)
             return reload()
 
         source = dropdown.Select(_source_options(held), look=dropdown.OUTLINED,

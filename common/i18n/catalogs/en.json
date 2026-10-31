@@ -2740,6 +2740,7 @@
   "manager.page.could_not_discard": "Couldn't discard the recording",
   "manager.page.load_failed": "Could not load the Manager",
   "manager.page.new_tab": "{label}, opens in a new tab",
+  "manager.page.place_title": "{place} - VPinFE Manager",
   "manager.page.could_not_resume": "Couldn't resume recording",
   "manager.page.power_waiting": "Power - {note}",
   "manager.page.start_failed": "Could not start",

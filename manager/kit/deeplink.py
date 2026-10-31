@@ -4,10 +4,10 @@ So a place can be linked to, and so a reload lands where you were - which matter
 because a reload is not always something you chose: a restart takes every open
 page with it.
 
-replaceState, not pushState: picking a different game is not navigation, and a back
-button that steps through every row somebody arrowed past is worse than one that
-leaves the section. The vocabularies of what is valid are passed in rather than
-imported, which is what keeps this out of a cycle with the page it serves.
+A place adds a history entry and a pick replaces the current one: Back goes to the
+page before, not through every row somebody arrowed past. Only a call that says `push`
+adds one. The vocabularies of what is valid are passed in rather than imported, which
+is what keeps this out of a cycle with the page it serves.
 """
 
 from __future__ import annotations
@@ -34,6 +34,12 @@ _FIELDS = (
     ("page", lambda state: state.get("settings_page") or ""),
     # Which of the Logs page's views is up.
     ("log", lambda state: state.get("log_view") or ""),
+    # Which of Discovery's grids is up. A subject's page is not one of them.
+    ("tab", lambda state: "" if state.get("subject") else state.get("discovery_tab") or ""),
+    # Which half shows where the list and the panel do not fit side by side, with a subject
+    # picked: "list" is the place before the panel opened, "open" the one after, and a link
+    # without it lands on the panel.
+    ("pane", lambda state: showing(state)),
     ("collection", lambda state: state.get("collection") or ""),
     ("launcher", lambda state: state.get("launcher") or ""),
     ("player", lambda state: state.get("player") or ""),
@@ -62,7 +68,8 @@ _FIELDS = (
 # is one game's slot - so leaving it out would drop the whole selection in silence.
 _PANEL = ("games", "tables", "media", "assets")
 _ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": _PANEL, "slot": _PANEL,
-            "page": ("settings",), "log": ("logs",), "collection": ("collections", "games"),
+            "page": ("settings",), "log": ("logs",), "tab": ("discovery",),
+            "collection": ("collections", "games"),
             "launcher": ("launchers", "tables"), "sets": ("tables",),
             "report": ("tables",), "group": ("tables",),
             "player": ("players",), "backup": ("backups",), "entry": ("discovery",),
@@ -98,6 +105,24 @@ def _subject(state: dict[str, Any], kind: str) -> str:
     return ""
 
 
+PANES = ("open", "list")
+
+# The state key that names the row picked on a page whose rows are not games.
+_PICKED_ON = {"collections": "collection", "launchers": "launcher", "players": "player",
+              "backups": "backup", "discovery": "entry"}
+
+
+def showing(state: dict[str, Any]) -> str:
+    """The half showing, or "" where both are or nothing is picked."""
+    if not state.get("stacked"):
+        return ""
+    if state.get("opened"):
+        return "open"
+    picked = (state.get("game") or state.get("table") or state.get("ext_row")
+              or state.get("subject") or state.get(_PICKED_ON.get(state.get("view") or "", "")))
+    return "list" if picked else ""
+
+
 def _slot_kind(state: dict[str, Any]) -> str:
     """The picked media kind, or "". Tolerant, because keeping the address current
     must never be the thing that takes the page down."""
@@ -111,19 +136,137 @@ def _meant_for(name: str, view: str) -> bool:
     return view in _ONLY_ON.get(name, (view,))
 
 
-def query(state: dict[str, Any]) -> str:
+def query(state: dict[str, Any], *, skip: tuple[str, ...] = ()) -> str:
     """The address for this state, without the path. A colon is left as it is, so a
     view reads `community:vpinplay:tables` in the bar rather than escaped."""
     view = state.get("view") or ""
     return urlencode([(name, read(state)) for name, read in _FIELDS
-                      if _meant_for(name, view) and read(state)], safe=":")
+                      if name not in skip and _meant_for(name, view) and read(state)],
+                     safe=":")
 
 
-def sync(state: dict[str, Any]) -> None:
-    """Put the current place in the address bar, without reloading anything."""
+def same_place(state: dict[str, Any], other: dict[str, Any]) -> bool:
+    """Whether two states name one place and differ at most in which half is showing."""
+    return query(state, skip=("pane",)) == query(other, skip=("pane",))
+
+
+def sync(state: dict[str, Any], *, push: bool = False, over: bool = False) -> None:
+    """Put the current place in the address bar, without reloading anything. `push` adds
+    a history entry for it, marked `over` when the entry before it is the list it opened a
+    panel from; without `push`, the current entry is rewritten. A dialog's entry on top is
+    rewritten rather than buried. An address equal to the one showing writes nothing, and
+    nothing is written while a move the browser made is unanswered (`settled`).
+
+    The title follows the address, written after it: a title set first would rename the
+    entry being left.
+    """
     tail = query(state)
+    address = "/manager?" + tail if tail else "/manager"
     ui.run_javascript(
-        f"history.replaceState(null, '', {json.dumps('/manager?' + tail if tail else '/manager')})")
+        "((address, push, over, title) => {"
+        " if (window.vpinArrivals) return;"
+        " if (address !== location.pathname + location.search) {"
+        "  const taken = push && window.vpinTakeSentinel && window.vpinTakeSentinel();"
+        "  history[push && !taken ? 'pushState' : 'replaceState']("
+        "push ? (over ? {vpinOver: true} : null) : history.state, '', address); }"
+        " if (title) document.title = title; })"
+        f"({json.dumps(address)}, {json.dumps(push)}, {json.dumps(over)},"
+        f" {json.dumps(_title(state))})")
+
+
+# Marks the Back button of a dialog that walks steps: Back with it open presses that button
+# where any other dialog is closed.
+BACK_STEP = "manager-back-step"
+
+_DIALOGS_BACK = """
+(() => {
+  let sentinels = 0, expected = 0;
+  const open = () => document.querySelectorAll('.q-dialog').length;
+  const reconcile = () => {
+    const want = open();
+    if (want > sentinels) {
+      for (; sentinels < want; sentinels++)
+        history.pushState({vpinSentinel: true}, '', location.href);
+    } else if (want < sentinels) {
+      const extra = sentinels - want;
+      sentinels = want;
+      if (history.state && history.state.vpinSentinel) { expected++; history.go(-extra); }
+    }
+  };
+  const escape = () => {
+    const key = {key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
+                 bubbles: true, cancelable: true};
+    document.dispatchEvent(new KeyboardEvent('keydown', key));
+    document.dispatchEvent(new KeyboardEvent('keyup', key));
+  };
+  window.vpinTakeSentinel = () => {
+    if (!sentinels || !(history.state && history.state.vpinSentinel)) return false;
+    sentinels--;
+    return true;
+  };
+  window.addEventListener('popstate', (event) => {
+    if (expected) { expected--; event.stopImmediatePropagation(); return; }
+    if (sentinels) {
+      event.stopImmediatePropagation();
+      sentinels--;
+      const all = document.querySelectorAll('.q-dialog');
+      const step = all.length && all[all.length - 1].querySelector('.__BACK_STEP__');
+      if (step) {
+        // The dialog walks steps: Back is its own Back, and the dialog stays open, so
+        // the entry this move used is put back.
+        step.click();
+        sentinels++;
+        history.pushState({vpinSentinel: true}, '', location.href);
+        return;
+      }
+      escape();
+      // After the hide transition: a dialog that refused has not been removed.
+      setTimeout(reconcile, 700);
+    } else if (event.state && event.state.vpinSentinel) {
+      event.stopImmediatePropagation();
+      expected++;
+      history.back();
+    }
+  });
+  new MutationObserver(reconcile).observe(document.body, {childList: true});
+  reconcile();
+})()
+"""
+
+
+def dialogs_follow_back() -> None:
+    """Back closes the topmost dialog as Escape does, or presses its `BACK_STEP` button
+    where it has one showing. Install before the page's own
+    `popstate` listener, which must not hear an entry that belongs to a dialog."""
+    ui.run_javascript(_DIALOGS_BACK.replace("__BACK_STEP__", BACK_STEP))
+
+
+def settled() -> None:
+    """Answer one move the page counted: the state now matches the entry reached."""
+    ui.run_javascript(
+        "window.vpinArrivals = Math.max(0, (window.vpinArrivals || 0) - 1)")
+
+
+def name_place(state: dict[str, Any]) -> None:
+    """Title the entry showing, and leave its address as it is: an address the page arrived
+    on can carry what the state does not."""
+    ui.run_javascript(f"document.title = {json.dumps(_title(state))} || document.title")
+
+
+def _title(state: dict[str, Any]) -> str:
+    place = state.get("place_title")
+    return place() if callable(place) else ""
+
+
+def forget(state: dict[str, Any]) -> None:
+    """Clear everything the address carries, so that applying an address leaves what it
+    names and nothing the last place left behind."""
+    for name in ("game", "table", "ext_row", "settings_page"):
+        state[name] = ""
+    for name in ("collection", "launcher", "player", "backup", "entry", "sets", "subject"):
+        state[name] = None
+    for name in ("slot", "section", "log_view", "discovery_tab", "opening", "find", "pane"):
+        state.pop(name, None)
 
 
 def apply(state: dict[str, Any], params: dict[str, str], *,
@@ -160,6 +303,10 @@ def apply(state: dict[str, Any], params: dict[str, str], *,
         state["settings_page"] = clean("page")
     if clean("log") in LOG_VIEWS:
         state["log_view"] = clean("log")
+    if clean("pane") in PANES:
+        state["pane"] = clean("pane")
+    if clean("tab") and state["view"] == "discovery":
+        state["discovery_tab"] = clean("tab")
     if str(params.get("collection") or "").strip():
         state["collection"] = str(params["collection"]).strip()
     if str(params.get("launcher") or "").strip():

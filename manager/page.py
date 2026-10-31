@@ -6,9 +6,10 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from functools import partial
 from typing import Any
+from urllib.parse import parse_qsl
 
 import requests
 from nicegui import background_tasks, run, ui
@@ -595,7 +596,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                    player: str = "", setup: str = "", log: str = "", find: str = "",
                    backup: str = "", report: str = "", group: str = "",
                    entry: str = "", row: str = "", author: str = "", maker: str = "",
-                   theme: str = "") -> None:
+                   theme: str = "", tab: str = "", pane: str = "") -> None:
     """The Manager. Query parameters say where in it, so a place can be linked to."""
     # 2.x's own page keys, still sitting in bookmarks and manager-ui-state.json.
     if page.strip().lower() in ("vpinplay_account", "vpinplay_player"):
@@ -630,7 +631,9 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     ui.on(shelves.MOVED, lambda event: shelves.moved(state, event))
     ui.on("hub_dock_px", lambda event: core.dock_dragged(state, event.args))
     ui.on("hub_row_focus", grid.row_focused)
-    ui.on("hub_row_pick", lambda: state["open_pane"]())
+    ui.on("hub_row_pick", lambda: state["pick_row"]())
+    ui.on("hub_stacked", lambda event: state["stacked_changed"](event.args))
+    ui.on("hub_arrive", lambda event: state["arrive"](event.args))
     ui.on("hub_media_zoom", lambda event: games.media_zoomed(state, event))
     ui.on("hub_rate", lambda event: games.rated(state, event))
     ui.on(jobs_list.REPORT_ASKED, jobs_page.report_asked)
@@ -694,6 +697,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     state: dict[str, Any] = {"view": landing_view, "device": None, "mini": False,
                              "host": ext_links.opened_at(),
                              "workbench": True, "settings_page": "",
+                             "addressed": not mode and not in_the_frontends_window,
                              "collection": None, "trouble": loaded["trouble"],
                              "devices": devices, "extensions": installed_extensions,
                              "ranked_orders": community_page.ranked_orders(
@@ -705,7 +709,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                            "collection": collection, "launcher": launcher, "sets": sets,
                            "player": player, "log": log, "find": find, "backup": backup,
                            "report": report, "group": group, "entry": entry,
-                           "row": row, "author": author, "maker": maker, "theme": theme},
+                           "row": row, "author": author, "maker": maker, "theme": theme,
+                           "tab": tab, "pane": pane},
                    views=[key for key, _label, _icon, _feature in nav_items],
                    sections=[*(item.key for item in rail.SECTIONS), *discovery_kinds.vocabulary()])
 
@@ -1300,8 +1305,10 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         if not library.has_games_grid():
             await run.io_bound(library.load_games_grid)
         render()
+        deeplink.sync(state, push=True)
         await show_game({"id": game_id})
         state["open_pane"]()
+        deeplink.sync(state)
 
     async def _show_unmatched() -> None:
         if not await may_leave(state, "games"):
@@ -1380,7 +1387,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         with workbench_header:
             # Only drawn where the panel has the window to itself, which is the way back
             # to the list.
-            panel_parts.icon_only(verbs.BACK, lambda: close_pane(), hint=t("word.back")) \
+            panel_parts.icon_only(verbs.BACK, lambda: back_from_pane(), hint=t("word.back")) \
                 .props("size=sm").classes("manager-pane-back shrink-0")
             # min-w-0 lets the column shrink below its content so the title truncates
             # instead of pushing the toggle onto a second line; shrink-0 keeps the
@@ -1500,10 +1507,43 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     def close_pane() -> None:
         """Back to the list."""
         state["opened"] = False
+        state["pane_pushed"] = False
         splitter.classes(remove="manager-opened")
+
+    def pick_row() -> None:
+        """A row picked: the panel opens, and where it is the page that opening is a place
+        of its own, so Back returns to the list."""
+        if state.get("opened") or not state.get("stacked") or not state["addressed"] \
+                or not has_pane():
+            open_pane()
+            return
+        deeplink.sync(state)
+        open_pane()
+        state["pane_pushed"] = True
+        deeplink.sync(state, push=True, over=True)
+
+    def back_from_pane() -> None:
+        """The arrow in the panel's header. An entry the opening added is walked back out
+        of, so the stack is what it was before and Forward reopens the panel; a panel the
+        page started on has no entry before it to go to."""
+        if state.get("pane_pushed"):
+            ui.run_javascript("history.back()")
+            return
+        close_pane()
+        deeplink.sync(state)
+
+    def stacked_changed(narrow: Any) -> None:
+        """The list and the panel now fit side by side, or no longer do. The address says
+        which half shows only where they are not both."""
+        was = deeplink.showing(state)
+        state["stacked"] = bool(narrow)
+        if deeplink.showing(state) != was and state["addressed"]:
+            deeplink.sync(state)
 
     state["open_pane"] = open_pane
     state["close_pane"] = close_pane
+    state["pick_row"] = pick_row
+    state["stacked_changed"] = stacked_changed
 
     def _step(delta: int) -> None:
         """Move the focused row, which is what the workbench follows. Sent as the key
@@ -1705,6 +1745,20 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                 .classes("text-base manager-workbench-title leading-tight truncate")
             ui.label(prompt).classes("text-xs manager-workbench-label leading-none truncate")
 
+    def place_name() -> str:
+        """What the page calls the place it is on: its heading, and the browser's name for
+        the history entry."""
+        view = state["view"]
+        listed = community_page.find(view, state["extensions"])
+        if listed is not None:
+            return str(listed[1].get("title") or "")
+        paged = ext_pages.find(view, state["extensions"])
+        if paged is not None:
+            return str(paged[1].get("title") or "")
+        return t(SECTIONS.get(view, view.title()))
+
+    state["place_title"] = lambda: t("manager.page.place_title", place=place_name())
+
     def page_header() -> ui.row:
         """The page's name, and one line saying what it is for. Answers the slot at the
         end of the name's row, where a page whose subject is the page draws its menu.
@@ -1716,17 +1770,15 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
 
         Here rather than in an app header because each pane already owns its chrome.
         """
-        title = t(SECTIONS.get(state["view"], state["view"].title()))
+        title = place_name()
         purpose = t(f"manager.purpose.{state['view']}")
         listed = community_page.find(state["view"], state["extensions"])
         if listed is not None:
-            title = str(listed[1].get("title") or "")
             purpose = t("manager.purpose.community.held" if listed[1].get("relation")
                         else "manager.purpose.community",
                         name=str(listed[0].get("display_name") or listed[0].get("name")))
         paged = ext_pages.find(state["view"], state["extensions"])
         if paged is not None:
-            title = str(paged[1].get("title") or "")
             purpose = t("manager.purpose.page",
                         name=str(paged[0].get("display_name") or paged[0].get("name")))
         # The band the other two panes' headers use, so the page name sits in a fixed
@@ -1948,6 +2000,22 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     })()
     """)
 
+    # Whether the list and the panel fit side by side, said once and on every change. The
+    # width is the one the stylesheet's container query reads.
+    ui.run_javascript("""
+    (() => {
+      const box = document.querySelector('.manager-pane-box');
+      if (!box) return;
+      let last = null;
+      const say = () => {
+        const now = box.getBoundingClientRect().width <= 703;
+        if (now !== last) { last = now; emitEvent('hub_stacked', now); }
+      };
+      new ResizeObserver(say).observe(box);
+      say();
+    })()
+    """)
+
     # A tooltip on the control that opened a menu sits on top of it. Watched once here
     # rather than wired per menu: menus portal into the body, so one observer sees them
     # all, and the alternative is remembering this on every menu ever added.
@@ -1960,6 +2028,9 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     })()
     """)
 
+    if state["addressed"]:
+        deeplink.dialogs_follow_back()
+
     client = ui.context.client
 
     def go(view: str) -> None:
@@ -1968,16 +2039,130 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         # before it draws, and arriving is exactly when that is first true.
         redraw()
         with client:
-            deeplink.sync(state)
+            deeplink.sync(state, push=True)
 
-    # An address naming a game means the pane it opens, not just the section. Restored
-    # after the shell exists, because that is what show_game builds into - and through
-    # show_game rather than around it, so a link lands on exactly the state a click
-    # would have produced.
-    # The four that select a game. Collections has a pane too and is not one of them:
-    # what its address names is a collection, which lands by its own route below.
-    landing = (state.get("game")
-               if state["view"] in ("games", "tables", "media", "assets") else None)
+    @on_page
+    async def land_subject() -> None:
+        """Open the pane the address names, not just the section. Restored after the
+        shell exists, because that is what show_game builds into - and through show_game
+        rather than around it, so a link, a reload and Back all land on exactly the state
+        a click would have produced."""
+        # The four that select a game. Collections has a pane too and is not one of
+        # them: what its address names is a collection, which lands by its own route
+        # below.
+        landing = (state.get("game")
+                   if state["view"] in ("games", "tables", "media", "assets") else None)
+        arrival = None
+        if landing:
+            # Shaped as the lens in play expects it, so the one handler reads it the same
+            # way whether it came from a click or from the address bar. The file lenses
+            # take the row shape they hand out, which carries the table rather than
+            # standing in for it - a shared file has none, and the address says so too.
+            if state["view"] in ("media", "assets"):
+                arrival = show_slot({"game_id": landing, "table": state.get("table") or "",
+                                     "kind": (state.get("slot") or {}).get("kind") or ""})
+            else:
+                arrival = show_game({"game_id": landing, "id": state.get("table") or landing}
+                                    if state["view"] == "tables" else {"id": landing})
+        elif state["view"] == "collections" and state.get("collection"):
+            arrival = show_collection({"id": state["collection"]})
+        elif state["view"] == "launchers" and state.get("launcher"):
+            arrival = show_launcher({"id": state["launcher"]})
+        elif state["view"] == "players" and state.get("player"):
+            arrival = show_player({"id": state["player"]})
+        elif state["view"] == "backups" and state.get("backup"):
+            arrival = show_backup({"id": state["backup"]})
+        elif state["view"] == "discovery" and state.get("entry"):
+            arrival = show_discovery({"id": state["entry"]})
+        elif state.get("ext_row") and community_page.find(state["view"], state["extensions"]):
+            listed = community_page.find(state["view"], state["extensions"])
+            if listed is not None and listed[1].get("detail"):
+                arrival = show_extension_row(*listed, [{"id": state["ext_row"]}], None)
+        elif state["view"] == "devices":
+            # Arriving at Devices lands on this device with its rail open, so reaching a
+            # setting is the two clicks it was when Settings was a place of its own. It is
+            # first in every view for the same reason.
+            arrival = show_device({"id": state.get("device_id")
+                                   or discovery.get("install_id")})
+        if arrival is not None:
+            await arrival
+            # An address that names a subject lands on its panel. Devices is not one: it
+            # arrives on this device so its rail is open, and the list is the page.
+            if state["view"] != "devices" and state.pop("pane", "") != "list":
+                open_pane()
+                if state["addressed"]:
+                    deeplink.sync(state)
+
+    async def land_on_page() -> None:
+        """`land_subject` as a task of its own, which starts with no page to draw on."""
+        with client:
+            await land_subject()
+
+    arriving = asyncio.Lock()
+
+    @on_page
+    async def arrive(args: Any) -> None:
+        """Follow the browser to another entry, which is Back or Forward: the page this
+        address names, built the way a first load builds it. One at a time: a second
+        entry reached while the first is still being built, or waiting on an answer,
+        waits its turn rather than building over it."""
+        async with arriving:
+            counted = True
+
+            def settle() -> None:
+                nonlocal counted
+                if counted:
+                    counted = False
+                    deeplink.settled()
+
+            try:
+                params = dict(parse_qsl(str((args or {}).get("search") or "").lstrip("?")))
+                over = bool((args or {}).get("over"))
+                target: dict[str, Any] = {"view": landing_view}
+                deeplink.apply(
+                    target, params,
+                    views=[key for _parent, items in nav_groups for key, *_rest in items
+                           if not ext_links.is_link(key)],
+                    sections=[*(item.key for item in rail.SECTIONS),
+                              *discovery_kinds.vocabulary()])
+                if state.get("stacked") and deeplink.same_place(state, target):
+                    if target.get("pane") == "open":
+                        open_pane()
+                        state["pane_pushed"] = over
+                    else:
+                        close_pane()
+                    settle()
+                    deeplink.sync(state)
+                    return
+                if not await may_leave(state, target["view"]):
+                    # The browser has already moved: refusing puts the place the page is
+                    # still on back as a new entry, and Forward is lost.
+                    settle()
+                    deeplink.sync(state, push=True)
+                    return
+                deeplink.forget(state)
+                leave_for(state, target["view"])
+                state.update(target)
+                state["pane_pushed"] = target.get("pane") == "open" and over
+                settle()
+                reported_job, reported_group = state.pop("report", ""), state.pop("group", "")
+                if reported_job and state["view"] == "tables":
+                    state["reported"] = await _group_of_report(
+                        library, reported_job, reported_group)
+                await builds.build(panel, workbench_title, library, None, state)
+                _land(state)
+                read_then_render(state, library, content, render, mark_findings, light_nav,
+                                 refresh_rail, after=land_on_page)
+                deeplink.name_place(state)
+            finally:
+                settle()
+
+    state["arrive"] = arrive
+    ui.run_javascript(
+        "window.addEventListener('popstate', () => {"
+        " window.vpinArrivals = (window.vpinArrivals || 0) + 1;"
+        " emitEvent('hub_arrive', {search: location.search,"
+        " over: !!(history.state && history.state.vpinOver)}); })")
     if first_width:
         on_window_width(first_width)
     await builds.build(panel, workbench_title, library, None, state)
@@ -1991,44 +2176,14 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     # waiting - so the shell and this go out in one message. A wait added in between
     # shows the shell under the loading screen.
     loading.delete()
-    arrival = None
-    if landing:
-        # Shaped as the lens in play expects it, so the one handler reads it the same
-        # way whether it came from a click or from the address bar. The file lenses
-        # take the row shape they hand out, which carries the table rather than
-        # standing in for it - a shared file has none, and the address says so too.
-        if state["view"] in ("media", "assets"):
-            arrival = show_slot({"game_id": landing, "table": state.get("table") or "",
-                                 "kind": (state.get("slot") or {}).get("kind") or ""})
-        else:
-            arrival = show_game({"game_id": landing, "id": state.get("table") or landing}
-                                if state["view"] == "tables" else {"id": landing})
-    elif state["view"] == "collections" and state.get("collection"):
-        arrival = show_collection({"id": state["collection"]})
-    elif state["view"] == "launchers" and state.get("launcher"):
-        arrival = show_launcher({"id": state["launcher"]})
-    elif state["view"] == "players" and state.get("player"):
-        arrival = show_player({"id": state["player"]})
-    elif state["view"] == "backups" and state.get("backup"):
-        arrival = show_backup({"id": state["backup"]})
-    elif state["view"] == "discovery" and state.get("entry"):
-        arrival = show_discovery({"id": state["entry"]})
-    elif state.get("ext_row") and community_page.find(state["view"], state["extensions"]):
-        listed = community_page.find(state["view"], state["extensions"])
-        if listed is not None and listed[1].get("detail"):
-            arrival = show_extension_row(*listed, [{"id": state["ext_row"]}], None)
-    elif state["view"] == "devices":
-        # Arriving at Devices lands on this device with its rail open, so reaching a
-        # setting is the two clicks it was when Settings was a place of its own. It is
-        # first in every view for the same reason.
-        arrival = show_device({"id": state.get("device_id")
-                               or discovery.get("install_id")})
-    if arrival is not None:
-        await arrival
-        # An address that names a subject lands on its panel. Devices is not one: it
-        # arrives on this device so its rail is open, and the list is the page.
-        if state["view"] != "devices":
-            open_pane()
+    await land_subject()
+    # The place named in full, once, so Back to this entry lands where the page started
+    # and not wherever a bare address resolves to by then. The frontend's own window and a
+    # `mode` comparison are left as they were opened.
+    if not view and not mode and not in_the_frontends_window:
+        deeplink.sync(state)
+    elif not in_the_frontends_window:
+        deeplink.name_place(state)
     if arrives_in_setup(pending, view):
         background_tasks.create(
             setup_page.open_setup(window=in_the_frontends_window), name="manager-setup")
@@ -2039,10 +2194,12 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
 def read_then_render(state: dict[str, Any], library: Library, content: ui.element,
                      render: Callable[[], None], mark_findings: Callable[[], None],
                      light: Callable[[], None],
-                     refresh_rail: Callable[[], None] = lambda: None) -> None:
+                     refresh_rail: Callable[[], None] = lambda: None,
+                     after: Callable[[], Awaitable[None]] | None = None) -> None:
     """Light the view's rail row now, then render it, first reading anything it needs,
     with `content` busy from now until it is drawn: what it shows stays up, dimmed under
-    the spinner, while the read runs.
+    the spinner, while the read runs. `after` runs once it is drawn, under the same mark:
+    render() empties the pane, so whatever opens the pane has to come after it.
 
     The by-file lens is a second walk of every folder, so it is read when somebody asks
     for it rather than at startup - and off the loop, because render() runs on it and the
@@ -2064,12 +2221,16 @@ def read_then_render(state: dict[str, Any], library: Library, content: ui.elemen
                 logger.exception("Could not read the installed extensions")
             render()
             mark_findings()
+            if after is not None:
+                await after()
         busy.start(content, read_trouble_then_draw)
         return
     if state["view"] == "devices":
         async def read_devices_then_draw() -> None:
             state["devices"][:] = await offload.io(library.devices)
             render()
+            if after is not None:
+                await after()
         busy.start(content, read_devices_then_draw)
         return
     reads = reads_before_drawing(state["view"], library)
@@ -2077,9 +2238,13 @@ def read_then_render(state: dict[str, Any], library: Library, content: ui.elemen
         async def read_then_draw() -> None:
             await run.io_bound(reads)
             render()
+            if after is not None:
+                await after()
         busy.start(content, read_then_draw)
         return
     render()
+    if after is not None:
+        busy.start(content, after)
 
 
 def _land(state: dict[str, Any]) -> None:
@@ -2221,7 +2386,7 @@ def _nav_item(key: str, label: str, icon: str, state: dict[str, Any], render: Ca
             return
         leave_for(state, key)
         render()
-        deeplink.sync(state)
+        deeplink.sync(state, push=True)
 
     # An anchor, not a div. A destination has an address - it is in the bar the moment
     # you arrive at one - and a row that only listens for a click hides that from the

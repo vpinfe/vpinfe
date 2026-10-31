@@ -1,4 +1,5 @@
 import inspect
+import json
 import unittest
 from unittest import mock
 from urllib.parse import parse_qs
@@ -178,6 +179,132 @@ class ExtensionAddressTests(unittest.TestCase):
     def test_a_page_is_noise_on_any_other_view(self) -> None:
         self.assertEqual({"view": "games"},
                          _address({"view": "games", "settings_page": "extensions.x"}))
+
+
+class HistoryTests(unittest.TestCase):
+    """Back and Forward: a place pushes an entry, a pick rewrites the current one."""
+
+    def _written(self, state: dict, **kwargs) -> str:
+        with mock.patch.object(deeplink.ui, "run_javascript") as js:
+            deeplink.sync(state, **kwargs)
+        return js.call_args.args[0]
+
+    def _arguments(self, state: dict, **kwargs) -> list:
+        """What the script was called with: address, push, over, title."""
+        return json.loads("[" + self._written(state, **kwargs).rsplit("; })(", 1)[1][:-1] + "]")
+
+    def test_a_pick_rewrites_the_entry_it_is_on(self) -> None:
+        self.assertFalse(self._arguments({"view": "games"})[1])
+
+    def test_a_place_adds_an_entry(self) -> None:
+        self.assertTrue(self._arguments({"view": "games"}, push=True)[1])
+
+    def test_an_entry_is_marked_over_the_list_only_when_asked(self) -> None:
+        self.assertFalse(self._arguments({"view": "games"}, push=True)[2])
+        self.assertTrue(self._arguments({"view": "games"}, push=True, over=True)[2])
+
+    def test_a_dialogs_entry_on_top_is_rewritten_rather_than_buried(self) -> None:
+        written = self._written({"view": "games"}, push=True)
+
+        self.assertLess(written.index("vpinTakeSentinel"), written.index("pushState"))
+
+    def test_an_address_equal_to_the_one_showing_writes_nothing(self) -> None:
+        self.assertIn("address !== location.pathname + location.search",
+                      self._written({"view": "games"}, push=True))
+
+    def test_the_title_is_set_after_the_entry_is_written(self) -> None:
+        written = self._written({"view": "games", "place_title": lambda: "Games - X"},
+                                push=True)
+
+        self.assertLess(written.index("history["), written.index("document.title"))
+        self.assertIn("Games - X", written)
+
+    def test_nothing_is_written_while_the_browser_has_moved_and_the_page_has_not(self) -> None:
+        written = self._written({"view": "games"}, push=True)
+
+        self.assertLess(written.index("window.vpinArrivals"), written.index("history["))
+
+    def test_each_move_is_settled_once_the_state_matches_it(self) -> None:
+        with mock.patch.object(deeplink.ui, "run_javascript") as js:
+            deeplink.settled()
+
+        self.assertIn("vpinArrivals", js.call_args.args[0])
+        self.assertIn("- 1", js.call_args.args[0])
+
+    def test_naming_a_place_leaves_the_address_alone(self) -> None:
+        with mock.patch.object(deeplink.ui, "run_javascript") as js:
+            deeplink.name_place({"view": "games", "place_title": lambda: "Games - X"})
+
+        self.assertIn("Games - X", js.call_args.args[0])
+        self.assertNotIn("history", js.call_args.args[0])
+
+    def test_a_discovery_tab_survives_the_round_trip(self) -> None:
+        state: dict = {"view": "discovery"}
+        deeplink.apply(state, {"view": "discovery", "tab": "tables"},
+                       views=["discovery"], sections=[])
+
+        self.assertEqual("view=discovery&tab=tables", deeplink.query(state))
+
+    def test_a_tab_is_dropped_where_a_subject_has_the_page(self) -> None:
+        state = {"view": "discovery", "discovery_tab": "tables",
+                 "subject": {"type": "author", "name": "Ann"}}
+
+        self.assertNotIn("tab", _address(state))
+
+    def test_forget_leaves_nothing_for_the_next_address_to_inherit(self) -> None:
+        state: dict = {"view": "games", "game": "g", "section": "play", "slot": {"kind": "bg"},
+                       "collection": "c", "subject": {"type": "author", "name": "Ann"},
+                       "settings_page": "extensions.x", "discovery_tab": "tables"}
+
+        deeplink.forget(state)
+        deeplink.apply(state, {"view": "games"}, views=["games"], sections=[])
+
+        self.assertEqual({"view": "games"}, _address(state))
+
+    def test_the_half_showing_is_named_only_where_the_two_do_not_fit(self) -> None:
+        picked = {"view": "games", "game": "g"}
+
+        self.assertEqual("", deeplink.showing(picked))
+        self.assertEqual("list", deeplink.showing({**picked, "stacked": True}))
+        self.assertEqual("open", deeplink.showing({**picked, "stacked": True, "opened": True}))
+        self.assertEqual("", deeplink.showing({"view": "games", "stacked": True}))
+
+    def test_a_row_picked_on_any_page_with_a_panel_is_a_subject(self) -> None:
+        for view, key in (("collections", "collection"), ("launchers", "launcher"),
+                          ("players", "player"), ("backups", "backup"), ("discovery", "entry")):
+            with self.subTest(view=view):
+                state = {"view": view, "stacked": True}
+                self.assertEqual("", deeplink.showing(state))
+                self.assertEqual("list", deeplink.showing({**state, key: "x"}))
+
+    def test_a_filter_that_is_not_the_pages_subject_does_not_name_a_half(self) -> None:
+        self.assertEqual("", deeplink.showing(
+            {"view": "tables", "stacked": True, "launcher": "x"}))
+
+    def test_the_half_showing_is_in_the_address(self) -> None:
+        state = {"view": "games", "game": "g", "stacked": True, "opened": True}
+
+        self.assertEqual({"view": "games", "game": "g", "pane": "open"}, _address(state))
+
+    def test_an_address_names_the_half_it_lands_on(self) -> None:
+        state: dict = {"view": "games"}
+        deeplink.apply(state, {"view": "games", "game": "g", "pane": "list"},
+                       views=["games"], sections=[])
+
+        self.assertEqual("list", state["pane"])
+
+    def test_an_unknown_half_is_ignored(self) -> None:
+        state: dict = {"view": "games"}
+        deeplink.apply(state, {"view": "games", "pane": "both"}, views=["games"], sections=[])
+
+        self.assertNotIn("pane", state)
+
+    def test_two_states_differing_only_in_the_half_showing_are_one_place(self) -> None:
+        listed = {"view": "games", "game": "g", "stacked": True}
+        opened = {**listed, "opened": True}
+
+        self.assertTrue(deeplink.same_place(listed, opened))
+        self.assertFalse(deeplink.same_place(listed, {**listed, "game": "h"}))
 
 
 class SectionTests(unittest.TestCase):

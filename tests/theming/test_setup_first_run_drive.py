@@ -188,7 +188,7 @@ class SetupFirstRunDrive(unittest.TestCase):
     def test_finish_closes_setup_onto_the_managers_home(self) -> None:
         self.assertFalse(self.seen["done_card"])
         self.assertFalse(self.seen["done_line"])
-        self.assertEqual(self.seen["done_location"], "/")
+        self.assertEqual(self.seen["done_location"], "/manager")
 
     def test_finish_clears_the_mark_and_discovery_stops_saying_it(self) -> None:
         self.assertFalse(self.seen["done_pending_said"])
