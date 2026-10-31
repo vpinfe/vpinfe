@@ -257,8 +257,8 @@ ALIEN_UPDATE: dict[str, Any] = {
     "game_id": "game-g1", "vps_id": "g1", "game": "Alien", "img_url": "",
     "moves": [{"source": "vps", "kind": "tableFiles", "release_id": "t1", "vps_id": "g1",
                "file": "Alien.vpx", "then": "1.0", "now": "1.2"},
-              {"source": "fixes", "kind": "script", "release_id": "", "vps_id": "",
-               "file": "Alien Folder", "then": "", "now": ""}]}
+              {"source": "vps", "kind": "b2sFiles", "release_id": "b1", "vps_id": "g1",
+               "file": "Alien.directb2s", "then": "2.0", "now": "2.1"}]}
 
 
 def _picture(kind: str, md5: str = "abc") -> dict[str, Any]:
@@ -286,37 +286,16 @@ class MoveTests(unittest.TestCase):
                          home.tile_lines([_picture("wheel"), _picture("playfield_video")]))
 
     def test_the_pictures_line_follows_the_lines_of_the_files(self) -> None:
-        self.assertEqual(["Table 1.0 to 1.2", "Script fix", "Wheel pictures"],
+        self.assertEqual(["Table 1.0 to 1.2", "Backglass 2.0 to 2.1", "Wheel pictures"],
                          home.tile_lines([*ALIEN_UPDATE["moves"], _picture("wheel")]))
-
-
-    def test_a_script_fix_is_kept_among_the_lines_a_tile_draws(self) -> None:
-        moves = [{**ALIEN_UPDATE["moves"][0], "kind": kind} for kind in
-                 ("tableFiles", "b2sFiles", "romFiles")] + [ALIEN_UPDATE["moves"][1]]
-
-        lines = home.shown_lines(moves)
-
-        self.assertIn("Script fix", lines[:home.MOVES_SHOWN])
-        self.assertEqual(sorted(home.tile_lines(moves)), sorted(lines))
-
-    def test_lines_that_fit_are_left_in_order(self) -> None:
-        self.assertEqual(home.tile_lines(ALIEN_UPDATE["moves"]),
-                         home.shown_lines(ALIEN_UPDATE["moves"]))
 
     def test_a_tied_release_says_the_version_it_moved_from_and_to(self) -> None:
         self.assertEqual(home.move_line(ALIEN_UPDATE["moves"][0]), "Table 1.0 to 1.2")
-
-    def test_a_script_fix_is_called_one(self) -> None:
-        self.assertEqual(home.move_line(ALIEN_UPDATE["moves"][1]), "Script fix")
 
     def test_a_source_that_names_only_its_version_says_it_is_available(self) -> None:
         move = {**ALIEN_UPDATE["moves"][0], "then": ""}
 
         self.assertEqual(home.move_line(move), "Table 1.2 available")
-
-    def test_the_fix_is_asked_for_by_the_folder_of_the_game(self) -> None:
-        self.assertEqual(home.fix_folders(ALIEN_UPDATE), ["Alien Folder"])
-        self.assertEqual(home.fix_folders({**ALIEN_UPDATE, "moves": ALIEN_UPDATE["moves"][:1]}), [])
 
 
 def _offered(game_id: str, vps_id: str, name: str) -> dict:
@@ -423,11 +402,11 @@ class DrivenHome(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("Updates for Your Games", words[0])
         self.assertLess(words.index("Updates for Your Games"), words.index("New on VPS"))
         self.assertIn("Table 1.0 to 1.2", words)
-        self.assertIn("Script fix", words)
+        self.assertIn("Backglass 2.0 to 2.1", words)
 
     def _update_tile(self, body: ui.element) -> ui.element:
         return next(one for one in body.descendants()
-                    if "manager-shelf-tile" in one.classes and "Script fix" in _words(one))
+                    if "manager-shelf-tile" in one.classes and "Alien" in _words(one))
 
     @staticmethod
     async def _press(tile: ui.element) -> None:
@@ -509,51 +488,6 @@ class DrivenHome(unittest.IsolatedAsyncioTestCase):
                                     opens.keys[games.UPDATES_KEY])
         self.assertEqual([[games.updates_label()], []],
                          [row[games.UPDATES_COLUMN] for row in shown])
-
-    async def test_fetching_a_fix_asks_for_the_games_folders_and_draws_the_page_after(
-            self) -> None:
-        await self._draw()
-
-        with mock.patch("manager.settings.sections.fetch_script_fixes",
-                        mock.Mock(return_value="fetching")) as fetch:
-            result = self.spied["fix_scripts"](["Alien Folder"])
-
-        self.assertEqual("fetching", result)
-        fetch.assert_called_once()
-        self.assertEqual(["Alien Folder"], fetch.call_args.kwargs["only"])
-        fetch.call_args.args[1]()
-        self.rerender.assert_called()
-
-    @staticmethod
-    def _fetch_buttons(tile: ui.element) -> list[ui.button]:
-        return [one for one in tile.descendants()
-                if isinstance(one, ui.button) and one.props.get("aria-label") == "Fetch Script Fix"]
-
-    async def test_a_script_fix_line_has_a_fetch_that_asks_for_that_games_folder(self) -> None:
-        self.updates = [ALIEN_UPDATE]
-        tile = self._update_tile(await self._draw())
-
-        [button] = self._fetch_buttons(tile)
-        assert button.parent_slot is not None
-        wrapper = button.parent_slot.parent
-        self.assertEqual({"click.stop", "keydown.enter.stop"},
-                         {one.type for one in wrapper._event_listeners.values()})
-        with mock.patch("manager.settings.sections.fetch_script_fixes",
-                        mock.Mock(return_value="fetching")) as fetch:
-            [press] = [one for one in button._event_listeners.values() if one.type == "click"]
-            assert press.handler is not None
-            press.handler(mock.Mock())
-
-        self.assertEqual(["Alien Folder"], fetch.call_args.kwargs["only"])
-
-    async def test_a_tile_with_no_script_fix_has_no_fetch(self) -> None:
-        self.updates = [{**ALIEN_UPDATE, "moves": ALIEN_UPDATE["moves"][:1]}]
-        body = await self._draw()
-
-        tile = next(one for one in body.descendants() if "manager-shelf-tile" in one.classes
-                    and "Table 1.0 to 1.2" in _words(one))
-
-        self.assertEqual([], self._fetch_buttons(tile))
 
     async def test_an_ignored_game_has_no_update_tile(self) -> None:
         self.updates = [ALIEN_UPDATE]
@@ -1071,7 +1005,7 @@ class DrivenHome(unittest.IsolatedAsyncioTestCase):
                       see_missing=mock.Mock(), see_updates=mock.Mock(),
                       see_dont_have=mock.Mock(), see_family=mock.Mock(), see_health=mock.Mock(),
                       see_unmatched=mock.Mock(), match_game=mock.AsyncMock(),
-                      see_picture=mock.Mock(), fix_scripts=mock.Mock(), open_view=mock.Mock(),
+                      see_picture=mock.Mock(), open_view=mock.Mock(),
                       open_releases_view=mock.Mock(), open_marks=mock.Mock(),
                       open_subject=mock.Mock(),
                       marking=discovery_marks.Marking(self.library, mock.AsyncMock()))

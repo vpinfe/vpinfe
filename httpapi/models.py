@@ -215,36 +215,6 @@ class InfoMaintenance(ApiModel):
     unwritten: list[dict]
 
 
-class ScriptPatches(ApiModel):
-    """What the community index had for this library when it was last read.
-
-    `checked_at` is when that was, and empty until the daily check has read the index once.
-    `reachable` is false until then, and while the source is switched off. An index that
-    cannot be reached is not an empty one, and reporting it as "nothing to do" would say the
-    library is fine on the strength of a failed request.
-
-    `checked` counts only tables whose script has actually been read. A table nothing has
-    opened has no hash to match on, and calling it "nothing published" would be a
-    statement about a file nobody has looked at.
-    """
-
-    reachable: bool
-    offered: list[str]
-    already: int
-    checked: int
-    checked_at: str = ""
-
-
-class PatchRequest(ApiModel):
-    """Which tables to fetch script fixes for: the `offered` names a check reported.
-    Left out, every table the index has a fix for gets one, which is what the command
-    line does."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    games: list[str] | None = None
-
-
 class DeviceGame(ApiModel):
     """One folder a device holds, and the game of this library it is, if any."""
 

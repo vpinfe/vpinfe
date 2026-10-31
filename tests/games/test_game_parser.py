@@ -11,7 +11,6 @@ from unittest import mock
 
 from common.games.game_parser import GameParser
 from common.games.game_repository import game_to_row
-from common.games.standalone_scripts import StandaloneScripts
 from common.i18n import t
 from tests.support.library import TempTree, write_game
 
@@ -142,14 +141,6 @@ class GameParserTests(unittest.TestCase):
 
             self.assertEqual(game.full_path_vpx_file, "")
             self.assertIsNotNone(game.creation_time)
-
-    def test_standalone_scripts_can_be_constructed_without_running_network_work(self) -> None:
-        with mock.patch(
-                "common.games.standalone_scripts.StandaloneScripts.apply_patches") as apply_patches:
-            scripts = StandaloneScripts([], auto_run=False)
-
-        self.assertIsNone(scripts.hashes)
-        apply_patches.assert_not_called()
 
 
 class ParallelScanTests(TempTree):

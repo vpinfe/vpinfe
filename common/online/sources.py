@@ -236,12 +236,10 @@ def _load_built_in() -> None:
     with _lock:
         if _built_in_loaded:
             return
-        from common.online import script_fixes, vpinmediadb, vps_source
+        from common.online import vpinmediadb, vps_source
 
         for module in (vps_source, vpinmediadb):
             register(module.SOURCE)
-        if script_fixes.available():
-            register(script_fixes.SOURCE)
         _built_in_loaded = True
 
 
@@ -337,7 +335,7 @@ def listing_sources() -> list[Source]:
 
 def upgrade_sources() -> list[Source]:
     """The sources that can say what is later than what you hold. `versions` says only that
-    a listing carries them, so a source that names none (a script fix) still answers."""
+    a listing carries them, so a source that names none still answers."""
     return [one for one in all_sources() if one.upgrades is not None and enabled(one)]
 
 

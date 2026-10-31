@@ -16,7 +16,7 @@ from .controls import VPXControls
 from .launch import VPXLaunch
 from .pause import VPXPause
 
-# What sits beside a table and belongs to it: its settings, a patched script, its
+# What sits beside a table and belongs to it: its settings, a script, its
 # backglass, a point of view, a saved camera. Here rather than in a generic module
 # because it is this program's list and the next app's will differ.
 COMPANION_SUFFIXES: tuple[str, ...] = (".ini", ".vbs", ".directb2s", ".pov", ".scv", ".nix")

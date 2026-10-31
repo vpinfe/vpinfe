@@ -17,7 +17,7 @@ from common.games import library_policy
 from common.online import sources, vpinmediadb
 from common.online.sources import Offer, Source
 from tests.support.library import TempTree
-from tests.support.sources import built_ins_afresh, fixes_apply_here, only
+from tests.support.sources import built_ins_afresh, only
 
 
 def _fake(source_id: str = "fake", kinds: frozenset[str] = frozenset({"wheel"})) -> Source:
@@ -71,9 +71,9 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual([one.id for one in sources.catalogs()], ["one"])
 
     def test_the_built_in_sources_register_the_way_a_contributed_one_does(self) -> None:
-        with built_ins_afresh(), fixes_apply_here():
+        with built_ins_afresh():
             found = [one.id for one in sources.all_sources()]
-        self.assertEqual(found, ["vps", "vpinmediadb", "script_fixes"])
+        self.assertEqual(found, ["vps", "vpinmediadb"])
 
     def test_a_kind_core_has_no_slot_for_is_refused(self) -> None:
         with only():

@@ -189,9 +189,6 @@ class PseudoLocaleTests(unittest.TestCase):
             | {"github"}
             # an art source's own name, which Library > Media lists as a source
             | {"vpinmediadb"}
-            # the script-fix source's own name, which Library > Discovery > Sources lists
-            # beside it: "VPX Standalone Scripts" is the project's name, not a label
-            | {"standalone", "scripts"}
             # `Last Played` is a collection *name*, written into collections.json - it
             # is stored data, and translating it would rename what is on disk
             | {"last", "played"}

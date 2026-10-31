@@ -556,11 +556,6 @@ python3 main.py --buildmeta --update-all --user-media
 
 Marked existing media as `"Source": "user"` so VPinMediaDB would not overwrite it. The downloader proves ownership by hash now, so there is nothing to mark. The flag still parses and does nothing; it will be removed in a later release.
 
-## VPX Table Patches
-VPinFE can automaticlly pull patches from [vpx-standalone-scripts](https://github.com/jsm174/vpx-standalone-scripts) via the `--vpxpatch` CLI option if a matching patch can be found.  
-
-`python3 main.py --vpxpatch`
-
 ## Mobile Transfer
 
 VPinFE sends games to the mobile version of VPinball on Android and iOS from the Manager. The device has to be added once, then any game can be sent to it.

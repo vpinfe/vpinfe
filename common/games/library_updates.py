@@ -3,8 +3,8 @@
 An update is a release a file is tied to whose version VPS now lists higher than it listed
 when the tie was made (`ties.update_available`), never the file's own version. The ties are
 read where they are kept - the `source` block of each table, and of each file in the assets
-ledger - and so are the other sources' answers to "what is later for this game": a fix for a
-table's script. A table's move is not counted where another file of the game is already that
+ledger - and so are the other sources' answers to "what is later for this game": a replaced
+picture. A table's move is not counted where another file of the game is already that
 release at the listed version or later: the newer file has taken its place.
 
 Read from the library as it stands and the catalog as loaded, with no request and nothing

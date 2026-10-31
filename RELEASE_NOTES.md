@@ -126,9 +126,8 @@ rewrites, so read the next section first.
 - **Manager** - Assets lists each supporting file a table needs (backglass, settings, script,
   point of view, score view layout, Nixie layout) and what is missing or left over. A table's
   INI, script, point of view or score view layout can be edited there, with a copy kept in Backups each
-  time you save. A table's script can be extracted to a `.vbs` to patch, and the community's
-  script fixes can be downloaded. A backglass, table INI or score view layout can be moved
-  between a game and its tables, with Undo.
+  time you save. A table's script can be extracted to a `.vbs` to patch. A backglass,
+  table INI or score view layout can be moved between a game and its tables, with Undo.
 - **Manager** - A table's file can be swapped without losing the table. Replace Table File...,
   and Update... and Use Instead... from Discovery, put another file in its place and keep its
   plays, rating and collections, with the old file kept in Backups and Undo to bring it back.

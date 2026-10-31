@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable
@@ -221,11 +220,6 @@ class Library:
         # Each collection's stored membership, for the menus that say where a game is.
         self._held_members: dict[str, list[dict[str, Any]]] = {}
         self._metadata_state: dict[str, Any] | None = None
-        self._script_patches: dict[str, Any] | None = None
-        # True from the moment a fetch of the fixes begins until its job ends. The kept
-        # answer still names the tables until the job has written their files, so while it
-        # runs the answer is read as offering none.
-        self._script_fetching = False
         self._table_art = ""
         self._art_stale: set[str] = set()
         # Each launcher's settings as its settings file declares them, by launcher id.
@@ -1242,7 +1236,7 @@ class Library:
         """What the Overview draws from. Off the event loop."""
         *_, watched, front = together(
             self.load_tables, self._read_missing_media, self._read_hidden_checks,
-            self._read_overview_hidden, self._read_dismissed, self.read_script_patches,
+            self._read_overview_hidden, self._read_dismissed,
             self._read_watched, self._read_front)
         self._watched = watched
         self._front = front
@@ -1268,7 +1262,6 @@ class Library:
         return (self._table_rows is not None and self._hidden_checks is not None
                 and self._hidden_overview is not None and self._front is not None
                 and not self._media_missing() and self._watched is not None
-                and self._script_patches is not None
                 and time.monotonic() - self._watched_at < WATCHED_FRESH_S
                 and time.monotonic() - self._front_at < FRONT_FRESH_S)
 
@@ -1610,57 +1603,12 @@ class Library:
         """
         return self._metadata_state or {}
 
-    def script_patches(self) -> dict[str, Any]:
-        """What the daily check found published. Already read - this asks nothing.
-
-        Read by the pages that show it (`load_overview`, `load_tables_view`), off the
-        loop: the server answers from its cache, so it is one local call and never a
-        request to the index.
-        """
-        return self._script_patches or {}
-
-    def read_script_patches(self) -> dict[str, Any]:
-        """Read the kept answer again. Off the event loop. While a fetch runs it offers
-        nothing, whatever the kept answer still says."""
-        try:
-            found = self._client.script_patches()
-            self._script_patches = {**found, "offered": []} if self._script_fetching else found
-        except Exception:
-            logger.warning("manager: could not read what script fixes are published",
-                           exc_info=True)
-            self._script_patches = {}
-        return self._script_patches
-
     def untied_tables(self) -> tuple[str, ...]:
         """The tables of games on VPS whose release nobody has picked, by id."""
         rows = self.table_rows()
         bases = ties.patch_bases(rows)
         return tuple(sorted(str(row["id"]) for row in rows
                             if ties.release_state(row, bases) == ties.UNTIED))
-
-    def script_fix_tables(self) -> tuple[str, ...]:
-        """The tables the last check offered a fix for, by id: the default table of each
-        game the index named by its folder."""
-        offered = {str(one) for one in self.script_patches().get("offered") or ()}
-        if not offered:
-            return ()
-        games = {str(game["id"]) for game in self.games
-                 if re.split(r"[\\/]", str(game.get("folder") or "").rstrip("\\/"))[-1]
-                 in offered}
-        return tuple(sorted(str(row["id"]) for row in self.table_rows()
-                            if row.get("default") and str(row.get("game_id")) in games))
-
-    def begin_script_fetch(self) -> None:
-        """A fetch of the fixes has started: offer none until it ends, and read the answer
-        again on the next visit."""
-        self._script_fetching = True
-        self._script_patches = None
-
-    def end_script_fetch(self) -> None:
-        """The fetch's job has ended and the kept answer has been counted again: read it
-        again on the next visit."""
-        self._script_fetching = False
-        self._script_patches = None
 
     def read_metadata_state(self) -> dict[str, Any]:
         """Ask again. Off the event loop, and after anything that rewrites a `.info`."""
@@ -1867,11 +1815,9 @@ class Library:
         self.load_tables()
         if self._hidden_checks is None:
             self._read_hidden_checks()
-        self.read_script_patches()
 
     def has_tables_view(self) -> bool:
-        return (self.has_table_rows() and self._hidden_checks is not None
-                and self._script_patches is not None)
+        return self.has_table_rows() and self._hidden_checks is not None
 
     def _load_setting_groups(self, rows: list[dict[str, Any]]) -> None:
         for launcher in dict.fromkeys(str(row.get("launcher") or "") for row in rows

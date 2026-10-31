@@ -12,9 +12,8 @@ from typing import Any
 from unittest.mock import patch
 
 from common.games import library_updates
-from common.online import script_fixes, sources, vps_marks, vps_updates
+from common.online import sources, vps_marks, vps_updates
 from common.online.sources import Source
-from tests.support.sources import fixes_apply_here
 
 CATALOG = {"entries": {
     "g1": {"tableFiles": [{"id": "t1", "version": "1.2"}, {"id": "t9", "version": "3.0"}],
@@ -296,31 +295,25 @@ class FoundTests(_Library):
         self.assertEqual(["a"], [one["game_id"] for one in library_updates.found()])
 
 
-class CostTests(unittest.TestCase):
-    """A pass over the library asks the script-fix answer's file once, and one game asked
-    about reads only that game. The source is the real one; only where it keeps its answer
-    is moved."""
+class OneGameTests(unittest.TestCase):
+    """One game asked about reads only that game, and a pass over the library reads each."""
 
     def setUp(self) -> None:
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
-        answer = self.root / "answer.json"
-        answer.write_text(json.dumps({"schema": script_fixes.SCHEMA, "reachable": True,
-                                      "offered": ["Game 1", "Game 3"], "checked": 4}))
+        later = Source(id="stand-in", name="Stand-in", kinds=frozenset({"wheel"}),
+                       upgrades=lambda who, kind: (
+                           {"folder": who["folder"]} if who["folder"] in ("Game 1", "Game 3")
+                           else {}))
         self.games = {f"g{n}": SimpleNamespace(meta_config={}, game_dir_name=f"Game {n}",
                                                full_path_game=str(self.root / f"Game {n}"))
                       for n in range(5)}
         library_updates._located = None
         self.addCleanup(setattr, library_updates, "_located", None)
-        script_fixes._held = None
-        self.addCleanup(setattr, script_fixes, "_held", None)
         for patcher in (
-                fixes_apply_here(),
-                patch.object(script_fixes, "ANSWER_PATH", answer),
-                patch.object(script_fixes.sources, "enabled", return_value=True),
                 patch.object(library_updates.sources, "upgrade_sources",
-                             return_value=[script_fixes.SOURCE]),
+                             return_value=[later]),
                 patch.object(library_updates.vps_releases, "index",
                              return_value={"entries": {}}),
                 patch.object(library_updates.game_repository, "catalog",
@@ -332,31 +325,8 @@ class CostTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def reads_of_the_answer(self, run: Any) -> tuple[Any, int]:
-        real = Path.read_text
-        reads = []
-
-        def counted(path: Path, *args: Any, **kwargs: Any) -> str:
-            reads.append(path)
-            return real(path, *args, **kwargs)
-
-        with patch.object(Path, "read_text", counted):
-            out = run()
-        return out, sum(1 for one in reads if one == script_fixes.ANSWER_PATH)
-
-    def test_the_answer_is_read_once_for_a_whole_library(self) -> None:
-        found, reads = self.reads_of_the_answer(library_updates.found)
-
-        self.assertEqual(["g1", "g3"], [one["game_id"] for one in found])
-        self.assertEqual(1, reads)
-
-    def test_a_fresh_answer_is_read_again(self) -> None:
-        library_updates.found()
-        script_fixes.ANSWER_PATH.write_text(json.dumps({
-            "schema": script_fixes.SCHEMA, "reachable": True, "offered": ["Game 2"],
-            "checked": 5}))
-
-        self.assertEqual(["g2"], [one["game_id"] for one in library_updates.found()])
+    def test_a_pass_over_the_library_finds_each_game_the_source_names(self) -> None:
+        self.assertEqual(["g1", "g3"], [one["game_id"] for one in library_updates.found()])
 
     def test_one_game_asked_about_looks_at_that_game_alone(self) -> None:
         with patch.object(library_updates, "of_game",
@@ -375,8 +345,8 @@ class ShelfTests(unittest.TestCase):
         return {"source": "vps", "kind": "tableFiles", "release_id": release,
                 "vps_id": vps_id, "file": "x.vpx", "then": "1.0", "now": now}
 
-    def fix(self) -> dict:
-        return {"source": "fixes", "kind": "script", "release_id": "", "vps_id": "",
+    def untied(self) -> dict:
+        return {"source": "vps", "kind": "b2sFiles", "release_id": "", "vps_id": "",
                 "file": "Folder", "then": "", "now": ""}
 
     def one(self, game_id: str, name: str, *moves: dict, vps_id: str = "g1") -> dict:
@@ -442,16 +412,16 @@ class ShelfTests(unittest.TestCase):
         self.assertEqual(1, vps_updates.shelf(
             found, self.marks((vps_marks.WANTED, vps_marks.RELEASE, "t1", "")))["count"])
 
-    def test_a_fix_from_another_source_is_left_only_by_ignoring_its_game(self) -> None:
-        found = [self.one("a", "Alien", self.fix())]
+    def test_a_move_with_no_release_is_left_only_by_ignoring_its_game(self) -> None:
+        found = [self.one("a", "Alien", self.untied())]
 
         self.assertEqual(1, vps_updates.shelf(
             found, self.marks((vps_marks.IGNORED, vps_marks.UPDATES, "t1", "")))["count"])
         self.assertEqual(0, vps_updates.shelf(
             found, self.marks((vps_marks.IGNORED, vps_marks.GAME, "g1", "")))["count"])
 
-    def test_a_fix_for_a_game_matched_to_nothing_stays_as_nothing_can_ignore_it(self) -> None:
-        found = [self.one("a", "Alien", self.fix(), vps_id="")]
+    def test_a_move_for_a_game_matched_to_nothing_stays_as_nothing_can_ignore_it(self) -> None:
+        found = [self.one("a", "Alien", self.untied(), vps_id="")]
 
         self.assertEqual(1, vps_updates.shelf(found, vps_marks.Marks())["count"])
 

@@ -21,7 +21,7 @@ The windows come and go under the run. `run_frontend_loop` waits on the shutdown
 - `common/games/collections_service.py`: shared collection manager access and filter-collection helpers.
 - `common/games/game_play_service.py`: start count, last-played date, runtime, score update, and NVRAM cleanup.
 - `common/host/display_service.py`: shared monitor discovery.
-- `common/games/metadata_service.py`: build metadata and VPX patch orchestration shared by CLI, frontend, and the Manager.
+- `common/games/metadata_service.py`: build metadata orchestration shared by CLI, frontend, and the Manager.
 - `common/games/game_report_service.py`: CLI-oriented missing/unknown game reports backed by the shared parser and VPSdb lookup.
 - `common/host/system_actions.py`: the app restart request (kept on the install row) and re-launch, clean OS command environment, shutdown, and reboot commands.
 - `frontend/game_state.py`: game JSON serialization, filtering, sorting, collections, and rating mutations for the JS API.

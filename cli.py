@@ -71,10 +71,6 @@ def list_unknown_games():
     return game_report_service.list_unknown_games(iniconfig=config_store, log=logger.info)
 
 
-def vpx_patches(progress_cb=None):
-    return metadata_service.apply_vpx_patches(progress_cb=progress_cb)
-
-
 def gamepadtest():
     """Run the gamepad test window using Chromium and a server of its own: the page needs
     core's files, not the library, and the real one may be running."""
@@ -210,8 +206,6 @@ def parse_args():
     parser.add_argument("--buildmeta", action="store_true",
                         help="Build the .info file, which holds a game's details, in each "
                              "game folder")
-    parser.add_argument("--vpxpatch", action="store_true",
-                        help="Write a script fix next to each table that needs one")
     parser.add_argument("--gamepadtest", action="store_true",
                         help="Open the gamepad button tester")
     parser.add_argument("--headless", action="store_true",
@@ -339,10 +333,6 @@ def parse_args():
 
     if args.gamepadtest:
         gamepadtest()
-        sys.exit()
-
-    if args.vpxpatch:
-        vpx_patches()
         sys.exit()
 
     return args

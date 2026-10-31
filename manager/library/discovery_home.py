@@ -23,7 +23,7 @@ from common import icons
 from common.failures import why
 from common.i18n import t
 from common.media.media_specs import IMAGE_FAMILY, MEDIA_SPECS, media_label_map
-from common.online import script_fixes, vps_find, vps_home
+from common.online import vps_find, vps_home
 from manager.kit import (
     busy,
     candidates,
@@ -153,17 +153,13 @@ _MEDIA_GAPS = {
 
 _BACKGLASSES = ("b2sFiles", "backglass")
 
-# What a move of a source other than the spreadsheet is called on a tile, by the kind of file.
-_MOVE_WORDS = {script_fixes.KIND: "manager.discovery.update.script_fix"}
-
 # How many moves a tile lists before it counts the rest.
 MOVES_SHOWN = 2
 
 
 def move_line(move: dict[str, Any]) -> str:
     """One line of a tile: what has a later version, and the version it moved from and to."""
-    word = _MOVE_WORDS.get(move["kind"])
-    kind = t(word) if word else _kind_words(move["kind"])[0]
+    kind = _kind_words(move["kind"])[0]
     if move["then"] and move["now"]:
         return t("manager.discovery.update.moved", kind=kind, then=move["then"], now=move["now"])
     return t("manager.discovery.update.later", kind=kind, now=move["now"]) \
@@ -195,28 +191,6 @@ def tile_lines(moves: list[dict[str, Any]]) -> list[str]:
     pictures = [one for one in moves if is_picture(one)]
     return [*(move_line(one) for one in moves if not is_picture(one)),
             *([pictures_line(pictures)] if pictures else [])]
-
-
-def fix_line(moves: list[dict[str, Any]]) -> str:
-    """The line a script fix has on a tile, or "" where there is none."""
-    return next((move_line(one) for one in moves if one["kind"] == script_fixes.KIND), "")
-
-
-def shown_lines(moves: list[dict[str, Any]]) -> list[str]:
-    """The lines of a tile in the order they are drawn: as `tile_lines` has them, except
-    that a script fix is kept among the lines shown, since its Fetch is drawn on it."""
-    lines = tile_lines(moves)
-    fix = fix_line(moves)
-    if fix in lines[MOVES_SHOWN:]:
-        lines.remove(fix)
-        lines.insert(MOVES_SHOWN - 1, fix)
-    return lines
-
-
-def fix_folders(item: dict[str, Any]) -> list[str]:
-    """The folders of the game's script fixes, which the fetch is asked for."""
-    return [move["file"] for move in item["moves"]
-            if move["kind"] == script_fixes.KIND and move["file"]]
 
 
 def _gap_words(kind: str) -> str:
@@ -262,7 +236,6 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
          see_unmatched: Callable[[], Any],
          match_game: Callable[[dict[str, Any]], Awaitable[bool]],
          see_picture: Callable[[str, str], Any],
-         fix_scripts: Callable[[list[str]], Any],
          open_view: Callable[[str], Any],
          open_releases_view: Callable[[str], Any],
          open_marks: Callable[[str], Any],
@@ -279,11 +252,10 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
     Games on the view that lists a Library Health finding's games, `see_picture(vps_id, kind)`
     a game's pane on the section of that media kind, `open_view(id)` on a saved view of
     All Games, `open_releases_view(id)` on one of Releases, `open_marks(view)` the Marks grid on
-    its Ignored or Wanted view, `open_subject` an author's page, and `fix_scripts(folders)`
-    fetches the script fixes of those games. `marking` is the menu a tile opens on a right
-    click or a long press, and what says a release is Wanted. `shelves` are the ids of the
-    shelves to draw, top to bottom; a shelf left out is not drawn at all. Returns the
-    coroutine that reads the shelves again and draws them where they stand."""
+    its Ignored or Wanted view, and `open_subject` an author's page. `marking` is the menu a
+    tile opens on a right click or a long press, and what says a release is Wanted. `shelves`
+    are the ids of the shelves to draw, top to bottom; a shelf left out is not drawn at all.
+    Returns the coroutine that reads the shelves again and draws them where they stand."""
     shown: dict[str, Any] = {"home": home, "chip": vps_home.ALL, "lack": "", "finding": "",
                              "rows": None, "people": [], "asked": home["days"]}
     with body:
@@ -322,9 +294,6 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
     def update_menu(card: Any, item: dict[str, Any]) -> None:
         """The right click and long press of an Updates tile."""
         entries = marking.update_verbs(item, lambda listing: _kind_words(listing)[0])
-        if folders := fix_folders(item):
-            entries.append(panel.Verb(t("manager.discovery.update.fetch_fix"),
-                                      lambda: fix_scripts(folders), icon=verbs.FETCH))
         if not entries:
             return
         with card:
@@ -338,14 +307,6 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
             return see_picture(item["vps_id"], str(item["moves"][0]["kind"]))
         return on_select({"id": item["vps_id"]})
 
-    def fetch_button(folders: list[str]) -> None:
-        """Fetch on the script-fix line: the press stops here, not on the tile."""
-        with ui.element("div").classes("shrink-0").on("click.stop", lambda: None) \
-                .on("keydown.enter.stop", lambda: None):
-            panel.icon_action(t("manager.discovery.update.fetch_fix"),
-                              lambda: fix_scripts(folders), icon=verbs.FETCH,
-                              hint=t("manager.discovery.update.fetch_fix"))()
-
     def update_tile(parent: Any, item: dict[str, Any]) -> None:
         with parent, ui.element("div").classes("manager-shelf-tile") as card:
             card.props("tabindex=0 role=button")
@@ -357,15 +318,9 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
             candidates.thumb(item["img_url"], icons.TABLES, t("manager.discovery.no_picture"))
             with ui.column().classes("gap-0 min-w-0"):
                 ui.label(item["game"]).classes("manager-shelf-name")
-                lines = shown_lines(item["moves"])
-                fix = fix_line(item["moves"])
+                lines = tile_lines(item["moves"])
                 for line in lines[:MOVES_SHOWN]:
-                    if line == fix and (folders := fix_folders(item)):
-                        with ui.row().classes("items-center gap-1 no-wrap"):
-                            ui.label(line).classes("text-xs manager-help truncate")
-                            fetch_button(folders)
-                    else:
-                        ui.label(line).classes("text-xs manager-help truncate")
+                    ui.label(line).classes("text-xs manager-help truncate")
                 if len(lines) > MOVES_SHOWN:
                     ui.label(t("manager.discovery.update.more",
                                count=len(lines) - MOVES_SHOWN)) \

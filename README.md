@@ -8,7 +8,6 @@
 - Keyboard & controller input support
 - The Manager, a web app for your library, settings and media (auto download via [VPinMediaDB](https://github.com/superhac/vpinmediadb))
 - Build custom table collections (VPS ID-based and filter-based)
-- Automatic [vpx patching](https://github.com/jsm174/vpx-standalone-scripts) for Linux & Mac
 - Fully customizable UI theming using HTML, JS and CSS
 - JSON-based table metadata with VPX file parsing and feature detection
 - DOF Support using [libdof-python](https://github.com/vpinfe/libdof-python)

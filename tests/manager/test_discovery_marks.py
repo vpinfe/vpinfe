@@ -524,8 +524,8 @@ class HomeMenuTests(unittest.TestCase):
 class UpdateMenuTests(unittest.TestCase):
     MOVE = {"source": "vps", "kind": "tableFiles", "release_id": "t1", "vps_id": "g1",
             "file": "Alien.vpx", "then": "1.0", "now": "1.2"}
-    FIX = {"source": "fixes", "kind": "script", "release_id": "", "vps_id": "",
-           "file": "Alien", "then": "", "now": ""}
+    UNTIED = {"source": "vps", "kind": "b2sFiles", "release_id": "", "vps_id": "",
+              "file": "Alien", "then": "", "now": ""}
 
     def _verbs(self, moves: list[dict[str, Any]], *marked: dict[str, str]) -> list[str]:
         library = mock.Mock(spec=Library)
@@ -538,8 +538,8 @@ class UpdateMenuTests(unittest.TestCase):
         self.assertEqual(self._verbs([self.MOVE]),
                          ["Skip This Version", "Ignore Updates to This Table"])
 
-    def test_a_tile_with_only_a_fix_has_nothing_to_skip(self) -> None:
-        self.assertEqual(self._verbs([self.FIX]), [])
+    def test_a_tile_with_no_release_or_picture_has_nothing_to_skip(self) -> None:
+        self.assertEqual(self._verbs([self.UNTIED]), [])
 
     PICTURE = {"source": "vpinmediadb", "kind": "wheel", "release_id": "", "vps_id": "g1",
                "file": "Alien", "then": "", "now": "", "md5": "abc"}

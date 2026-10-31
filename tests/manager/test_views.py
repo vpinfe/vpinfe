@@ -517,6 +517,20 @@ class ArrivalTests(unittest.TestCase):
         stale = views.View(id="s", name="Old", columns=("gone",))
         self.assertIs(views.arrived(stale, games.UNMATCHED, self.FIELDS), stale)
 
+    def test_a_view_saved_with_the_script_fix_column_loses_only_that_column(self) -> None:
+        saved = views.View(id="s", name="Old", columns=("name", "script_fix", "year"),
+                           filters={"script_fix": {"values": ["Fix available"]}})
+        self.assertNotIn("script_fix", self.FIELDS)
+        self.assertEqual(views.visible_columns(saved, self.FIELDS), ["name", "year"])
+        self.assertIs(views.arrived(saved, {"script_fix": {"values": ["x"]}}, self.FIELDS),
+                      saved)
+        self.assertEqual(views.arrived(saved, games.UNMATCHED, self.FIELDS).filters,
+                         games.UNMATCHED)
+
+    def test_a_view_saved_with_only_the_script_fix_column_is_stale(self) -> None:
+        saved = views.View(id="s", name="Old", columns=("script_fix",))
+        self.assertIsNone(views.visible_columns(saved, self.FIELDS))
+
 
 class OpenedViewTests(unittest.TestCase):
     FIELDS = ["name", "authors", "kind", "held"]

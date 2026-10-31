@@ -848,9 +848,6 @@ LACKING_COLUMN = "lacking"
 UPDATES_KEY = "updated_games"
 UPDATES_COLUMN = "updates"
 
-# The column of the tables a script fix is published for, in the Tables grid.
-FIXES_COLUMN = "script_fix"
-
 # The game's rating on a table's row: `rating` there is the table's own.
 GAME_RATING = "game_rating"
 
@@ -872,8 +869,6 @@ TABLE_COLUMNS = [
     grid.column("on_vps", t("manager.games.on_vps"), group=t(_TABLE),
                 help=t("manager.games.on_vps.help")),
     game_states.release().column("release", t("manager.games.release"), 150, group=t(_TABLE)),
-    grid.list_column(FIXES_COLUMN, t("manager.games.fix_column"), 120, group=t(_TABLE),
-                     help=t("manager.games.fix_column.help")),
     grid.column("mod_of", t("manager.games.mod_of"), 200, group=t(_TABLE),
                 help=t("manager.games.mod_of.help"),
                 **{**grid.choice_filter([
@@ -1105,7 +1100,6 @@ def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, 
              "author": game_tables.named_version_and_authors(row)[1],
              "on_vps": str((row.get("source") or {}).get("version") or ""),
              "release": ties.release_state(row, bases),
-             FIXES_COLUMN: [],
              **_mod_cell((row.get("source") or {}).get("mod_of")),
              "tags": [*((row.get("user") or {}).get("tags") or []),
                       *(row.get("derived_tags") or [])],
@@ -1177,10 +1171,6 @@ def updates_column() -> dict[str, Any]:
                             help=t("manager.games.updates_column.help"))
 
 
-def fixes_label() -> str:
-    return t("manager.games.fix_group")
-
-
 def _stamped(built: list[dict[str, Any]], ids: Collection[str] | None, column: str,
              label: str) -> list[dict[str, Any]]:
     """Copies, so the library's own rows carry no mark."""
@@ -1212,12 +1202,6 @@ def stamp_updates(built: list[dict[str, Any]],
                   ids: Collection[str] | None) -> list[dict[str, Any]]:
     """Each row says whether Home's Updates counts it, in the Updates column."""
     return _stamped(built, ids, UPDATES_COLUMN, updates_label())
-
-
-def stamp_fixes(built: list[dict[str, Any]],
-                ids: Collection[str] | None) -> list[dict[str, Any]]:
-    """Each row says whether a script fix is published for it, in the Script Fix column."""
-    return _stamped(built, ids, FIXES_COLUMN, fixes_label())
 
 
 def _mod_cell(mod: dict[str, Any] | None) -> dict[str, Any]:
@@ -1304,12 +1288,7 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
     look = library.thumbnail_look()
     reported = state.pop("reported", None)
     only_new = state.pop(NEW_KEY, None)
-    # Stamped on every visit: the column is there to be filtered on, and until the daily
-    # check has run nothing in it is marked.
-    mended = library.script_fix_tables() or None
-    built = stamp_fixes(
-        stamp_new(stamp_report(table_rows(rows, look is not None), reported), only_new),
-        mended)
+    built = stamp_new(stamp_report(table_rows(rows, look is not None), reported), only_new)
     # Taken once, as the Games grid takes its own.
     arriving = setting_their_own(rows, str(state.pop("launcher", None) or ""),
                                  str(state.pop("sets", None) or ""))
@@ -1536,11 +1515,10 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
         # blanks four columns on exactly the rows just acted on.
         rows_now = await offload.io(library.load_tables)
         for game_id in set(game_ids):
-            fresh = stamp_fixes(
-                stamp_new(stamp_report(table_rows([item for item in rows_now
-                                                   if item.get("game_id") == game_id],
-                                                  look is not None), reported), only_new),
-                mended)
+            fresh = stamp_new(
+                stamp_report(table_rows([item for item in rows_now
+                                         if item.get("game_id") == game_id],
+                                        look is not None), reported), only_new)
             transaction = row_transaction(by_id, game_id, fresh)
             add_index(built, game_id, transaction)
             if transaction:

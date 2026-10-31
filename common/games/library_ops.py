@@ -12,7 +12,7 @@ busy.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from common import service_errors
@@ -46,7 +46,7 @@ from common.games.game_metadata import (
 )
 from common.games.tables import table_entries
 from common.i18n import t
-from common.online import script_fixes, vps_home, vps_marks, vps_updates
+from common.online import vps_home, vps_marks, vps_updates
 from common.runtime import job_details
 from common.runtime import jobs as job_registry
 
@@ -247,26 +247,6 @@ def one_info_pass(work: Callable[..., object], title: str = "") -> job_registry.
     return start(job_registry.KIND_LIBRARY_SCAN, lambda job: work(job=job), title)
 
 
-def apply_script_patches(only: Collection[str] | None = None) -> job_registry.Job:
-    """Each fix lands as a `.vbs` sidecar beside the table it is for. `only` names the
-    game folders the check offered; left out, every table the index has a fix for. Refused
-    where the fixes do not apply."""
-    if not script_fixes.available():
-        raise service_errors.UnavailableError(t("said.script_fixes_unavailable"))
-
-    def fetch(job: job_registry.Job) -> None:
-        try:
-            game_service.apply_vpx_patches(progress_cb=job.progress, only=only)
-        finally:
-            # After a failed fetch too, for what it did write. Never in place of its error.
-            try:
-                script_fixes.recount()
-            except Exception:  # noqa: BLE001 - the fetch's own outcome is what is reported
-                logger.warning("Could not count the script fixes again", exc_info=True)
-
-    return start(job_registry.KIND_LIBRARY_SCAN, fetch, t("said.title_script_fixes"))
-
-
 def dismissed() -> dict[str, Any]:
     return {"rows": [{"row": row, "ids": ids} for row, ids in dismissals.dismissed().items()]}
 
@@ -403,9 +383,3 @@ def info_maintenance() -> dict[str, Any]:
             "restorable_games": game_service.restorable_game_names(),
             "unreadable": game_repository.unreadable_games(),
             "unwritten": game_repository.unwritten_games()}
-
-
-def offered_patches() -> dict[str, Any]:
-    """What script fixes the last daily check found for this library. Changes nothing and
-    asks nobody."""
-    return script_fixes.answer()

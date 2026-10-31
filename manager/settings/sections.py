@@ -754,47 +754,6 @@ def metadata_line(library: Library, state: dict[str, Any]) -> None:
                          hint=t("manager.sections.show_needs.help"))()
 
 
-# --- The scripts the tables run ---------------------------------------------------
-#
-# Standalone runs the same tables the Windows build does, and a good many of them need a
-# small script change to do it. The community keeps an index of those fixes, matched on
-# the hash of the script a table actually runs rather than on its name - one table's
-# script appears under a dozen filenames, and a fix is only correct for the bytes it was
-# built against. A fix arrives as a `.vbs` sidecar, which the program runs in place of
-# the script the table ships with.
-
-
-@on_page
-async def fetch_script_fixes(library: Library, after: Callable[[], Any],
-                             only: list[str] | None = None) -> None:
-    """Ask, then start the fetch as a job, for the game folders in `only` or for every one
-    the check offered. `after` redraws what showed the fixes: once when the fetch begins,
-    when they are no longer offered, and again when the job ends and the count has been made
-    again."""
-    from manager.kit import confirm
-    from manager.kit.api import ApiClient
-
-    offered = list(only if only is not None else library.script_patches().get("offered") or [])
-    if not await confirm.ask(
-            t("manager.sections.fetch_confirm", count=len(offered)),
-            detail=t("manager.sections.script_fixes_how"),
-            confirm=t("word.fetch"), icon=verbs.FETCH, danger=False):
-        return
-    client = ApiClient()
-    try:
-        job = await run.io_bound(client.apply_script_patches, offered)
-    except Exception as exc:
-        ui.notify(t("manager.sections.fetch_failed"), caption=why(exc), type="negative")
-        return
-    ui.notify(t("manager.sections.fetching_way"), type="positive")
-    library.begin_script_fetch()
-    after()
-    await _ended(client, str((job or {}).get("id") or ""))
-    library.end_script_fetch()
-    await run.io_bound(library.read_script_patches)
-    after()
-
-
 def no_tables_line(library: Library, state: dict[str, Any]) -> None:
     """The notice above the Tables grid while some game has no table, which the grid
     cannot show: it lists files, and these have none. Drawn once; the page redraws it."""

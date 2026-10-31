@@ -495,17 +495,8 @@ async def _fill_home(library: Library, body: Any, state: dict[str, Any],
         state["section"] = discovery_kinds.section_key(kind)
         await on_select({"id": vps_id})
 
-    def fix_scripts(folders: list[str]) -> Any:
-        from manager.settings import sections
-        return sections.fetch_script_fixes(library, redraw_after_fix, only=folders)
-
     def go_to(subject: dict[str, str]) -> None:
         open_page(state, people, rerender, subject)
-
-    def redraw_after_fix() -> None:
-        """The page again once a fetch begins and ends: the games it mended no longer show."""
-        library.forget_catalog()
-        rerender()
 
     @on_page
     async def redraw_home() -> None:
@@ -520,7 +511,6 @@ async def _fill_home(library: Library, body: Any, state: dict[str, Any],
         see_updates=see_updates, see_dont_have=see_dont_have, see_family=see_family,
         see_health=see_health, see_unmatched=see_unmatched, match_game=match_game,
         see_picture=see_picture,
-        fix_scripts=fix_scripts,
         open_view=to_view, open_releases_view=to_releases_view, open_marks=to_marks,
         open_subject=go_to, marking=discovery_marks.Marking(library, redraw_home),
         shelves=shelves)

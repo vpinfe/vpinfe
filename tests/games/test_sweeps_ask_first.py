@@ -15,7 +15,6 @@ from common.games import (
     game_repository,
     library_folders,
     library_ops,
-    metadata_service,
 )
 from common.games.game_metadata import carrying
 from common.i18n import t
@@ -137,29 +136,6 @@ class AutoMatchSweepTests(_Sweep):
             said = library_ops.auto_match([GOOD, DEAD])
         self.assertEqual(len(matching.call_args.args[0]), 2)
         self.assertEqual(said["skipped"], 0)
-
-
-class ScriptPatchSweepTests(_Sweep):
-    def test_a_game_that_cannot_be_written_to_gets_no_patch_and_is_reported(self) -> None:
-        said: list[str] = []
-        with never_answering(str(self.dead)), \
-                mock.patch.object(metadata_service, "StandaloneScripts") as scripts:
-            metadata_service.apply_vpx_patches(
-                progress_cb=lambda done, total, message: said.append(message))
-        self.assertEqual([g.game_dir_name for g in scripts.call_args.args[0]], [GOOD, PLAIN])
-        self.assertEqual(said, [t("said.patches_skipped", count=1)])
-
-    def test_only_the_named_folders_are_looked_at(self) -> None:
-        with mock.patch.object(metadata_service, "StandaloneScripts") as scripts:
-            metadata_service.apply_vpx_patches(only=[PLAIN])
-        self.assertEqual([g.game_dir_name for g in scripts.call_args.args[0]], [PLAIN])
-
-    def test_nothing_extra_is_said_when_every_folder_answers(self) -> None:
-        said: list[str] = []
-        with mock.patch.object(metadata_service, "StandaloneScripts"):
-            metadata_service.apply_vpx_patches(
-                progress_cb=lambda done, total, message: said.append(message))
-        self.assertEqual(said, [])
 
 
 if __name__ == "__main__":

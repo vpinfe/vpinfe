@@ -83,7 +83,6 @@ BASELINE: dict[str, int] = {
     "common/games/score_parser.py": 10,
     # Names are read from the table script the way the parser strips its comments.
     "common/games/formats/script_names.py": 1,
-    "common/games/standalone_scripts.py": 2,
     "common/games/table_lens.py": 15,
     "common/games/table_ops.py": 6,
     "common/games/tables.py": 8,

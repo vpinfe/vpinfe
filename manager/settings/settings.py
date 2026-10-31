@@ -1109,10 +1109,9 @@ def _checks_arranged(switches: list[KindSwitch]) -> list[tuple[Any, Any]]:
 def _sources_arranged(switches: list[KindSwitch]) -> list[tuple[Any, Any]]:
     """The sources with a rule between each, the ones VPinFE ships first, each with the line
     that says what it gives."""
-    from common.online import script_fixes, vpinmediadb
+    from common.online import vpinmediadb
 
-    shipped = {vpinmediadb.ID: "manager.settings.vpinmediadb.help",
-               script_fixes.ID: "manager.settings.script_fixes.help"}
+    shipped = {vpinmediadb.ID: "manager.settings.vpinmediadb.help"}
     order = list(shipped)
     entries: list[tuple[Any, Any]] = []
     for at, (name, label, draw) in enumerate(sorted(

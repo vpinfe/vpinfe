@@ -142,7 +142,6 @@ Options that work on the library without starting VPinFE:
 | `--restore-info` | Restore the `.info` files saved before they were upgraded.  Your current ones are kept first |
 | `--listmissing` | List the games from VPS |
 | `--listunknown` | List the games VPinFE cannot match to VPS |
-| `--vpxpatch` | Apply the VPX patches |
 | `--reset-3x-state` | Remove everything 3.x wrote, so the next start migrates from scratch: its settings and collections files, the `.info` files it made and every backup it kept.  Settings you changed in 3.x are lost, and so are ratings and play counts on games 3.x added.  Refuses while VPinFE is running.  `--dry-run` lists what would go and changes nothing, and `--config-only` leaves the game library alone |
 
 `--claim-user-media` does nothing any more: your own media is protected automatically.

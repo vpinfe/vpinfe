@@ -275,25 +275,3 @@ def upgrade_info(response: Response) -> models.JobResource:
     is rewritten, and `/backups` lists it."""
     return _accepted(response, library_ops.one_info_pass(
         game_service.upgrade_info, t("said.title_info_upgrade")))
-
-
-@router.get("/patches", summary="What script fixes are published for this library",
-            dependencies=[requires(scopes.GAMES_READ)])
-def script_patches() -> models.ScriptPatches:
-    """What the daily check found, kept in the cache and never asked of the index here. Its
-    own read rather than a flag on the apply, because what is being decided is whether to
-    let something write a file into every game folder that needs one. Being able to ask
-    first is the difference between a confirm and a leap."""
-    return models.ScriptPatches(**library_ops.offered_patches())
-
-
-@router.post("/patches", summary="Fetch the published script fixes", status_code=202,
-             dependencies=[requires(scopes.GAMES_WRITE)])
-def apply_script_patches(response: Response,
-                         request: models.PatchRequest | None = Body(default=None)
-                         ) -> models.JobResource:
-    """Accepted, not done. A table that already has a sidecar is left alone and recorded
-    as patched: whatever is in that file is what the table runs, and replacing it would
-    overwrite somebody else's work."""
-    options = request or models.PatchRequest()
-    return _accepted(response, library_ops.apply_script_patches(options.games))
