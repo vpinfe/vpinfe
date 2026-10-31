@@ -1,11 +1,9 @@
-"""The Authenticator section of Security, and the one offer to set one up."""
+"""The Authenticator section of Security."""
 
 from __future__ import annotations
 
-import base64
 import re
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -69,41 +67,15 @@ class WithAnAuthenticator(unittest.TestCase):
         authenticator.use(self.held)
 
 
-class TheOffer(WithAnAuthenticator):
-    def test_a_signed_in_browser_is_offered_one_when_nobody_has_been(self) -> None:
-        self.assertTrue(authenticator_panel.offer_due(signed_in_owner=True))
-
-    def test_this_device_is_never_offered_one(self) -> None:
-        self.assertFalse(authenticator_panel.offer_due(signed_in_owner=False))
-
-    def test_it_is_offered_once_whatever_the_answer(self) -> None:
-        self.held.mark_offered()
-
-        self.assertFalse(authenticator_panel.offer_due(signed_in_owner=True))
-
-    def test_it_is_not_offered_where_one_is_already_set_up(self) -> None:
-        made = self.held.begin("Game Room")
-        self.held.activate(authenticator._code(base64.b32decode(made.secret),
-                                               int(time.time() // 30)))
-
-        self.assertFalse(authenticator_panel.offer_due(signed_in_owner=True))
-
-
 class TheUpgradeStep(WithAnAuthenticator):
-    def test_an_update_from_before_asks_for_one_until_it_is_set_up(self) -> None:
-        keys = [need.key for need in upgrade_needs.open_for(mock.Mock(), "v2.6.6")]
+    def test_no_update_asks_for_one(self) -> None:
+        for since in ("", "v2.6.6", "v3.0.0"):
+            keys = [need.key for need in upgrade_needs.open_for(mock.Mock(), since)]
 
-        self.assertIn("authenticator", keys)
+            self.assertNotIn("authenticator", keys)
 
-    def test_an_install_already_past_it_is_not_asked(self) -> None:
-        keys = [need.key for need in upgrade_needs.open_for(mock.Mock(), "v3.0.0")]
-
-        self.assertNotIn("authenticator", keys)
-
-    def test_it_never_stops_play(self) -> None:
-        need = next(need for need in upgrade_needs.NEEDS if need.key == "authenticator")
-
-        self.assertFalse(need.blocks_play)
+    def test_nothing_it_asks_for_stops_play(self) -> None:
+        self.assertEqual(upgrade_needs.blocking(mock.Mock()), [])
 
 
 if __name__ == "__main__":

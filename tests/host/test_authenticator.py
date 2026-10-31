@@ -322,19 +322,3 @@ class TheOnScreenCodes(WithSecrets):
 
         self.assertFalse(self.held.enabled())
         self.assertTrue(self.held.screen_codes())
-
-
-class TheOffer(WithSecrets):
-    def test_it_is_made_once_and_stays_made_after_a_removal(self) -> None:
-        self.assertFalse(self.held.offered())
-
-        self.enrol()
-        self.held.mark_offered()
-        self.held.remove()
-
-        self.assertTrue(self.held.offered())
-        self.assertTrue(authenticator.Authenticator(self.clock).offered())
-
-
-if __name__ == "__main__":
-    unittest.main()

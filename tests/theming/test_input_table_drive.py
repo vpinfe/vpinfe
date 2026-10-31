@@ -478,16 +478,13 @@ class InputTableDrive(unittest.TestCase):
         self.assertEqual(self.seen["heard_nothing"], "Z · Does nothing here")
 
     def test_a_clicked_row_listens_and_the_line_says_what_for_and_how(self) -> None:
-        self.assertEqual(self.seen["prompt"], "Press what should do Next")
-        self.assertEqual(
-            self.seen["prompt_help"],
-            "Two together makes a chord, and keeping it down makes a hold. Click away to stop")
+        self.assertEqual(self.seen["prompt"], "Press a button or key for Next")
+        self.assertEqual(self.seen["prompt_help"], "Click away to stop")
         self.assertEqual(self.seen["listening_rows"], ["Next"])
 
-    def test_a_row_that_cannot_be_held_offers_only_the_chord(self) -> None:
-        self.assertEqual(self.seen["picture_prompt"], "Press what should do Take Picture")
-        self.assertEqual(self.seen["picture_help"],
-                         "Two together makes a chord. Click away to stop")
+    def test_a_row_that_cannot_be_held_says_the_same_beside_the_switch(self) -> None:
+        self.assertEqual(self.seen["picture_prompt"], "Press a button or key for Take Picture")
+        self.assertEqual(self.seen["picture_help"], "Click away to stop")
 
     def test_a_click_on_a_heading_a_gap_or_the_line_stops_the_listening(self) -> None:
         idle = "Press anything to see what it does"
@@ -503,7 +500,7 @@ class InputTableDrive(unittest.TestCase):
     def test_a_click_on_another_row_moves_the_listening_to_it(self) -> None:
         self.assertEqual(self.seen["to_another_row"]["listening"], ["Menu"])
         self.assertTrue(self.seen["to_another_row"]["line"].startswith(
-            "Press what should do Menu"))
+            "Press a button or key for Menu"))
 
     def test_a_click_on_a_chip_of_the_listening_row_keeps_listening(self) -> None:
         self.assertEqual(self.seen["own_chip"], {"listening": ["Next"], "menu": False})

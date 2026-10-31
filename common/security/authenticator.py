@@ -5,7 +5,7 @@ authenticator app reads the enrolment. One step either side of now is accepted, 
 is spent once used. Nothing needs an authenticator; it is set up on Security and removed
 there.
 
-The secret, the last step spent, the on-screen-code switch and the offered mark live in one
+The secret, the last step spent and the on-screen-code switch live in one
 record in the secrets file, which only this user can read. Nothing here knows about HTTP.
 """
 
@@ -121,16 +121,6 @@ class Authenticator:
                 raise sign_in.SignInError(sign_in.NOT_SET)
             record["screen_codes"] = bool(on)
             self._keep(record)
-
-    def offered(self) -> bool:
-        return bool(self._record().get("offered"))
-
-    def mark_offered(self) -> None:
-        with self._lock:
-            record = self._record()
-            if not record.get("offered"):
-                record["offered"] = True
-                self._keep(record)
 
     # --- setting up -------------------------------------------------------------------
 

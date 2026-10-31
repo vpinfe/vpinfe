@@ -129,7 +129,7 @@ class AskProgramTests(unittest.TestCase):
 
         self.assertEqual({setup_vpx.SOMEWHERE_ELSE, setup_vpx.NOT_INSTALLED}, set(details))
 
-    def test_not_installed_yet_names_where_to_get_it_and_the_rest_that_waits(self) -> None:
+    def test_not_installed_yet_names_where_to_get_it_and_the_preview_and_what_waits(self) -> None:
         values: dict[str, Any] = {}
         with _PAGE, mock.patch.object(setup_vpx.panel, "link_out") as link:
             link.return_value = lambda: None
@@ -137,8 +137,9 @@ class AskProgramTests(unittest.TestCase):
             with holder:
                 setup_vpx._none_detail(values, lambda: None)
 
-        link.assert_called_once()
-        self.assertEqual(setup_vpx.RELEASES, link.call_args.kwargs["to"])
+        self.assertEqual([setup_vpx.RELEASES, setup_vpx.PREVIEW_BUILDS],
+                         [call.kwargs["to"] for call in link.call_args_list])
+        self.assertIn("sign in", link.call_args_list[1].kwargs["hint"])
         texts = [one.text for one in holder.descendants() if isinstance(one, ui.label)]
         self.assertEqual(["The rest of this step waits for it, in Launchers › Visual Pinball X"],
                          texts)

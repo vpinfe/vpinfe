@@ -73,7 +73,7 @@ from manager.library import media as media_page
 from manager.library import record as recorder
 from manager.overview import needs
 from manager.remote import remote
-from manager.security import authenticator_panel, security, sign_in_notice
+from manager.security import security, sign_in_notice
 from manager.settings import folders, sections, shelves, waiting
 from manager.settings import settings as settings_page
 from manager.settings.library_folders import KIND_IMPORT, hold_library
@@ -2034,9 +2034,6 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
             setup_page.open_setup(window=in_the_frontends_window), name="manager-setup")
     elif arrives_in_whats_new(whats_new_due, view, window=in_the_frontends_window):
         background_tasks.create(whats_new_page.open_whats_new(), name="manager-whats-new")
-    elif not view.strip() and authenticator_panel.offer_due(
-            signed_in_owner=bool(security.this_session_id())):
-        background_tasks.create(authenticator_panel.offer(), name="manager-authenticator")
 
 
 def read_then_render(state: dict[str, Any], library: Library, content: ui.element,

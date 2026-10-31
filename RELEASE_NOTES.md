@@ -1,14 +1,11 @@
 ## VPinFE Release Notes
 
 ### Summary
-VPinFE 3.0. The Manager is the new place to run your library: games, tables, media,
-collections, tags, players, devices, settings and backups, with Discovery to set your library
-against the Virtual Pinball Spreadsheet, and Setup for a first run and an import from
-PinballX, PinballY or PinUP Popper. Every game has an id of its own, a game
-folder can hold more than one table, other programs can build on an HTTP API at `/api/v1`,
-and every word on screen comes from a translation catalog. An install from an earlier version
-upgrades on its first start and VPinFE keeps a copy of everything it rewrites, so read the
-next section first.
+VPinFE 3.0 rebuilds and expands the Manager: one place on this device or any other to run
+your library, set up your screens and controls, and keep it all backed up. Setup walks a new
+install through its first run, or imports tables and settings from another front end. An
+install from an earlier version upgrades on its first start and keeps a copy of everything it
+rewrites, so read the next section first.
 
 ### Before you upgrade
 - **Update the earlier install to its latest release first, even if you plan to stay on 3.0.**

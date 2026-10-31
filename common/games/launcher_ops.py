@@ -722,7 +722,7 @@ def make_settings_file(launcher_id: str) -> dict[str, Any]:
     if not _has_settings_file(found):
         if exited:
             _wrote_nothing[found.launcher_id] = command[0]
-        raise service_errors.RefusedError(t("error.launchers.no_file_made"))
+        raise service_errors.RefusedError(t("error.launchers.no_file_made", app_name=app_name))
     return {"files": config_files(found)}
 
 

@@ -451,7 +451,7 @@ class ProgramNoteTests(unittest.TestCase):
                  "settings_file_not_made": True}
 
         self.assertEqual(all_settings.no_file_note(found),
-                         t("manager.workbench.file_not_made"))
+                         t("manager.workbench.file_not_made", app="Visual Pinball X"))
 
     def test_a_program_with_its_file_needs_no_note(self) -> None:
         found = {**_launcher(path_state.OK), "has_settings_file": True}

@@ -42,6 +42,9 @@ CHECKED = "else_checked"
 NOT_INSTALLED = "none"
 # Where Visual Pinball's releases are published.
 RELEASES = "https://github.com/vpinball/vpinball/releases"
+# Where its newest builds are made, the 10.8.1 preview among them. Downloading from here asks
+# for a GitHub sign-in.
+PREVIEW_BUILDS = "https://github.com/vpinball/vpinball/actions/workflows/vpinball.yml"
 
 BGSET_KEY = "Player.BGSet"
 SIZE_KEYS = ("Player.ScreenWidth", "Player.ScreenHeight")
@@ -152,6 +155,9 @@ def _else_detail(client: ApiClient,
 def _none_detail(_values: dict[str, Any], _changed: Callable[[], None]) -> None:
     ui.label(t("manager.setup.vpx.none_note")).classes("manager-help")
     panel.link_out(t("manager.setup.vpx.none_get"), to=RELEASES)()
+    with ui.element("div").classes("manager-help"):
+        panel.link_out(t("manager.setup.vpx.none_preview"), to=PREVIEW_BUILDS,
+                       hint=t("manager.setup.vpx.none_preview_hint"))()
 
 
 def _missed() -> None:

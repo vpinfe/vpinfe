@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 from common.config.config_access import ConfigSource
 from common.release.release_notes import newer
-from common.security import authenticator
 
 logger = logging.getLogger("vpinfe.common.release.upgrade_needs")
 
@@ -27,10 +26,9 @@ class Need:
     blocks_play: bool = False
 
 
-NEEDS: tuple[Need, ...] = (
-    Need("authenticator", "v3.0.0",
-         lambda config: authenticator.instance().enabled()),
-)
+# Empty on purpose: the authenticator is offered once by the page and is never a step an
+# update asks for.
+NEEDS: tuple[Need, ...] = ()
 
 
 def _open(config: ConfigSource, need: Need) -> bool:

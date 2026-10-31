@@ -110,7 +110,7 @@ def no_file_note(launcher: dict[str, Any]) -> str:
     if launcher.get("has_config") and _program_state(launcher) == path_state.OK \
             and launcher.get("has_settings_file") is False:
         if launcher.get("settings_file_not_made"):
-            return t("manager.workbench.file_not_made")
+            return t("manager.workbench.file_not_made", app=launcher["app_name"])
         return t("manager.workbench.file_not_written", app=launcher["app_name"])
     return ""
 

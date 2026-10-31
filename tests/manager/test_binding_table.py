@@ -730,18 +730,15 @@ class AnActedOnTable(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("manager-binding-row--listening", control._rows["back"].classes)
         self.assertNotIn("manager-binding-row--listening", control._rows["next"].classes)
-        self.assertEqual(self._line(control), ["Press what should do", "Back"])
-        self.assertEqual(self._send(control)[-1],
-                         "Two together makes a chord, and keeping it down makes a hold. "
-                         "Click away to stop")
+        self.assertEqual(self._line(control), ["Press a button or key for", "Back"])
+        self.assertEqual(self._send(control)[-1], "Click away to stop")
 
-    async def test_a_row_that_cannot_be_held_offers_only_the_chord(self) -> None:
+    async def test_a_row_that_cannot_be_held_says_the_same_beside_the_switch(self) -> None:
         control = self.drawn()
 
         said(control.line, "listen", "take_picture")
 
-        self.assertEqual(self._send(control)[-1],
-                         "Two together makes a chord. Click away to stop")
+        self.assertEqual(self._send(control)[-1], "Click away to stop")
 
     async def test_listening_moves_from_one_row_to_the_next(self) -> None:
         control = self.drawn()

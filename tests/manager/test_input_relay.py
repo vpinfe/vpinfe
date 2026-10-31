@@ -467,14 +467,12 @@ class TheSwitchTests(_TableCase):
 
         self.assertEqual(self.asked.armed, [True])
 
-    async def test_listening_says_what_a_chord_is_beside_the_switch(self) -> None:
+    async def test_listening_says_only_how_to_stop_beside_the_switch(self) -> None:
         control = self.drawn()
 
         said(control.line, "listen", "back")
 
-        self.assertEqual(self._words(control)[-1],
-                         "Two together makes a chord, and keeping it down makes a hold. "
-                         "Click away to stop")
+        self.assertEqual(self._words(control)[-1], "Click away to stop")
 
 
 class WhenItLetsGoTests(_TableCase):

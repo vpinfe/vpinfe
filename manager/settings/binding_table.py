@@ -566,11 +566,7 @@ class Table:
         if self.sending and self._playing:
             return t("manager.binding_table.paused", device=self._cab)
         if self.listening:
-            row = self.by_name[self.listening]
-            return t("manager.binding_table.listening_help",
-                     chord=t("manager.binding_table.chord_hold" if row.holds
-                             else "manager.binding_table.chord"),
-                     away=t("manager.binding_table.click_away"))
+            return t("manager.binding_table.click_away")
         if not self.sending and self.off_reason == "idle":
             return t("manager.binding_table.off_idle")
         if not self.sending and self.off_reason == "taken":

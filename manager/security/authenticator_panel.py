@@ -1,4 +1,4 @@
-"""The authenticator app on Settings > Security, and the one-time offer to set one up.
+"""The authenticator app on Settings > Security.
 
 Setting up, setting up again after a lost phone, removing it and switching off the on-screen
 sign-in code are all Protected, so the page only calls and the Manager's boundary asks for
@@ -16,14 +16,11 @@ from common.config import paths
 from common.devices.install_identity import display_name
 from common.failures import why
 from common.i18n import t
-from common.security import authenticator
-from manager.kit import confirm, deeplink, offload, panel, qr, verbs
+from manager.kit import confirm, offload, panel, qr, verbs
 from manager.kit import dialog as frame
 from manager.kit.api import ApiError
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
-
-SECURITY_PAGE = "vpinfe.security"
 
 
 def entries(state: dict[str, Any], device: str, set_up: Callable[[], Any],
@@ -130,24 +127,3 @@ def page_parts(library: Library, refill: Callable[[], None],
 
     return entries(state, device, set_up, remove, screen_codes)
 
-
-def offer_due(*, signed_in_owner: bool) -> bool:
-    """Whether to offer an authenticator now: a browser another device signed in, nobody
-    has been offered one, and none is set up."""
-    held = authenticator.instance()
-    return signed_in_owner and not held.offered() and not held.enabled()
-
-
-async def offer() -> None:
-    """Ask once, and never again whatever the answer."""
-    authenticator.instance().mark_offered()
-    device = display_name(paths.get_ini_config())
-    with frame.opened(t("manager.authenticator.offer_title"), classes="manager-confirm") as box:
-        ui.label(t("manager.authenticator.offer_line", device=device)).classes("manager-help px-3")
-        with frame.footer():
-            frame.cancel(lambda: box.submit(False), t("manager.authenticator.offer_not_now"))
-            frame.answer(t("manager.authenticator.set_up"), lambda: box.submit(True),
-                         icon=verbs.ADD)
-    if await box:
-        ui.navigate.to("/manager?" + deeplink.query({"view": "settings",
-                                                     "settings_page": SECURITY_PAGE}))
