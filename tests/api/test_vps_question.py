@@ -148,6 +148,15 @@ class FindTests(unittest.TestCase):
         self.assertEqual([one["name"] for one in vps_find.find("a", PEOPLE, ROWS)[vps_find.GAME]],
                          ["Alpha", "Beta", "Gamma"])
 
+    def test_two_games_of_one_name_are_told_apart_by_what_the_games_grid_says(self) -> None:
+        rows = [{"id": "X", "name": "Twin", "said": "Bally 1980"},
+                {"id": "Y", "name": "Twin", "said": "Williams 1994"},
+                {"id": "Z", "name": "Twin Peaks"}]
+        found = vps_find.find("twin", [], rows)[vps_find.GAME]
+
+        self.assertEqual({one["id"]: one["said"] for one in found},
+                         {"X": "Bally 1980", "Y": "Williams 1994", "Z": ""})
+
     def test_makers_and_themes_count_their_games(self) -> None:
         found = vps_find.find("ba", PEOPLE, ROWS)
         self.assertEqual(found[vps_find.MAKER], [{"name": "Bally", "count": 2}])

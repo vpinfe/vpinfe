@@ -153,7 +153,10 @@ class Suggest:
                     if one.get("via"):
                         ui.label(t("manager.discovery.ask.as", name=one["via"])) \
                             .classes("manager-help")
-                    if group != vps_find.GAME:
+                    if group == vps_find.GAME:
+                        if one.get("said"):
+                            ui.label(one["said"]).classes("manager-help")
+                    else:
                         ui.label(str(one["count"])).classes("manager-help")
                 # mousedown, not click: the box would lose focus first and hide the list
                 # before the press reached the row.

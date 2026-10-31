@@ -88,6 +88,25 @@ class HaveAvailableTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertNotIn(t("manager.discovery.available"), labels)
 
+    async def test_a_mod_is_listed_under_the_release_it_is_based_on(self) -> None:
+        mod = {"vps_file_id": "m1", "version": "2.1", "authors": ["Cy"], "name": "A Mod",
+               "mod_of": {"vps_file_id": "r1"}}
+        holder = self._body(_kind(records=[HELD, OTHER, mod]))
+        listed = next(one for one in holder.descendants() if "manager-rels" in one.classes)
+
+        nested = ["manager-source-row--under" in one.classes
+                  for one in listed.default_slot.children]
+
+        self.assertEqual([False, True, False], nested[:3])
+
+    async def test_the_card_steps_through_the_list_in_the_order_it_is_drawn(self) -> None:
+        mod = {"vps_file_id": "m1", "version": "2.1", "authors": ["Cy"], "name": "A Mod",
+               "mod_of": {"vps_file_id": "r1"}}
+        holder = self._body(_kind(records=[mod, HELD, OTHER]))
+        labels = " ".join(self._labels(holder))
+
+        self.assertIn(t("manager.discovery.card_of", n=1, count=3) + " 1.0 · Alice", labels)
+
     async def test_the_counts_are_set_apart_from_the_headings(self) -> None:
         holder = self._body(_kind())
         counts = [one.text for one in holder.descendants()

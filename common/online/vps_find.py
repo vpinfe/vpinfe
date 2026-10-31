@@ -40,7 +40,8 @@ def find(text: str, people: Sequence[Mapping[str, Any]],
     """Up to a few matches per group, best first.
 
     Each is `{"name", "count"}`: an author's releases, a maker's or theme's games. A game
-    carries its `id`, and an author the alias that matched, where it was not their name."""
+    carries its `id` and `said` (maker and year, as the games grid shows them), and an
+    author the alias that matched, where it was not their name."""
     wanted = person_key(text)
     out: dict[str, list[dict[str, Any]]] = {group: [] for group in GROUPS}
     if not wanted:
@@ -61,7 +62,8 @@ def find(text: str, people: Sequence[Mapping[str, Any]],
                     for row in rows
                     if (rank := _rank(wanted, str(row.get("name") or ""))) is not None),
                    key=lambda r: r[:2])
-    out[GAME] = [{"name": row["name"], "count": 1, "id": row["id"]}
+    out[GAME] = [{"name": row["name"], "count": 1, "id": row["id"],
+                  "said": str(row.get("said") or "")}
                  for _rank_, _name, row in games[:SHOWN[GAME]]]
 
     makers = Counter(str(row["manufacturer"]) for row in rows if row.get("manufacturer"))

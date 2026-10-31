@@ -174,8 +174,9 @@ def body(context: dict[str, Any], scene: Scene, kind: Kind) -> None:
     with holder:
         if kind.unread:
             panel.line(t("manager.discovery.files_failed"), hint=kind.unread)
-        helds, rows = _helds(kind), _unheld(kind)
-        view = context["state"].setdefault("discovery_views", {}).setdefault(
+        helds = _helds(kind)
+        rows = [one for one, _nested in release_match.in_lineage(_unheld(kind))]
+        view =context["state"].setdefault("discovery_views", {}).setdefault(
             (scene.vps_id, kind.key), _View())
         ids = [str(one.get("vps_file_id") or "") for one in rows]
         if view.pressed not in ids:
@@ -438,9 +439,9 @@ def _available(context: dict[str, Any], scene: Scene, kind: Kind, rows: list[dic
                              icon=verbs.SHOW_PICTURES, inline=True,
                              hint=t("manager.discovery.show_pictures.help"))()
         with ui.column().classes("gap-0 w-full min-w-0 manager-rels"):
-            for record in shown():
+            for record, nested in release_match.in_lineage(shown()):
                 _release(context, scene, kind, record, view, features, picture_of(record),
-                         press)
+                         press, nested)
             _offers(context, scene, kind)
         shade(view)
 
@@ -553,10 +554,13 @@ async def _match_held(context: dict[str, Any], scene: Scene, kind: Kind, held: _
 
 
 def _release(context: dict[str, Any], scene: Scene, kind: Kind, record: dict[str, Any],
-             view: _View, features: bool, picture: str, press: Callable[[str], None]) -> None:
+             view: _View, features: bool, picture: str, press: Callable[[str], None],
+             nested: bool = False) -> None:
     file_id = str(record.get("vps_file_id") or "")
     wired = False
-    with ui.column().classes("gap-0 w-full min-w-0") as shell:
+    with ui.column().classes("gap-0 min-w-0" if nested else "gap-0 w-full min-w-0") as shell:
+        if nested:
+            shell.classes("manager-source-row--under")
         view.shells[file_id] = shell
         with ui.element("div").classes("manager-rel manager-rel--press") as row:
             with ui.element("div").classes("manager-rel-pic") as pic:
