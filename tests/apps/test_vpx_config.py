@@ -2042,7 +2042,7 @@ class SettingsFileCommandTests(unittest.TestCase):
         command = VPXConfig().settings_file_command(
             {"bin_path": "/opt/vpx/VPinballX_BGFX", "ini_path": "/cfg/own.ini"})
 
-        self.assertEqual(command[1:], ["-ini", "/cfg/own.ini", "-v"])
+        self.assertEqual(command[1:], ["-ini", str(Path("/cfg/own.ini")), "-v"])
 
     def test_no_program_is_no_command(self) -> None:
         self.assertEqual(VPXConfig().settings_file_command({"bin_path": " "}), [])

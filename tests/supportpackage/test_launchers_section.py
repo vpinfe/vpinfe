@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -87,6 +88,7 @@ class Collecting(unittest.TestCase):
         self.assertIn("- **Default:** No", beta)
         self.assertIn("- **Enabled:** No", beta)
 
+    @unittest.skipIf(sys.platform == "win32", "Windows has no modes")
     def test_a_program_that_is_not_there_or_not_runnable_says_so(self) -> None:
         self.program.chmod(0o644)
         self.assertIn("Not executable", "\n".join(self.lines()))

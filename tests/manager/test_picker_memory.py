@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import unittest
 from typing import Any
 from unittest.mock import patch
@@ -63,6 +64,9 @@ class RememberingTests(unittest.TestCase):
 
     def test_windows_paths_are_compared_without_regard_to_case(self) -> None:
         self.assertTrue(picker_memory.same(r"C:\Users\p\Downloads", r"c:\users\p\downloads\\"))
+
+    @unittest.skipIf(sys.platform == "win32", "every path is compared without regard to case there")
+    def test_other_paths_are_compared_with_regard_to_case(self) -> None:
         self.assertFalse(picker_memory.same("/Volumes/share/Downloads", "/volumes/share/downloads"))
 
 

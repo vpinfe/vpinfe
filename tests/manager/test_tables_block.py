@@ -78,7 +78,7 @@ class TheTablesBlockOfSeveralTables(unittest.TestCase):
 class TheArrowToATablesDetails(unittest.TestCase):
     def test_it_is_not_underlined_at_rest_on_hover_or_on_focus(self) -> None:
         css = (Path(__file__).resolve().parents[2] / "manager" / "static"
-               / "manager-base.css").read_text()
+               / "manager-base.css").read_text(encoding="utf-8")
 
         for state in ("", ":hover", ":focus-visible"):
             rule = rf"a\.manager-member-go{state}[^{{]*\{{[^}}]*text-decoration: none"

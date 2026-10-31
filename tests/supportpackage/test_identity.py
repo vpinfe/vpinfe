@@ -66,7 +66,7 @@ class Reading(unittest.TestCase):
 
     def test_each_store_contributes_its_own_kind(self) -> None:
         found = self.build()
-        self.assertIn("/home/someone", found.homes)
+        self.assertIn(str(Path("/home/someone")), found.homes)
         self.assertIn("patex", found.logins)
         self.assertIn("cabinet-zed", found.hosts)
         self.assertIn("Zed Cabinet", found.hosts)

@@ -10,6 +10,7 @@ import configparser
 import os
 import pathlib
 import subprocess
+import sys
 import threading
 import time
 import unittest
@@ -467,6 +468,7 @@ class MakeSettingsFileTests(unittest.TestCase):
         self.assertEqual(got.status_code, 400, got.text)
         self.assertIn("not allowed", logged.output[0])
 
+    @unittest.skipIf(sys.platform == "win32", "Windows has no modes")
     def test_a_linux_account_with_nowhere_to_save_is_refused_before_anything_runs(self) -> None:
         shut = pathlib.Path(self.tmp.name, "shut")
         shut.mkdir()
