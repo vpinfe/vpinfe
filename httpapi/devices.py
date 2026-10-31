@@ -94,7 +94,7 @@ def forget(device_id: str) -> Response:
 @router.get("/{device_id}/games", summary="What a VPX Mobile device is carrying",
             dependencies=[requires(scopes.DEVICES_READ)])
 async def device_games(device_id: str) -> models.DeviceGameList:
-    """Asked of the device, never remembered. A phone is taken away, filled up and
+    """Asked of the device, never remembered. A mobile device is taken away, filled up and
     emptied by hand, so anything this end recorded about it would be a claim."""
     return models.DeviceGameList.model_validate(
         await run_in_threadpool(mobile_ops.carried_by, device_id))
@@ -104,7 +104,7 @@ async def device_games(device_id: str) -> models.DeviceGameList:
              status_code=202, dependencies=[requires(scopes.DEVICES_WRITE)])
 def send_games(device_id: str, response: Response,
                payload: models.DeviceSendRequest = Body(...)) -> models.JobResource:
-    """A job, not an action: a multi-file transfer over a phone's wifi is slow work, and
+    """A job, not an action: a multi-file transfer over a mobile device's wifi is slow work, and
     slow work has a shape here already."""
     job = mobile_ops.send(device_id, payload.games, payload.everything, payload.settings)
     response.headers["Location"] = f"/api/v1/jobs/{job.id}"

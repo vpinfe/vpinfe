@@ -525,6 +525,19 @@ _STRUCTURE = """
   /* Art standing in for a picture that is not there, sized to the box it fills. */
   --icon-slot: 32px;
   --icon-slot-small: 22px;
+  /* A key on the Remote's wheel: the glyph is most of the key, and a thumb reads it from
+     above. */
+  --icon-key: 34px;
+  --icon-key-small: 26px;
+
+  /* Text and fades laid over a table picture. Fixed across themes: the picture is the
+     ground, so the ink has to answer it rather than the palette. */
+  --on-art: #fff;
+  --on-art-soft: #e4dcf7;
+  --art-fade: rgba(0, 0, 0, 0.82);
+  --art-fade-clear: rgba(0, 0, 0, 0);
+  --art-chip: rgba(0, 0, 0, 0.55);
+  --art-shadow: #000;
 
   /* A rating is five adjacent targets on one line, so it is sized on its own rather
      than off `--target-min` - five 44px boxes is a row 220px wide, which is most of a

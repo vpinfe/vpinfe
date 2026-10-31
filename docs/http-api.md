@@ -53,7 +53,7 @@ the documented entry point is a plain 200. Both spellings work.
 | GET | `/api/v1/auth/confirm` | Whether the caller holds a Confirm, and for how long |
 | POST | `/api/v1/auth/pair/code` | Ask this install for a pairing code. The digits appear on this device's screen. The answer holds a `request_id` |
 | POST | `/api/v1/auth/pair` | `{"request_id", "code", "name"}` answers with a Full Control token, shown once, in `secret`. The asking install keeps it and sends it as `Authorization: Bearer` on every call to this one |
-| POST | `/api/v1/auth/remote_code/renew` | Make a new Remote Code. Every phone that came in with the old one is signed out; answers with how many (`access:write`) |
+| POST | `/api/v1/auth/remote_code/renew` | Make a new Remote Code. Every mobile device that came in with the old one is signed out; answers with how many (`access:write`) |
 | GET | `/api/v1/auth/tokens` | The tokens made: name, `access`, `can_power`, when made and when last used. Never the secret (`access:read`) |
 | POST | `/api/v1/auth/tokens` | `{"name", "access", "can_power"}` makes a token. `access` is `full` or `play`. The secret is in this answer and cannot be read again. `protected:write` |
 | PUT | `/api/v1/auth/tokens/{token_id}` | `{"can_power"}` changes the Can Shut Down and Restart switch (`access:write`, and `protected:write` to turn it on). `404` for a token that is gone |
@@ -82,6 +82,8 @@ the documented entry point is a plain 200. Both spellings work.
 | GET | `/api/v1/events` | Subscribe to the event stream (SSE). `?events=` filters by name |
 | GET | `/api/v1/play/state` | What this play host is doing, with the running game's `game_id` and when it `started_at`. The snapshot you take once; `play.state_changed` on the stream is how you hear about it after that |
 | POST | `/api/v1/play/stop` | Close the table this play host is running. `stopped` is false when there was nothing to close, which is an answer rather than a failure |
+| GET | `/api/v1/play/controls` | What can be pressed on the table this play host is running: each control's `id`, `group`, `label`, `hold_ms`, `holdable`, `side` (`left`, `right`, or empty for the middle), `available` and, where it is not, a `reason`. `notes` says each cause once for the controls that share it, `{controls, text}` with the ids and a sentence naming them, so a screen need not repeat a `reason` under every control. `table` is null and `controls` empty when nothing plays, a recording owns the table, or the table's app offers none. The hand controls (flippers, magna saves, launch ball, nudge) are left out, with no note, where the table's settings map them to no single key that can be pressed. `press` is whether this device can send keys at all. The answer holds for the table's life; ask again when `play.state_changed` says another runs. `play:read` |
+| POST | `/api/v1/play/controls/{control_id}` | Press one control of the running table, by the `id` the listing gave; no key code is accepted. `pressed` is that the key was sent to the window with focus, not that the table acted on it. The body's `phase` is `tap` by default, the key held for the control's `hold_ms`. On a control listed `holdable` (the flippers, the Magna Saves and Launch Ball), `press` leaves the key down and `release` lets it go; a held press is sent again about three times within its `ttl_ms` (1500 by default, 200 to 10000), and the install lets go on its own when they stop. Where the device cannot leave a key down (`wtype`), a `press` is one tap and a `release` sends nothing. `404` for an id the table's app does not declare, `409` (`conflict`) where nothing plays, a recording owns the table the control has no single key to press, or a `press` names a control that is not `holdable`, `503` where this device cannot send keys. `input:act` |
 | GET | `/api/v1/frontend/state` | What the frontend is showing: whether it is up, its collection, the game on the wheel and any recording shown for a decision. `frontend.state_changed` on the stream carries the same after every change |
 | GET | `/api/v1/frontend/browser` | What this device's frontend browser can play, and how to fix what it cannot. `state` is `unknown` until the frontend has reported since this browser was chosen |
 | GET | `/api/v1/capture` | What this device can record of its own screens, and exactly why not. See [Recording](#recording) |
@@ -178,7 +180,7 @@ the documented entry point is a plain 200. Both spellings work.
 | POST | `/api/v1/devices/{id}/games/plan` | The same body, and what it would do that is worth saying first → `{"mobile_settings": [...]}`, the ids of the games that would send a mobile settings file. Changes nothing |
 | DELETE | `/api/v1/devices/{id}/games/{name}` | Remove a game from it. `204` |
 | GET | `/api/v1/actions` | What this install can be asked to do to itself. Only the pairs it performs. The window ones (`frontend` start, stop, restart) are listed whether or not the run started with `--headless`, and are unavailable, with a `reason`, on an install without the `frontend` feature. One that can run but not now stays, with `available` false and a `reason`, in this install's language, and `reason_key`, the catalog key it was read from |
-| POST | `/api/v1/actions` | Do one. `{"scope","action","reason"}`. One that takes this process or this device down answers before it goes, so `performed` means the work was handed over |
+| POST | `/api/v1/actions` | Do one. `{"scope","action","reason"}`. One that takes this process or this device down answers before it goes, so `performed` means the work was handed over. `frontend` start needs `frontend:open`, which an Owner holds without a Confirm and a token or a Remote pass never does; the rest need `system:admin` |
 | GET | `/api/v1/logs` | Recent records from this install's own log, oldest last (`limit`, `level`, `contains`, `source`). A record carries its continuation lines, so a traceback arrives whole. `source` names the current log, a rotation beside it, or Visual Pinball's (`visual_pinball` says what it is called when a launcher names where it writes); its records read the same way, with its `WARN` as `WARNING` and the function that wrote the line as `logger` |
 | GET | `/api/v1/logs/file` | One of those files whole, for attaching to a report (`source`, empty for the current log). A name that is not one of them is a 404, and a file over 32 MB is a 413 |
 | GET | `/api/v1/manufacturers` | Every manufacturer VPSdb or the library knows: computed slug, effective alias, resolved logo (or `null`), library game count. The reference for logo packs and alias maps |
@@ -622,7 +624,7 @@ answers `429` `too_many_requests` with the seconds to wait in `details.wait`.
 | Tier | What it covers | Who holds it |
 |---|---|---|
 | Play | Reading the library, collections, players and what is playing; launching, stopping, pressing buttons, capturing with the configured command, rating and favoriting, joining as a guest, signing a guest out and saying who is up | The Remote's pass, a Play token, any Owner, this device |
-| Library | Everything that changes what VPinFE knows or shows | A signed-in Owner, a Full Control token, this device |
+| Library | Everything that changes what VPinFE knows or shows. Opening the frontend's windows (`frontend:open`) sits beside it, for an Owner and this device only | A signed-in Owner, a Full Control token, this device |
 | Protected | What runs (commands, launcher programs, tools, theme and extension sources and acceptance, updating), what destroys the way back (restoring a backup, the backup folder, going back to 2.x, deleting a game's folder from the disk), what hands out access (making a token, the Trusted Proxies and Trusted Networks lists) and what takes the device down (`protected:write`, `system:admin`) | This device, or an Owner holding a Confirm. Never a token, except `system:admin` on a token whose Can Shut Down and Restart switch is on |
 
 An Owner that reaches a Protected route without a Confirm is answered `403` with
@@ -690,7 +692,7 @@ device. Trusted Networks are judged by the socket address and never by a header.
 `0.0.0.0` and serves the API, the Manager, themes and the table library's media.
 
 It answers everywhere because the Remote and the sign-in page are the point - a
-phone administering a VPinFE device is a supported workflow, not an accident. Set it to `127.0.0.1`
+mobile device administering a VPinFE device is a supported workflow, not an accident. Set it to `127.0.0.1`
 if you want the API reachable only from the device itself; the Remote and the Manager on
 other devices stop working, which is the trade.
 
@@ -918,7 +920,7 @@ not a discrete action on a timer.** Send `press` when the button goes down and `
 when it comes up; the repeat curve lives in the install, so holding "next" feels the same
 whether you held a flipper, a key or a thumb.
 
-**A press expires unless you renew it.** A release can be lost — a phone locks its screen,
+**A press expires unless you renew it.** A release can be lost — a mobile device locks its screen,
 a network drops — and a lost release is a wheel that spins forever. Send `press` again with
 the same action to renew; renewals aren't announced, so one gesture stays one press. `ttl_ms`
 is how long a press stands without one (200–10000, default 1500); renew at roughly a third
@@ -942,14 +944,16 @@ that lets a network caller act *as the player*, which is neither reading nor lau
 ```
 
 `press` is whether VPinFE can press a key into the running table, as Take Picture presses
-the table's own Pause: through `wtype` or `ydotool` on Wayland, `pynput` elsewhere. `hear`
+the table's own Pause: through `wtype` or `ydotool` on Wayland, `pynput` elsewhere, which on
+macOS needs Accessibility (Device Control and Data Access on macOS 27), which VPinFE asks
+macOS for when it starts. `hear`
 is whether it can hear the keyboard from outside the frontend's page, which a key bound to
 Take Picture needs during play: `evdev` on Wayland, where the device's user has to be in the
 `input` group, and `pynput` elsewhere, which on macOS needs Input Monitoring. Where one
 can't, `reason` says why as a catalog key, with a `remedy` where a person can fix it. It
 carries `play:read`.
 
-Two producers at once isn't decided. A phone and a cabinet flipper holding opposite
+Two producers at once isn't decided. A mobile device and a cabinet flipper holding opposite
 directions is last-press-wins because that's what the dispatch already does, not because
 anyone chose it. The expiry stops a lost release becoming a runaway; it doesn't arbitrate.
 
@@ -1585,7 +1589,7 @@ What it buys today is attribution. Every event carries the `install_id` it happe
 and for a VPinFE install that is the same value as its `device_id` - so the registry turns
 that id into a name a person recognizes.
 
-`device_id` rather than `install_id` because not every device is an install. A phone
+`device_id` rather than `install_id` because not every device is an install. A mobile device
 running VPX Mobile has no install id to offer, so one is minted for it. The address is
 never the key: it is the property most likely to change, and a device on DHCP would
 otherwise become a new device every time its lease turned over.
@@ -1603,10 +1607,10 @@ a copy that goes stale by design.
 it off the socket and ignores any the body carries: a device behind a router does not know
 how it is reached, and a caller that could name its own address could name someone else's.
 
-A `vpx_mobile` device is the other case. The phone is not the caller - a person lists it
+A `vpx_mobile` device is the other case. The mobile device is not the caller - a person lists it
 at `/config/mobile_devices` with a `name`, an `address` and a `port` (2112 unless given),
 and the install mints its id from the same generator install ids use. That is what lets
-several phones coexist: each has an id of its own rather than one derived from an address
+several mobile devices coexist: each has an id of its own rather than one derived from an address
 they will both change. `/devices` shows it joined with what the install has learned of it:
 `first_seen`, `last_seen`, `last_reachable` and `browser`, empty until something answers.
 

@@ -156,7 +156,7 @@ VPinFE starts two listeners:
 | Web server | `0.0.0.0:8001` | The Manager at `/`, the remote at `/remote`, the HTTP API at `/api/v1`, and the themes and table media the frontend windows load |
 | Window channel | `127.0.0.1:8002` | How the frontend windows talk to VPinFE.  It stays on this machine |
 
-The web server answers on every interface so you can run a cabinet from another device, such as a phone.  A browser on another device signs in with a code from this machine's screen or from the authenticator app.  The connection is not encrypted until you set up **Encrypted Connections** under **Settings > Security**, so keep it on a network you trust.  To reach it only from the machine itself, set **Reachable From** to **This Device Only** under **Settings > VPinFE > Network**.
+The web server answers on every interface so you can run a cabinet from another device, such as a mobile device.  A browser on another device signs in with a code from this machine's screen or from the authenticator app.  The connection is not encrypted until you set up **Encrypted Connections** under **Settings > Security**, so keep it on a network you trust.  To reach it only from the machine itself, set **Reachable From** to **This Device Only** under **Settings > VPinFE > Network**.
 
 **Port** and **Window Port** are on the same page.  Table media is served on the web server's port but is only handed to a signed-in browser on another device that may read the library.  The window channel can start a game and power the machine off, so there is no setting to open it.  If another program holds a port, VPinFE says which setting to change instead of starting.
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -38,7 +39,7 @@ def _quartz_controller() -> Any:
         Key.home: 115, Key.page_up: 116, Key.delete: 117, Key.end: 119, Key.page_down: 121,
         Key.right: 124, Key.left: 123, Key.down: 125, Key.up: 126,
         Key.ctrl_l: 59, Key.shift_l: 56, Key.alt_l: 58, Key.cmd: 55,
-        Key.ctrl_r: 62, Key.shift_r: 56, Key.alt_r: 58,
+        Key.ctrl_r: 62, Key.shift_r: 60, Key.alt_r: 61,
         'a': 0, 'b': 11, 'c': 8, 'd': 2, 'e': 14, 'f': 3, 'g': 5, 'h': 4,
         'i': 34, 'j': 38, 'k': 40, 'l': 37, 'm': 46, 'n': 45, 'o': 31, 'p': 35,
         'q': 12, 'r': 15, 's': 1, 't': 17, 'u': 32, 'v': 9, 'w': 13, 'x': 7,
@@ -79,7 +80,15 @@ Run = Callable[..., Any]
 
 
 class Backend(Protocol):
+    # Whether `down` and `up` can be two separate calls. A tool that lets go of every key
+    # when its process ends cannot.
+    holds: bool
+
     def press(self, key_id: Any) -> bool: ...
+
+    def down(self, key_id: Any) -> bool: ...
+
+    def up(self, key_id: Any) -> bool: ...
 
     def hold(self, key_id: Any, seconds: float = 1) -> bool: ...
 
@@ -88,6 +97,8 @@ class Backend(Protocol):
 
 class PynputKeyboardBackend:
     """Types via pynput. Works under X11; Wayland will not let it reach another window."""
+
+    holds = True
 
     def __init__(self, key_map: Mapping[Any, Any]) -> None:
         self.key_map = key_map
@@ -110,14 +121,25 @@ class PynputKeyboardBackend:
         self.keyboard.release(key)
         return True
 
-    def hold(self, key_id: Any, seconds: float = 1) -> bool:
+    def down(self, key_id: Any) -> bool:
         key = self._translate(key_id)
         if key is None:
             return False
         self.keyboard.press(key)
-        time.sleep(seconds)
+        return True
+
+    def up(self, key_id: Any) -> bool:
+        key = self._translate(key_id)
+        if key is None:
+            return False
         self.keyboard.release(key)
         return True
+
+    def hold(self, key_id: Any, seconds: float = 1) -> bool:
+        if not self.down(key_id):
+            return False
+        time.sleep(seconds)
+        return self.up(key_id)
 
     def combo(self, *key_ids: Any) -> bool:
         translated = [self._translate(key_id) for key_id in key_ids]
@@ -150,7 +172,11 @@ def _ran(tool: str, argv: list[str], runner: Run, env: Mapping[str, str] | None 
 
 
 class WtypeKeyboardBackend:
-    """Types via wtype. Keys are named by their XKB keysym."""
+    """Types via wtype. Keys are named by their XKB keysym. Its virtual keyboard goes with
+    the process, so a key it pressed is let go when the command ends and cannot be held
+    across two."""
+
+    holds = False
 
     def __init__(self, path: Path, runner: Run = subprocess.run, debug: bool = False) -> None:
         self.path = path
@@ -169,6 +195,12 @@ class WtypeKeyboardBackend:
         keysym = self._keysym(key_id)
         return self._run("-k", keysym) if keysym else False
 
+    def down(self, key_id: Any) -> bool:
+        return False
+
+    def up(self, key_id: Any) -> bool:
+        return False
+
     def hold(self, key_id: Any, seconds: float = 1) -> bool:
         keysym = self._keysym(key_id)
         if not keysym:
@@ -186,6 +218,8 @@ class WtypeKeyboardBackend:
 
 class YdotoolKeyboardBackend:
     """Types via ydotool, through the service socket it was found with."""
+
+    holds = True
 
     def __init__(self, key_map: Mapping[Any, int], path: Path | str = "ydotool",
                  socket_path: str = "", runner: Run = subprocess.run,
@@ -212,14 +246,19 @@ class YdotoolKeyboardBackend:
             return False
         return self._run_key_sequence([f"{code}:1", f"{code}:0"])
 
-    def hold(self, key_id: Any, seconds: float = 1) -> bool:
+    def down(self, key_id: Any) -> bool:
         code = self._translate(key_id)
-        if code is None:
-            return False
-        if not self._run_key_sequence([f"{code}:1"]):
+        return self._run_key_sequence([f"{code}:1"]) if code is not None else False
+
+    def up(self, key_id: Any) -> bool:
+        code = self._translate(key_id)
+        return self._run_key_sequence([f"{code}:0"]) if code is not None else False
+
+    def hold(self, key_id: Any, seconds: float = 1) -> bool:
+        if not self.down(key_id):
             return False
         time.sleep(seconds)
-        return self._run_key_sequence([f"{code}:0"])
+        return self.up(key_id)
 
     def combo(self, *key_ids: Any) -> bool:
         codes = [self._translate(key_id) for key_id in key_ids]
@@ -233,6 +272,8 @@ class YdotoolKeyboardBackend:
 class UnsentKeyboardBackend:
     """Where this device has no way to press a key. Says why once, then answers False."""
 
+    holds = False
+
     def __init__(self, reason: Mapping[str, Any]) -> None:
         self.reason = reason
         self._said = False
@@ -244,6 +285,12 @@ class UnsentKeyboardBackend:
         return False
 
     def press(self, key_id: Any) -> bool:
+        return self._refuse()
+
+    def down(self, key_id: Any) -> bool:
+        return self._refuse()
+
+    def up(self, key_id: Any) -> bool:
         return self._refuse()
 
     def hold(self, key_id: Any, seconds: float = 1) -> bool:
@@ -260,6 +307,9 @@ WTYPE = "wtype"
 YDOTOOL = "ydotool"
 
 NEEDS_TOOL = "keys.send.needs_tool"
+NO_POST_ACCESS = "keys.send.no_post_access"
+ALLOW_POST_ACCESS = "keys.send.allow_post_access"
+DEVICE_CONTROL_PANE = "keys.send.device_control_pane"
 NO_YDOTOOL_SERVICE = "keys.send.no_ydotool_service"
 NO_SESSION = "keys.send.no_session"
 START_YDOTOOL_SERVICE = "keys.send.start_ydotool_service"
@@ -319,13 +369,70 @@ def _wlroots(env: Mapping[str, str]) -> bool:
     return bool(env.get("SWAYSOCK") or env.get("HYPRLAND_INSTANCE_SIGNATURE"))
 
 
+def _post_access() -> bool:
+    """Whether macOS lets this process post key events. Asks without prompting.
+
+    Without it `CGEventPost` drops every event and reports nothing, so a press looks sent.
+    """
+    try:
+        import Quartz
+
+        return bool(Quartz.CGPreflightPostEventAccess())
+    except Exception:  # noqa: BLE001 - an answer nobody could give is a no
+        return False
+
+
+def _request_post_access() -> bool:
+    """Raises macOS's own permission dialog. macOS shows it once per binary; a later call
+    returns the standing answer without a dialog."""
+    try:
+        import Quartz
+
+        return bool(Quartz.CGRequestPostEventAccess())
+    except Exception:  # noqa: BLE001 - an answer nobody could give is a no
+        return False
+
+
+def ask_for_post_access(system: str | None = None,
+                        post_access: Callable[[], bool] = _post_access,
+                        request: Callable[[], bool] = _request_post_access) -> bool:
+    """On macOS without the key permission, asks for it. True where a press can be sent.
+
+    Called at start so the dialog arrives while the person is at the machine, not on the
+    first press from a phone. Other systems have nothing to ask for and return True.
+    """
+    system = tools.here() if system is None else system
+    if system != tools.DARWIN or post_access():
+        return True
+    logger.info("macOS has not allowed VPinFE to press keys; asking for it")
+    return request()
+
+
+def _macos_major() -> int:
+    try:
+        return int(platform.mac_ver()[0].split(".")[0])
+    except ValueError:
+        return 0
+
+
+def _post_access_remedy(macos_major: int) -> dict[str, Any]:
+    """macOS 27 names the Accessibility pane Device Control and Data Access."""
+    key = DEVICE_CONTROL_PANE if macos_major >= 27 else ALLOW_POST_ACCESS
+    return {"key": key, "params": {}}
+
+
 def sender(env: Mapping[str, str] | None = None, system: str | None = None,
            resolve: Callable[[tools.Tool], tools.Found] = tools.resolve,
-           exists: Callable[[str], bool] = os.path.exists) -> Sender:
+           exists: Callable[[str], bool] = os.path.exists,
+           post_access: Callable[[], bool] = _post_access,
+           macos_major: Callable[[], int] = _macos_major) -> Sender:
     """How this device would press a key into a running table, read off the session."""
     env = os.environ if env is None else env
     system = tools.here() if system is None else system
-    if system in (tools.WINDOWS, tools.DARWIN):
+    if system == tools.DARWIN:
+        return Sender(PYNPUT) if post_access() else Sender(
+            "", reason=_reason(NO_POST_ACCESS, None, _post_access_remedy(macos_major())))
+    if system == tools.WINDOWS:
         return Sender(PYNPUT)
     if not env.get("WAYLAND_DISPLAY"):
         return Sender(PYNPUT) if env.get("DISPLAY") else Sender("", reason=_reason(NO_SESSION))
@@ -352,6 +459,33 @@ def sender(env: Mapping[str, str] | None = None, system: str | None = None,
 def press_code(code: str, *, via: Sender | None = None) -> bool:
     """Press one key, named as a binding names it (`KeyP`), on this device."""
     return KeySimulator(sender_found=via).press_code(code)
+
+
+def hold_code(code: str, seconds: float = 0.1, *, via: Sender | None = None) -> bool:
+    """Hold one key down for `seconds`, then let go."""
+    return KeySimulator(sender_found=via).hold_code(code, seconds)
+
+
+def down_code(code: str, *, via: Sender | None = None) -> bool:
+    """Press one key and leave it down, until `up_code` for the same key."""
+    return KeySimulator(sender_found=via).down_code(code)
+
+
+def up_code(code: str, *, via: Sender | None = None) -> bool:
+    return KeySimulator(sender_found=via).up_code(code)
+
+
+def can_hold(via: Sender | None = None) -> bool:
+    """Whether a key can be left down across calls, which not every way of pressing one
+    allows."""
+    return KeySimulator(sender_found=via).backend.holds
+
+
+def can_press(code: str) -> bool:
+    """Whether `press_code` can name this key: a few a binding may use, the numpad and
+    F13 to F24 among them, have no key id to send."""
+    key = keys.BY_CODE.get(code)
+    return key is not None and bool(key.key_id)
 
 
 class KeySimulator:
@@ -467,6 +601,14 @@ class KeySimulator:
     def hold_code(self, code: str, seconds: float = 0.1) -> bool:
         key_id = self._key_id(code)
         return self.hold(key_id, seconds) if key_id else False
+
+    def down_code(self, code: str) -> bool:
+        key_id = self._key_id(code)
+        return self.backend.down(key_id) if key_id else False
+
+    def up_code(self, code: str) -> bool:
+        key_id = self._key_id(code)
+        return self.backend.up(key_id) if key_id else False
 
     def create_backend(self) -> Backend:
         found = self.sender

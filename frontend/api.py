@@ -131,6 +131,7 @@ API_PUBLISHED_METHODS = {
     'get_theme_assets_port',
     'get_http_port',
     'get_remote_link',
+    'get_manager_link',
     'get_vpinplay_multi_link',
     'get_theme_index_page',
     # Additive: the roster and who is up, for a theme that wants to show it. Kept live
@@ -1106,6 +1107,9 @@ class API:
 
     def get_remote_link(self) -> dict[str, Any]:
         return config_api.get_remote_link(self._ini_config.config)
+
+    def get_manager_link(self) -> dict[str, Any]:
+        return config_api.get_manager_link(self._ini_config.config)
 
     def get_vpinplay_multi_link(self) -> dict[str, Any]:
         return config_api.get_vpinplay_multi_link(self._ini_config.config)

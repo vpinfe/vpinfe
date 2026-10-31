@@ -93,6 +93,10 @@ PLAY_RATE = "play:rate"
 # Joining as a guest, signing a guest out and saying who is up: what a phone does to the
 # roster without touching a kept player.
 PLAY_PLAYERS = "play:players"
+# Opening the frontend's windows on this device, from an Owner's browser. Not play:*, so a
+# Remote pass never holds it, and not system:admin, so it needs no Confirm: it puts the
+# screen back and takes nothing away.
+FRONTEND_OPEN = "frontend:open"
 
 CORE = frozenset({
     INSTANCE_READ,
@@ -108,7 +112,7 @@ CORE = frozenset({
     PLAYERS_READ, PLAYERS_WRITE,
     APPS_PROVIDE,
     ACCESS_READ, ACCESS_WRITE,
-    PROTECTED, PLAY_RATE, PLAY_PLAYERS,
+    PROTECTED, PLAY_RATE, PLAY_PLAYERS, FRONTEND_OPEN,
 })
 
 # Read the library, collections, players and what is playing; launch, stop, press buttons,
@@ -119,8 +123,9 @@ PLAY = frozenset({
     DEVICES_READ, PLAY_RATE, PLAY_PLAYERS,
 })
 
-# What a token cannot be given, switch or no switch: who is signed in, and the Protected tier.
-NEVER_A_TOKEN = frozenset({ACCESS_READ, ACCESS_WRITE, PROTECTED, SYSTEM_ADMIN})
+# What a token is not given with its access: who is signed in, the Protected tier and opening
+# the frontend.  The power switch adds system:admin, which opens it too.
+NEVER_A_TOKEN = frozenset({ACCESS_READ, ACCESS_WRITE, PROTECTED, SYSTEM_ADMIN, FRONTEND_OPEN})
 # Everything that changes what VPinFE knows or shows. A Library caller is never asked for a Confirm.
 LIBRARY = CORE - NEVER_A_TOKEN
 # What a Confirm adds to an Owner: the Protected scope and the power.

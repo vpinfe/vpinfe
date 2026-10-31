@@ -90,6 +90,8 @@ LEDGER_ALLOWS: dict[str, Any] = {
     # PAR-109: the cabinet's controller window reports a button to a Manager Input page, and
     # says when a held button took them back. Core's own calls, refused to themes.
     "PAR-109": {"input_capture", "input_capture_release"},
+    # PAR-110: the main menu shows where the Manager is from another device, with a QR.
+    "PAR-110": {"get_manager_link"},
     # New media kinds add theme-payload keys. Additive only: every key master
     # had must still be present and equal.
     "PAR-11": {"InstructionCardImagePath", "TopperPath", "TopperVideoPath",
@@ -208,7 +210,8 @@ class ParityTests(unittest.TestCase):
             | LEDGER_ALLOWS["PAR-100"] | LEDGER_ALLOWS["PAR-101"]
             | LEDGER_ALLOWS["PAR-102"] | LEDGER_ALLOWS["PAR-103"]
             | LEDGER_ALLOWS["PAR-104"] | LEDGER_ALLOWS["PAR-106"]
-            | LEDGER_ALLOWS["PAR-107"] | LEDGER_ALLOWS["PAR-108"] | LEDGER_ALLOWS["PAR-109"],
+            | LEDGER_ALLOWS["PAR-107"] | LEDGER_ALLOWS["PAR-108"] | LEDGER_ALLOWS["PAR-109"]
+            | LEDGER_ALLOWS["PAR-110"],
             "only PAR-04's, PAR-21's and PAR-27's additions are permitted")
 
     def test_legacy_endpoints_served_on_master_and_do_not_serve_here(self) -> None:

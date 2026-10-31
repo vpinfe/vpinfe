@@ -278,6 +278,22 @@ def _pause_of(launcher: launchers.Launcher, binary: str,
     return pause, press
 
 
+def _controls_of(launcher: launchers.Launcher, binary: str,
+                 ) -> launch_state.RunningControls | None:
+    """What the app lets be pressed on the table it is running; keys are read from the
+    launcher's settings at each press."""
+    app = apps.get(getattr(launcher, "app", "")) or apps.default_app()
+    controls = app.controls
+    if controls is None:
+        return None
+    settings = _settings(launcher, binary)
+    return launch_state.RunningControls(
+        app=app.id,
+        offered=controls.offered(),
+        key=lambda control_id: controls.key(control_id, settings),
+        why_not=lambda control_id: controls.why_not(control_id, settings))
+
+
 def _capture_folder() -> Path:
     """Emptied first: one still there was left by a launch that never got to close."""
     shutil.rmtree(CAPTURE_LAUNCH_DIR, ignore_errors=True)
@@ -494,8 +510,10 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
         # anyone who heard table.launching - which is what stops a failure below from
         # leaving the frontend with its input suppressed for the life of the process.
         try:
-            launch_state.set_launching(game.game_dir_name, source=source,
-                                       game_id=game_identity.game_id(game) or None)
+            launch_state.set_launching(
+                game.game_dir_name, source=source,
+                game_id=game_identity.game_id(game) or None,
+                controls=None if capturing else _controls_of(launcher, binary))
             folder = _capture_folder() if capturing else None
             cmd, marker = _plan(playing, binary, launcher, capture=folder,
                                 record_sound=record_sound)

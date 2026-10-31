@@ -21,7 +21,8 @@ FIELD = "field"
 OUTLINED = "outlined"
 
 MARK = "manager-select"
-_PROPS = {FIELD: "dense borderless options-dense", OUTLINED: "dense outlined options-dense"}
+_PROPS = {FIELD: "dense borderless options-dense behavior=menu",
+          OUTLINED: "dense outlined options-dense behavior=menu"}
 _CLASSES = {FIELD: "manager-edit-field manager-edit-select", OUTLINED: ""}
 _MANY = "manager-edit-many"
 

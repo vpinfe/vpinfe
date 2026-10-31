@@ -278,13 +278,17 @@ class RemotePlayersDrive(unittest.TestCase):
                 " round: getComputedStyle(img.closest('.remote-avatar')).borderRadius}"
                 " : null)(document.querySelector('.remote-identity .remote-avatar img'))")
 
-            await walk.visit("/remote?screen=play")
+            await walk.visit("/remote?screen=games")
             await browser.wait_for("document.body.innerText.includes('Alpha')")
             await open_game_sheet()
             seen["kid_sheet_words"] = await browser.evaluate(
                 "[...document.querySelectorAll('.remote-sheet button')]"
                 ".map(b => b.innerText.trim())")
             await browser.click(".remote-sheet .manager-star", nth=2)
+            await browser.wait_for(
+                "[...document.querySelectorAll('.remote-sheet .manager-stars-saved')]"
+                ".some(el => el.offsetParent !== null)")
+            await browser.escape()
             await sheet_closed()
             seen["kid_record"] = _call(instance, "GET", f"/api/v1/players/{kid}/record")
             seen["owner_game_after_kid_rated"] = _call(instance, "GET", "/api/v1/games/alpha")

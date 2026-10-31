@@ -36,6 +36,7 @@ let menuConfigLoaded = false;
 let relayoutTimer = null;
 let remoteQrLoaded = false;
 let joinQrLoaded = false;
+let managerQrLoaded = false;
 // recording_offer's last answer, or null; whether its choices are the list on screen;
 // and a count so a late answer for another game is dropped.
 let recordOffer = null;
@@ -127,6 +128,71 @@ async function loadRemoteQrPanel() {
   }
 }
 
+const MANAGER_NAME_POLL_MS = 2000;
+let managerNamePolls = 0;
+
+function managerAddressLines(link) {
+  const urls = link && Array.isArray(link.urls) ? link.urls : [];
+  return urls
+    .filter((url) => typeof url === 'string' && !url.toLowerCase().includes('://localhost:'))
+    .slice(0, 2);
+}
+
+// The device's name can take longer than a page to answer, so the panel opens on the IP
+// address and swaps the text when the name arrives. The QR code carries the IP address
+// either way, so only the text is redrawn.
+function watchManagerName(link) {
+  if (!link || !link.resolving || managerNamePolls >= 30) return;
+  managerNamePolls += 1;
+  setTimeout(async () => {
+    try {
+      const next = await window.parent.vpin.call('get_manager_link');
+      const shown = managerAddressLines(next);
+      const address = document.getElementById('manager-address');
+      if (address && shown.length) {
+        address.replaceChildren(...shown.map((text) => {
+          const line = document.createElement('div');
+          line.textContent = text;
+          return line;
+        }));
+      }
+      watchManagerName(next);
+    } catch (_e) {
+      // The next page open asks again.
+    }
+  }, MANAGER_NAME_POLL_MS);
+}
+
+async function loadManagerQrPanel() {
+  if (managerQrLoaded) return;
+
+  const panels = document.getElementById('menu-qr-panels');
+  const panel = document.getElementById('manager-qr-panel');
+  const code = document.getElementById('manager-qr-code');
+  const address = document.getElementById('manager-address');
+  if (!panels || !panel || !code || !address) return;
+
+  try {
+    const link = await window.parent.vpin.call('get_manager_link');
+    const qrSvg = link && typeof link.qr_svg === 'string' ? link.qr_svg.trim() : '';
+    const shown = managerAddressLines(link);
+    if (!qrSvg || !shown.length) return;
+
+    code.innerHTML = qrSvg;
+    address.replaceChildren(...shown.map((text) => {
+      const line = document.createElement('div');
+      line.textContent = text;
+      return line;
+    }));
+    panel.hidden = false;
+    panels.hidden = false;
+    managerQrLoaded = true;
+    watchManagerName(link);
+  } catch (_e) {
+    code.innerHTML = '';
+  }
+}
+
 async function loadJoinQrPanel() {
   if (joinQrLoaded) return;
 
@@ -164,7 +230,7 @@ async function applyMainMenuConfig() {
 
   menuConfigLoaded = true;
   refreshPlayerMenuLabel();
-  await Promise.all([loadRemoteQrPanel(), loadJoinQrPanel()]);
+  await Promise.all([loadManagerQrPanel(), loadRemoteQrPanel(), loadJoinQrPanel()]);
 }
 
 // -- players: the roster read from the theme window's own copy, kept live by

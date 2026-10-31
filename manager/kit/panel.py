@@ -10,6 +10,7 @@ into an entry list as the second half of a pair.
 
 from __future__ import annotations
 
+import html
 import inspect
 import json
 import logging
@@ -475,11 +476,32 @@ def switch(value: bool | None, on_change: Callable[[Any], Any], *,
     return draw
 
 
-def segmented(options: Any, value: Any, on_change: Callable[[Any], Any]) -> ui.toggle:
+class _GlyphToggle(ui.toggle):
+    """A toggle whose options each carry a glyph, kept across the rebuild every `props()`
+    and `classes()` call makes of the payload."""
+
+    def __init__(self, options: Any, *, glyphs: Sequence[str], value: Any,
+                 on_change: Callable[[Any], Any]) -> None:
+        # Before `super().__init__`, which builds the payload for the first time.
+        self.glyphs = list(glyphs)
+        super().__init__(options, value=value, on_change=on_change)
+
+    def _update_options(self) -> None:
+        super()._update_options()
+        for option, glyph in zip(self._props["options"], self.glyphs, strict=False):
+            option["icon"] = glyph
+
+
+def segmented(options: Any, value: Any, on_change: Callable[[Any], Any], *,
+              glyphs: Sequence[str] = ()) -> ui.toggle:
     """A choice between a few named states that is one control with an edge and a
-    filled segment for the one in force, wherever it is drawn."""
-    return ui.toggle(options, value=value, on_change=on_change) \
-        .props("dense no-caps unelevated").classes("manager-segmented")
+    filled segment for the one in force, wherever it is drawn.
+
+    `glyphs` are drawn before the words, one to an option in order; the words stay, so
+    the glyph is taught where it is met alone."""
+    control = _GlyphToggle(options, glyphs=glyphs, value=value, on_change=on_change) \
+        if glyphs else ui.toggle(options, value=value, on_change=on_change)
+    return control.props("dense no-caps unelevated").classes("manager-segmented")
 
 
 def choice_buttons(options: Any, value: Any, on_change: Callable[[Any], Any], *,
@@ -792,6 +814,22 @@ def icon_only(icon: str, on_click: Callable[[], Any], *, hint: str = "") -> Any:
     if hint:
         control.tooltip(hint)
     return control
+
+
+def chip(label: str, on: bool, on_click: Callable[..., Any], hint: str) -> ui.button:
+    """One choice in a row of them, words alone as a segmented option has them: the lit
+    one is the choice in force. Returned, so a caller can light another."""
+    return ui.button(text=label, color=None).props("no-caps unelevated dense") \
+        .classes("remote-chip" + (" remote-chip--on" if on else "")) \
+        .on("click", on_click).tooltip(hint)
+
+
+def open_row(label: str, on_click: Callable[..., Any]) -> ui.button:
+    """The chevron at the end of a tappable row, which opens what the row stands for. Its
+    tap stops here: the row's own tap does something else."""
+    return ui.button(icon="chevron_right").props(
+        f'flat round dense aria-label="{html.escape(label)}"') \
+        .classes("remote-row-open").on("click.stop", on_click).tooltip(label)
 
 
 def path_text(path: str, *, icon: str = "", classes: str = "") -> Any:
@@ -1789,6 +1827,26 @@ def remote_action(label: str, on_click: Callable[..., Any] | None = None, *, ico
             .classes("remote-action" + (" remote-action--danger" if danger else ""))
     if hint:
         control.tooltip(hint)
+    return control
+
+
+def remote_key(label: str, on_click: Callable[..., Any] | None = None, *, icon: str,
+               hint: str, size: str = "large", hold: str = "",
+               icon_after: bool = False) -> ui.button:
+    """A key of the Remote's wheel. `size` is "large" (glyph over name), "page" (a short
+    row) or "select" (round). `hold` names a held action: while a thumb stays on it the
+    page's own script keeps the press renewed, and `on_click` is not used."""
+    control = ui.button(label, icon=icon, on_click=on_click)
+    props = "no-caps flat"
+    if icon_after:
+        # `icon-right` takes the glyph's name; as a bare flag Quasar tries to draw `true`.
+        control.props(f"icon-right={icon}", remove="icon")
+    if size != "page":
+        props += " stack"
+    control = control.props(props).classes(f"remote-key remote-key--{size}")
+    if hold:
+        control = control.props(f"data-hold-action={hold}")
+    control.tooltip(hint)
     return control
 
 

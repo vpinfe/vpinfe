@@ -28,6 +28,17 @@ from functools import lru_cache
 import websockets
 from websockets.asyncio.client import ClientConnection
 
+# What a page holds that is wider than the box it is in and is not a name being cut off:
+# a scroll container the page did not mean to have, or a row pushed past the screen. The
+# document's own scrollWidth misses it, since an inner container takes the overflow.
+OVERFLOWING = """(() => [...document.querySelectorAll('body *')]
+  .filter(el => el.getBoundingClientRect().width > 0
+                && el.scrollWidth > el.clientWidth + 1
+                && !el.closest('.truncate, .q-ripple'))
+  .map(el => el.tagName + '.' + String(el.className).slice(0, 60)
+             + ' ' + el.scrollWidth + '>' + el.clientWidth)
+)()"""
+
 
 def free_port() -> int:
     """A port nothing holds. Probed the way the instance binds, not on loopback.
@@ -351,6 +362,39 @@ class BrowserSession:
                             {"type": event, "x": where["x"], "y": where["y"],
                              "button": "left", "clickCount": 1})
             await asyncio.sleep(_INPUT_GAP_S)
+
+    async def as_phone(self, width: int = 390, height: int = 844) -> None:
+        """A phone's screen and its input: touch events, and a pointer that cannot hover,
+        so a `(hover: hover)` rule does not apply as it would to the headless mouse."""
+        await self.send("Emulation.setDeviceMetricsOverride",
+                        {"width": width, "height": height, "deviceScaleFactor": 2,
+                         "mobile": True})
+        await self.send("Emulation.setTouchEmulationEnabled",
+                        {"enabled": True, "maxTouchPoints": 1})
+        await self.send("Emulation.setEmulatedMedia",
+                        {"features": [{"name": "hover", "value": "none"},
+                                      {"name": "any-hover", "value": "none"},
+                                      {"name": "pointer", "value": "coarse"}]})
+
+    async def tap(self, selector: str, *, nth: int = 0) -> None:
+        """Touch something once it has stopped moving, as a finger does."""
+        where = await self._centre(selector, nth)
+        point = {"x": where["x"], "y": where["y"]}
+        await self.send("Input.dispatchTouchEvent",
+                        {"type": "touchStart", "touchPoints": [point]})
+        await asyncio.sleep(_INPUT_GAP_S)
+        await self.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        await asyncio.sleep(_INPUT_GAP_S)
+
+    async def hold(self, selector: str, seconds: float, *, nth: int = 0) -> None:
+        """Keep a finger on something for `seconds`, then lift it."""
+        where = await self._centre(selector, nth)
+        point = {"x": where["x"], "y": where["y"]}
+        await self.send("Input.dispatchTouchEvent",
+                        {"type": "touchStart", "touchPoints": [point]})
+        await asyncio.sleep(seconds)
+        await self.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        await asyncio.sleep(_INPUT_GAP_S)
 
     async def hover(self, selector: str, *, nth: int = 0) -> None:
         """Rest the pointer on something, as a mouse does, so `:hover` applies to it."""

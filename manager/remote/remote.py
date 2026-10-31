@@ -21,17 +21,22 @@ import html
 import logging
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from datetime import UTC, datetime
 from typing import Any
 
-from nicegui import background_tasks, run, ui
+from nicegui import app, background_tasks, run, ui
+from starlette.responses import JSONResponse
 
-from common import events
+from common import events, icons
 from common.config.labels import humanize
 from common.devices import device_registry, install_identity, serving
 from common.failures import why
+from common.games import library_policy
+from common.host import addresses, key_simulator
 from common.host.launch_state import SOURCE_CAPTURE
 from common.i18n import t
+from common.runtime import lifecycle
 from manager.frontend.players import (
     CARD_FILES,
     CLAIM,
@@ -45,6 +50,7 @@ from manager.frontend.players import (
 from manager.kit import (
     acting,
     appearance,
+    art,
     busy,
     confirm,
     dropdown,
@@ -55,6 +61,7 @@ from manager.kit import (
     qr,
     remembered,
     stars,
+    thumbnails,
     verbs,
 )
 from manager.kit import dialog as frame
@@ -62,15 +69,21 @@ from manager.kit.api import ApiClient, ApiError, local_base_url
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
 from manager.remote import remote_record
+from manager.security.sign_in_gate import REMOTE_MANIFEST, REMOTE_PAGE
 
 logger = logging.getLogger("vpinfe.manager.remote.remote")
 
-NOW, PLAY, CONTROL, JOIN = "now", "play", "control", "join"
+_NAME_POLL_SECONDS = 2.0
 
+WHEEL, GAMES, NOW, JOIN = "wheel", "games", "now", "join"
+
+WHEEL_GLYPH = "view_carousel"
+
+# The order is a sequence: what the cabinet shows, pick another, what is running.
 SCREENS = (
-    (NOW, t("word.now"), "radio_button_checked"),
-    (PLAY, t("manager.remote.play"), "search"),
-    (CONTROL, t("manager.remote.control"), "gamepad"),
+    (WHEEL, t("manager.remote.tab_wheel"), WHEEL_GLYPH),
+    (GAMES, t("manager.remote.tab_games"), icons.GAMES),
+    (NOW, t("word.now"), "play_circle"),
 )
 
 
@@ -195,18 +208,60 @@ def _read_target(client: ApiClient) -> dict[str, Any]:
     the wrong one offers games whose ids the target has never heard of.
     """
     showing = _frontend_of(client)
+    kind = _art_kind()
+    files, art_of = _files_of(client, kind)
+    play = client.play_state()
     read: dict[str, Any] = {
-        "play": client.play_state(),
+        "play": play,
+        "controls": _controls_of(client, play),
         "games": offered_games(client.library_entries()),
+        "files": files,
+        "art": art_of,
+        "look": thumbnails.look(kind) if kind else None,
         "jobs": client.jobs(),
         "collections": client.collections(),
         "frontend": showing,
         "players": client.players(),
+        "actions": _actions_of(client),
         **remote_record.read(client),
     }
     if mirroring(showing):
         read.update(_narrowed_to(client, str((showing or {}).get("collection") or "")))
     return read
+
+
+def _controls_of(client: ApiClient, play: dict[str, Any]) -> dict[str, Any]:
+    """What the running table can be asked to do. Empty where no table is up, where a
+    recording holds it, and where the target is too old to know the route."""
+    if not play.get("launching") or play.get("source") == SOURCE_CAPTURE:
+        return {}
+    try:
+        return client.table_controls() or {}
+    except Exception as exc:
+        logger.info("remote: the target did not say what its table can be asked to do: %s", exc)
+        return {}
+
+
+def _actions_of(client: ApiClient) -> list[dict[str, Any]]:
+    """What the target can be asked to do to itself; none where it cannot say."""
+    try:
+        return client.actions()
+    except ApiError as exc:
+        logger.info("remote: the target did not say what it can be asked to do: %s", exc)
+        return []
+
+
+def _files_of(client: ApiClient,
+              kind: str) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+    """Every table the target holds, and each game's picture where the Media settings draw
+    one (None where they draw none). A target too old to list tables has no Tables lens
+    and no pictures."""
+    try:
+        files = client.all_tables(media=kind)
+    except ApiError as exc:
+        logger.info("remote: the target did not list its tables: %s", exc)
+        return [], None
+    return files, thumbnails.by_game(files) if kind else None
 
 
 def _frontend_of(client: ApiClient) -> dict[str, Any] | None:
@@ -264,20 +319,73 @@ def wheel_id(showing: dict[str, Any] | None) -> str:
     return str(((showing or {}).get("game") or {}).get("id") or "")
 
 
-def on_the_wheel(showing: dict[str, Any] | None,
-                 games: list[dict[str, Any]]) -> dict[str, Any]:
+def on_the_wheel(showing: dict[str, Any] | None, games: list[dict[str, Any]],
+                 strays: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """The game on the wheel as the list holds it, or as the frontend named it where the
-    list does not; nothing where the wheel is empty."""
+    list does not; nothing where the wheel is empty. `strays` holds the second kind, and is
+    the caller's, so what is written onto one outlives the draw."""
     game_id = wheel_id(showing)
     if not game_id:
         return {}
     for game in games:
         if game.get("id") == game_id:
             return game
-    return {"id": game_id, "name": str(((showing or {}).get("game") or {}).get("name") or "")}
+    stray = strays.setdefault(game_id, {"id": game_id})
+    stray["name"] = str(((showing or {}).get("game") or {}).get("name") or "")
+    return stray
 
 
-@ui.page("/remote", title=t("manager.remote.vpinfe_remote"), reconnect_timeout=300)
+def _opening_screen(state: dict[str, Any]) -> str:
+    if (state.get("play") or {}).get("launching"):
+        return NOW
+    kind = str((state.get("target") or {}).get("kind") or "")
+    if frontend_closed(state.get("frontend")) or kind == device_registry.KIND_VPX_MOBILE:
+        return GAMES
+    return WHEEL
+
+
+_VIEWPORT = ("width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, "
+             "viewport-fit=cover")
+
+_ICON_DIR = appearance.BASE_MOUNT + "/img/"
+_HOME_SCREEN_ICONS = (180, 192, 512)
+_HOME_SCREEN_BACKGROUND = "#0f0722"
+
+
+@app.get(REMOTE_MANIFEST, include_in_schema=False)
+def remote_manifest() -> JSONResponse:
+    """What a phone reads to install the Remote to its Home Screen, where it opens without
+    the browser's address and navigation bars."""
+    return JSONResponse({
+        "name": t("manager.remote.vpinfe_remote"),
+        "start_url": REMOTE_PAGE,
+        "scope": "/",
+        "display": "standalone",
+        "background_color": _HOME_SCREEN_BACKGROUND,
+        "theme_color": _HOME_SCREEN_BACKGROUND,
+        "icons": [{"src": f"{_ICON_DIR}vpinfe-remote-{size}.png",
+                   "sizes": f"{size}x{size}", "type": "image/png"}
+                  for size in _HOME_SCREEN_ICONS],
+    }, media_type="application/manifest+json")
+
+
+def _home_screen_head() -> str:
+    """The tags that make the Remote installable. `use-credentials` sends the sign-in
+    cookie with the manifest request, which a browser otherwise leaves out and the
+    sign-in gate would answer with the sign-in page."""
+    name = html.escape(t("manager.remote.vpinfe_remote"), quote=True)
+    return (
+        f'<link rel="manifest" href="{REMOTE_MANIFEST}" crossorigin="use-credentials">'
+        f'<link rel="apple-touch-icon" href="{_ICON_DIR}vpinfe-remote-180.png">'
+        '<meta name="apple-mobile-web-app-capable" content="yes">'
+        '<meta name="mobile-web-app-capable" content="yes">'
+        f'<meta name="apple-mobile-web-app-title" content="{name}">'
+        '<meta name="apple-mobile-web-app-status-bar-style" content="default">'
+        f'<meta name="theme-color" content="{_HOME_SCREEN_BACKGROUND}">')
+
+
+@ui.page("/remote", title=t("manager.remote.vpinfe_remote"), reconnect_timeout=300,
+         viewport=_VIEWPORT)
 async def remote_page(screen: str = "") -> None:
     """The remote. `screen` names which of the three, so a place can be linked to."""
     # The same setting the desk surface reads. One install, one appearance - a phone
@@ -291,18 +399,21 @@ async def remote_page(screen: str = "") -> None:
     # The shell takes the viewport once and everything below it is flex, the same way
     # the Manager's does - a pane that subtracts a fixed header height collapses the
     # moment that header changes.
-    ui.query(".nicegui-content").classes("p-0 gap-0 h-screen")
+    ui.query(".nicegui-content").classes("p-0 gap-0 remote-viewport")
     # A phone locking its screen is the most common disconnect there is, far more common
     # than anything a desk session sees, so the meta viewport matters as much as the
     # reconnect timeout above.
+    # iOS ignores `user-scalable=no` for a pinch in Safari; this is what stops it there.
     ui.add_head_html(
-        '<meta name="viewport" content="width=device-width, initial-scale=1, '
-        'viewport-fit=cover">')
+        "<script>document.addEventListener('gesturestart', "
+        "function (e) { e.preventDefault(); });</script>")
+    ui.add_head_html(_home_screen_head())
 
     # Before the client connects, which is the only time a page can add to its own body.
     # Adding it from inside the screen that uses it looked right and installed nothing:
     # by then the page has been sent, and the pad had no behavior at all.
-    ui.add_body_html(f"<script>{_HOLD_SCRIPT % {'renew': RENEW_MS}}</script>")
+    ui.add_body_html(f"<script>{_HOLD_SCRIPT % {'renew': RENEW_MS, 'repeat': REPEAT_MS}}</script>")
+    ui.add_body_html(f"<script>{_CLOCK_SCRIPT}</script>")
 
     # Once per page, not once per draw. Registered inside the screen that uses them, a
     # handler would be added again on every redraw and one thumb would send N presses.
@@ -314,8 +425,41 @@ async def remote_page(screen: str = "") -> None:
         await _say(client_for_target, str((event.args or {}).get("action") or ""),
                    "release")
 
+    pressing: set[str] = set()
+
+    async def repeated(event: Any) -> None:
+        control_id = str((event.args or {}).get("id") or "")
+        if not control_id or control_id in pressing:
+            return
+        pressing.add(control_id)
+        try:
+            await _press_control(client_for_target, control_id, quiet=True)
+        finally:
+            pressing.discard(control_id)
+
+    # A press and its release are answered in the order they were sent: threads would
+    # otherwise let a quick tap's release overtake its press and leave the key down.
+    in_order: dict[str, asyncio.Lock] = {}
+
+    @on_page
+    async def key_phase(event: Any, phase: str) -> None:
+        control_id = str((event.args or {}).get("id") or "")
+        if not control_id:
+            return
+        async with in_order.setdefault(control_id, asyncio.Lock()):
+            await _press_control(client_for_target, control_id, quiet=True, phase=phase)
+
+    async def key_down(event: Any) -> None:
+        await key_phase(event, "press")
+
+    async def key_up(event: Any) -> None:
+        await key_phase(event, "release")
+
     ui.on("remote_press", held)
     ui.on("remote_release", let_go)
+    ui.on("remote_control", repeated)
+    ui.on("remote_control_down", key_down)
+    ui.on("remote_control_up", key_up)
 
     with ui.column().classes("w-full h-full items-center justify-center gap-3") as loading:
         ui.label(t("manager.remote.loading")).classes("text-sm opacity-60")
@@ -332,13 +476,15 @@ async def remote_page(screen: str = "") -> None:
     local_device_id = loaded["local_device_id"]
     aimable = targets(loaded["devices"], local_device_id)
     state: dict[str, Any] = {
-        "screen": screen if screen in {key for key, *_ in SCREENS} | {JOIN} else NOW,
+        "screen": screen if screen in {key for key, *_ in SCREENS} | {JOIN} else "",
         "target": aimable[0] if aimable else {},
-        "play": {}, "games": [], "jobs": [], "collections": [],
-        "find": "", "collection": "", "collection_ids": None,
+        "play": {}, "games": [], "files": [], "art": None, "look": None, "jobs": [],
+        "collections": [], "find": "", "collection": "", "collection_ids": None,
+        "lens": GAMES_LENS, "tiles": bool(remembered.get(TILES_KEY, False)),
         "frontend": None, "rows": {}, "relist": None, "refill_up": None,
         "capture": None, "run": {}, "waiting": [], "reviewing": None,
         "players": [], "identity": None, "record": {}, "accounts": [], "result": None,
+        "actions": [], "strays": {}, "controls": {},
         "local_device_id": local_device_id,
     }
 
@@ -381,19 +527,16 @@ async def remote_page(screen: str = "") -> None:
         except Exception as exc:
             logger.info("remote: %s did not answer: %s",
                         target_name(state["target"]), exc)
-            state.update({"play": {}, "games": [], "jobs": [], "collections": [],
+            state.update({"play": {}, "games": [], "files": [], "art": None, "look": None,
+                          "jobs": [], "collections": [],
                           "frontend": None, "reachable": False, "capture": None,
                           "run": {}, "waiting": [], "reviewing": None,
-                          "players": [], "identity": None, "record": {}, "accounts": []})
+                          "players": [], "identity": None, "record": {}, "accounts": [],
+                          "actions": [], "controls": {}})
             follow()
             return
         await reread_identity()
         follow()
-
-    def draw_strip() -> None:
-        strip.clear()
-        with strip:
-            _strip(state, client_for_target, redraw)
 
     def redraw() -> None:
         """All of it, always. The bar says which screen you are on, so a redraw that
@@ -408,7 +551,7 @@ async def remote_page(screen: str = "") -> None:
         tabs.clear()
         state["relist"] = None
         state["refill_up"] = None
-        draw_strip()
+        state["refill_wheel"] = None
         with body:
             _screen(state, client_for_target, redraw)
         with tabs:
@@ -480,7 +623,7 @@ async def remote_page(screen: str = "") -> None:
                                                         client_for_target())
                 except Exception as exc:
                     logger.info("remote: could not read what waits: %s", exc)
-            if was != now and state["screen"] != PLAY:
+            if was != now and state["screen"] != GAMES:
                 redraw()
             return
         said = payload.get("state")
@@ -491,9 +634,18 @@ async def remote_page(screen: str = "") -> None:
             state["play"] = said
             if said.get("launching"):
                 state["reviewing"] = None
-            if bool(was.get("launching")) != bool(said.get("launching")) \
-                    or (bool(was.get("paused")) != bool(said.get("paused"))
-                        and state["screen"] != PLAY):
+            table_changed = bool(was.get("launching")) != bool(said.get("launching"))
+            if table_changed or (said.get("launching") and not state.get("controls")):
+                target = state.get("target")
+                read = await offload.io(_controls_of, client_for_target(), said)
+                if state.get("target") is target:
+                    state["controls"] = read
+            if table_changed:
+                held = state.pop("controls_sheet", None)
+                if held is not None:
+                    held.close()
+            if table_changed or (bool(was.get("paused")) != bool(said.get("paused"))
+                                 and state["screen"] != GAMES):
                 redraw()
             return
         was = state.get("frontend")
@@ -507,7 +659,8 @@ async def remote_page(screen: str = "") -> None:
             state["relist"]()
         else:
             _mark_here(state["rows"], wheel_id(was), wheel_id(said))
-        draw_strip()
+        if callable(state.get("refill_wheel")):
+            state["refill_wheel"]()
 
     async def listen() -> None:
         with page:
@@ -543,12 +696,12 @@ async def remote_page(screen: str = "") -> None:
     await reread()
     if page.is_deleted:
         return
+    state["screen"] = state["screen"] or _opening_screen(state)
     # Header, then the screen, then the tabs, in that order and inside the shell: the
     # body has to be built here rather than earlier and reparented, because a NiceGUI
     # element belongs to whatever slot was open when it was made.
     with ui.column().classes("w-full h-full gap-0 remote-shell no-wrap"):
         header = ui.column().classes("w-full gap-0")
-        strip = ui.column().classes("w-full gap-0")
         body = ui.column().classes(
             "w-full grow min-h-0 gap-0 overflow-auto remote-body")
         tabs = ui.row().classes("w-full items-stretch gap-0 remote-tabs no-wrap")
@@ -556,13 +709,12 @@ async def remote_page(screen: str = "") -> None:
     loading.delete()
 
 
-def picture_of(state: dict[str, Any], player: dict[str, Any]) -> str:
-    """Where the phone loads this player's picture from, or "" for none or no way there.
+def on_target(state: dict[str, Any], path: str) -> str:
+    """Where the phone loads `path` from, or "" for none or no way there.
 
     The install serving this page answers on this page's own origin; another device on its
     own address, which the phone may not reach.
     """
-    path = picture_address(player)
     if not path:
         return ""
     device = state.get("target") or {}
@@ -570,6 +722,16 @@ def picture_of(state: dict[str, Any], player: dict[str, Any]) -> str:
         return path
     base = base_url_of(device, str(state.get("local_device_id") or ""))
     return f"{base}{path}" if base else ""
+
+
+def picture_of(state: dict[str, Any], player: dict[str, Any]) -> str:
+    """Where the phone loads this player's picture from, or "" for none or no way there."""
+    return on_target(state, picture_address(player))
+
+
+def table_picture(state: dict[str, Any], game_id: str, size: int) -> str:
+    """The game's table picture, as the phone loads it."""
+    return on_target(state, art.media(game_id, "playfield", size=size)) if game_id else ""
 
 
 def _avatar(state: dict[str, Any], player: dict[str, Any]) -> None:
@@ -600,7 +762,6 @@ def _header(state: dict[str, Any], aimable: list[dict[str, Any]], aim: Any,
     """
     identity = state.get("identity")
     with ui.row().classes("w-full items-center gap-2 remote-header no-wrap"):
-        ui.icon("sports_esports").classes("remote-mark")
         if len(aimable) > 1:
             names = {one["device_id"]: target_name(one) for one in aimable}
             by_id = {one["device_id"]: one for one in aimable}
@@ -633,35 +794,9 @@ def _header(state: dict[str, Any], aimable: list[dict[str, Any]], aim: Any,
                 else:
                     ui.icon(PERSON).classes("remote-identity-icon")
 
-
-def _strip(state: dict[str, Any], client_for_target: Callable[[], Any],
-           redraw: Callable[[], None]) -> None:
-    """The game on the frontend's wheel, with Launch, above every screen.
-
-    Drawn only while the frontend is up and no table is: during a game the screen is
-    showing the game, and Now already says so.
-    """
-    if not mirroring(state.get("frontend")) or state.get("reachable") is False \
-            or (state.get("play") or {}).get("launching"):
-        return
-    game = on_the_wheel(state.get("frontend"), state.get("games") or [])
-
-    def open_sheet(_event: Any = None) -> None:
-        _game_sheet(game, state, client_for_target, redraw)
-
-    with ui.row().classes("w-full items-center gap-3 no-wrap remote-strip"):
-        with ui.column().classes("grow min-w-0 gap-0") as said:
-            ui.label(t("manager.remote.wheel_title")).classes("manager-card-title")
-            if not game:
-                ui.label(t("manager.remote.wheel_empty")).classes("remote-empty")
-                return
-            ui.label(str(game.get("name") or "")).classes("remote-headline")
-            made = game_tables.made(game)
-            if made:
-                ui.label(made).classes("remote-note truncate")
-        said.on("click", open_sheet).classes("cursor-pointer")
-        _launch_button(game, state, client_for_target, redraw,
-                       cls="remote-action remote-action--primary remote-action--beside")
+            panel.icon_only(verbs.MORE,
+                            lambda: _dots_sheet(state, client_for_target, redraw),
+                            hint=t("manager.remote.more")).classes("remote-dots")
 
 
 def _tabs(state: dict[str, Any], redraw: Callable[[], None]) -> None:
@@ -679,7 +814,11 @@ def _tabs(state: dict[str, Any], redraw: Callable[[], None]) -> None:
         here = state["screen"] == key
         with ui.column().on("click", go) \
                 .classes("remote-tab" + (" remote-tab--here" if here else "")):
-            ui.icon(icon).classes("remote-tab-icon")
+            with ui.element("span").classes("remote-tab-mark"):
+                ui.icon(icon).classes("remote-tab-icon")
+                if key == NOW and (state.get("play") or {}).get("launching"):
+                    ui.element("span").classes("remote-tab-dot") \
+                        .tooltip(t("manager.remote.table_up"))
             ui.label(label).classes("remote-tab-label")
 
 
@@ -945,6 +1084,132 @@ async def _share_with(state: dict[str, Any], identity: dict[str, Any],
     return went
 
 
+# The lifecycle pairs the dots sheet offers, in the order it draws them. The first two act on
+# VPinFE and the last two on the device it runs on.
+_VPINFE_PAIRS = ((lifecycle.VPINFE, lifecycle.RESTART), (lifecycle.VPINFE, lifecycle.STOP))
+_DEVICE_PAIRS = ((lifecycle.SYSTEM, lifecycle.RESTART), (lifecycle.SYSTEM, lifecycle.STOP))
+_PAIR_ICONS = {lifecycle.RESTART: verbs.RESTART, lifecycle.STOP: verbs.POWER}
+
+
+def _offered_pairs(state: dict[str, Any],
+                   pairs: tuple[tuple[str, str], ...]) -> list[tuple[str, str]]:
+    """Which of `pairs` the target lists as ready to run. Nothing for a browser that came in
+    with a Remote pass: the pass holds Play, and these need more."""
+    if acting.play_only():
+        return []
+    ready = {(str(one.get("scope") or ""), str(one.get("action") or ""))
+             for one in state.get("actions") or [] if one.get("available", True)}
+    return [pair for pair in pairs if pair in ready]
+
+
+_OPEN_FRONTEND = (lifecycle.FRONTEND, lifecycle.START)
+
+
+def _open_frontend_offer(state: dict[str, Any], client_for_target: Callable[[], Any],
+                         after: Callable[[], object] | None = None) -> None:
+    """The action that opens the frontend's windows, for a place that says they are closed.
+    Drawn only where the target lists it as ready and this browser may run it, so a
+    Remote pass sees the note alone."""
+    if not _offered_pairs(state, (_OPEN_FRONTEND,)):
+        return
+    label = lifecycle.label(*_OPEN_FRONTEND)
+
+    @on_page
+    async def open_it() -> None:
+        if after:
+            after()
+        try:
+            done = await run.io_bound(client_for_target().perform_action, lifecycle.FRONTEND,
+                                      lifecycle.START, "asked from the Remote")
+        except Exception as exc:
+            ui.notify(t("said.action_failed"), caption=why(exc), type="negative",
+                      position="top")
+            return
+        if (done or {}).get("performed"):
+            ui.notify(t("manager.devices.windows_opened"), type="positive", position="top")
+        else:
+            ui.notify(t("manager.devices.not_happen", label=label), type="warning",
+                      position="top")
+
+    panel.remote_action(label, open_it, icon=verbs.OPEN_WINDOW,
+                        hint=t("action.frontend.start.help"))
+
+
+def _dots_sheet(state: dict[str, Any], client_for_target: Callable[[], Any],
+                redraw: Callable[[], None]) -> None:
+    """What is rare or costly, behind the header's dots rather than on a screen of its own.
+    Tutorial is the frontend's own action, so a closed frontend hears nothing: the sheet
+    says so instead of offering a button that reports success. The lifecycle actions are
+    the install's, and are offered whatever the frontend is doing."""
+    target = state["target"]
+    name = target_name(target)
+
+    @on_page
+    async def tutorial() -> None:
+        sheet.close()
+        await _say(client_for_target, "tutorial", "tap")
+
+    def who() -> None:
+        sheet.close()
+        with ui.context.client.layout:
+            _identity_sheet(state, client_for_target, redraw)
+
+    @on_page
+    async def lifecycle_action(scope: str, action: str) -> None:
+        label = lifecycle.label(scope, action)
+        if not await confirm.ask(
+                t("manager.remote.do_ask", label=label, target_name=name),
+                detail=t(f"action.{scope}.{action}.help"),
+                confirm=label, icon=_PAIR_ICONS[action]):
+            return
+        sheet.close()
+        try:
+            await run.io_bound(client_for_target().perform_action, scope, action,
+                               "asked from the Remote")
+        except Exception as exc:
+            ui.notify(t("said.action_failed"), caption=why(exc), type="negative",
+                      position="top")
+
+    def draw_pairs(pairs: list[tuple[str, str]]) -> None:
+        for scope, action in pairs:
+            panel.remote_action(
+                lifecycle.label(scope, action),
+                lambda _e=None, scope=scope, action=action: lifecycle_action(scope, action),
+                icon=_PAIR_ICONS[action], danger=action == lifecycle.STOP,
+                hint=t(f"action.{scope}.{action}.help"))
+
+    if str(target.get("kind") or "") == device_registry.KIND_VPX_MOBILE:
+        said = t("manager.remote.cannot_drive", target_name=name)
+    elif state.get("reachable") is False or frontend_closed(state.get("frontend")):
+        said = t("manager.remote.frontend_closed")
+    elif (state.get("play") or {}).get("launching"):
+        said = t("manager.remote.wheel_busy")
+    else:
+        said = ""
+    own = _offered_pairs(state, _VPINFE_PAIRS)
+    device = _offered_pairs(state, _DEVICE_PAIRS)
+
+    # Under the page's layout, not the header: a redraw clears the header, and a confirm
+    # left open would go with it.
+    with ui.context.client.layout, frame.made().props("position=bottom") as sheet, \
+            ui.card().classes("w-full remote-sheet"):
+        ui.label(name).classes("remote-headline")
+        if said:
+            ui.label(said).classes("remote-note")
+            if frontend_closed(state.get("frontend")):
+                _open_frontend_offer(state, client_for_target, sheet.close)
+        else:
+            panel.remote_action(t("word.tutorial"), tutorial, icon=verbs.GET_HELP,
+                                hint=t("manager.remote.tutorial.help"))
+        panel.remote_action(t("manager.remote.who_playing"), who, icon=verbs.THIS_IS_ME,
+                            hint=t("manager.remote.who_playing.help"))
+        draw_pairs(own)
+        if device:
+            ui.label(t("manager.remote.the_device")).classes("manager-card-title")
+            draw_pairs(device)
+    sheet.open()
+
+
 def _screen(state: dict[str, Any],
             client_for_target: Callable[[], Any],
             redraw: Callable[[], None]) -> None:
@@ -956,12 +1221,12 @@ def _screen(state: dict[str, Any],
         return _unreachable(state, redraw)
     if state["screen"] == NOW:
         _now(state, client_for_target, redraw)
-    elif state["screen"] == PLAY:
+    elif state["screen"] == GAMES:
         _play(state, client_for_target, redraw)
     elif state["screen"] == JOIN:
         _join(state, client_for_target, redraw)
     else:
-        _control(state, client_for_target, redraw)
+        _wheel(state, client_for_target, redraw)
 
 
 def _nothing(said: str) -> None:
@@ -1015,6 +1280,7 @@ def _now(state: dict[str, Any],
             elif frontend_closed(state.get("frontend")):
                 with ui.column().classes("w-full gap-1 manager-card"):
                     ui.label(t("manager.remote.frontend_closed")).classes("remote-empty")
+                    _open_frontend_offer(state, client_for_target)
             if run_now:
                 remote_record.run_card(state, client_for_target, redraw)
             elif state.get("waiting"):
@@ -1024,7 +1290,7 @@ def _now(state: dict[str, Any],
             if not play.get("launching"):
                 _up_section(state, client_for_target)
                 if state.get("result"):
-                    _result_card(state, client_for_target, redraw)
+                    _result_card(state, client_for_target)
                 else:
                     _idle(state, client_for_target, redraw)
         _running_jobs(state)
@@ -1034,6 +1300,65 @@ def takes_pictures(play: dict[str, Any], showing: dict[str, Any] | None) -> bool
     """Whether a table is up that a player can take a picture of from here."""
     return (bool(play.get("launching")) and play.get("source") != SOURCE_CAPTURE
             and not frontend_closed(showing))
+
+
+def _hero(state: dict[str, Any], game_id: str, name: str, made: str, *, badge: str,
+          pulse: bool = False, tall: bool = False,
+          open_sheet: Callable[[], None] | None = None,
+          heart: Callable[[], None] | None = None) -> None:
+    """A game's table picture with its name over it: the Wheel's game and Now's table.
+
+    The picture is a layer over a ground, so a game with none, or one that does not load,
+    is a name on the ground. `heart` draws a control at the trailing corner outside the part
+    that opens the sheet, so pressing it does not also open that.
+    """
+    address = table_picture(state, game_id, art.PANEL)
+    with ui.element("div").classes("remote-hero" + (" remote-hero--tall" if tall else "")):
+        with ui.element("div").classes("remote-hero-face") as face:
+            if address:
+                ui.html(f'<img src="{html.escape(address)}" alt="" draggable="false" '
+                        'onerror="this.remove()">', sanitize=False, tag="span") \
+                    .classes("remote-hero-art")
+            ui.element("div").classes("remote-hero-scrim")
+            with ui.row().classes("remote-hero-badge items-center gap-2 no-wrap"):
+                if pulse:
+                    ui.element("span").classes("remote-pulse")
+                ui.label(badge)
+            with ui.column().classes("remote-hero-text gap-0" + (" remote-hero-text--heart"
+                                                                if heart else "")):
+                ui.label(name).classes("remote-hero-name")
+                if made:
+                    ui.label(made).classes("remote-hero-made truncate")
+        if open_sheet is not None:
+            face.on("click", open_sheet).classes("cursor-pointer")
+        if heart is not None:
+            heart()
+
+
+def _elapsed_seconds(started_at: str) -> int | None:
+    try:
+        began = datetime.fromisoformat(started_at)
+    except ValueError:
+        return None
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=UTC)
+    return max(0, int((datetime.now(UTC) - began).total_seconds()))
+
+
+def _clock(started_at: str) -> None:
+    """How long this table has been up. The page's own script ticks every `data-elapsed`
+    label."""
+    seconds = _elapsed_seconds(started_at)
+    if seconds is None:
+        return
+    with ui.column().classes("w-full items-center gap-0"):
+        ui.label(_hms(seconds)).classes("remote-clock") \
+            .props(f'data-elapsed={seconds}')
+        ui.label(t("manager.remote.session_clock")).classes("remote-note")
+
+
+def _hms(seconds: int) -> str:
+    return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
 
 
 def _playing(play: dict[str, Any], state: dict[str, Any], client_for_target: Callable[[], Any],
@@ -1053,19 +1378,190 @@ def _playing(play: dict[str, Any], state: dict[str, Any], client_for_target: Cal
         redraw()
 
     paused = bool(play.get("paused"))
-    with ui.column().classes("w-full gap-1 manager-card"):
-        ui.label(t("manager.remote.paused" if paused else "manager.remote.playing")) \
-            .classes("manager-card-title")
-        ui.label(str(play.get("game_name") or t("manager.remote.table"))) \
-            .classes("remote-headline")
-        if note:
-            ui.label(note).classes("remote-note")
-    if takes_pictures(play, state.get("frontend")):
-        _tap_button("take_picture", client_for_target, icon=verbs.TAKE_PICTURE, primary=True)
-        if paused:
-            _tap_button("back", client_for_target, icon=verbs.BACK)
-    ui.button(t("manager.remote.quit_table"), icon=verbs.STOP, on_click=quit_table) \
-        .props("no-caps flat").classes("remote-action remote-action--danger")
+    game_id = str(play.get("game_id") or "")
+    held: dict[str, Any] = next(
+        (one for one in state.get("games") or [] if one.get("id") == game_id), {})
+    _hero(state, game_id, str(play.get("game_name") or t("manager.remote.table")),
+          game_tables.made(held) if held else "",
+          badge=t("manager.remote.paused" if paused else "manager.remote.playing"),
+          pulse=not paused, tall=True)
+    if note:
+        ui.label(note).classes("remote-note text-center")
+    _clock(str(play.get("started_at") or ""))
+    controls = state.get("controls") or {}
+    pause = _control_of(controls, "pause")
+    pictures = takes_pictures(play, state.get("frontend"))
+    if pause or pictures:
+        with ui.row().classes("w-full gap-2 no-wrap"):
+            if pause:
+                _pause_key(pause, paused, controls, client_for_target)
+            if pictures:
+                _tap_button("take_picture", client_for_target, icon=verbs.TAKE_PICTURE,
+                            hint=t("manager.remote.take_picture.help"), size="action")
+                if paused:
+                    _tap_button("back", client_for_target, icon=verbs.BACK,
+                                hint=t("manager.remote.back.help"), size="action")
+    if any(one.get("id") != "pause" for one in controls.get("controls") or []):
+        panel.remote_action(
+            t("manager.remote.table_controls"),
+            lambda _e=None: _controls_sheet(state, client_for_target),
+            icon=verbs.TUNE, hint=t("manager.remote.table_controls.help"))
+    panel.remote_action(t("manager.remote.quit_table"), quit_table, icon=verbs.STOP,
+                        danger=True, hint=t("manager.remote.quit_table.help"))
+
+
+def _control_of(controls: dict[str, Any], control_id: str) -> dict[str, Any] | None:
+    return next((one for one in controls.get("controls") or []
+                 if one.get("id") == control_id), None)
+
+
+def _blocked(controls: dict[str, Any], control: dict[str, Any]) -> str:
+    """Why a control cannot be pressed now, or an empty string where it can: the control's
+    own reason, or the install's where it cannot send keys at all."""
+    press = controls.get("press") or {}
+    if not press.get("available", True):
+        said = press.get("reason")
+        return key_simulator.words(said) if said else str(control.get("reason") or "")
+    if not control.get("available", True):
+        return str(control.get("reason") or "")
+    return ""
+
+
+def _pause_key(pause: dict[str, Any], paused: bool, controls: dict[str, Any],
+               client_for_target: Callable[[], Any]) -> None:
+    async def tap() -> None:
+        # Pause is a toggle, and the label flips only when the table reports it: a second
+        # tap before then would undo the first.
+        key.disable()
+        try:
+            await _press_control(client_for_target, "pause")
+            await asyncio.sleep(PAUSE_SETTLE_S)
+        finally:
+            key.enable()
+
+    key = panel.remote_key(
+        t("manager.page.resume" if paused else "manager.remote.pause"), tap,
+        icon=verbs.RUN if paused else verbs.PAUSE, size="action",
+        hint=_blocked(controls, pause)
+        or t("manager.remote.resume_table.help" if paused else "manager.remote.pause_table.help"))
+    if _blocked(controls, pause):
+        key.disable()
+
+
+PAUSE_SETTLE_S = 1.0
+_CONTROL_GLYPHS = {
+    "start": verbs.RUN, "show_rules": verbs.RULES, "reset": verbs.RESET,
+    "extra_ball": verbs.ADD, "fire": verbs.FIRE, "volume_down": verbs.VOLUME_DOWN,
+    "left_flipper": verbs.LEFT_FLIPPER, "right_flipper": verbs.RIGHT_FLIPPER,
+    "launch_ball": verbs.LAUNCH_BALL, "left_magna": verbs.MAGNA_SAVE,
+    "right_magna": verbs.MAGNA_SAVE, "nudge_left": verbs.NUDGE_LEFT,
+    "nudge_center": verbs.NUDGE_CENTER, "nudge_right": verbs.NUDGE_RIGHT,
+    "volume_up": verbs.VOLUME_UP, "coin_door": verbs.COIN_DOOR, "menu_up": verbs.UP,
+    "menu_down": verbs.DOWN, "menu_enter": verbs.CHOOSE, "menu_cancel": verbs.CANCEL,
+}
+_GROUP_GLYPHS = {
+    "play": verbs.GAME_CONTROL, "nudge": verbs.NUDGE_CENTER,
+    "game": verbs.GAME_CONTROL, "coins": verbs.COIN, "sound": verbs.VOLUME_UP,
+    "menu": verbs.COIN_DOOR, "service": verbs.SERVICE, "debug": verbs.DEBUG,
+}
+# Where the Remote folds what is rare, so the sheet opens on what a player reaches for.
+_FOLDED_GROUPS = ("nudge", "menu", "service", "debug")
+# Controls that take repeated presses for as long as they are held.
+_REPEATING_GROUPS = ("sound",)
+
+
+@on_page
+async def _press_control(client_for_target: Callable[[], Any], control_id: str, *,
+                         quiet: bool = False, phase: str = "tap") -> None:
+    """One press of a control the target listed, or the press or the release of one held
+    down. A failure is said once, except for a control held down, which stops on its own
+    when the thumb lifts."""
+    try:
+        said = await run.io_bound(client_for_target().press_control, control_id,
+                                  **({} if phase == "tap" else {"phase": phase}))
+    except Exception as exc:
+        logger.info("remote: control %s did not reach the target: %s", control_id, exc)
+        if not quiet:
+            ui.notify(t("manager.remote.control_failed"), caption=why(exc), type="negative",
+                      position="top")
+        return
+    if not (said or {}).get("pressed") and not quiet:
+        ui.notify(t("manager.remote.control_not_sent"), type="warning", position="top")
+
+
+def _controls_sheet(state: dict[str, Any], client_for_target: Callable[[], Any]) -> None:
+    """The keys the running table's app declares, drawn as the target listed them.
+
+    The Remote holds no list of its own: a group, a label and whether a control can be
+    pressed are the target's, so a different app draws different keys here without this
+    changing. Nudge, Service and Debug are folded.
+    """
+    controls = state.get("controls") or {}
+    listed = [one for one in controls.get("controls") or [] if one.get("id") != "pause"]
+    press = controls.get("press") or {}
+    notes = [] if not press.get("available", True) else list(controls.get("notes") or [])
+
+    def draw_group(group: str, held: list[dict[str, Any]]) -> None:
+        ui.label(t(f"controls.group.{group}")).classes("manager-card-title")
+        if any(one.get("side") for one in held):
+            with ui.element("div").classes("remote-controls"):
+                for side in ("left", "", "right"):
+                    with ui.element("div").classes("remote-hand"):
+                        for one in held:
+                            if (one.get("side") or "") == side:
+                                draw_key(group, one)
+        else:
+            with ui.element("div").classes("remote-controls"):
+                for one in held:
+                    draw_key(group, one)
+        ids = {str(one.get("id")) for one in held}
+        for note in [one for one in notes if ids & set(one.get("controls") or [])]:
+            notes.remove(note)
+            ui.label(str(note.get("text") or "")).classes("remote-note")
+
+    def draw_key(group: str, one: dict[str, Any]) -> None:
+        control_id = str(one.get("id") or "")
+        label = str(one.get("label") or control_id)
+        blocked = _blocked(controls, one)
+        glyph = _CONTROL_GLYPHS.get(control_id) or _GROUP_GLYPHS.get(group, verbs.TUNE)
+
+        async def tap() -> None:
+            await _press_control(client_for_target, control_id)
+
+        follows_thumb = bool(one.get("holdable"))
+        key = panel.remote_key(
+            label, None if group in _REPEATING_GROUPS or follows_thumb else tap, icon=glyph,
+            hint=blocked or t("manager.remote.control.help", label=label), size="tap")
+        if blocked:
+            key.disable()
+        elif group in _REPEATING_GROUPS:
+            key.props(f"data-repeat-control={control_id}")
+        elif follows_thumb:
+            key.props(f"data-hold-control={control_id}")
+
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for one in listed:
+        by_group.setdefault(str(one.get("group") or ""), []).append(one)
+
+    with ui.context.client.layout, frame.made().props("position=bottom") as sheet, \
+            ui.card().classes("w-full remote-sheet remote-sheet--tall"):
+        with ui.row().classes("remote-sheet-head w-full items-center no-wrap"):
+            ui.label(str((controls.get("table") or {}).get("game_name")
+                         or t("manager.remote.table_controls"))).classes("remote-headline truncate")
+            panel.icon_action(t("word.close"), sheet.close, icon=verbs.CLOSE,
+                              hint=t("word.close"))()
+        if not press.get("available", True) and press.get("reason"):
+            ui.label(key_simulator.words(press["reason"])).classes("remote-note")
+        for group, held in by_group.items():
+            if group not in _FOLDED_GROUPS:
+                draw_group(group, held)
+        folded = [(group, held) for group, held in by_group.items() if group in _FOLDED_GROUPS]
+        if folded:
+            with panel.disclosure(t("manager.remote.folded_controls")):
+                for group, held in folded:
+                    draw_group(group, held)
+    state["controls_sheet"] = sheet
+    sheet.open()
 
 
 def _who(state: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
@@ -1094,6 +1590,26 @@ async def _rate(client: ApiClient, identity: dict[str, Any] | None,
         await run.io_bound(client.player_rating, str(identity["id"]), game_id, value)
     else:
         await run.io_bound(client.rate, game_id, value)
+
+
+def _rating_stars(state: dict[str, Any], client_for_target: Callable[[], Any],
+                  game_id: str, shown: int,
+                  game: dict[str, Any] | None = None) -> Callable[[], None]:
+    """The stars for one game on this phone, wherever they are drawn: lit at the tap, the
+    write behind them, and what the screen holds updated once it is saved. `game` is the
+    row the caller holds when that is not one of `state["games"]`."""
+    identity = state.get("identity")
+
+    async def save(value: int) -> None:
+        await _rate(client_for_target(), identity, game_id, value)
+        if is_someone_else(identity):
+            state.setdefault("record", {}).setdefault(game_id, {})["rating"] = value
+            return
+        for held in (game, *(state.get("games") or [])):
+            if held is not None and str(held.get("id") or "") == game_id:
+                held.setdefault("user", {})["rating"] = value
+
+    return stars.rated(shown, save)
 
 
 def _up_section(state: dict[str, Any], client_for_target: Callable[[], Any]) -> None:
@@ -1147,15 +1663,37 @@ def _up_section(state: dict[str, Any], client_for_target: Callable[[], Any]) -> 
     drawn()
 
 
+def _thumb(state: dict[str, Any], game_id: str) -> None:
+    address = table_picture(state, game_id, art.CELL)
+    with ui.element("span").classes("remote-thumb"):
+        if address:
+            ui.html(f'<img src="{html.escape(address)}" alt="" draggable="false" '
+                    'onerror="this.remove()">', sanitize=False, tag="span") \
+                .classes("remote-thumb-art")
+
+
+def _when(stamp: str) -> str:
+    """How long ago, in the one unit that reads at a glance; nothing where it cannot say."""
+    seconds = _elapsed_seconds(stamp)
+    if seconds is None:
+        return ""
+    if seconds < 60:
+        return t("manager.remote.just_now")
+    if seconds < 3600:
+        return t("manager.remote.minutes_ago", count=seconds // 60)
+    if seconds < 86400:
+        return t("manager.remote.hours_ago", count=seconds // 3600)
+    return t("manager.remote.days_ago", count=seconds // 86400)
+
+
 def _idle(state: dict[str, Any], client_for_target: Callable[[], Any],
           redraw: Callable[[], None]) -> None:
-    """Nothing is playing, so this offers the one thing worth doing about that.
+    """Nothing is playing, so this offers what is worth doing about that.
 
-    The last game played, with its rating. That is the moment somebody has an opinion
-    about a table and the phone is already in their hand, and it is the only reason this
-    screen has anything to say when the machine is quiet. Superseded by the result card
-    the moment a play is recorded this session - this is what is left to say before that
-    has happened even once.
+    The last game played, with its rating: the moment somebody has an opinion about a table
+    and the phone is already in their hand, and the way back into it. Superseded by the
+    result card the moment a play is recorded this session - this is what is left to say
+    before that has happened even once.
     """
     game = last_played(state.get("games") or [])
     if not game:
@@ -1163,26 +1701,45 @@ def _idle(state: dict[str, Any], client_for_target: Callable[[], Any],
             ui.label(t("manager.remote.nothing_playing")).classes("remote-headline")
         return
     identity = state.get("identity")
+    game_id = str(game["id"])
 
     @on_page
-    async def rate(value: int) -> None:
+    async def show_on_wheel() -> None:
         try:
-            await _rate(client_for_target(), identity, str(game["id"]), value)
+            await run.io_bound(client_for_target().move_wheel, game_id)
         except Exception as exc:
-            ui.notify(t("manager.stars.save_failed"), caption=why(exc),
-                      type="negative")
+            ui.notify(t("manager.remote.wheel_failed"), caption=why(exc), type="negative",
+                      position="top")
             return
-        if is_someone_else(identity):
-            state.setdefault("record", {}).setdefault(str(game["id"]), {})["rating"] = value
-        else:
-            game.setdefault("user", {})["rating"] = value
+        state["screen"] = WHEEL
         redraw()
 
-    with ui.column().classes("w-full gap-2 manager-card"):
+    with ui.column().classes("w-full gap-3 manager-card"):
         ui.label(t("word.last_played")).classes("manager-card-title")
-        ui.label(str(game.get("name") or "")).classes("remote-headline")
-        stars.draw(_rating_of(str(game["id"]), game, identity, state.get("record") or {}),
-                  rate)()
+        with ui.row().classes("w-full items-center gap-3 no-wrap"):
+            _thumb(state, game_id)
+            with ui.column().classes("grow min-w-0 gap-0"):
+                ui.label(str(game.get("name") or "")).classes("remote-headline")
+                line = " \u00b7 ".join(part for part in (
+                    game_tables.made(game),
+                    _when(str((game.get("user") or {}).get("last_played") or ""))) if part)
+                if line:
+                    ui.label(line).classes("remote-note")
+        with ui.row().classes("w-full items-center justify-between no-wrap"):
+            ui.label(t("manager.remote.your_rating")).classes("remote-note")
+            _rating_stars(state, client_for_target, game_id,
+                          _rating_of(game_id, game, identity, state.get("record") or {}),
+                          game)()
+        with ui.row().classes("w-full gap-2 no-wrap"):
+            _launch_button(game, state, client_for_target, redraw,
+                           label=t("manager.remote.play_again"),
+                           cls="remote-action remote-action--half"
+                           if mirroring(state.get("frontend")) else "remote-action")
+            if mirroring(state.get("frontend")):
+                panel.remote_action(t("manager.remote.on_wheel"), show_on_wheel,
+                                    icon=WHEEL_GLYPH,
+                                    hint=t("manager.remote.on_wheel.help")) \
+                    .classes("remote-action--half")
 
 
 def _visible_up(identity: dict[str, Any] | None,
@@ -1255,8 +1812,7 @@ async def _play_recorded(state: dict[str, Any], payload: dict[str, Any],
         redraw()
 
 
-def _result_card(state: dict[str, Any], client_for_target: Callable[[], Any],
-                 redraw: Callable[[], None]) -> None:
+def _result_card(state: dict[str, Any], client_for_target: Callable[[], Any]) -> None:
     """What became of the play just recorded, for each player the result card is
     showing - their new entry where they made one, and what each of their sharing
     accounts did with it. The phone's own row carries the rating control the idle card
@@ -1274,22 +1830,6 @@ def _result_card(state: dict[str, Any], client_for_target: Callable[[], Any],
                     if str(row["player"].get("id") or "") == str(identity.get("id") or "")),
                     None)
 
-    @on_page
-    async def rate(value: int) -> None:
-        try:
-            await _rate(client_for_target(), identity, game_id, value)
-        except Exception as exc:
-            ui.notify(t("manager.stars.save_failed"), caption=why(exc),
-                      type="negative")
-            return
-        if is_someone_else(identity):
-            state.setdefault("record", {}).setdefault(game_id, {})["rating"] = value
-        else:
-            for game in state.get("games") or []:
-                if str(game.get("id") or "") == game_id:
-                    game.setdefault("user", {})["rating"] = value
-        redraw()
-
     with ui.column().classes("w-full gap-2 manager-card"):
         ui.label(str(result.get("game_name") or "")).classes("manager-card-title")
         for row in rows:
@@ -1300,8 +1840,11 @@ def _result_card(state: dict[str, Any], client_for_target: Callable[[], Any],
                 for said in row.get("statuses") or []:
                     ui.label(said).classes("remote-note")
         if mine is not None:
-            stars.draw(_rating_of(game_id, mine["player"], identity,
-                                  state.get("record") or {}), rate)()
+            held: dict[str, Any] = next(
+                (one for one in state.get("games") or []
+                 if str(one.get("id") or "") == game_id), {})
+            _rating_stars(state, client_for_target, game_id,
+                          _rating_of(game_id, held, identity, state.get("record") or {}))()
 
 
 def _running_jobs(state: dict[str, Any]) -> None:
@@ -1328,6 +1871,19 @@ def _running_jobs(state: dict[str, Any]) -> None:
 # is given, and a library is longer than a screen by design - the answer to a long list
 # is typing into it, not scrolling it.
 SHOWN_AT_ONCE = 40
+
+# The Games tab lists the target's games or its tables, as a list or as tiles. The choice
+# of tiles is the phone's, remembered per browser; a lens is for the visit.
+GAMES_LENS, TABLES_LENS = "games", "tables"
+LIST_VIEW, TILES_VIEW = "list", "tiles"
+TILES_KEY = "remote.tiles"
+
+
+def lens_of(state: dict[str, Any]) -> str:
+    """The lens in force. A target with no tables to list reads as games whatever was
+    chosen, because the switch back is drawn only where there are tables."""
+    return TABLES_LENS if state.get("lens") == TABLES_LENS and state.get("files") \
+        else GAMES_LENS
 
 
 def matching(games: list[dict[str, Any]], said: str) -> list[dict[str, Any]]:
@@ -1383,6 +1939,59 @@ def manual_collections(collections: list[dict[str, Any]]) -> list[str]:
             if str(one.get("type") or "") == "manual" and one.get("name")]
 
 
+def lens_items(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """What the Games tab lists before anything narrows it: the target's games, or its
+    tables.
+
+    A table is listed only where it can be started from here: its game is one the target
+    offers, it is not hidden, and it is not known to be unlaunchable.
+    """
+    games = state.get("games") or []
+    if lens_of(state) != TABLES_LENS:
+        return games
+    offered = {str(one.get("id") or "") for one in games}
+    return [one for one in state.get("files") or []
+            if str(one.get("game_id") or "") in offered and not one.get("hidden")
+            and one.get("launchable") is not False]
+
+
+def matching_files(files: list[dict[str, Any]], said: str) -> list[dict[str, Any]]:
+    """The tables a typed word finds: the game's name, maker and year, and which table
+    it is. Every word has to land somewhere, as `matching` has it."""
+    words = said.lower().split()
+    if not words:
+        return files
+    return [one for one in files
+            if all(word in " ".join(str(part or "") for part in (
+                one.get("game"), one.get("manufacturer"), one.get("year"),
+                game_tables.table_name(one))).lower() for word in words)]
+
+
+def narrowed_items(state: dict[str, Any], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`items` narrowed to what was typed and to the chosen collection."""
+    said = state.get("find") or ""
+    ids = state.get("collection_ids")
+    if lens_of(state) != TABLES_LENS:
+        return in_collection(matching(items, said), ids)
+    found = matching_files(items, said)
+    return found if ids is None else [one for one in found if one.get("game_id") in ids]
+
+
+def _art_kind() -> str:
+    return thumbnails.chosen(library_policy.kept_kinds()["media"])
+
+
+def _art_of(state: dict[str, Any], item: dict[str, Any]) -> str | None:
+    """The picture a list row shows, "" where it has none, None where the Media settings
+    draw no pictures and a row has no frame at all."""
+    art = state.get("art")
+    if art is None:
+        return None
+    if lens_of(state) == TABLES_LENS:
+        return on_target(state, thumbnails.address(item))
+    return on_target(state, art.get(str(item.get("id") or ""), ""))
+
+
 def _play(state: dict[str, Any],
           client_for_target: Callable[[], Any],
           redraw: Callable[[], None]) -> None:
@@ -1393,17 +2002,21 @@ def _play(state: dict[str, Any],
 
     Where the frontend is up, the collection is the one it is showing, both ways.
     """
+    chips: dict[str, Any] = {}
+
     # Not redraw(): a field rebuilt under the cursor drops the focus mid-word.
     async def typed(event: Any) -> None:
         state["find"] = str(event.value or "")
         listing.refill()
 
     @on_page
-    async def narrow(event: Any) -> None:
-        name = str(event.value or "")
+    async def narrow(name: str) -> None:
         # Taken before anything is awaited, so the frontend's own report of this switch
         # finds the phone already on it rather than switching it a second time.
         state["collection"] = name
+        for one, chip in chips.items():
+            chip.classes(add="remote-chip--on") if one == name \
+                else chip.classes(remove="remote-chip--on")
         showing = state.get("frontend")
         if mirroring(showing) and name != str((showing or {}).get("collection") or ""):
             try:
@@ -1420,19 +2033,42 @@ def _play(state: dict[str, Any],
         listing.refill()
 
     def draw_picker() -> None:
+        chips.clear()
         named = frontend_collections(state.get("collections") or [],
                                     state.get("collection") or "")
         if not named:
             return
-        dropdown.Select({"": t("manager.remote.all_games")} | {name: name for name in named},
-                        value=state.get("collection") or "", on_change=narrow,
-                        look=dropdown.OUTLINED).classes("w-full")
+        chosen = state.get("collection") or ""
+        with ui.row().classes("w-full items-center gap-2 no-wrap remote-chips"):
+            for name in ["", *named]:
+                chips[name] = panel.chip(
+                    name or t("manager.remote.all_games"), name == chosen,
+                    lambda _e=None, name=name: narrow(name),
+                    t("manager.remote.show_collection", name=name) if name
+                    else t("manager.remote.show_all_games"))
 
     def draw_listing() -> None:
-        _game_list(in_collection(matching(state.get("games") or [], state.get("find") or ""),
-                                 state.get("collection_ids")),
-                   state, client_for_target, redraw)
+        items = lens_items(state)
+        found = narrowed_items(state, items)
+        if found and len(found) != len(items):
+            ui.label(t("manager.remote.match_tables" if lens_of(state) == TABLES_LENS
+                       else "manager.remote.match_games",
+                       shown=len(found), count=len(items))).classes("remote-note px-3 pb-1")
+        _entry_list(found, state, client_for_target, redraw)
 
+    def draw_search() -> None:
+        tables_lens = lens_of(state) == TABLES_LENS
+        with ui.row().classes("w-full items-center gap-2 no-wrap"):
+            ui.input(placeholder=t("manager.remote.search_tables" if tables_lens
+                                   else "manager.remote.search_games",
+                                   count=len(lens_items(state))),
+                     value=state.get("find") or "", on_change=typed) \
+                .props("dense outlined clearable inputmode=search").classes("grow")
+            panel.segmented({LIST_VIEW: t("manager.remote.view_list"),
+                             TILES_VIEW: t("manager.remote.view_tiles")},
+                            TILES_VIEW if state.get("tiles") else LIST_VIEW, switch_view)
+
+    searching = panel.region(draw_search)
     picker = panel.region(draw_picker)
     listing = panel.region(draw_listing)
 
@@ -1440,41 +2076,63 @@ def _play(state: dict[str, Any],
         picker.refill()
         listing.refill()
 
+    def switch_lens(event: Any) -> None:
+        state["lens"] = str(event.value)
+        searching.refill()
+        relist()
+
+    def switch_view(event: Any) -> None:
+        state["tiles"] = event.value == TILES_VIEW
+        remembered.put(TILES_KEY, state["tiles"])
+        listing.refill()
+
     with ui.column().classes("w-full gap-2 p-3"):
-        ui.input(placeholder=t("manager.remote.find_game"), value=state.get("find") or "",
-                 on_change=typed) \
-            .props("dense outlined clearable inputmode=search").classes("w-full")
-        with ui.column().classes("w-full gap-0"):
-            picker()
+        if state.get("files"):
+            panel.segmented({GAMES_LENS: t("manager.section.games"),
+                             TABLES_LENS: t("manager.section.tables")},
+                            lens_of(state), switch_lens,
+                            glyphs=(icons.GAMES, icons.TABLES)) \
+                .props("spread").classes("w-full")
+        searching()
+        picker()
     with ui.column().classes("w-full gap-0"):
         listing()
     state["relist"] = relist
 
 
-def _game_list(found: list[dict[str, Any]], state: dict[str, Any],
-               client_for_target: Callable[[], Any], redraw: Callable[[], None]) -> None:
+def _entry_list(found: list[dict[str, Any]], state: dict[str, Any],
+                client_for_target: Callable[[], Any], redraw: Callable[[], None]) -> None:
     state["rows"] = {}
     if not found:
         return _nothing(t("manager.remote.nothing_name") if state.get("find")
                         else t("manager.remote.collection_empty"))
-    with ui.column().classes("w-full gap-0"):
-        for game in found[:SHOWN_AT_ONCE]:
-            _game_row(game, state, client_for_target, redraw)
+    tiles = bool(state.get("tiles"))
+    with ui.column().classes("w-full gap-0") as shown:
+        if state.get("look") is not None:
+            state["look"].apply(shown)
+        with ui.element("div").classes("remote-tiles w-full" if tiles else "w-full"):
+            for item in found[:SHOWN_AT_ONCE]:
+                _entry(item, state, client_for_target, redraw, tiles)
         left = len(found) - SHOWN_AT_ONCE
         if left > 0:
             # The count, not a "load more": what is wanted is one game, and typing two
             # more letters reaches it faster than paging to it does.
-            ui.label(t("manager.remote.search_more", left=(left))).classes("remote-note p-3")
+            ui.label(t("manager.remote.search_more", left=left)).classes("remote-note p-3")
 
 
-def _game_row(game: dict[str, Any], state: dict[str, Any], client_for_target: Callable[[], Any],
-              redraw: Callable[[], None]) -> None:
-    """One game. Where the frontend is up, a tap moves the wheel to it; a tap on the one
-    already there, or one the wheel refuses, opens it instead.
+def _entry(item: dict[str, Any], state: dict[str, Any], client_for_target: Callable[[], Any],
+           redraw: Callable[[], None], tiles: bool) -> None:
+    """One game, or one table, as a row or a tile. Where the frontend is up, a tap moves
+    the wheel to the game; a tap on the one already there, or one the wheel refuses, opens
+    it instead. The chevron always opens it.
 
     Never tap-to-launch. A mis-tap that opens a sheet costs a tap to undo; a mis-tap
     that starts a table takes the machine away from whoever is on it.
     """
+    by_table = lens_of(state) == TABLES_LENS
+    game = next((one for one in state.get("games") or []
+                 if one.get("id") == item.get("game_id")), item) if by_table else item
+    table = item if by_table else None
     game_id = str(game.get("id") or "")
 
     @on_page
@@ -1486,33 +2144,59 @@ def _game_row(game: dict[str, Any], state: dict[str, Any], client_for_target: Ca
                 return
             except Exception as exc:
                 logger.info("remote: the wheel did not move to %s: %s", game_id, exc)
-        _game_sheet(game, state, client_for_target, redraw)
+        _game_sheet(game, state, client_for_target, redraw, table)
+
+    def opened(_event: Any = None) -> None:
+        _game_sheet(game, state, client_for_target, redraw, table)
 
     here = game_id == wheel_id(state.get("frontend"))
-    with ui.row().on("click", tapped) \
-            .classes("w-full items-center gap-2 no-wrap remote-row"
-                     + (" remote-row--here" if here else "")) as row:
-        with ui.column().classes("grow min-w-0 gap-0"):
-            ui.label(str(game.get("name") or "")).classes("remote-row-name truncate")
-            made = game_tables.made(game)
-            if made:
-                ui.label(made).classes("remote-note truncate")
-        if (game.get("user") or {}).get("favorite"):
-            ui.icon("favorite").classes("remote-row-mark")
-    state["rows"][game_id] = row
+    picture = _art_of(state, item)
+    glyph = icons.TABLES if by_table else icons.GAMES
+    identity = state.get("identity")
+    if by_table:
+        rating = 0 if is_someone_else(identity) else int(item.get("rating") or 0)
+        line = game_tables.table_name(item) or game_tables.made(game)
+    else:
+        rating = _rating_of(game_id, game, identity, state.get("record") or {})
+        line = game_tables.made(game)
+    name = str(game.get("name") or "")
+    classes = ("remote-tile" if tiles else "w-full items-center gap-2 no-wrap remote-row") \
+        + (" remote-row--here" if here else "")
+    with (ui.column() if tiles else ui.row()).on("click", tapped).classes(classes) as row:
+        if picture is not None:
+            ui.html(thumbnails.frame_html(picture, glyph), sanitize=False, tag="span")
+        with ui.row().classes("w-full items-center gap-1 no-wrap") if tiles \
+                else nullcontext():
+            with ui.column().classes("grow min-w-0 gap-0"):
+                with ui.row().classes("w-full items-center gap-2 no-wrap min-w-0"):
+                    ui.label(name).classes("remote-row-name truncate")
+                    ui.label(t("manager.remote.row_on_wheel")).classes("remote-here-mark")
+                if line:
+                    ui.label(line).classes("remote-note truncate w-full")
+                if rating:
+                    stars.static(rating)
+            if (game.get("user") or {}).get("favorite"):
+                ui.icon("favorite").classes("remote-row-mark") \
+                    .tooltip(t("word.favorite")).props(
+                        f'aria-label="{html.escape(t("word.favorite"))}"')
+            panel.open_row(t("manager.remote.open_game"), opened)
+    state["rows"].setdefault(game_id, []).append(row)
 
 
-def _mark_here(rows: dict[str, Any], was: str, now: str) -> None:
+def _mark_here(rows: dict[str, list[Any]], was: str, now: str) -> None:
     """Move the wheel's mark between rows without rebuilding the list under a thumb."""
-    if was != now and was in rows:
-        rows[was].classes(remove="remote-row--here")
-    if now in rows:
-        rows[now].classes(add="remote-row--here")
+    if was != now:
+        for one in rows.get(was, []):
+            one.classes(remove="remote-row--here")
+    for one in rows.get(now, []):
+        one.classes(add="remote-row--here")
 
 
 def _game_sheet(game: dict[str, Any], state: dict[str, Any], client_for_target: Callable[[], Any],
-                redraw: Callable[[], None]) -> None:
+                redraw: Callable[[], None], table: dict[str, Any] | None = None) -> None:
     """One game, everything that can be done to it from here, and Launch at the foot.
+    From the Tables lens, `table` is the file the sheet was opened for, and the Launch
+    starts that one.
 
     A sheet from the bottom rather than a screen of its own: what is being decided is
     about the row you just touched, and pushing a screen would take the list away to
@@ -1524,6 +2208,8 @@ def _game_sheet(game: dict[str, Any], state: dict[str, Any], client_for_target: 
         made = game_tables.made(game)
         if made:
             ui.label(made).classes("remote-note")
+        if table is not None and game_tables.table_name(table):
+            ui.label(game_tables.table_name(table)).classes("remote-note")
         lacks = ui.label("").classes("remote-note")
         lacks.set_visibility(False)
         identity = state.get("identity")
@@ -1538,22 +2224,9 @@ def _game_sheet(game: dict[str, Any], state: dict[str, Any], client_for_target: 
                 return False
             return True
 
-        @on_page
-        async def rate(value: int) -> None:
-            try:
-                await _rate(client_for_target(), identity, str(game["id"]), value)
-            except Exception as exc:
-                ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
-                return
-            if someone_else:
-                state.setdefault("record", {}).setdefault(str(game["id"]), {})["rating"] = value
-            else:
-                game.setdefault("user", {})["rating"] = value
-            sheet.close()
-            redraw()
-
-        stars.draw(_rating_of(str(game["id"]), game, identity, state.get("record") or {}),
-                  rate)()
+        _rating_stars(state, client_for_target, str(game["id"]),
+                      _rating_of(str(game["id"]), game, identity, state.get("record") or {}),
+                      game)()
 
         if not someone_else:
             held = bool((game.get("user") or {}).get("favorite"))
@@ -1580,19 +2253,22 @@ def _game_sheet(game: dict[str, Any], state: dict[str, Any], client_for_target: 
 
         remote_record.sheet_entry(game, state, client_for_target, lacks, started)
         _launch_button(game, state, client_for_target, redraw,
-                       cls="remote-action remote-action--primary", then=sheet.close)
+                       cls="remote-action remote-action--primary", then=sheet.close,
+                       file=game_tables.native_key(table) if table else "")
     sheet.open()
 
 
 def _launch_button(game: dict[str, Any], state: dict[str, Any],
                    client_for_target: Callable[[], Any], redraw: Callable[[], None], *,
-                   cls: str, then: Callable[[], Any] = lambda: None) -> None:
-    """Launch, at the foot of the sheet and beside the game on the wheel alike. Once it
-    has started, Now is where the table is quit from."""
+                   cls: str, then: Callable[[], Any] = lambda: None, label: str = "",
+                   file: str = "") -> None:
+    """Launch, at the foot of the sheet and under the game on the wheel alike. Once it
+    has started, Now is where the table is quit from. `file` picks one of the game's
+    tables, and the default is what is started without it."""
     @on_page
     async def launch() -> None:
         try:
-            await run.io_bound(client_for_target().launch, game["id"])
+            await run.io_bound(client_for_target().launch, game["id"], file)
         except Exception as exc:
             ui.notify(t("manager.remote.launch_failed"), caption=why(exc), type="negative")
             return
@@ -1601,7 +2277,7 @@ def _launch_button(game: dict[str, Any], state: dict[str, Any],
         state["play"] = await offload.io(client_for_target().play_state)
         redraw()
 
-    ui.button(t("manager.remote.launch"), icon="play_arrow", on_click=launch) \
+    ui.button(label or t("manager.remote.launch"), icon="play_arrow", on_click=launch) \
         .props("no-caps unelevated color=primary").classes(cls)
 
 
@@ -1643,18 +2319,13 @@ BUTTON_WORDS = {
     "take_picture": t("input.take_picture.label"),
     "menu": t("manager.remote.menu"),
     "collection_menu": t("manager.remote.collections"),
-    "tutorial": t("word.tutorial"),
-    "exit": t("manager.remote.quit_vpinfe"),
 }
-
-# The four that keep going while a thumb is down. The same four core repeats, and for
-# the same reason: a hold means "keep going", and going is something only these do.
-HELD_ACTIONS = ("previous", "next", "page_previous", "page_next")
-HELD_WORDS = {action: t(f"input.{action}.label") for action in HELD_ACTIONS}
 
 # How often a held button says it is still held. A third of the time to live, so a
 # renewal has to be lost twice running before the install lets go.
 RENEW_MS = 500
+# How often a control held down is pressed again, for the ones that take repeated presses.
+REPEAT_MS = 200
 
 # Press and release from a thumb, and the renewal in between.
 #
@@ -1682,9 +2353,53 @@ if (!window.__vpinRemoteHold) {
     const el = target && target.closest ? target.closest('[data-hold-action]') : null;
     return el ? el.dataset.holdAction : '';
   };
+  // A table control held for as long as the thumb is on it: down, renewed, then up.
+  const kept = new Map();
+  const dropKept = (id) => {
+    const one = kept.get(id);
+    if (one === undefined) return;
+    clearInterval(one.timer);
+    kept.delete(id);
+    emitEvent('remote_control_up', {id});
+  };
+  const keep = (id, pointer) => {
+    if (kept.has(id)) return;
+    emitEvent('remote_control_down', {id});
+    // A key whose page has been redrawn under the thumb never hears the thumb lift, so
+    // each renewal checks that it is still there.
+    const timer = setInterval(() => {
+      if (!document.querySelector('[data-hold-control="' + id + '"]')) { dropKept(id); return; }
+      emitEvent('remote_control_down', {id});
+    }, %(renew)d);
+    kept.set(id, {timer, pointer});
+  };
+  const keptAt = (target) => {
+    const el = target && target.closest ? target.closest('[data-hold-control]') : null;
+    return el ? el.dataset.holdControl : '';
+  };
+  const repeating = new Map();
+  const stopRepeat = (id) => {
+    const timer = repeating.get(id);
+    if (timer === undefined) return;
+    clearInterval(timer);
+    repeating.delete(id);
+  };
+  const startRepeat = (id) => {
+    if (repeating.has(id)) return;
+    emitEvent('remote_control', {id});
+    repeating.set(id, setInterval(() => emitEvent('remote_control', {id}), %(repeat)d));
+  };
+  const controlAt = (target) => {
+    const el = target && target.closest ? target.closest('[data-repeat-control]') : null;
+    return el ? el.dataset.repeatControl : '';
+  };
   document.addEventListener('pointerdown', (e) => {
     const action = actionAt(e.target);
     if (action) { e.preventDefault(); takeHold(action); }
+    const control = controlAt(e.target);
+    if (control && e.button === 0) { e.preventDefault(); startRepeat(control); }
+    const key = keptAt(e.target);
+    if (key && e.button === 0) { e.preventDefault(); keep(key, e.pointerId); }
   });
   // Every way a thumb can stop being on the button, including sliding off it and the
   // browser taking the pointer away for a scroll. A release that is never sent is the
@@ -1694,31 +2409,101 @@ if (!window.__vpinRemoteHold) {
     document.addEventListener(name, (e) => {
       const action = actionAt(e.target);
       if (action) letGo(action);
+      const id = keptAt(e.target);
+      if (id) dropKept(id);
     });
+  }
+  // A mouse released off the key, or a touch the browser took away, lets go of the key
+  // that pointer was holding and no other: two thumbs hold two flippers.
+  for (const name of ['pointerup', 'pointercancel']) {
+    document.addEventListener(name, (e) => [...kept.entries()]
+      .filter(([, one]) => one.pointer === e.pointerId)
+      .forEach(([id]) => dropKept(id)));
+  }
+  // A repeating key stops on any release, wherever the pointer ended up: a mouse dragged
+  // off the key lets go over something else, and `pointerleave` does not bubble.
+  for (const name of ['pointerup', 'pointercancel']) {
+    document.addEventListener(name, () => [...repeating.keys()].forEach(stopRepeat));
   }
   // The page going away with a thumb down: a phone locking its screen is the common
   // one, and it is why the press expires at the other end as well.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) [...held.keys()].forEach(letGo);
+    if (document.hidden) {
+      [...held.keys()].forEach(letGo);
+      [...repeating.keys()].forEach(stopRepeat);
+      [...kept.keys()].forEach(dropKept);
+    }
   });
-  window.addEventListener('blur', () => [...held.keys()].forEach(letGo));
+  window.addEventListener('blur', () => {
+    [...held.keys()].forEach(letGo);
+    [...repeating.keys()].forEach(stopRepeat);
+    [...kept.keys()].forEach(dropKept);
+  });
 }
 """
 
 
-def _control(state: dict[str, Any],
-             client_for_target: Callable[[], Any],
-             redraw: Callable[[], None]) -> None:
+# Counts every `data-elapsed` label up from the seconds it was drawn with.
+_CLOCK_SCRIPT = """
+if (!window.__vpinRemoteClock) {
+  window.__vpinRemoteClock = true;
+  const two = (n) => String(n).padStart(2, '0');
+  const tick = () => document.querySelectorAll('[data-elapsed]').forEach((el) => {
+    if (!el.dataset.seen) el.dataset.seen = String(Date.now());
+    const n = Number(el.dataset.elapsed)
+      + Math.floor((Date.now() - Number(el.dataset.seen)) / 1000);
+    el.textContent = two(Math.floor(n / 3600)) + ':' + two(Math.floor(n % 3600 / 60))
+      + ':' + two(n % 60);
+  });
+  setInterval(tick, 250);
+}
+"""
+
+
+def _heart(state: dict[str, Any], game: dict[str, Any], client_for_target: Callable[[], Any],
+           refill: Callable[[], None]) -> Callable[[], None] | None:
+    """The Favorite control at the hero's corner, or None for a phone answering as someone
+    else: a favorite is the owner's."""
+    if is_someone_else(state.get("identity")):
+        return None
+    game_id = str(game.get("id") or "")
+    held = bool((game.get("user") or {}).get("favorite"))
+
+    @on_page
+    async def favor() -> None:
+        try:
+            await run.io_bound(client_for_target().set_favorite, game_id, not held)
+        except Exception as exc:
+            ui.notify(t("said.save_failed"), caption=why(exc), type="negative",
+                      position="top")
+            return
+        game.setdefault("user", {})["favorite"] = not held
+        refill()
+
+    def draw() -> None:
+        panel.icon_only("favorite" if held else "favorite_border", favor,
+                        hint=t("manager.remote.remove_favorite" if held else "word.favorite")) \
+            .classes("remote-hero-heart" + (" remote-hero-heart--on" if held else ""))
+
+    return draw
+
+
+def _wheel(state: dict[str, Any],
+           client_for_target: Callable[[], Any],
+           redraw: Callable[[], None]) -> None:
     """Drive the frontend from here.
 
     Not the table. In-game input is VPX's own and reaches it as keystrokes; what these
-    buttons produce is an action on the install's bus, addressed at the machine the
-    header names. Keeping the two apart is what stops a press meaning one thing on the
-    wheel and another inside a game.
+    keys produce is an action on the install's bus, addressed at the machine the header
+    names. Keeping the two apart is what stops a press meaning one thing on the wheel
+    and another inside a game.
+
+    The game the frontend is showing is the hero, with Launch under it, and it follows the
+    frontend's own changes without the keys below it being drawn again.
     """
     target = state["target"]
     if str(target.get("kind") or "") == device_registry.KIND_VPX_MOBILE:
-        # Said rather than shown as dead buttons: this is a real target and it really
+        # Said rather than shown as dead keys: this is a real target and it really
         # can be played on, which is a different thing from being driveable.
         return _nothing(t("manager.remote.cannot_drive",
                 target_name=(target_name(target))))
@@ -1726,22 +2511,54 @@ def _control(state: dict[str, Any],
     play = state.get("play") or {}
     if play.get("launching"):
         # Honest, and not a guess: the frontend stops listening for the length of a
-        # launch, so every button here would do nothing and report success.
+        # launch, so every key here would do nothing and report success.
         return _playing_instead(play, state, client_for_target, redraw)
     if frontend_closed(state.get("frontend")):
         # The same reason: a press goes to the windows alone, so with none up every
-        # button here reports success and nothing hears it.
-        return _nothing(t("manager.remote.frontend_closed"))
+        # key here reports success and nothing hears it.
+        return _closed_wheel(state, client_for_target, redraw)
 
-    with ui.column().classes("w-full items-center gap-4 p-3"):
-        _pad(client_for_target)
-        with ui.column().classes("w-full gap-2"):
-            for action in ("back", "menu", "collection_menu", "tutorial"):
-                _tap_button(action, client_for_target)
-        # Apart from the rest and in the danger color: it ends the thing every other
-        # button on this screen is for.
-        if not acting.play_only():
-            _tap_button("exit", client_for_target, danger=True)
+    def draw_head() -> None:
+        game = on_the_wheel(state.get("frontend"), state.get("games") or [],
+                            state["strays"])
+        if not game:
+            ui.label(t("manager.remote.wheel_empty")).classes("remote-empty text-center")
+            return
+        game_id = str(game["id"])
+
+        def open_sheet() -> None:
+            _game_sheet(game, state, client_for_target, redraw)
+
+        _hero(state, game_id, str(game.get("name") or ""), game_tables.made(game),
+              badge=t("manager.remote.wheel_title"), open_sheet=open_sheet,
+              heart=_heart(state, game, client_for_target, lambda: head.refill()))
+        with ui.row().classes("w-full justify-center"):
+            _rating_stars(state, client_for_target, game_id,
+                          _rating_of(game_id, game, state.get("identity"),
+                                     state.get("record") or {}),
+                          game)()
+        _launch_button(game, state, client_for_target, redraw,
+                       cls="remote-action remote-action--primary")
+
+    head = panel.region(draw_head)
+    state["refill_wheel"] = head.refill
+    with ui.column().classes("w-full gap-3 p-3"):
+        head()
+        _keys(client_for_target)
+
+
+def _closed_wheel(state: dict[str, Any], client_for_target: Callable[[], Any],
+                  redraw: Callable[[], None]) -> None:
+    """No frontend to drive, and the way to what still works without one."""
+    def open_games() -> None:
+        state["screen"] = GAMES
+        redraw()
+
+    with ui.column().classes("w-full items-center justify-center grow gap-3 p-6"):
+        ui.label(t("manager.remote.frontend_closed")).classes("remote-empty text-center")
+        _open_frontend_offer(state, client_for_target)
+        panel.remote_action(t("manager.remote.open_games"), open_games, icon=icons.GAMES,
+                            hint=t("manager.remote.open_games.help"))
 
 
 def _playing_instead(play: dict[str, Any], state: dict[str, Any],
@@ -1752,53 +2569,42 @@ def _playing_instead(play: dict[str, Any], state: dict[str, Any],
                  note=t("manager.remote.wheel_busy"))
 
 
-def _pad(client_for_target: Callable[[], Any]) -> None:
-    """The four directions and select, laid out as they move.
+def _keys(client_for_target: Callable[[], Any]) -> None:
+    """The wheel's moves, laid out as they act: a page either way over a step either way,
+    with Select between the steps. The four that move are held keys, so a thumb that stays
+    down keeps the wheel going - the curve for that lives in the install, so it feels the
+    same from a thumb as it does from a flipper or a key."""
+    with ui.column().classes("w-full gap-2 remote-keys"):
+        with ui.element("div").classes("remote-keys-pages"):
+            panel.remote_key(t("manager.remote.page_back"), icon=verbs.PAGE_EARLIER,
+                             hint=t("manager.remote.page_back.help"), size="page",
+                             hold="page_previous")
+            panel.remote_key(t("manager.remote.page_forward"), icon=verbs.PAGE_LATER,
+                             hint=t("manager.remote.page_forward.help"), size="page",
+                             hold="page_next", icon_after=True)
+        with ui.element("div").classes("remote-keys-steps"):
+            panel.remote_key(t("input.previous.label"), icon=verbs.EARLIER,
+                             hint=t("manager.remote.previous.help"), hold="previous")
+            _tap_button("select", client_for_target, icon=verbs.PICK,
+                        hint=t("manager.remote.select.help"), size="select")
+            panel.remote_key(t("input.next.label"), icon=verbs.LATER,
+                             hint=t("manager.remote.next.help"), hold="next")
+        ui.label(t("manager.remote.hold_hint")).classes("remote-hint")
+    with ui.element("div").classes("remote-keys-tap"):
+        _tap_button("back", client_for_target, icon=verbs.BACK,
+                    hint=t("manager.remote.back.help"))
+        _tap_button("menu", client_for_target, icon=verbs.OPEN_MENU,
+                    hint=t("manager.remote.menu.help"))
+        _tap_button("collection_menu", client_for_target, icon=verbs.OPEN_COLLECTIONS,
+                    hint=t("manager.remote.collections.help"))
 
-    A cross rather than a list, because what these do is spatial - left and right step
-    the wheel, up and down jump it a page - and a list of five words makes the reader
-    translate a direction into a name every time.
-    """
-    with ui.element("div").classes("remote-pad"):
-        _held_button("page_previous", "keyboard_arrow_up", "remote-pad-up")
-        _held_button("previous", "keyboard_arrow_left", "remote-pad-left")
-        _tap_button("select", client_for_target, cls="remote-pad-mid", icon_only=True)
-        _held_button("next", "keyboard_arrow_right", "remote-pad-right")
-        _held_button("page_next", "keyboard_arrow_down", "remote-pad-down")
 
-
-def _held_button(action: str, icon: str, cls: str) -> None:
-    """A direction. Held down, it keeps going - the curve for that lives in the install,
-    so it feels the same from a thumb as it does from a flipper or a key."""
-    ui.button(icon=icon).props("flat round") \
-        .classes(f"remote-pad-key {cls}") \
-        .props(f'data-hold-action={action}') \
-        .tooltip(HELD_WORDS[action])
-
-
-def _tap_button(action: str, client_for_target: Callable[[], Any], *, danger: bool = False,
-                cls: str = "", icon_only: bool = False, icon: str = "",
-                primary: bool = False) -> None:
+def _tap_button(action: str, client_for_target: Callable[[], Any], *, icon: str, hint: str,
+                size: str = "tap") -> None:
     async def tap() -> None:
         await _say(client_for_target, action, "tap")
 
-    said = BUTTON_WORDS.get(action, action)
-    button = ui.button(on_click=tap, icon=icon or None)
-    if icon_only:
-        button.props("flat round").classes(f"remote-pad-key {cls}").tooltip(said)
-        with button:
-            ui.icon("radio_button_checked")
-        return
-    if primary:
-        button.props("no-caps unelevated color=primary") \
-            .classes("remote-action remote-action--primary").set_text(said)
-        return
-    # Flat either way: filled is what the one action a screen is *for* wears, and on
-    # Control that is the pad. A destructive button drawn louder than everything
-    # around it is the one a thumb finds by accident.
-    button.props("no-caps flat") \
-        .classes("remote-action" + (" remote-action--danger" if danger else "")) \
-        .set_text(said)
+    panel.remote_key(BUTTON_WORDS.get(action, action), tap, icon=icon, hint=hint, size=size)
 
 
 async def _say(client_for_target: Callable[[], Any], action: str, phase: str) -> None:
@@ -1887,21 +2693,26 @@ def _join(state: dict[str, Any], client_for_target: Callable[[], Any],
 
 
 def where_to_find_it() -> str:
-    """The address to hand somebody holding a phone.
+    """What to read out to somebody holding a phone: the device's name once it has
+    answered, its IP address until then. Never loopback; empty while this install answers
+    only itself."""
+    return _with_pass(lambda port: addresses.best(port, "/remote"))
 
-    Not the one the Manager was reached on: an install is usually administered from the
-    machine itself, so that address is loopback and loopback is the one address certain
-    not to work from anywhere else. Carries the Remote pass, so a scan signs the phone in.
-    Empty while this install answers only itself, since no phone can reach it.
-    """
+
+def where_to_scan() -> str:
+    """The same address as a QR code carries it: the IP address, which a phone resolves
+    without help where it may or may not resolve the name."""
+    return _with_pass(lambda port: addresses.to_scan(addresses.urls(port, "/remote")))
+
+
+def _with_pass(choose: Callable[[int], str]) -> str:
     from common.config.paths import get_ini_config
-    from common.host.addresses import best
     from common.security import access_keys
 
     network = serving.network(get_ini_config())
     if not serving.reachable_from_elsewhere(network.http_bind):
         return ""
-    address = best(network.http_port, "/remote")
+    address = choose(network.http_port)
     if not address:
         return ""
     return f"{address}?{access_keys.PASS_PARAM}={access_keys.remote_pass()[1]}"
@@ -1935,16 +2746,23 @@ def invite(labels: list) -> None:
         show()
 
     def show() -> None:
-        said = where_to_find_it()
+        waiting = addresses.resolving()
         with frame.made() as sheet, ui.card().classes("manager-confirm items-center"):
-            ui.label(t("manager.remote.vpinfe_phone")).classes("manager-confirm-title")
-            art = qr.svg(said)
+            ui.label(t("manager.remote.sheet_title")).classes("manager-confirm-title")
+            art = qr.svg(where_to_scan())
             if art:
                 ui.html(art).classes("manager-qr")
             # Always, not only when the drawing failed: a camera is not the only way
             # somebody gets this, and an address nobody can read out is one they cannot
             # type either.
-            ui.label(said).classes("manager-help text-center")
+            readable = ui.label(where_to_find_it()).classes("manager-help text-center")
+            if waiting:
+                def name_arrived() -> None:
+                    readable.set_text(where_to_find_it())
+                    if not addresses.resolving():
+                        arrival.deactivate()
+
+                arrival = ui.timer(_NAME_POLL_SECONDS, name_arrived)
             with ui.row().classes("justify-center w-full"):
                 panel.action(t("manager.remote.new_code"), lambda: renew(sheet),
                              icon=verbs.REFRESH, hint=t("manager.remote.new_code_hint"))()
@@ -1955,4 +2773,4 @@ def invite(labels: list) -> None:
     with ui.row().classes("items-center justify-center gap-2 w-full no-wrap "
                           "manager-invite").on("click", show):
         ui.icon("qr_code_2").classes("shrink-0")
-        labels.append(ui.label(t("manager.remote.phone")).classes("text-xs"))
+        labels.append(ui.label(t("manager.remote.mobile_device")).classes("text-xs"))

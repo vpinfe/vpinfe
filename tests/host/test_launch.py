@@ -262,6 +262,48 @@ class PauseTests(LaunchTests):
         self.assertFalse(launch_state.toggle_pause(), "nothing runs once it has exited")
 
 
+class ControlsTests(LaunchTests):
+    """What the app lets be pressed is held for the table's life, and a recording has none."""
+
+    def _held_while_running(self, **run) -> list:
+        held: list = []
+
+        def lines():
+            yield "Startup done\n"
+            held.append(launch_state.state_and_controls()[1])
+
+        def popen(cmd, **k):
+            running = _FakePopen()
+            running.stdout = lines()
+            return running
+
+        with mock.patch("apps.vpx.pause.VPXPause.key", return_value="KeyP"):
+            self._run(popen=popen, **run)
+        return held
+
+    def test_the_apps_controls_are_held_while_the_table_runs(self) -> None:
+        (running,) = self._held_while_running()
+
+        self.assertEqual(running.app, "vpx")
+        self.assertIn("credit_1", [one.id for one in running.offered])
+        self.assertEqual(running.key("pause"), "KeyP")
+        self.assertIsNone(launch_state.state_and_controls()[1], "released once it has exited")
+
+    def test_a_recording_has_none(self) -> None:
+        self.assertEqual(self._held_while_running(source=launch_state.SOURCE_CAPTURE), [None])
+
+    def test_they_are_held_before_the_table_process_exists(self) -> None:
+        before_start: list = []
+
+        def popen(cmd, **k):
+            before_start.append(launch_state.state_and_controls()[1])
+            return _FakePopen()
+
+        self._run(popen=popen)
+
+        self.assertIsNotNone(before_start[0])
+
+
 class PlayDataTests(LaunchTests):
     """The gap that made consolidating worth doing: only the wheel used to do this."""
 

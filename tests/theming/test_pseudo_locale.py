@@ -267,8 +267,12 @@ class FrontendPseudoLocaleTests(unittest.TestCase):
                       "holds, so each test opens them on an instance no other test has "
                       "driven.")
 
+    # The Manager's address is this machine's own names, not words the catalog owns.
     READ = ("(() => { const f = document.getElementById('%s');"
-            " return f && f.contentDocument ? f.contentDocument.body.innerText : ''; })()")
+            " if (!f || !f.contentDocument) return '';"
+            " const address = f.contentDocument.querySelector('.menu-qr-address');"
+            " if (address) address.style.display = 'none';"
+            " return f.contentDocument.body.innerText; })()")
 
     def test_the_menus_say_nothing_in_english(self) -> None:
         if not chromium_path():

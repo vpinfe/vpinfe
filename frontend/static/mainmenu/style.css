@@ -118,9 +118,11 @@ ul.menu.choosing li.menu-item:not(.record-choice):not(.player-choice) {
   left: 50%;
   bottom: 7%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: 92%;
   display: flex;
   align-items: stretch;
-  gap: clamp(8px, 1.6vmin, 24px);
+  gap: clamp(16px, 4vmin, 64px);
   z-index: 1;
 }
 
@@ -128,8 +130,8 @@ ul.menu.choosing li.menu-item:not(.record-choice):not(.player-choice) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(5px, 1vmin, 14px);
-  padding: clamp(7px, 1.2vmin, 18px) clamp(10px, 1.8vmin, 24px);
+  gap: clamp(6px, 1.2vmin, 16px);
+  padding: clamp(9px, 1.6vmin, 22px) clamp(12px, 2.2vmin, 30px);
   border-radius: clamp(6px, 1.2vmin, 16px);
   background: linear-gradient(180deg, rgba(15, 19, 28, 0.94) 0%, rgba(8, 10, 16, 0.94) 100%);
   border: 0.16vh solid rgba(255, 216, 77, 0.28);
@@ -140,8 +142,8 @@ ul.menu.choosing li.menu-item:not(.record-choice):not(.player-choice) {
 
 .menu-qr-code {
   flex: 0 0 auto;
-  width: clamp(66px, 10vmin, 150px);
-  height: clamp(66px, 10vmin, 150px);
+  width: clamp(76px, 11.5vmin, 172px);
+  height: clamp(76px, 11.5vmin, 172px);
   padding: clamp(5px, 0.8vmin, 10px);
   background: #fff;
   border-radius: 0.7vh;
@@ -155,13 +157,33 @@ ul.menu.choosing li.menu-item:not(.record-choice):not(.player-choice) {
 }
 
 .menu-qr-label {
-  font-size: clamp(12px, 1.8vh, 26px);
+  font-size: clamp(14px, 2.6vh, 38px);
   font-weight: bold;
-  letter-spacing: 0.12vh;
-  text-transform: uppercase;
+  white-space: nowrap;
   color: #ffe17c;
   text-shadow: 0 0.15vh 0.35vh rgba(0,0,0,0.75);
   text-align: center;
+}
+
+#menu-qr-panels[hidden],
+.menu-qr-panel[hidden] {
+  display: none;
+}
+
+.menu-qr-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.9vmin, 26px);
+}
+
+.menu-qr-address {
+  font-size: clamp(13px, 2.1vh, 30px);
+  line-height: 1.35;
+  text-align: left;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #d8dce6;
+  text-shadow: 0 0.15vh 0.35vh rgba(0,0,0,0.75);
 }
 
 li.menu-item {

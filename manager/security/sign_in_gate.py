@@ -34,11 +34,13 @@ from manager.kit import appearance
 
 PAGE = "/signin"
 REMOTE_PAGE = "/remote"
+REMOTE_MANIFEST = "/remote.webmanifest"
 PICTURE_SIZE = 96
 # Everything the Remote loads besides its own page: the UI framework's scripts and socket,
-# the shared stylesheet and the icon. A Play sign-in is held to these.
+# the shared stylesheet, the icon and the manifest a Home Screen app is installed from.
+# A Play sign-in is held to these.
 REMOTE_REACHES = ("/_nicegui/", "/_nicegui_ws/", appearance.BASE_MOUNT + "/")
-REMOTE_FILES = frozenset({REMOTE_PAGE, "/favicon.ico"})
+REMOTE_FILES = frozenset({REMOTE_PAGE, REMOTE_MANIFEST, "/favicon.ico"})
 
 
 def next_page(raw: str) -> str:

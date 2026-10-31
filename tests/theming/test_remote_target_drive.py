@@ -29,6 +29,15 @@ PLAYED = {"LastRun": "2026-09-01T10:00:00Z", "StartCount": 1}
 INDEX_OF = ("[...document.querySelectorAll(%s)].findIndex(el => el.innerText.split('\\n')"
             ".map(line => line.trim()).includes(%s))")
 SHEET_OPEN = "!!document.querySelector('.remote-sheet')"
+# Where the header's pieces sit: the picker's box, the dots' glyph and the window's width.
+HEADER = ("(() => { const box = el => el.getBoundingClientRect();"
+          " const dots = box(document.querySelector('.remote-dots i, .remote-dots .q-icon'));"
+          " const pick = box(document.querySelector('.remote-target'));"
+          " return {width: innerWidth, pickLeft: pick.left, pickRight: pick.right,"
+          " dotsRight: dots.right}; })()")
+MENU = ("(() => { const menu = document.querySelector('.q-menu').getBoundingClientRect();"
+        " const pick = document.querySelector('.remote-target').getBoundingClientRect();"
+        " return {menuTop: menu.top, pickBottom: pick.bottom}; })()")
 
 
 def _call(instance: LiveInstance, method: str, path: str, body: dict | None = None):
@@ -98,6 +107,16 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
                     return
                 raise AssertionError(f"no sheet opened for {name}")
 
+            async def rated(root: Path, name: str, want: int) -> None:
+                """The write has landed, and the sheet it was made on is still open."""
+                for _attempt in range(100):
+                    if _user(root, name).get("Rating") == want:
+                        break
+                    await asyncio.sleep(0.1)
+                else:
+                    raise AssertionError(f"{name} was not rated {want}: {_user(root, name)}")
+                await browser.wait_for(SHEET_OPEN)
+
             async def sheet_closed() -> None:
                 try:
                     await browser.wait_for("!document.querySelector('.remote-sheet')")
@@ -109,17 +128,20 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
                                          f"B's Solo: {_user(b_root, 'Solo')}") from None
                 await walk.drawn()
 
-            await walk.visit("/remote?screen=play")
+            await walk.visit("/remote?screen=games")
+            seen["header"] = await browser.evaluate(HEADER)
             await browser.click(".remote-target")
+            await browser.wait_for("!!document.querySelector('.q-menu .q-item')")
+            seen["menu"] = await browser.evaluate(MENU)
             await click_text(".q-menu .q-item", TARGET)
             await browser.wait_for("document.body.innerText.includes('Solo')")
 
             await open_sheet("Solo")
             await browser.click(".remote-sheet .manager-star", nth=3)
-            await sheet_closed()
+            await rated(b_root, "Solo", 4)
             seen["solo rated"] = _user(b_root, "Solo").get("Rating")
 
-            await open_sheet("Solo")
+            # A rating leaves the sheet where it is.
             await click_text(".remote-sheet button", t("word.favorite"))
             await sheet_closed()
             seen["solo favorite"] = _user(b_root, "Solo").get("Favorite")
@@ -134,6 +156,8 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
 
             await open_sheet("Shared")
             await browser.click(".remote-sheet .manager-star", nth=1)
+            await rated(b_root, "Shared", 2)
+            await browser.escape()
             await sheet_closed()
             seen["shared on b"] = _user(b_root, "Shared").get("Rating")
             seen["shared on a"] = _user(a_root, "Shared").get("Rating")
@@ -150,6 +174,16 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
 
     def test_a_rating_on_the_sheet_lands_on_the_target(self) -> None:
         self.assertEqual(self.seen["solo rated"], 4)
+
+    def test_the_picker_fills_the_header_and_the_dots_sit_in_its_corner(self) -> None:
+        header = self.seen["header"]
+        self.assertGreater(header["pickRight"] - header["pickLeft"], header["width"] * 0.5,
+                           header)
+        self.assertGreater(header["dotsRight"], header["width"] - 24, header)
+
+    def test_the_picker_opens_under_its_box(self) -> None:
+        menu = self.seen["menu"]
+        self.assertLess(abs(menu["menuTop"] - menu["pickBottom"]), 12, menu)
 
     def test_a_favorite_lands_on_the_target(self) -> None:
         self.assertTrue(self.seen["solo favorite"])

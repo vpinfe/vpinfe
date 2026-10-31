@@ -640,7 +640,7 @@ until then the chain reports `required: null`.
   that runs on it.
 - **Theme** — a player-facing frontend package.
 - **Device** - a thing on the network: a VPinFE install, whatever it is switched on for, or
-  a phone running VPX Mobile, which never runs our code. Not "something that can play": an
+  a mobile device running VPX Mobile, which never runs our code. Not "something that can play": an
   install with only `library` on is a device and plays nothing, so a picker that targets
   play filters on the `frontend` feature and keeps the word. On screen the machine VPinFE
   runs on is *this device*, and the one the reader is on is *your device*.
@@ -1104,7 +1104,7 @@ no icon, and on an icon name `verbs.py` does not declare.
   page already shows the result.
 
 `tests/invariants/test_dialogs_are_drawn_by_the_frame.py` fails on any `ui.dialog()`
-outside `manager/kit/dialog.py`. The enlarged picture in `mediaview.py` and the phone
+outside `manager/kit/dialog.py`. The enlarged picture in `mediaview.py` and the mobile device
 remote's sheets are the exceptions, because neither asks anything.
 
 ### A wizard is one size on every step

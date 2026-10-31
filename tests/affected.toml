@@ -60,6 +60,8 @@ tests = [
   "tests/theming/test_nav_rail_width_drive.py",
   "tests/theming/test_panel_pages_stack_drive.py",
   "tests/theming/test_pseudo_locale.py",
+  "tests/theming/test_remote_stars_drive.py",
+  "tests/theming/test_support_dialog_drive.py",
 ]
 
 # Library: the grids, panels, collections and their rows.
@@ -171,7 +173,11 @@ tests = [
 paths = ["manager/remote/*"]
 tests = [
   "tests/theming/test_join_redirect_drive.py",
+  "tests/theming/test_remote_controls_drive.py",
+  "tests/theming/test_remote_games_drive.py",
   "tests/theming/test_remote_players_drive.py",
+  "tests/theming/test_remote_shell_drive.py",
+  "tests/theming/test_remote_stars_drive.py",
   "tests/theming/test_remote_target_drive.py",
 ]
 

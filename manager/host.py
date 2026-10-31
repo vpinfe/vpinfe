@@ -13,6 +13,7 @@ from nicegui import app, ui
 from common import i18n
 from common.config.config_access import NetworkConfig
 from common.devices import install_presence, serving
+from common.host import addresses
 from common.i18n import t
 from common.security import encrypted_connections, machine_secrets
 
@@ -98,6 +99,7 @@ def _run_ui() -> None:
     logger.info("Starting the web server on host=%s port=%s", _ui_bind, _ui_port)
     logger.info("Expected URLs: %s", ", ".join(_server_urls(_ui_port)))
     app.on_startup(_say_ready)
+    app.on_startup(addresses.warm)
     ghost_timers.install()
     # The language is set here, not on the @ui.page decorators: `resolve_language()` reads
     # app.config per request. Labels built at import still need a restart to change.

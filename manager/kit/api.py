@@ -1904,6 +1904,20 @@ class ApiClient:
             body["ttl_ms"] = ttl_ms
         return self._post("/input/actions", body)
 
+    def table_controls(self) -> dict:
+        """What can be pressed on the table that is running, in the install's words. Its
+        `controls` is empty where nothing plays or the app offers none."""
+        return self._get("/play/controls")
+
+    def press_control(self, control_id: str, *, source: str = "remote", phase: str = "tap",
+                      ttl_ms: int | None = None) -> dict:
+        """Press one of them: a `tap`, or on a holdable one a `press` renewed until a
+        `release`. `pressed` is false where the key could not be sent."""
+        body: dict = {"source": source, "phase": phase}
+        if ttl_ms is not None:
+            body["ttl_ms"] = ttl_ms
+        return self._post(f"/play/controls/{quote(control_id, safe='')}", body)
+
     def play_state(self) -> dict:
         """What the play host is doing. `launching` stays true for as long as a table
         is up, not just while it is starting."""

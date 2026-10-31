@@ -14,7 +14,7 @@ from tests.support import trees
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = json.loads((ROOT / "common/i18n/catalogs/en.json").read_text(encoding="utf-8"))
 
-NOT_A_NAME = {"len", "count", "the_count", "lower", "latest", "kind", "who"}
+NOT_A_NAME = {"len", "count", "the_count", "lower", "latest", "kind", "who", "label"}
 SLOT = re.compile(r"(.?)\{(\w+)\}(.?)")
 
 

@@ -42,7 +42,10 @@ def perform_action(background: BackgroundTasks, request: Request,
     from common.runtime import lifecycle
 
     scope, action = action_ops.check(payload.scope, payload.action)
-    if (scope, action) != (lifecycle.TABLE, lifecycle.STOP):
+    identity = getattr(request.state, "identity", None)
+    opens_frontend = (scope, action) == (lifecycle.FRONTEND, lifecycle.START)
+    if not (opens_frontend and identity is not None and identity.can(scopes.FRONTEND_OPEN)) \
+            and (scope, action) != (lifecycle.TABLE, lifecycle.STOP):
         require(request, scopes.SYSTEM_ADMIN)
     reason = payload.reason.strip() or "asked over the API"
     body = {"scope": scope, "action": action,

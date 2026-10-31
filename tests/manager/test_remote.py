@@ -13,6 +13,7 @@ from unittest import mock
 from nicegui import ui
 
 from httpapi import events
+from manager.kit import game_tables
 from manager.kit.api import _lines, read_frames
 from manager.remote import remote
 from tests.support import trees
@@ -206,18 +207,35 @@ class FollowsTheFrontendTests(unittest.TestCase):
     def test_the_game_on_the_wheel_is_the_one_the_list_holds(self) -> None:
         games = [{"id": "g1", "name": "Medieval Madness", "year": "1997"}]
 
-        self.assertEqual(remote.on_the_wheel(self.SHOWING, games), games[0])
+        self.assertEqual(remote.on_the_wheel(self.SHOWING, games, {}), games[0])
 
     def test_a_game_the_list_does_not_hold_is_still_named(self) -> None:
         """The wheel can sit on a game the phone has filtered out; the strip still
         says what the screen shows."""
-        self.assertEqual(remote.on_the_wheel(self.SHOWING, []),
+        self.assertEqual(remote.on_the_wheel(self.SHOWING, [], {}),
                          {"id": "g1", "name": "Medieval Madness"})
+
+    def test_a_game_the_list_does_not_hold_keeps_what_is_saved_on_it(self) -> None:
+        """A favorite or a rating saved on the row has to be on the row that is drawn
+        next, or the heart goes dark the moment the hero is drawn again."""
+        strays: dict[str, dict] = {}
+        remote.on_the_wheel(self.SHOWING, [], strays)["user"] = {"favorite": True}
+
+        again = remote.on_the_wheel(self.SHOWING, [], strays)
+
+        self.assertEqual(again["user"], {"favorite": True})
+
+    def test_a_stray_is_named_as_the_frontend_names_it_now(self) -> None:
+        strays: dict[str, dict] = {}
+        remote.on_the_wheel(self.SHOWING, [], strays)
+        renamed = self.SHOWING | {"game": {"id": "g1", "name": "MM"}}
+
+        self.assertEqual(remote.on_the_wheel(renamed, [], strays)["name"], "MM")
 
     def test_an_empty_wheel_has_nothing_on_it(self) -> None:
         empty = self.SHOWING | {"game": None}
 
-        self.assertEqual(remote.on_the_wheel(empty, [{"id": "g1"}]), {})
+        self.assertEqual(remote.on_the_wheel(empty, [{"id": "g1"}], {}), {})
         self.assertEqual(remote.wheel_id(empty), "")
         self.assertEqual(remote.wheel_id(None), "")
 
@@ -614,10 +632,276 @@ class PlayRecordedTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.get("result"), before)
 
     async def test_now_open_redraws_but_another_screen_does_not(self) -> None:
-        state: dict[str, Any] = {"identity": None, "screen": remote.PLAY}
+        state: dict[str, Any] = {"identity": None, "screen": remote.GAMES}
 
         await self._fire(state, {"up": [_player("kid")], "private": False,
                                  "new_entries": [], "game": {"id": "g1", "name": "Alpha"}})
 
         self.assertIsNotNone(state.get("result"))
         self.redraw.assert_not_called()
+
+
+class OpeningScreenTests(unittest.TestCase):
+    def _screen(self, *, frontend: dict | None, play: dict | None = None,
+                target: dict | None = None) -> str:
+        return remote._opening_screen({"frontend": frontend, "play": play or {},
+                                       "target": target or {}})
+
+    def test_a_running_frontend_opens_on_the_wheel(self) -> None:
+        self.assertEqual(self._screen(frontend={"running": True}), remote.WHEEL)
+
+    def test_a_table_up_opens_on_now(self) -> None:
+        self.assertEqual(self._screen(frontend={"running": True}, play={"launching": True}),
+                         remote.NOW)
+
+    def test_a_closed_frontend_opens_on_the_games(self) -> None:
+        self.assertEqual(self._screen(frontend={"running": False}), remote.GAMES)
+
+    def test_a_target_that_runs_no_vpinfe_opens_on_the_games(self) -> None:
+        mobile = {"kind": remote.device_registry.KIND_VPX_MOBILE}
+        self.assertEqual(self._screen(frontend=None, target=mobile), remote.GAMES)
+
+    def test_the_tabs_are_the_wheel_the_games_and_what_is_running(self) -> None:
+        self.assertEqual([key for key, *_ in remote.SCREENS],
+                         [remote.WHEEL, remote.GAMES, remote.NOW])
+
+
+class DotsSheetTests(unittest.TestCase):
+    ACTIONS = [{"scope": "vpinfe", "action": "restart", "available": True},
+               {"scope": "vpinfe", "action": "stop", "available": False},
+               {"scope": "system", "action": "restart", "available": True}]
+
+    def _offered(self, *, play_only: bool, pairs: tuple) -> list:
+        with mock.patch.object(remote.acting, "play_only", return_value=play_only):
+            return remote._offered_pairs({"actions": self.ACTIONS}, pairs)
+
+    def test_only_the_actions_the_target_lists_as_ready_are_offered(self) -> None:
+        self.assertEqual(self._offered(play_only=False, pairs=remote._VPINFE_PAIRS),
+                         [("vpinfe", "restart")])
+        self.assertEqual(self._offered(play_only=False, pairs=remote._DEVICE_PAIRS),
+                         [("system", "restart")])
+
+    def test_a_remote_pass_is_offered_none_of_them(self) -> None:
+        self.assertEqual(self._offered(play_only=True, pairs=remote._VPINFE_PAIRS), [])
+
+    def test_a_target_that_lists_nothing_offers_nothing(self) -> None:
+        with mock.patch.object(remote.acting, "play_only", return_value=False):
+            self.assertEqual(remote._offered_pairs({}, remote._DEVICE_PAIRS), [])
+
+
+class SessionClockTests(unittest.TestCase):
+    def test_a_stamp_counts_up_from_when_it_began(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        began = (datetime.now(UTC) - timedelta(seconds=75)).isoformat()
+        self.assertIn(remote._elapsed_seconds(began), (75, 76))
+
+    def test_a_stamp_that_cannot_be_read_gives_no_clock(self) -> None:
+        self.assertIsNone(remote._elapsed_seconds("not a time"))
+        self.assertEqual(remote._when("not a time"), "")
+
+    def test_hours_minutes_and_seconds_are_two_digits_each(self) -> None:
+        self.assertEqual(remote._hms(3725), "01:02:05")
+
+    def test_how_long_ago_picks_one_unit(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        def ago(**span: int) -> str:
+            return remote._when((datetime.now(UTC) - timedelta(**span)).isoformat())
+
+        self.assertEqual(ago(seconds=10), "Just now")
+        self.assertEqual(ago(minutes=5), "5 minutes ago")
+        self.assertEqual(ago(hours=1), "1 hour ago")
+        self.assertEqual(ago(days=3), "3 days ago")
+
+
+class TablesLensTests(unittest.TestCase):
+    """Games | Tables: one row per game, or one per file."""
+
+    GAMES = [{"id": "a", "name": "Attack from Mars", "manufacturer": "Bally", "year": "1995"},
+             {"id": "b", "name": "Medieval Madness", "manufacturer": "Williams", "year": "1997"}]
+    FILES: list[dict[str, Any]] = [
+        {"id": "a1", "game_id": "a", "game": "Attack from Mars", "filename": "a.vpx",
+         "manufacturer": "Bally", "year": "1995", "version": "1.0"},
+        {"id": "a2", "game_id": "a", "game": "Attack from Mars", "filename": "a-mod.vpx",
+         "manufacturer": "Bally", "year": "1995", "version": "2.0"},
+        {"id": "b1", "game_id": "b", "game": "Medieval Madness", "filename": "b.vpx",
+         "manufacturer": "Williams", "year": "1997", "hidden": True},
+        {"id": "z1", "game_id": "z", "game": "Not Offered", "filename": "z.vpx"},
+        {"id": "a3", "game_id": "a", "game": "Attack from Mars", "filename": "a-bad.vpx",
+         "launchable": False},
+    ]
+
+    def _state(self, lens: str, **rest: Any) -> dict[str, Any]:
+        return {"games": self.GAMES, "files": self.FILES, "lens": lens} | rest
+
+    def test_games_lists_the_games(self) -> None:
+        self.assertEqual(remote.lens_items(self._state(remote.GAMES_LENS)), self.GAMES)
+
+    def test_tables_lists_only_files_that_can_be_started_from_here(self) -> None:
+        """Hidden, unlaunchable and not-offered files are not choices a phone can act on."""
+        found = remote.lens_items(self._state(remote.TABLES_LENS))
+
+        self.assertEqual([one["id"] for one in found], ["a1", "a2"])
+
+    def test_tables_search_reads_the_version_and_author_that_name_a_table(self) -> None:
+        found = remote.matching_files(self.FILES, "2.0")
+
+        self.assertEqual([one["id"] for one in found], ["a2"])
+
+    def test_tables_search_narrows_with_every_word(self) -> None:
+        found = remote.matching_files(self.FILES, "attack 2.0")
+
+        self.assertEqual([one["id"] for one in found], ["a2"])
+        self.assertEqual(remote.matching_files(self.FILES, "williams 2.0"), [])
+
+    def test_a_collection_narrows_tables_by_their_game(self) -> None:
+        state = self._state(remote.TABLES_LENS, collection_ids={"b"})
+        items = remote.lens_items(self._state(remote.TABLES_LENS))
+
+        self.assertEqual(remote.narrowed_items(state, items), [])
+        state["collection_ids"] = {"a"}
+        self.assertEqual([one["id"] for one in remote.narrowed_items(state, items)],
+                         ["a1", "a2"])
+
+    def test_games_are_narrowed_by_the_word_and_the_collection(self) -> None:
+        state = self._state(remote.GAMES_LENS, find="bally", collection_ids={"a", "b"})
+
+        self.assertEqual([one["id"] for one in remote.narrowed_items(state, self.GAMES)], ["a"])
+
+
+class ReachTests(unittest.TestCase):
+    """Where the phone loads a picture from."""
+
+    def test_this_install_answers_on_the_pages_own_origin(self) -> None:
+        state = {"target": _device("here"), "local_device_id": "here"}
+
+        self.assertEqual(remote.on_target(state, "/api/v1/x"), "/api/v1/x")
+
+    def test_another_install_is_reached_on_its_own_address(self) -> None:
+        state = {"target": _device("far", address="10.0.0.9", port=8080),
+                 "local_device_id": "here"}
+
+        self.assertEqual(remote.on_target(state, "/api/v1/x"), "http://10.0.0.9:8080/api/v1/x")
+
+    def test_nothing_to_load_stays_nothing(self) -> None:
+        state = {"target": _device("far"), "local_device_id": "here"}
+
+        self.assertEqual(remote.on_target(state, ""), "")
+
+    def test_a_row_draws_no_frame_when_the_media_settings_draw_no_pictures(self) -> None:
+        state = {"art": None, "target": _device("here"), "local_device_id": "here"}
+
+        self.assertIsNone(remote._art_of(state, {"id": "a"}))
+
+    def test_a_game_without_art_has_an_empty_frame(self) -> None:
+        state = {"art": {"a": "/api/v1/games/a/media/backglass"}, "target": _device("here"),
+                 "local_device_id": "here"}
+
+        self.assertEqual(remote._art_of(state, {"id": "a"}), "/api/v1/games/a/media/backglass")
+        self.assertEqual(remote._art_of(state, {"id": "b"}), "")
+
+    def test_a_table_row_uses_its_own_picture(self) -> None:
+        row = {"id": "a1", "game_id": "a", "media_kind": "backglass", "media_version": "7"}
+        state = {"art": {}, "lens": remote.TABLES_LENS, "files": [row],
+                 "target": _device("here"), "local_device_id": "here"}
+
+        self.assertIn("/games/a/tables/a1/media/backglass", remote._art_of(state, row) or "")
+        self.assertEqual(remote._art_of(state, {"id": "a2", "game_id": "a"}), "")
+
+
+class LensInForceTests(unittest.TestCase):
+    def test_a_target_with_no_tables_reads_as_games_whatever_was_chosen(self) -> None:
+        games = [{"id": "a"}]
+
+        self.assertEqual(remote.lens_of({"lens": remote.TABLES_LENS, "files": []}),
+                         remote.GAMES_LENS)
+        self.assertEqual(remote.lens_items({"lens": remote.TABLES_LENS, "files": [],
+                                            "games": games}), games)
+
+    def test_a_target_with_tables_reads_as_chosen(self) -> None:
+        held = {"files": [{"id": "a1"}]}
+
+        self.assertEqual(remote.lens_of({**held, "lens": remote.TABLES_LENS}),
+                         remote.TABLES_LENS)
+        self.assertEqual(remote.lens_of({**held, "lens": remote.GAMES_LENS}),
+                         remote.GAMES_LENS)
+
+
+class TableKeyTests(unittest.TestCase):
+    """What a list row sends to launch itself: the key the install resolves it by."""
+
+    def test_a_file_in_the_folder_is_its_name(self) -> None:
+        self.assertEqual(game_tables.native_key({"filename": "a.vpx", "form": "contained"}),
+                         "a.vpx")
+
+    def test_a_referenced_file_is_its_stored_path(self) -> None:
+        self.assertEqual(game_tables.native_key(
+            {"filename": "a.vpx", "reference": "/elsewhere/a.vpx", "form": "referenced"}),
+            "/elsewhere/a.vpx")
+
+    def test_a_keyed_table_is_its_app_and_key(self) -> None:
+        self.assertEqual(game_tables.native_key(
+            {"filename": "", "app": "fpx", "key": "cow", "form": "keyed"}), "fpx:cow")
+
+
+class _Row:
+    def __init__(self) -> None:
+        self.here = False
+
+    def classes(self, add: str = "", remove: str = "") -> None:
+        if add:
+            self.here = True
+        if remove:
+            self.here = False
+
+
+class WheelMarkTests(unittest.TestCase):
+    def test_the_mark_moves_to_every_row_of_the_game_the_wheel_is_on(self) -> None:
+        """A game can be listed twice in the Tables lens, and both rows are the wheel's."""
+        old, first, second = _Row(), _Row(), _Row()
+        old.here = True
+        rows = {"a": [old], "b": [first, second]}
+
+        remote._mark_here(rows, "a", "b")
+
+        self.assertFalse(old.here)
+        self.assertTrue(first.here and second.here)
+
+    def test_a_game_the_list_does_not_hold_marks_nothing(self) -> None:
+        row = _Row()
+        row.here = True
+
+        remote._mark_here({"a": [row]}, "a", "zzz")
+
+        self.assertFalse(row.here)
+
+
+class HomeScreenTests(unittest.TestCase):
+    def test_the_manifest_opens_the_remote_without_the_browsers_bars(self) -> None:
+        body = json.loads(bytes(remote.remote_manifest().body))
+
+        self.assertEqual(body["display"], "standalone")
+        self.assertEqual(body["start_url"], "/remote")
+        self.assertEqual(body["name"], "VPinFE Remote")
+
+    def test_every_icon_the_manifest_names_is_a_file_of_the_size_it_says(self) -> None:
+        from PIL import Image
+
+        from manager.kit import appearance
+
+        for icon in json.loads(bytes(remote.remote_manifest().body))["icons"]:
+            with self.subTest(icon=icon["src"]):
+                path = appearance.BASE_CSS.parent / icon["src"].removeprefix(
+                    appearance.BASE_MOUNT + "/")
+                with Image.open(path) as picture:
+                    self.assertEqual(f"{picture.width}x{picture.height}", icon["sizes"])
+
+    def test_the_page_head_links_the_manifest_and_an_icon_for_the_home_screen(self) -> None:
+        head = remote._home_screen_head()
+
+        self.assertIn('rel="manifest" href="/remote.webmanifest" crossorigin="use-credentials"',
+                      head)
+        self.assertIn('rel="apple-touch-icon" href="/manager-static/img/vpinfe-remote-180.png"',
+                      head)
+        self.assertIn('name="apple-mobile-web-app-capable" content="yes"', head)

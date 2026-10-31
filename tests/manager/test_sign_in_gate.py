@@ -41,8 +41,9 @@ async def _socket(websocket):
 def _app() -> Starlette:
     app = Starlette(routes=[
         Route("/", _page), Route("/manager", _page), Route("/remote", _page),
-        Route("/favicon.ico", _page), Route("/_nicegui/x.js", _page),
-        Route("/manager-static/x.css", _page), Route("/api/v1/health", _page),
+        Route("/favicon.ico", _page), Route(sign_in_gate.REMOTE_MANIFEST, _page),
+        Route("/_nicegui/x.js", _page), Route("/manager-static/x.css", _page),
+        Route("/api/v1/health", _page),
         Route("/api/v1", _page), Route(sign_in_gate.PAGE, sign_in_gate.sign_in_page),
         Route("/media_games/x.png", _page, methods=["GET", "POST"]),
         WebSocketRoute("/_nicegui_ws/ws", _socket),
@@ -178,7 +179,8 @@ class ARemoteSignIn(Gate):
     def test_the_remote_and_what_it_loads_are_unchanged(self) -> None:
         client = self.remote()
 
-        for path in ("/remote", "/favicon.ico", "/_nicegui/x.js", "/manager-static/x.css"):
+        for path in ("/remote", "/favicon.ico", sign_in_gate.REMOTE_MANIFEST, "/_nicegui/x.js",
+                     "/manager-static/x.css"):
             with self.subTest(path=path):
                 self.assertEqual(client.get(path, headers=HTML).status_code, 200)
 

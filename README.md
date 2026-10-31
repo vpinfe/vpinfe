@@ -76,7 +76,7 @@ Anytime you want to get back to the Manager, look in the terminal for the web ad
 VPinFE ready to go on http://localhost:8001, and http://192.168.1.228:8001
 ```
 
-Put that address in a browser, on this device or any other on your network.
+Put that address in a browser, on this device or any other on your network.  The frontend's Menu (**M**, or Button 9 on a controller) shows it too, with a QR code to scan from a mobile device.
 Your game folders should follow the [VPinball table organization standard](https://github.com/vpinball/vpinball/blob/master/docs/FileLayout.md).  [Running VPinFE](docs/running.md) shows what a game folder holds and how media and matching work.
 
 ## Where VPinFE keeps what you set

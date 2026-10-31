@@ -160,7 +160,7 @@ def declare_core() -> None:
     capabilities.declare(capabilities.Capability(
         name="devices",
         feature=capabilities.install_identity.DEVICES,
-        description="The other VPinFE installs and phones on your network",
+        description="The other VPinFE installs and mobile devices on your network",
     ))
     capabilities.declare(capabilities.Capability(
         name="logs",

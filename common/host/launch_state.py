@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from common import events
+from common.apps.contract import Control
 
 logger = logging.getLogger("vpinfe.common.host.launch_state")
 
@@ -48,6 +49,17 @@ class LaunchState:
                 "game_id": self.game_id, "started_at": self.started_at}
 
 
+@dataclass(frozen=True)
+class RunningControls:
+    """What the running table's app lets be pressed. `key` and `why_not` read the settings
+    file at each call, so a change made while the table runs is the one that counts."""
+
+    app: str
+    offered: tuple[Control, ...]
+    key: Callable[[str], str]
+    why_not: Callable[[str], str]
+
+
 _state = LaunchState()
 
 # The running table's process, so something other than the thread that launched it can
@@ -56,6 +68,9 @@ _state = LaunchState()
 _process: subprocess.Popen | None = None
 # Presses the running table's own pause key; True where a key was pressed.
 _pause: Callable[[], bool] | None = None
+# What presses one of the running table's controls, and what it offers; None for a launch
+# whose app declares none and for a recording.
+_controls: RunningControls | None = None
 _paused_changed = threading.Condition()
 
 
@@ -90,12 +105,17 @@ def _replace(new_state: LaunchState) -> LaunchState:
 
 
 def set_launching(game_name: str | None, *, source: str,
-                  game_id: str | None = None) -> LaunchState:
+                  game_id: str | None = None,
+                  controls: RunningControls | None = None) -> LaunchState:
     """Record that a launch is starting, for which game, and who asked.
 
     `source` is required rather than defaulted: a caller that does not say is a
-    caller the frontend cannot tell apart from itself.
+    caller the frontend cannot tell apart from itself. `controls` are in place before the
+    state is announced, so a client that asks when it hears of the launch is answered.
     """
+    global _controls
+    with _lock:
+        _controls = controls
     return _replace(LaunchState(launching=True, game_name=game_name, source=source,
                                 game_id=game_id,
                                 started_at=datetime.now(UTC).isoformat()))
@@ -103,11 +123,16 @@ def set_launching(game_name: str | None, *, source: str,
 
 def clear() -> LaunchState:
     """Record that nothing is launching. Safe to call when nothing was."""
-    global _process, _pause
+    global _process, _pause, _controls, _state
     with _lock:
         _process = None
         _pause = None
-    cleared = _replace(LaunchState())
+        _controls = None
+        changed = _state != LaunchState()
+        _state = LaunchState()
+    cleared = LaunchState()
+    if changed:
+        events.emit(events.PLAY_STATE_CHANGED, state=cleared.as_dict())
     with _paused_changed:
         _paused_changed.notify_all()
     return cleared
@@ -177,3 +202,10 @@ def stop(timeout: float = 5.0) -> bool:
         except subprocess.TimeoutExpired:
             logger.error("The table's process survived a kill")
     return True
+
+
+def state_and_controls() -> tuple[LaunchState, RunningControls | None]:
+    """The launch state and the running table's controls, read together: None where none
+    runs or its app declares none."""
+    with _lock:
+        return _state, _controls

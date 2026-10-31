@@ -21,12 +21,19 @@
     </ul>
     <p class="menu-note" id="menu-note" hidden></p>
     <div id="menu-qr-panels" aria-live="polite" hidden>
+      <div class="menu-qr-panel" id="manager-qr-panel" hidden>
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.manager">Manager</div>
+        <div class="menu-qr-row">
+          <div class="menu-qr-code" id="manager-qr-code" aria-label="QR code for the Manager"></div>
+          <div class="menu-qr-address" id="manager-address"></div>
+        </div>
+      </div>
       <div class="menu-qr-panel" id="remote-qr-panel">
-        <div class="menu-qr-label" data-i18n="frontend.mainmenu.remote">Remote</div>
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.remote">Remote Control</div>
         <div class="menu-qr-code" id="remote-qr-code" aria-label="QR code for the remote control"></div>
       </div>
       <div class="menu-qr-panel" id="join-qr-panel">
-        <div class="menu-qr-label" data-i18n="frontend.mainmenu.join">Join</div>
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.join">Join as Player</div>
         <div class="menu-qr-code" id="join-qr-code" aria-label="QR code for the Remote's Join screen"></div>
       </div>
     </div>

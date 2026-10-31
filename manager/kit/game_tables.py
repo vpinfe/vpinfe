@@ -51,7 +51,9 @@ def native_key(table: dict[str, Any] | None) -> str:
     key = str(held.get("key") or "").strip()
     if key:
         return f"{str(held.get('app') or '').strip()}:{key}"
-    reference = str((held.get("reference") or {}).get("path") or "").strip()
+    stored = held.get("reference") or {}
+    # A list row carries the stored path as a string; one game's table, the record.
+    reference = str(stored if isinstance(stored, str) else stored.get("path") or "").strip()
     return reference or str(held.get("filename") or "")
 
 

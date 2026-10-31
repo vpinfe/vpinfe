@@ -467,6 +467,67 @@ class Buttons(Protocol):
     def keys(self, settings: Mapping[str, Any]) -> Mapping[str, tuple[str, ...]]: ...
 
 
+# --- table controls -----------------------------------------------------------------
+
+CONTROLS_PLAY = "play"
+CONTROLS_GAME = "game"
+CONTROLS_COINS = "coins"
+CONTROLS_SOUND = "sound"
+CONTROLS_NUDGE = "nudge"
+CONTROLS_MENU = "menu"
+CONTROLS_SERVICE = "service"
+CONTROLS_DEBUG = "debug"
+
+SIDE_LEFT = "left"
+SIDE_RIGHT = "right"
+
+# Pausing and resuming are the same press, so one id covers both.
+PAUSE = "pause"
+
+# Why a control has no key to press: the app's settings map it to nothing, or to
+# something that is not one key.
+UNMAPPED = "unmapped"
+NOT_A_KEY = "not_a_key"
+
+
+@dataclass(frozen=True)
+class Control:
+    """One thing a person can press on a running entry from somewhere else.
+
+    `id` is the app's own word and travels over the API; its label is the install's
+    catalog `controls.<id>`. `hold_ms` is how long the install holds the key for a tap,
+    never the caller. `holdable` lets a caller keep the key down for as long as it says,
+    with a press and a release. `side` is `SIDE_LEFT` or `SIDE_RIGHT` for a control that
+    belongs to one hand, and "" for the middle; a caller lays a group out by it when any
+    of the group's controls has one. `when_mapped` leaves the control out of what is
+    listed, and out of the notes, where the app has no key one press can send for it;
+    pressing it is still refused with the reason.
+    """
+
+    id: str
+    group: str
+    hold_ms: int = 0
+    when_mapped: bool = False
+    holdable: bool = False
+    side: str = ""
+
+
+@runtime_checkable
+class Controls(Protocol):
+    """What the app lets be pressed on a running entry, and the key behind each.
+
+    `key` answers "" where there is none, and `why_not` then says which of `UNMAPPED` or
+    `NOT_A_KEY`. A control is looked up at the press, so a settings file changed while the
+    entry runs is the one that counts. No key code ever leaves an app.
+    """
+
+    def offered(self) -> tuple[Control, ...]: ...
+
+    def key(self, control_id: str, settings: Mapping[str, Any]) -> str: ...
+
+    def why_not(self, control_id: str, settings: Mapping[str, Any]) -> str: ...
+
+
 # --- the app ----------------------------------------------------------------------
 
 
@@ -492,3 +553,4 @@ class App:
     capture: Capture | None = None
     pause: Pause | None = None
     buttons: Buttons | None = None
+    controls: Controls | None = None

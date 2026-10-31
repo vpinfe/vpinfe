@@ -51,7 +51,7 @@ GRID_OF = {
 
 # Direct `ui.button(` calls outside `panel.py`. A count that only comes down: lower it
 # when one moves to a constructor, never raise it.
-BUTTON_CEILING = 60
+BUTTON_CEILING = 57
 
 
 # Grids that have not yet reached the selection rules in `docs/conventions.md`. A page
@@ -79,8 +79,8 @@ def _is_ui_call(node: ast.AST, attr: str) -> bool:
 
 # What a section's builder draws, read from `ui.` and `panel.` calls. A button is a verb; a
 # layout call holds either; anything else is something to read or set.
-_BUTTONS = {"action", "icon_action", "remote_action", "browse_button", "link", "link_out",
-            "out", "menu_button", "verb_menu", "subject_menu", "button"}
+_BUTTONS = {"action", "icon_action", "remote_action", "remote_key", "browse_button", "link",
+            "link_out", "out", "menu_button", "verb_menu", "subject_menu", "button"}
 _LAYOUT = {"row", "column", "element", "space", "separator", "tooltip", "menu", "item",
            "card", "timer", "notify", "navigate", "run_javascript", "add_head_html",
            "add_css", "expansion", "tabs", "tab", "tab_panels", "tab_panel", "dialog"}

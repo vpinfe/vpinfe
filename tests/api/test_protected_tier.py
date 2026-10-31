@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from starlette.testclient import TestClient
 
 import httpapi
+from common.runtime import lifecycle
 from common.security import api_tokens, sign_in
 from httpapi import auth, protected_settings, scopes
 
@@ -124,6 +125,15 @@ class WhatEachCallerHoldsTests(TierCase):
         identity = self.identify(cookies={auth.COOKIE: secret})
 
         self.assertEqual(identity.scopes, frozenset({scopes.INSTANCE_READ}))
+
+    def test_opening_the_frontend_is_an_owner_scope_a_token_or_a_pass_never_holds(self) -> None:
+        cookies, _ = self.owner_cookie()
+        self.clock.advance(sign_in.CONFIRM_SECONDS + 1)
+        secret, _ = self.tokens.make("home", api_tokens.FULL)
+
+        self.assertTrue(self.identify(cookies=cookies).can(scopes.FRONTEND_OPEN))
+        self.assertFalse(self.identify(cookies=self.remote_cookie()).can(scopes.FRONTEND_OPEN))
+        self.assertFalse(self.identify(authorization="Bearer " + secret).can(scopes.FRONTEND_OPEN))
 
     def test_guests_are_joined_at_play(self) -> None:
         self.assertLessEqual({scopes.PLAY_PLAYERS, scopes.PLAY_RATE}, scopes.PLAY)
@@ -324,6 +334,53 @@ class AProtectedRouteOverTheWireTests(TierCase):
 
                 self.assertEqual(response.status_code, 403)
                 self.assertEqual(self.reason(response), auth.CONFIRM_NEEDED)
+
+
+class OpeningTheFrontendOverTheWireTests(TierCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(lifecycle.reset_for_tests)
+        self.opened: list = []
+        lifecycle.register_performer(lifecycle.FRONTEND, lifecycle.START, self.opened.append)
+        lifecycle.register_performer(lifecycle.FRONTEND, lifecycle.RESTART, self.opened.append)
+
+    def ask(self, scope, action, *, cookies=None, **headers):
+        client = TestClient(httpapi.create_api_app(), raise_server_exceptions=False,
+                            client=("192.168.1.50", 50000), base_url="http://192.168.1.50")
+        for name, value in (cookies or {}).items():
+            client.cookies.set(name, value)
+        return client.post("/actions", json={"scope": scope, "action": action},
+                           headers=headers)
+
+    def test_an_owner_opens_it_without_a_confirm(self) -> None:
+        cookies, _ = self.owner_cookie()
+        self.clock.advance(sign_in.CONFIRM_SECONDS + 1)
+
+        response = self.ask(lifecycle.FRONTEND, lifecycle.START, cookies=cookies)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(self.opened), 1)
+
+    def test_an_owner_without_a_confirm_still_cannot_restart_the_frontend(self) -> None:
+        cookies, _ = self.owner_cookie()
+        self.clock.advance(sign_in.CONFIRM_SECONDS + 1)
+
+        response = self.ask(lifecycle.FRONTEND, lifecycle.RESTART, cookies=cookies)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"]["details"]["reason"], auth.CONFIRM_NEEDED)
+        self.assertEqual(self.opened, [])
+
+    def test_a_remote_pass_and_a_full_control_token_cannot_open_it(self) -> None:
+        secret, _ = self.tokens.make("home", api_tokens.FULL)
+
+        for caller, kwargs in (("a Remote pass", {"cookies": self.remote_cookie()}),
+                               ("a token", {"authorization": "Bearer " + secret})):
+            with self.subTest(caller=caller):
+                response = self.ask(lifecycle.FRONTEND, lifecycle.START, **kwargs)
+
+                self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.opened, [])
 
 
 class TheTokenStoreTests(TierCase):

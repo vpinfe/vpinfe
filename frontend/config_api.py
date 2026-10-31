@@ -85,11 +85,6 @@ def _build_remote_qr_svg(url: str) -> str:
     return stream.getvalue().decode("utf-8")
 
 
-def _preferred_url(urls: list[str]) -> str:
-    return next((url for url in urls if "://localhost:" not in url.lower()),
-                urls[0] if urls else "")
-
-
 def get_splashscreen_enabled(config: ConfigSource) -> str:
     return "true" if SettingsConfig.from_config(config).splashscreen else "false"
 
@@ -149,7 +144,7 @@ def get_http_port(config: ConfigSource) -> int:
 
 def get_remote_link(config: ConfigSource) -> dict[str, Any]:
     urls = _remote_urls(config)
-    preferred_url = _preferred_url(urls)
+    preferred_url = addresses.to_scan(urls)
     return {
         "url": preferred_url,
         "urls": urls,
@@ -157,10 +152,29 @@ def get_remote_link(config: ConfigSource) -> dict[str, Any]:
     }
 
 
+def get_manager_link(config: ConfigSource) -> dict[str, Any]:
+    """Where the Manager is from another device, for the main menu to show and scan.
+
+    Empty while this install answers only itself. The Manager asks for its own sign-in, so
+    unlike the Remote's addresses these carry no pass.
+    """
+    network = serving.network(config)
+    resolving = addresses.resolving()
+    urls = (addresses.urls(network.http_port, "/manager")
+            if serving.reachable_from_elsewhere(network.http_bind) else [])
+    preferred_url = addresses.to_scan(urls)
+    return {
+        "url": preferred_url,
+        "urls": urls,
+        "qr_svg": _build_remote_qr_svg(preferred_url) if preferred_url else "",
+        "resolving": bool(urls) and resolving,
+    }
+
+
 def get_vpinplay_multi_link(config: ConfigSource) -> dict[str, Any]:
     """The main menu's second QR: the Remote's Join screen."""
     urls = [f"{url}&screen=join" for url in _remote_urls(config)]
-    preferred_url = _preferred_url(urls)
+    preferred_url = addresses.to_scan(urls)
     return {
         "url": preferred_url,
         "urls": urls,

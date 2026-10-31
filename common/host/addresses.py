@@ -12,12 +12,18 @@ led with it would be a list whose first answer is wrong for the reader holding a
 This machine's name leads when it resolves to one of this machine's own addresses, and
 the address follows it. A name that does not resolve at all is listed after the address; a
 name that resolves to another machine is left out, along with that machine's address.
+
+Nothing here waits on the network. A `.local` name that has not answered yet is absent from
+the list, so the address leads, and it joins the list when it answers.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
+import threading
+import time
+from urllib.parse import urlsplit
 
 from common.security import encrypted_connections
 
@@ -62,6 +68,9 @@ def hosts() -> list[str]:
     person recognizes and it keeps working when the lease changes, but a name that
     points somewhere else would send them to the wrong machine, so it is left out. The
     routed address follows, and is the lead when there is no such name.
+
+    `<name>.local` takes the name's place while this machine resolves it to itself: a
+    phone resolves that through mDNS where it cannot resolve the plain name.
     """
     found: list[str] = []
     seen: set[str] = set()
@@ -76,13 +85,17 @@ def hosts() -> list[str]:
     name = _hostname()
     resolved = _resolved(name) if name else []
     ours = bool(name) and _is_this_machine(resolved, routed)
-    if ours:
+    mdns = _mdns_name(name)
+    mdns_ours = bool(mdns) and _is_this_machine(_resolved(mdns), routed)
+    if mdns_ours:
+        add(mdns)
+    elif ours:
         add(name)
     add(routed)
     if ours:
         for address in resolved:
             add(address)
-    elif name and routed and not resolved:
+    elif name and routed and not resolved and not mdns_ours:
         add(name)
     add("localhost")
     return found
@@ -127,6 +140,11 @@ def _hostname() -> str:
     return "" if name.lower() in {"localhost", "ip6-localhost"} else name
 
 
+def _mdns_name(name: str) -> str:
+    first = name.split(".")[0]
+    return "" if not first or name.lower().endswith(".local") else f"{first}.local"
+
+
 def _is_this_machine(resolved: list[str], routed: str) -> bool:
     """Whether any of these is an address on one of this machine's own interfaces."""
     return bool(set(resolved) & ({routed} | _interface_ipv4s()))
@@ -147,6 +165,128 @@ def _resolved(name: str) -> list[str]:
     Never raises: a machine whose own name does not resolve is common enough - it is
     what a fresh container does - and it must not take the rest of the list with it.
     """
+    if name.lower().endswith(".local"):
+        return _resolved_by_mdns(name)
+    return _lookup(name)
+
+
+# mDNS leaves a machine that does not answer for itself waiting five seconds, and the
+# addresses are asked while a page is built. A `.local` name is therefore never waited
+# for: the answer held so far is returned at once, none until the first one comes, and a
+# held answer older than this is replaced by a lookup that runs beside the page.
+_MDNS_HOLD_SECONDS = 30.0
+_NETWORK_WATCH_SECONDS = 10.0
+_mdns_lock = threading.Lock()
+_mdns_held: dict[str, tuple[float, list[str]]] = {}
+_mdns_asking: set[str] = set()
+_mdns_generation = 0
+_watching = False
+
+
+def _resolved_by_mdns(name: str) -> list[str]:
+    """The addresses held for a `.local` name, whatever their age, without waiting.
+
+    An answer past its hold, or none yet, starts one lookup in the background; the page
+    that asked is built with what is held. A lookup that was running when `forget()` was
+    called stores nothing: it was asked on the network that has gone.
+    """
+    key = name.lower()
+    with _mdns_lock:
+        held = _mdns_held.get(key)
+        stale = not held or time.monotonic() - held[0] >= _MDNS_HOLD_SECONDS
+        if not stale or key in _mdns_asking:
+            return held[1] if held else []
+        _mdns_asking.add(key)
+        generation = _mdns_generation
+
+    def ask() -> None:
+        found = _lookup(name)
+        with _mdns_lock:
+            if generation == _mdns_generation:
+                _mdns_held[key] = (time.monotonic(), found)
+                _mdns_asking.discard(key)
+
+    threading.Thread(target=ask, daemon=True, name="mdns-lookup").start()
+    return held[1] if held else []
+
+
+def _mdns_target() -> str:
+    """The `.local` name that stands for this machine, or "" where it has none."""
+    name = _hostname()
+    return name if name.lower().endswith(".local") else _mdns_name(name)
+
+
+def resolving() -> bool:
+    """Whether this machine's `.local` name is still waiting for its first answer.
+
+    True means the list is showing the address only because the name has not answered
+    yet, so a screen drawn from it can ask again shortly and show the name when it comes.
+    A screen reads this before it builds the list, so an answer that lands between the
+    two is caught by the next ask.
+    """
+    target = _mdns_target()
+    if not target:
+        return False
+    with _mdns_lock:
+        return target.lower() not in _mdns_held
+
+
+def warm() -> None:
+    """Start asking for this machine's `.local` name, and keep asking when the network
+    changes. Runs once; a second call does nothing."""
+    global _watching
+    with _mdns_lock:
+        if _watching:
+            return
+        _watching = True
+    target = _mdns_target()
+    if target:
+        _resolved_by_mdns(target)
+    threading.Thread(target=_watch_network, daemon=True, name="mdns-watch").start()
+
+
+def _watch_network() -> None:
+    """Forget the held answers when the routed address changes: they were taken on the
+    old network, and a name that points at the old address is not this machine's now."""
+    routed = primary_ipv4()
+    while True:
+        time.sleep(_NETWORK_WATCH_SECONDS)
+        now = primary_ipv4()
+        if now == routed:
+            continue
+        routed = now
+        forget()
+        target = _mdns_target()
+        if target:
+            _resolved_by_mdns(target)
+
+
+def forget() -> None:
+    """Ask the `.local` names again at the next lookup."""
+    global _mdns_generation
+    with _mdns_lock:
+        _mdns_generation += 1
+        _mdns_held.clear()
+        _mdns_asking.clear()
+
+
+def to_scan(urls: list[str]) -> str:
+    """The address to put in a QR code: a device's IP address, because a phone resolves
+    that without help while a name may or may not resolve.
+
+    An HTTPS address is used only while the certificate covers it, so a scan never opens
+    on a warning. Otherwise the first address that is not loopback.
+    """
+    vouched = served_names()
+    for url in urls:
+        host = urlsplit(url).hostname or ""
+        if usable_ipv4(host) and (not vouched or host in vouched):
+            return url
+    return next((url for url in urls if "://localhost:" not in url.lower()),
+                urls[0] if urls else "")
+
+
+def _lookup(name: str) -> list[str]:
     try:
         found = socket.getaddrinfo(name, None, socket.AF_INET)
     except Exception:

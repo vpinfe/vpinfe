@@ -12,6 +12,7 @@ from .buttons import VPXButtons
 from .capability import VPXCapability
 from .capture import VPXCapture
 from .config import VPXConfig
+from .controls import VPXControls
 from .launch import VPXLaunch
 from .pause import VPXPause
 
@@ -48,4 +49,5 @@ VPX = App(
     capture=VPXCapture(),
     pause=VPXPause(),
     buttons=VPXButtons(),
+    controls=VPXControls(),
 )

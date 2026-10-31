@@ -1,6 +1,7 @@
-"""Every button says what pressing it does: `panel.action` and `panel.remote_action`
-each carry a `hint=`, drawn as its tooltip, and it is never empty. A button built by hand
-with an icon and no label carries a tooltip too, since the icon is all a person has."""
+"""Every button says what pressing it does: `panel.action`, `panel.remote_action` and
+`panel.remote_key` each carry a `hint=`, drawn as its tooltip, and it is never empty. A
+button built by hand with an icon and no label carries a tooltip too, since the icon is
+all a person has."""
 
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ def _action_calls(tree: ast.Module) -> list[ast.Call]:
         owner = node.func.value
         if not isinstance(owner, ast.Name) or owner.id != "panel":
             continue
-        if node.func.attr in ("action", "remote_action"):
+        if node.func.attr in ("action", "remote_action", "remote_key"):
             got.append(node)
     return got
 

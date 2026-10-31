@@ -32,7 +32,7 @@ def act(payload: models.InputActionRequest, request: Request) -> models.InputAct
         require(request, scopes.SYSTEM_ADMIN)
     return models.InputActionResult.model_validate(
         input_actions.act(payload.action, payload.phase,
-                          source=_source(payload.source, request),
+                          source=source_of(payload.source, request),
                           ttl_ms=payload.ttl_ms))
 
 
@@ -43,7 +43,7 @@ def get_play_input() -> models.PlayInput:
                                             "hear": key_reader.hearing().as_dict()})
 
 
-def _source(said: str, request: Request) -> str:
+def source_of(said: str, request: Request) -> str:
     """Who pressed it, as one string for the log.
 
     The caller names itself and the boundary says where it came from. Both, because

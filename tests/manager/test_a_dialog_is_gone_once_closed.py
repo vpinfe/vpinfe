@@ -190,7 +190,11 @@ class OnesWithTheirOwnCardGoToo(unittest.TestCase):
     def setUp(self) -> None:
         for patcher in (mock.patch.object(ui, "run_javascript"),
                         mock.patch.object(remote, "where_to_find_it",
-                                          return_value="http://10.0.0.9:8080/remote")):
+                                          return_value="http://10.0.0.9:8080/remote"),
+                        mock.patch.object(remote, "where_to_scan",
+                                          return_value="http://10.0.0.9:8080/remote"),
+                        mock.patch.object(remote.addresses, "resolving",
+                                          return_value=False)):
             patcher.start()
             self.addCleanup(patcher.stop)
 

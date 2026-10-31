@@ -309,7 +309,7 @@ play data on the way out.
 
 A request also carries **where it came from**, not just what kind of surface it was.
 A confirmation is put to the surface that asked and nowhere else - a dialog raised on
-the cabinet because somebody pressed something on their phone is a hang on a screen
+the cabinet because somebody pressed something on their mobile device is a hang on a screen
 nobody is watching. Every other surface is told through `lifecycle.acting`, which is
 subscribers-only for the usual reason: being told is not being asked. A request nothing
 can ask, like a `SIGTERM`, proceeds rather than waiting for an answer that will never

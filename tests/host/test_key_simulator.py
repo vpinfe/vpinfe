@@ -121,14 +121,17 @@ class SenderTests(unittest.TestCase):
     SWAY = {"WAYLAND_DISPLAY": "wayland-1", "SWAYSOCK": "/run/sway.sock"}
     PLASMA = {"WAYLAND_DISPLAY": "wayland-0", "XDG_CURRENT_DESKTOP": "KDE"}
 
-    def _sender(self, env, have=("wtype", "ydotool"), socket=True, system="linux"):
+    def _sender(self, env, have=("wtype", "ydotool"), socket=True, system="linux",
+                post_access=True, macos_major=26):
         from common.host import key_simulator
 
         def resolve(tool):
             return _found(tool, missing=tool.id not in have)
 
         return key_simulator.sender(env, system, resolve,
-                                    exists=lambda _path: socket)
+                                    exists=lambda _path: socket,
+                                    post_access=lambda: post_access,
+                                    macos_major=lambda: macos_major)
 
     def test_a_wlroots_session_presses_through_wtype(self) -> None:
         found = self._sender(self.SWAY)
@@ -165,6 +168,56 @@ class SenderTests(unittest.TestCase):
             with self.subTest(system=system):
                 self.assertEqual(self._sender({}, system=system).via, "pynput")
 
+    def test_macos_without_permission_to_post_keys_cannot_press(self) -> None:
+        for system, available in (("darwin", False), ("windows", True), ("linux", True)):
+            with self.subTest(system=system):
+                found = self._sender({"DISPLAY": ":0"}, system=system, post_access=False)
+                self.assertEqual(found.available, available)
+        denied = self._sender({}, system="darwin", post_access=False)
+        self.assertEqual(denied.reason["key"], "keys.send.no_post_access")
+        self.assertEqual(denied.reason["fix"], "user")
+        self.assertEqual(denied.reason["remedy"]["key"], "keys.send.allow_post_access")
+
+    def test_macos_27_names_the_pane_it_calls_device_control_and_data_access(self) -> None:
+        from common.host import key_simulator
+
+        denied = self._sender({}, system="darwin", post_access=False, macos_major=27)
+        self.assertEqual(denied.reason["remedy"]["key"],
+                         "keys.send.device_control_pane")
+        said = key_simulator.words(denied.reason)
+        self.assertIn("Device Control and Data Access", said)
+        self.assertTrue(said.endswith("."))
+
+    def test_macos_without_the_permission_asks_for_it(self) -> None:
+        from common.host import key_simulator
+
+        asked: list[str] = []
+        allowed = key_simulator.ask_for_post_access(
+            "darwin", post_access=lambda: False,
+            request=lambda: asked.append("dialog") or False)
+
+        self.assertEqual(asked, ["dialog"])
+        self.assertFalse(allowed)
+
+    def test_macos_with_the_permission_does_not_ask(self) -> None:
+        from common.host import key_simulator
+
+        def refuse() -> bool:
+            raise AssertionError("asked although the permission was held")
+
+        self.assertTrue(key_simulator.ask_for_post_access(
+            "darwin", post_access=lambda: True, request=refuse))
+
+    def test_other_systems_have_nothing_to_ask_for(self) -> None:
+        from common.host import key_simulator
+
+        def refuse() -> bool:
+            raise AssertionError("asked on a system with no such permission")
+
+        for system in ("linux", "windows"):
+            self.assertTrue(key_simulator.ask_for_post_access(
+                system, post_access=lambda: False, request=refuse))
+
     def test_no_session_is_nothing_to_fix(self) -> None:
         found = self._sender({})
 
@@ -178,6 +231,8 @@ class SenderTests(unittest.TestCase):
         catalog = served()
         for key in (key_simulator.NEEDS_TOOL, key_simulator.NO_YDOTOOL_SERVICE,
                     key_simulator.NO_SESSION, key_simulator.START_YDOTOOL_SERVICE,
+                    key_simulator.NO_POST_ACCESS, key_simulator.ALLOW_POST_ACCESS,
+                    key_simulator.DEVICE_CONTROL_PANE,
                     "keys.send.with_remedy"):
             with self.subTest(key=key):
                 self.assertIn(key, catalog)
@@ -219,6 +274,31 @@ class BackendTests(unittest.TestCase):
         argv, env = runner.calls[0]
         self.assertEqual(argv, [str(Path("/usr/bin/ydotool")), "key", "25:1", "25:0"])
         self.assertEqual(env["YDOTOOL_SOCKET"], "/tmp/.ydotool_socket")
+
+    def test_ydotool_leaves_a_key_down_and_lets_it_go_in_two_calls(self) -> None:
+        simulator, runner = self._simulator("ydotool", socket="/tmp/.ydotool_socket")
+
+        self.assertTrue(simulator.backend.holds)
+        self.assertTrue(simulator.down_code("KeyP"))
+        self.assertTrue(simulator.up_code("KeyP"))
+
+        self.assertEqual([argv[-1] for argv, _ in runner.calls], ["25:1", "25:0"])
+
+    def test_wtype_cannot_leave_a_key_down_across_two_commands(self) -> None:
+        simulator, runner = self._simulator("wtype")
+
+        self.assertFalse(simulator.backend.holds)
+        self.assertFalse(simulator.down_code("KeyP"))
+        self.assertFalse(simulator.up_code("KeyP"))
+        self.assertEqual(runner.calls, [])
+
+    def test_a_device_that_cannot_press_cannot_hold(self) -> None:
+        from common.host import key_simulator
+
+        chosen = key_simulator.Sender("", reason={"key": key_simulator.NO_SESSION,
+                                                  "params": {}})
+
+        self.assertFalse(key_simulator.can_hold(chosen))
 
     def test_a_key_with_no_name_here_presses_nothing(self) -> None:
         simulator, runner = self._simulator("wtype")
@@ -284,6 +364,32 @@ class KeyTableTests(unittest.TestCase):
                                "page_down": 109, "cmd_r": 126, "f12": 88}.items():
             with self.subTest(key_id=key_id):
                 self.assertEqual(keys.BY_KEY_ID[key_id].evdev, number)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "the macOS key table is only built on macOS")
+class MacOSKeycodeTests(unittest.TestCase):
+    def test_each_side_of_a_modifier_posts_its_own_key(self) -> None:
+        from unittest import mock
+
+        import Quartz
+        from pynput.keyboard import Key
+
+        from common.host import key_simulator
+
+        posted: list[int] = []
+
+        def create(_source, keycode, _down):
+            posted.append(keycode)
+            return object()
+
+        with mock.patch.object(Quartz, "CGEventCreateKeyboardEvent", create), \
+                mock.patch.object(Quartz, "CGEventPost", lambda *_: None):
+            controller = key_simulator._quartz_controller()
+            for key in (Key.shift_l, Key.shift_r, Key.ctrl_l, Key.ctrl_r, Key.alt_l,
+                        Key.alt_r):
+                controller.press(key)
+
+        self.assertEqual(posted, [56, 60, 59, 62, 58, 61])
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 """The two keys this install holds in plain, because it must hand them on.
 
-**The Remote pass** is what the Remote Code, the Join code and On your phone carry, so scanning
-one signs a phone in at Play with nothing to type. Renewing it ends every phone that came in
-with the old one.
+**The Remote pass** is what the Remote Code, the Join code and On your mobile device carry,
+so scanning one signs a mobile device in at Play with nothing to type. Renewing it ends every
+mobile device that came in with the old one.
 
 **A pairing token** is what another install issued this one when they were paired. This
 install sends it with every call to that device.

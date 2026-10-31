@@ -400,6 +400,15 @@ try:
 except Exception:
     logger.exception("Could not make the owner; the roster has none until the next start")
 
+# On macOS the Remote's Table Controls press keys, which macOS allows only after a
+# dialog at the machine; ask now rather than on the first press from a phone.
+try:
+    from common.host import key_simulator
+
+    key_simulator.ask_for_post_access()
+except Exception:
+    logger.exception("Could not ask macOS for the key permission")
+
 shutdown.exit_if_requested(logger)
 
 # The catalog everything VPS-shaped reads from - matching, release lists, what a kind is

@@ -466,6 +466,67 @@ class PlayStopped(ApiModel):
     game_name: str | None
 
 
+class TableControlsTable(ApiModel):
+    """The table the controls are for, and the app that plays it."""
+
+    game_id: str | None = None
+    game_name: str | None = None
+    app: str
+
+
+class TableControl(ApiModel):
+    """One control of the running table. `id` is stable and `label` is in the install's
+    language. `hold_ms` is how long the install holds the key. `reason` is a sentence
+    where `available` is false, and empty otherwise."""
+
+    id: str
+    group: str
+    label: str
+    hold_ms: int
+    holdable: bool = False
+    side: str = ""
+    available: bool
+    reason: str = ""
+
+
+class TableControlsNote(ApiModel):
+    """One sentence for the controls that cannot be pressed for the same cause, naming
+    them, so a caller says it once. `controls` holds their ids."""
+
+    controls: list[str]
+    text: str
+
+
+class TableControls(ApiModel):
+    """What can be pressed on the table this install is running. `table` is null, and
+    `controls` empty, when nothing plays, a recording owns the table, or its app offers
+    none. `press` is whether this device can send keys at all."""
+
+    table: TableControlsTable | None = None
+    press: PlayInputAbility
+    controls: list[TableControl]
+    notes: list[TableControlsNote] = []
+
+
+class TableControlPress(ApiModel):
+    """`pressed` is that the key was sent, not that the table acted on it, and false when
+    it could not be sent."""
+
+    control_id: str
+    pressed: bool
+
+
+class TableControlRequest(ApiModel):
+    """`source` is who is pressing, for the log. A `tap` is one short press. On a control
+    listed `holdable`, `press` leaves the key down and `release` lets it go; send `press`
+    again about three times within `ttl_ms` while it stays held, and the install lets go on
+    its own when they stop."""
+
+    source: str = ""
+    phase: Literal["tap", "press", "release"] = "tap"
+    ttl_ms: int | None = None
+
+
 # --- Frontend --------------------------------------------------------------
 
 class FrontendGameLinks(ApiModel):

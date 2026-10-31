@@ -119,7 +119,7 @@ up rather than adding a second.  A card used for a player's existing account,
 `values` it answers to that account with `write`.
 
 VPinPlay's card is the one 2.x's *Download QR Code* saved, byte for byte: the same text, the
-same QR settings, the same hiding places.  Cards are on people's phones, so a card from either
+same QR settings, the same hiding places.  Cards are on people's mobile devices, so a card from either
 version joins on the other.
 
 Words: `account.label` (the heading over the account; left out, the extension's name) and

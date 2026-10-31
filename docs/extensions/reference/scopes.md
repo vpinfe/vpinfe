@@ -6,7 +6,7 @@ attach one.
 
 | tier | who reaches it | for |
 |---|---|---|
-| `play` (`ext:<name>:play`) | A Remote pass or a Play token, and everyone above | What a person at the VPinFE device or on a phone may see or press |
+| `play` (`ext:<name>:play`) | A Remote pass or a Play token, and everyone above | What a person at the VPinFE device or on a mobile device may see or press |
 | `library` (`ext:<name>:library`) | An Owner or a Full token | The default: managing the library, the extension's settings and accounts |
 | `protected` (`ext:<name>:protected`) | An Owner who has just confirmed.  Never a token | An act that changes the device or hands out access |
 

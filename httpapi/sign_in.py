@@ -354,6 +354,6 @@ def confirm_with_authenticator(attempt: AuthenticatorCode, request: Request) -> 
 @router.post("/remote_code/renew", summary="Make a new Remote Code",
              response_model=RemoteCodeRenewed, dependencies=[requires(scopes.ACCESS_WRITE)])
 def renew_remote_code() -> RemoteCodeRenewed:
-    """Every phone that came in with the old code is signed out."""
+    """Every mobile device that came in with the old code is signed out."""
     old_id, _ = access_keys.renew_remote_pass()
     return RemoteCodeRenewed(ended=sign_in.instance().sign_out_via(old_id))

@@ -326,7 +326,7 @@ class RenderSmokeTests(_Smoke):
                 BrowserSession(chromium_path() or "") as phone:
             await self._open(theme, instance, "playfield")
             await theme.evaluate(self.WATCH_MOVES)
-            await phone.navigate(instance.manager_url("/remote?screen=control"))
+            await phone.navigate(instance.manager_url("/remote?screen=wheel"))
             await phone.wait_for(
                 "document.querySelectorAll('[data-hold-action]').length === 4",
                 timeout=self.READY_TIMEOUT)

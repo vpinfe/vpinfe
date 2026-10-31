@@ -305,20 +305,21 @@ class RecordingsTableTests(unittest.TestCase):
     def _drawn(self, play: dict[str, Any]) -> tuple[Any, Any]:
         from manager.remote import remote
 
-        with mock.patch.object(remote, "ui") as ui, \
+        with mock.patch.object(remote, "ui"), mock.patch.object(remote, "_hero"), \
+                mock.patch.object(remote, "panel") as panel, \
                 mock.patch.object(remote.remote_record, "run_card") as card:
             remote._playing(play, {"run": {"state": "running", "of": 3}, "frontend": None},
                             mock.Mock(), mock.Mock())
-        return card, ui
+        return card, panel
 
     def test_quit_table_gives_way_to_the_runs_card(self) -> None:
-        card, ui = self._drawn({"launching": True, "source": "capture"})
+        card, panel = self._drawn({"launching": True, "source": "capture"})
         card.assert_called_once()
-        ui.button.assert_not_called()
+        panel.remote_action.assert_not_called()
 
-        card, ui = self._drawn({"launching": True, "source": "frontend"})
+        card, panel = self._drawn({"launching": True, "source": "frontend"})
         card.assert_not_called()
-        self.assertEqual(ui.button.call_args.args[0], "Quit Table")
+        self.assertEqual(panel.remote_action.call_args.args[0], "Quit Table")
 
 
 class SheetPlanTests(unittest.IsolatedAsyncioTestCase):

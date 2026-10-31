@@ -53,9 +53,10 @@
      across, and a thumb can pick the third one without picking the second. */
   --star-size: 26px;
   --star-gap: 8px;
-  /* Well above the target floor: this is the control the whole screen is for, it is
-     pressed without looking, and a thumb covers it entirely while it is down. */
-  --pad-key: 76px;
+  /* Well above the target floor: these are the controls the whole screen is for, they are
+     pressed without looking, and a thumb covers one entirely while it is down. */
+  --key-large: 96px;
+  --key-page: 56px;
 }
 
 /* The remote's own components: a header that names the target, a tab bar under the
@@ -64,6 +65,13 @@
    and the treatments are one design system and only the density differs. */
 
 .remote-shell { background: var(--surface-0); }
+/* Pinned to the visible area rather than sized to `dvh`: a Home Screen app on iOS reports
+   a height that leaves a band under the tab bar, and `inset: 0` fills what is really
+   there. */
+.remote-viewport { position: fixed; inset: 0; }
+/* A message from the top of the screen, below the status bar: the bottom of a phone is the
+   tab bar's, and a toast there is hidden behind it. */
+.q-notifications__list--top { padding-top: env(safe-area-inset-top); }
 .remote-header {
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
@@ -72,10 +80,39 @@
      shell reach the edges; this is what keeps the content off them. */
   padding-top: calc(10px + env(safe-area-inset-top));
 }
-.remote-mark { color: var(--accent); font-size: var(--icon-nav); }
+/* The shell never scrolls as a document: only `.remote-body` does. A page taller than the
+   visible area carried the header off the top of the screen, and a rubber-band at the edge
+   moved the whole shell under the thumb. */
+html[data-surface="remote"], html[data-surface="remote"] body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  /* The tab bar's color, so a strip the shell does not reach reads as the bar and not
+     as a hole. */
+  background: var(--surface-1);
+  /* No double-tap zoom; pinch is the viewport meta and `gesturestart`. */
+  touch-action: manipulation;
+}
+/* Nothing in the list scrolls sideways, whatever a long name asks for. */
+html[data-surface="remote"] .remote-body { overflow-x: hidden; }
+/* The header's one button. A circle at the target floor, quiet until it is wanted. */
+.remote-dots.q-btn {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  color: var(--ink-3);
+  flex-shrink: 0;
+  /* The button is wider than its glyph, so the glyph sits in the header's gutter. */
+  margin-right: -10px;
+}
 .remote-target-name, .remote-target {
   font-size: var(--fs-title);
   color: var(--ink);
+}
+/* The target takes the row, which puts the person and the dots at its right edge. Under
+   `.remote-header` to outrank `.manager-edit-select`'s `flex: 0 1 auto`, which a Tailwind
+   `grow` does not. */
+.remote-header .remote-target, .remote-header .remote-target-name {
+  flex: 1 1 0;
+  min-width: 0;
 }
 /* Who this phone is answering for, beside the target it is answering to - a kept
    player's initials only; a guest and the owner both leave the target to speak for
@@ -120,10 +157,13 @@
   display: block; width: 100%; height: 100%; object-fit: cover;
 }
 .remote-body { padding-bottom: 4px; }
+/* The inset is 0 in Safari and about 34px in a Home Screen app, where the home indicator
+   sits in the lowest 13px or so. The whole inset left a band under the labels that read as
+   room kept for Safari's bar, so only what clears the indicator is kept. */
 .remote-tabs {
   border-top: 1px solid var(--line);
   background: var(--surface-1);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - 18px));
 }
 .remote-tab {
   flex: 1 1 0;
@@ -134,14 +174,30 @@
   color: var(--ink-3);
   cursor: pointer;
 }
-/* The current screen is named by colour and by a rule at the top edge, not by colour
-   alone: a tab bar read at arm's length in a dim room is exactly where a single
+/* The current screen is named by a lit pill behind its glyph and a bold label, not by
+   colour alone: a tab bar read at arm's length in a dim room is exactly where a single
    hue-only signal disappears. */
-.remote-tab--here {
-  color: var(--accent);
-  box-shadow: inset 0 2px 0 0 var(--accent);
+.remote-tab--here { color: var(--accent); }
+.remote-tab--here .remote-tab-label { font-weight: 700; }
+.remote-tab-mark { position: relative; display: inline-flex; }
+/* A table is up: the Manager's green for in use, ringed in the bar's ground so it reads
+   over the pill. */
+.remote-tab-dot {
+  position: absolute; top: 0; right: 14px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--positive);
+  border: 2px solid var(--surface-1);
+  box-sizing: content-box;
 }
-.remote-tab-icon { font-size: var(--icon-nav); }
+.remote-tab-icon {
+  font-size: var(--icon-nav);
+  padding: 4px 20px;
+  border-radius: 999px;
+  box-sizing: content-box;
+}
+.remote-tab--here .remote-tab-icon {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
 .remote-tab-label { font-size: var(--fs-caption); }
 /* An action on this surface owns its row. On a desk a button is one control among
    several on a line; in one hand it is the thing being reached for, and a thumb does
@@ -176,6 +232,10 @@
 /* A line under the headline that qualifies it. The ramp's third step, the same as the
    Manager's help text - this surface changes the size of things, not what they mean. */
 .remote-note { color: var(--ink-3); font-size: var(--fs-caption); line-height: 1.3; }
+/* Below 16px a phone zooms the whole page in on tapping a field and leaves it zoomed. */
+[data-surface="remote"] .q-field__native, [data-surface="remote"] .q-field__input {
+  font-size: var(--fs-body);
+}
 /* The way out of the Manager and onto a phone. In the drawer's foot with the version
    and the job line: install-level, read once, and not a destination. */
 .manager-invite {
@@ -209,17 +269,42 @@
 /* The row on the wheel: the accent and a rule at the leading edge, as the current tab. */
 .remote-row--here { box-shadow: inset 3px 0 0 0 var(--accent); }
 .remote-row--here .remote-row-name { color: var(--accent); }
-/* Who is up, one row each, a switch at the trailing edge rather than a whole row that
+/* The wheel's own word, so the lit edge is not the only sign of which row it is. */
+.remote-here-mark {
+  display: none; flex: none; white-space: nowrap;
+  font-size: var(--fs-caption); font-weight: 600; color: var(--accent);
+}
+.remote-row--here .remote-here-mark { display: inline; }
+.remote-row-open.q-btn { flex: none; color: var(--ink-3); }
+/* A rating to read in a list row, at the size of the line it sits under. */
+.manager-stars--read { --star-size: 11px; --star-gap: 2px; margin-top: 2px; }
+.manager-stars--read .manager-star { cursor: inherit; }
+/* Collections in one row that scrolls sideways: a phone shows four and a library holds
+   more, and a wrapped row would push the list off the screen. */
+.remote-chips { overflow-x: auto; scrollbar-width: none; }
+.remote-chips::-webkit-scrollbar { display: none; }
+.remote-chip.q-btn {
+  flex: none; min-height: 32px; padding: 0 14px; border-radius: 16px;
+  border: 1px solid var(--line-strong); color: var(--ink-2);
+}
+.remote-chip--on.q-btn {
+  border-color: var(--accent); color: var(--accent); font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+/* Two across, the picture first. The frame is the Media settings' own, widened to the
+   tile and held to the shape it was set to. */
+.remote-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 14px 12px; }
+.remote-tile { cursor: pointer; min-width: 0; align-items: stretch; gap: 6px; }
+.remote-tile:active { background: var(--surface-hover); }
+.remote-tile.remote-row--here { box-shadow: inset 0 3px 0 0 var(--accent); }
+.remote-tiles .remote-tile .manager-cell-art-box--list {
+  width: 100%; height: auto; aspect-ratio: 2 / 1;
+}
+.remote-tiles.manager-art-square .remote-tile .manager-cell-art-box--list,
+.manager-art-square .remote-tiles .remote-tile .manager-cell-art-box--list { aspect-ratio: 1 / 1; }/* Who is up, one row each, a switch at the trailing edge rather than a whole row that
    toggles: the row is still tappable text (a name to read), not a control. */
 .remote-up-row { min-height: var(--target-min); border-bottom: 1px solid var(--line); }
 .remote-up-row:last-child { border-bottom: none; }
-/* A band of the header rather than a card of the screen: it stays put under a scroll. */
-.remote-strip {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-1);
-}
-.remote-action--beside.q-btn { width: auto; flex: none; padding: 0 16px; }
 /* The sheet a row opens. Square at the foot because it is against the edge of the
    screen, rounded at the top because that is the edge it came up from. */
 .remote-sheet {
@@ -235,28 +320,86 @@
   border: 1px solid var(--line); border-radius: 10px; background: var(--surface-lift);
 }
 .remote-toggle .q-btn { min-height: var(--target-min); font-size: var(--fs-body); }
-/* The direction pad. A grid rather than three rows, because what makes it readable is
-   that the keys sit where they point - a list of five words asks the reader to translate
-   a direction into a name every time. */
-.remote-pad {
-  display: grid;
-  grid-template-columns: repeat(3, var(--pad-key));
-  grid-template-rows: repeat(3, var(--pad-key));
-  gap: 8px;
-  justify-content: center;
+/* A game's table picture with its name over it. Light text over a dark fade whatever the
+   theme: the picture sets the ground here, not the palette. */
+.remote-hero {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: 218px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--art-ground);
 }
-.remote-pad-up    { grid-area: 1 / 2; }
-.remote-pad-left  { grid-area: 2 / 1; }
-.remote-pad-mid   { grid-area: 2 / 2; }
-.remote-pad-right { grid-area: 2 / 3; }
-.remote-pad-down  { grid-area: 3 / 2; }
-.remote-pad-key.q-btn {
-  width: var(--pad-key);
-  height: var(--pad-key);
-  min-height: var(--pad-key);
+.remote-hero--tall { height: 190px; }
+.remote-hero-face { position: absolute; inset: 0; }
+.remote-hero-art, .remote-thumb-art { position: absolute; inset: 0; }
+.remote-hero-art img, .remote-thumb-art img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+}
+.remote-hero-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, var(--art-fade) 4%, var(--art-fade-clear) 62%);
+}
+.remote-hero-badge {
+  position: absolute; top: 10px; left: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--art-chip);
+  backdrop-filter: blur(6px);
+  color: var(--on-art);
+  font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.remote-hero-text { position: absolute; left: 14px; right: 14px; bottom: 12px; }
+.remote-hero-text--heart { right: 62px; }
+.remote-hero-name {
+  color: var(--on-art); font-size: 20px; font-weight: 650; line-height: 1.15;
+  text-shadow: 0 1px 8px var(--art-shadow);
+}
+.remote-hero-made {
+  color: var(--on-art-soft); font-size: 13px; text-shadow: 0 1px 6px var(--art-shadow);
+}
+/* Beside the name rather than over it, and outside the face that opens the sheet. */
+.remote-hero-heart.q-btn {
+  position: absolute; right: 8px; bottom: 6px;
+  min-width: var(--target-min); min-height: var(--target-min);
+  color: var(--on-art);
+}
+.remote-hero-heart--on.q-btn { color: var(--danger); }
+.remote-pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--positive);
+  animation: remote-pulse 1.6s ease-in-out infinite;
+}
+@keyframes remote-pulse { 50% { opacity: 0.35; } }
+.remote-thumb {
+  position: relative; flex: none; overflow: hidden;
+  width: 96px; height: 72px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--art-ground);
+}
+.remote-clock {
+  font-size: 30px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.remote-action--half.q-btn { flex: 1 1 0; width: auto; min-width: 0; }
+
+/* The wheel's keys, laid out where they act: a page either way over a step either way,
+   with Select between the steps. */
+.remote-keys-pages, .remote-keys-steps, .remote-keys-tap { display: grid; width: 100%; }
+.remote-keys-pages { grid-template-columns: 1fr 1fr; gap: 10px; }
+.remote-keys-steps { grid-template-columns: 1fr 92px 1fr; gap: 10px; align-items: center; }
+.remote-keys-tap { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.remote-keys-pages .remote-key.q-btn, .remote-keys-tap .remote-key.q-btn,
+.remote-keys-steps .remote-key--large.q-btn { width: 100%; }
+.remote-key.q-btn {
   border: 1px solid var(--line);
   background: var(--surface-1);
-  font-size: 28px;
+  color: var(--ink);
+  font-size: 13.5px; font-weight: 600;
   /* A thumb covers the key it is on, so the only feedback is what is around it. Held,
      it stays lit for as long as the wheel is moving. */
   transition: background 60ms linear, border-color 60ms linear;
@@ -267,11 +410,40 @@
   -webkit-touch-callout: none;
   touch-action: manipulation;
 }
-.remote-pad-key.q-btn:active {
-  border-color: var(--accent);
-  background: var(--surface-hover);
+.remote-key.q-btn:active { border-color: var(--accent); background: var(--surface-hover); }
+.remote-key--large.q-btn { height: var(--key-large); border-radius: 16px; }
+.remote-key--large .q-icon { font-size: var(--icon-key); }
+.remote-key--page.q-btn {
+  height: var(--key-page); border-radius: 16px;
+  font-size: 14px; color: var(--ink-3);
 }
-.remote-pad-mid.q-btn { color: var(--accent); }
+.remote-key--page .q-icon { font-size: var(--icon-key-small); }
+.remote-key--select.q-btn {
+  width: 92px; height: 92px; border-radius: 50%;
+  border: 2px solid var(--accent); color: var(--accent); background: var(--accent-wash);
+}
+.remote-key--tap.q-btn { min-height: var(--target-min); border-radius: 10px; }
+.remote-key--action.q-btn {
+  flex: 1 1 0; min-width: 0; height: 64px; border-radius: 12px; font-size: 14px;
+}
+.remote-hint { width: 100%; text-align: center; font-size: 12px; color: var(--ink-3); }
+/* A running table's controls: a grid of keys, with one that cannot be pressed taking a
+   row of its own so the reason can sit under it. */
+.remote-sheet--tall { max-height: 85vh; max-height: 85dvh; overflow-y: auto; }
+/* The sheet's title and its close, kept at the top while the keys scroll under them, so
+   a sheet taller than the screen still shows the way out. The negative margins take the
+   head out to the card's own edges; the padding gives that back. */
+.remote-sheet-head {
+  position: sticky; top: 0; z-index: 1; flex: none;
+  margin: -16px -16px 0; padding: 12px 8px 8px 16px;
+  background: var(--surface-1);
+}
+.remote-sheet-head .remote-headline { flex: 1 1 auto; min-width: 0; }
+.remote-sheet-head .q-btn { min-width: var(--target-min); min-height: var(--target-min); }
+.remote-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; }
+.remote-controls .remote-key.q-btn { width: 100%; min-height: 64px; }
+/* A group laid out by hand: one column to the left, the middle and the right. */
+.remote-hand { display: flex; flex-direction: column; gap: 8px; }
 
 /* The base color goes on body alone. Painting it on .q-page-container too put an
    opaque element over body::before, which is where the grid lives - so the backdrop was
@@ -878,9 +1050,22 @@ body::before {
   transition: opacity 90ms ease-out, background 90ms ease-out;
 }
 .manager-star--on { background: var(--accent); opacity: 1; }
-.ag-row:hover .manager-star { opacity: 0.6; }
-.ag-row:hover .manager-star--on { opacity: 1; }
-.manager-star:hover { opacity: 1; background: var(--accent); }
+/* Gated on the input, never on the surface (`docs/conventions.md`): a touch screen has no
+   hover to leave, so the star last touched would otherwise stay lit on its own while the
+   ones before it read as unrated. */
+@media (hover: hover) and (pointer: fine) {
+  .ag-row:hover .manager-star { opacity: 0.6; }
+  .ag-row:hover .manager-star--on { opacity: 1; }
+  .manager-star:hover { opacity: 1; background: var(--accent); }
+}
+/* Beside the stars on a panel row: what the write did, said where the eye already is. */
+.manager-stars-saved {
+  align-self: center;
+  margin-left: 8px;
+  font-size: var(--fs-caption);
+  line-height: 1.2;
+  color: var(--ink-3);
+}
 /* The way back to unrated. Beside the stars rather than in them, because it is not a
    sixth degree of the same scale - and only on a row the pointer is over, so a rated
    library does not read as a column of dismissals. */
@@ -903,7 +1088,9 @@ body::before {
   .manager-stars:hover .manager-star-clear { opacity: 0.75; }
 }
 .manager-stars:focus-within .manager-star-clear { opacity: 1; }
-.manager-star-clear:hover { opacity: 1; color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .manager-star-clear:hover { opacity: 1; color: var(--ink); }
+}
 /* In the filter, the stars are a picture of a value and not a control. */
 .manager-filter-row .manager-star { cursor: pointer; margin-right: -1px; }
 

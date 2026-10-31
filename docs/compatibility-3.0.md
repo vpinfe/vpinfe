@@ -385,8 +385,8 @@ scoped to - data, no screen. Routing a launch to a chosen device, aggregating st
 conflict resolution are all deliberately absent: each needs a decision across devices that
 has not been made. The registry fills itself from what is announced on the network
 (PAR-89) rather than from installs pushing to a configured address, so `PUT` is what a
-person uses to add a phone or a device mDNS cannot reach. Its address is read off the
-socket for anything announcing itself and taken from the body for a phone, because a phone
+person uses to add a mobile device or a device mDNS cannot reach. Its address is read off the
+socket for anything announcing itself and taken from the body for a mobile device, because a mobile device
 is registered by a person rather than by itself. Covered by `tests/api/test_devices.py` and
 `tests/theming/test_separation.py`, which runs two live installs against a live library.
 
@@ -637,12 +637,12 @@ now carries an `origin` of `local` or `network`, decided by the request's own pe
 address. **Nothing a caller may do changes**: a network caller keeps exactly the scopes it
 had, so no install behaves differently and no request that worked stops working.
 *Why:* VPinFE binds every interface by default and has since 2.x - that is deliberate,
-so a phone can administer a cabinet - which means "on this machine" and "able to reach
+so a mobile device can administer a cabinet - which means "on this machine" and "able to reach
 this machine" have never been the same question, and nothing could tell them apart. Every
 caller was identified as `local` whether it was or not, so a policy wanting to treat the
 two differently had no fact to build on. This is that fact and nothing more; what a
 network caller should be *allowed* is a separate decision with real user cost, since the
-phone workflow the open bind exists for is the thing any restriction would land on. Split
+mobile device workflow the open bind exists for is the thing any restriction would land on. Split
 out so the mechanism can be reviewed on its own rather than bundled with a policy nobody
 has agreed. The peer address is read from the socket and never from `X-Forwarded-For`,
 which the caller writes - trusting it would let anyone declare itself local, which is the
@@ -955,7 +955,7 @@ it; and the Manager UI's Remote page carried its own confirmation dialogs that n
 surface had. Two axes rather than four verbs makes reboot an ordinary member and makes
 "open the windows on a headless instance" expressible at all. The question is put to
 whichever surface asked - a dialog raised on the cabinet because somebody pressed
-something on their phone is a hang on a screen nobody is watching - and every other
+something on their mobile device is a hang on a screen nobody is watching - and every other
 surface is told through `lifecycle.acting` without being able to block. A request that
 cannot be asked, like a `SIGTERM`, proceeds; a surface that should answer and has gone
 away denies. Covered by `tests/host/test_lifecycle.py`.
@@ -1565,6 +1565,18 @@ through the second when a button held at the cabinet takes them back.
 opened elsewhere cannot hear the cabinet's without the cabinet's window passing them on.
 Covered by `tests/js/input-capture.test.js`, `tests/js/internal-methods.test.js` and
 `tests/api/test_input_capture.py`.
+
+**PAR-110 - The main menu shows where the Manager is.** One WebSocket method,
+`get_manager_link`, answering `url`, `urls` and `qr_svg` like `get_remote_link`, and empty
+while this install answers only itself. A theme that draws its own menu can call it.
+For all three links `url`, the address the QR carries, is the device's IP address, where
+master gave the host name: a mobile device resolves an address without help and often cannot resolve a
+name. Over HTTPS it stays the name unless the certificate covers the address. `urls` still
+lists every address, and `<name>.local` stands in for the plain name where this device
+resolves it to itself.
+*Why:* the person at the cabinet is the one who knows the Manager exists and the one least
+likely to have its address, and a QR carries it to a mobile device.
+Covered by `tests/host/test_addresses.py` and `tests/invariants/test_parity.py`.
 
 ## Explicitly *not* exceptions
 
