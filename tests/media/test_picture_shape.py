@@ -61,16 +61,21 @@ class ReadTests(unittest.TestCase):
 
     def test_it_reads_the_pixel_size(self) -> None:
         shape = picture_shape.read(drops.png(self.tmp / "a.png", 300, 120))
+        assert shape is not None
         self.assertEqual((300, 120), (shape.width, shape.height))
 
     def test_a_picture_with_see_through_pixels_is_transparent(self) -> None:
         path = drops.png(self.tmp / "a.png", 30, 12, alpha=True)
-        self.assertTrue(picture_shape.read(path).transparent)
+        shape = picture_shape.read(path)
+        assert shape is not None
+        self.assertTrue(shape.transparent)
 
     def test_an_alpha_channel_with_nothing_see_through_is_not_transparent(self) -> None:
         path = self.tmp / "opaque.png"
         Image.new("RGBA", (30, 12), (200, 30, 30, 255)).save(path)
-        self.assertFalse(picture_shape.read(path).transparent)
+        shape = picture_shape.read(path)
+        assert shape is not None
+        self.assertFalse(shape.transparent)
 
     def test_a_file_that_is_not_a_picture_has_no_shape(self) -> None:
         path = self.tmp / "IMG_0001.png"

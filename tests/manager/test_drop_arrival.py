@@ -213,8 +213,10 @@ class ARowThatTakesNothing(ADrop):
 class APictureDrop(ADrop):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
-        self.library.upload_image = Mock(return_value=("picture.png", b"png"))  # type: ignore[method-assign]
-        self.library.set_collection_image = Mock()  # type: ignore[method-assign]
+        self.upload_image = Mock(return_value=("picture.png", b"png"))
+        self.set_image = Mock()
+        self.library.upload_image = self.upload_image  # type: ignore[method-assign]
+        self.library.set_collection_image = self.set_image  # type: ignore[method-assign]
         self.reread = AsyncMock()
         self.state: dict[str, Any] = {"view": "collections", "refresh_collections": self.reread}
         patcher = patch.object(page.players_page, "dropped_picture", new=AsyncMock())
@@ -228,7 +230,7 @@ class APictureDrop(ADrop):
     async def test_a_collections_row_sets_that_collections_picture_in_place(self) -> None:
         await self._on(row_id="Favorites")
 
-        self.library.set_collection_image.assert_called_once_with(
+        self.set_image.assert_called_once_with(
             "Favorites", "picture.png", b"png")
         self.reread.assert_awaited_once_with("")
         self.aborted.assert_called_once_with("u-1")
@@ -259,21 +261,21 @@ class APictureDrop(ADrop):
 
         self.player.assert_awaited_once_with(
             self.library, self.state, "p-1", "picture.png", b"png")
-        self.library.set_collection_image.assert_not_called()
+        self.set_image.assert_not_called()
         self.aborted.assert_called_once_with("u-1")
 
     async def test_a_drop_that_is_not_one_picture_says_why_and_sets_nothing(self) -> None:
-        self.library.upload_image = Mock(side_effect=RuntimeError("A picture takes one image file"))
+        self.upload_image.side_effect = RuntimeError("A picture takes one image file")
 
         await self._on(row_id="Favorites")
 
         self.said.assert_called_once_with("A picture takes one image file", type="warning")
-        self.library.set_collection_image.assert_not_called()
+        self.set_image.assert_not_called()
         self.reread.assert_not_awaited()
         self.aborted.assert_called_once_with("u-1")
 
     async def test_a_picture_the_collection_refuses_says_so_and_still_lets_go(self) -> None:
-        self.library.set_collection_image = Mock(side_effect=RuntimeError("no such collection"))
+        self.set_image.side_effect = RuntimeError("no such collection")
 
         await self._on(row_id="Gone")
 

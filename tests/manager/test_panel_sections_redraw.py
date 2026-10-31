@@ -39,8 +39,8 @@ class SectionsRedrawTests(unittest.TestCase):
             self.made.append(_Element())
             return self.made[-1]
 
-        ui = self.enterContext(patch.object(panel, "ui"))
-        ui.element.side_effect = element
+        self.ui = self.enterContext(patch.object(panel, "ui"))
+        self.ui.element.side_effect = element
         self.rows = self.enterContext(patch.object(panel, "_rail_row"))
         self.enterContext(patch.object(panel, "_rail_group"))
         self.enterContext(patch.object(panel, "t", side_effect=lambda key: key))
@@ -67,12 +67,12 @@ class SectionsRedrawTests(unittest.TestCase):
 
     def test_a_kept_rail_wires_its_scroll_and_an_unkept_one_does_not(self) -> None:
         panel.sections([("a", "A")], "a", self.pick)
-        panel.ui.run_javascript.assert_called_once_with(panel._OPEN_ROW_IN_VIEW_JS)
-        panel.ui.run_javascript.reset_mock()
+        self.ui.run_javascript.assert_called_once_with(panel._OPEN_ROW_IN_VIEW_JS)
+        self.ui.run_javascript.reset_mock()
 
         panel.sections([("a", "A")], "a", self.pick, keep="settings")
 
-        sent = [call.args[0] for call in panel.ui.run_javascript.call_args_list]
+        sent = [call.args[0] for call in self.ui.run_javascript.call_args_list]
         self.assertIn(panel.KEEP_RAIL_SCROLL_JS % {"key": '"settings"', "id": '"c7"'}, sent)
 
     def test_a_rail_that_has_gone_is_left_alone(self) -> None:

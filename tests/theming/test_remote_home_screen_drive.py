@@ -16,6 +16,8 @@ from tests.support.live_instance import LiveInstance
 
 
 class RemoteHomeScreenDrive(unittest.TestCase):
+    instance: LiveInstance
+
     @classmethod
     def setUpClass(cls) -> None:
         held = TemporaryDirectory()

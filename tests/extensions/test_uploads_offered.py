@@ -351,9 +351,10 @@ class TheRequestTests(_Uploads):
                          set(EXECUTE_KEYS))
 
     def test_a_convert_of_the_wrong_shape_is_refused(self) -> None:
-        for asked in ("webp", {"rows": []}, {"rows": {"a.tga": "webp"}},
-                      {"rows": {"a.tga": {"format": "webp"}}},
-                      {"rows": {"a.tga": {"to": 3}}}, {"wait": "yes"}, {"speed": "fast"}):
+        wrong: list[Any] = ["webp", {"rows": []}, {"rows": {"a.tga": "webp"}},
+                            {"rows": {"a.tga": {"format": "webp"}}},
+                            {"rows": {"a.tga": {"to": 3}}}, {"wait": "yes"}, {"speed": "fast"}]
+        for asked in wrong:
             with self.subTest(asked=asked), self.assertRaises(ContractError) as refused:
                 self.uploads.plan(self.incoming, game_id="g1", convert=asked)
             self.assertIn("convert", str(refused.exception))

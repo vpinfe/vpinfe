@@ -81,7 +81,8 @@ class RowTests(unittest.TestCase):
 
     def test_the_full_single_screen_picture_is_a_row_of_its_own_that_starts_unticked(self) -> None:
         kinds = ["playfield", "playfield_fss"]
-        no_view = {"key": "capture.view.no_fss", "fix": "none", "remedy": None, "params": {}}
+        no_view: dict[str, Any] = {"key": "capture.view.no_fss", "fix": "none", "remedy": None,
+                                   "params": {}}
 
         self.assertEqual(record.rows_of(kinds, {}), [(("playfield",), ""),
                                                      (("playfield_fss",), "")])

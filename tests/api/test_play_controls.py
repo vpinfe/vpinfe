@@ -34,7 +34,7 @@ class _Keys:
     """Stands in for the keyboard: what was sent, and as a tap or a hold."""
 
     def __init__(self) -> None:
-        self.sent: list[tuple[str, float]] = []
+        self.sent: list[tuple[str, float | str]] = []
 
     def press_code(self, code: str, *, via=None) -> bool:
         self.sent.append((code, 0))

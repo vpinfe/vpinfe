@@ -110,6 +110,10 @@ class ConvertibleTests(unittest.TestCase):
                                           VP9_REFUSED, LOCAL), [])
 
 
+async def _nothing_after(_ids: list[str]) -> None:
+    return None
+
+
 class StubLibrary:
     def discovery(self) -> dict:
         return {"install_id": LOCAL}
@@ -121,7 +125,7 @@ class TheMenuTests(unittest.TestCase):
     def verbs(self, one: dict, devices: list[dict] | None = None) -> list[str]:
         shown = file_acts.File({"id": "g1:x", **one}, {"id": "g1"})
         return [verb.label for verb in file_acts.media_acts(
-            StubLibrary(), [shown], {"devices": devices or []}, lambda _ids: None)]
+            StubLibrary(), [shown], {"devices": devices or []}, _nothing_after)]
 
     def test_an_unsupported_file_is_offered_convert_and_no_slot_act(self) -> None:
         self.assertEqual(self.verbs(row("medias/wheel.tga", via="unsupported", kind="wheel")),

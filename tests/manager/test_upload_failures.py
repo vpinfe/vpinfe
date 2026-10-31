@@ -76,7 +76,7 @@ class WhatAFailedImportLeavesInTheLog(unittest.IsolatedAsyncioTestCase):
 
         found = await uploads.analyzed(self.library, "u-1", game_named=True)
 
-        self.assertIsNotNone(found)
+        assert found is not None
         self.assertNotIn("error", found)
         self.library.abort_upload.assert_not_called()
 

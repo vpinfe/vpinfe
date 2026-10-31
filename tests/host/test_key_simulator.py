@@ -192,9 +192,13 @@ class SenderTests(unittest.TestCase):
         from common.host import key_simulator
 
         asked: list[str] = []
+
+        def request() -> bool:
+            asked.append("dialog")
+            return False
+
         allowed = key_simulator.ask_for_post_access(
-            "darwin", post_access=lambda: False,
-            request=lambda: asked.append("dialog") or False)
+            "darwin", post_access=lambda: False, request=request)
 
         self.assertEqual(asked, ["dialog"])
         self.assertFalse(allowed)
