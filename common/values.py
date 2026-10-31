@@ -51,3 +51,16 @@ def newer_version(this: tuple[int, ...], than: tuple[int, ...]) -> bool:
     """Whether `this` is a later version than `than`, with 3.0 and 3.0.0 the same one."""
     width = max(len(this), len(than))
     return this + (0,) * (width - len(this)) > than + (0,) * (width - len(than))
+
+
+# The quarter turns VPinFE applies to its own screen, clockwise.
+QUARTERS = (0, 90, 180, 270)
+
+
+def quarter_turn(rotation: Any) -> int:
+    """A stored rotation as the quarter turn VPinFE applies, 0 where it applies none."""
+    try:
+        turned = int(str(rotation).strip())
+    except ValueError:
+        return 0
+    return turned if turned in QUARTERS else 0

@@ -5,10 +5,14 @@ on each part now and the acts it reports to, and the control writes nothing itse
 takes one screen and a screen sits on one part, so putting a screen where another is sends
 that one to where this one came from. A part that can be drawn inside the playfield's window
 holds `INSIDE` there, which is no screen and displaces nothing.
+
+The picture also asks whether the playfield screen is rotated correctly, with a
+test card the caller opens on that screen and three turns that add to the stored rotation.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -17,6 +21,7 @@ from typing import Any
 from nicegui import ui
 
 from common.i18n import t
+from common.values import quarter_turn
 from manager.kit import panel, verbs
 from manager.kit.on_page import on_page
 from manager.settings.screens import Screen
@@ -30,19 +35,23 @@ INSIDE = "inside"
 # A screen's number, INSIDE, or None for no screen.
 Placement = int | str | None
 
-# Which way the playfield's own page points, as the person sees it on the cabinet.
-UP = "up"
-LEFT = "left"
-RIGHT = "right"
-DOWN = "down"
-ARROWS = (UP, LEFT, RIGHT, DOWN)
+# The turns the panel offers: what each adds, its words and its icon. Around has no icon of
+# its own, as in Media Rotation.
+_TURNS = ((270, "manager.screens.turn_left", verbs.ROTATE_LEFT),
+          (180, "manager.screens.turn_around", verbs.ROTATE_RIGHT),
+          (90, "manager.screens.turn_right", verbs.ROTATE_RIGHT))
+_WAYS = {270: "manager.media_rotate.way_left", 180: "manager.media_rotate.way_around",
+         90: "manager.media_rotate.way_right"}
+# The chip a turned answer wears, and what it says on hover.
+_TURNED = {90: ("manager.screens.turned_right", "manager.screens.turned_right.help"),
+           180: ("manager.screens.turned_around", "manager.screens.turned_around.help"),
+           270: ("manager.screens.turned_left", "manager.screens.turned_left.help")}
 
-# How far the UI is turned to face the player when its top points that way.
-_TURN = {UP: 0, LEFT: 90, DOWN: 180, RIGHT: 270}
-_ICON = {UP: verbs.FACES_UP, LEFT: verbs.FACES_LEFT, RIGHT: verbs.FACES_RIGHT,
-         DOWN: verbs.FACES_DOWN}
-_WORDS = {UP: "manager.screens.arrow_up", LEFT: "manager.screens.arrow_left",
-          RIGHT: "manager.screens.arrow_right", DOWN: "manager.screens.arrow_down"}
+# Where the panel is: before the card is asked for, with it up, with it gone and no answer
+# given, after it looked right.
+_IDLE, _CHECKING, _ASKING, _DONE = "idle", "checking", "asking", "done"
+# How often the page says the card is still wanted; `screen_card.HOLD` has to stay above it.
+_HOLD_S = 2.0
 
 # A strip this much wider than it is tall is a DMD, and nothing else is.
 _STRIP = 2.5
@@ -114,18 +123,12 @@ def changes(before: Mapping[str, Placement],
     return {part: number for part, number in after.items() if before.get(part) != number}
 
 
-def arrow_at(rotation: Any) -> str | None:
-    """The arrow a stored rotation is drawn as."""
-    turn = str(rotation if rotation is not None else "").strip()
-    return next((arrow for arrow, degrees in _TURN.items() if str(degrees) == turn), None)
-
-
-def turn(arrow: str, screen: Screen | None) -> dict[str, str]:
-    """The playfield's `orientation` and `rotation` for an arrow on this screen."""
+def turn(degrees: int, screen: Screen | None) -> dict[str, str]:
+    """The playfield's `orientation` and `rotation` for a turn of `degrees` on this screen."""
     tall = screen is not None and screen.height > screen.width
-    sideways = arrow in (LEFT, RIGHT)
+    sideways = degrees in (90, 270)
     return {"orientation": "portrait" if tall != sideways else "landscape",
-            "rotation": str(_TURN[arrow])}
+            "rotation": str(degrees)}
 
 
 def guess(screens: Sequence[Screen]) -> dict[str, int]:
@@ -165,41 +168,62 @@ def _size_of(screen: Screen) -> None:
     ui.label(screen.size).classes("manager-menu-size")
 
 
+@dataclass(frozen=True)
+class Test:
+    """What the rotation check asks of the device. `open` puts the test card on a screen
+    turned by the degrees and answers whether it is up; `turn` turns it; `close` takes it
+    down; `hold` says it is still wanted, which a card left with no one holding it closes
+    itself without. `apply` runs when the answer is Looks Right, to put the kept turn into
+    effect on the windows that are open; it is not run by any other way out of the check."""
+    open: Callable[[Screen, int], Awaitable[bool]]
+    turn: Callable[[int], Awaitable[Any]]
+    close: Callable[[], Awaitable[Any]]
+    hold: Callable[[], Awaitable[Any]]
+    apply: Callable[[], Awaitable[Any]] | None = None
+
+
 class Picture:
     """The parts and the screens, drawn from what the caller says is where.
 
     `move` is told every part whose screen changed - two, when a screen swaps places - and
-    answers whether the change was kept; the picture follows it only if it was. `point` is
-    told the arrow picked and the playfield's screen, and `show` runs Show numbers with what
-    is where; the picture offers each only when it is given. `arrows` is False for a
-    device on a desk, which has no cabinet to point anywhere in.
+    answers whether the change was kept; the picture follows it only if it was. `show` runs
+    Show numbers with what is where. `rotation` is the playfield's stored turn, which the
+    small card on the playfield draws; `point` is told the turn the panel's buttons make and
+    the playfield's screen and answers whether it was kept, and `test` is the card on the
+    screen itself. The picture offers each only when it is given. `cabinet` only chooses
+    the line above the picture.
 
-    `differs` names the parts held otherwise than the thing this picture is compared with
-    (`arrow_differs` the playfield's arrow), and `match` puts them right; both are drawn
-    only when something differs.
+    `differs` names the parts held otherwise than the thing this picture is compared with,
+    and `match` puts them right; both are drawn only when something differs.
     """
 
     def __init__(self, screens: Sequence[Screen], on: Mapping[str, Placement], *,
                  move: Callable[[dict[str, Placement]], Awaitable[bool]],
-                 parts: Sequence[Part] = (), arrow: str | None = None, arrows: bool = True,
-                 point: Callable[[str, Screen], Awaitable[bool]] | None = None,
+                 parts: Sequence[Part] = (), rotation: Any = 0, cabinet: bool = True,
+                 point: Callable[[int, Screen], Awaitable[bool]] | None = None,
+                 test: Test | None = None,
                  show: Callable[[dict[str, Placement]], Awaitable[Any]] | None = None,
-                 differs: Sequence[str] = (), arrow_differs: bool = False,
+                 differs: Sequence[str] = (),
                  match: Callable[[], Awaitable[Any]] | None = None,
                  ) -> None:
         self.screens = list(screens)
         self.on = dict(on)
         self.differs = tuple(differs)
-        self.arrow_differs = arrow_differs
         self.match = match
         self.parts = tuple(parts) or vpinfe_parts()
-        self.arrow = arrow
-        self.arrows = arrows
+        self.rotation = quarter_turn(rotation)
+        self.turn_known = rotation is not None
+        self.cabinet = cabinet
         self.move = move
         self.point = point
+        self.test = test
         self.show = show
         self.showing = False
-        self.container = ui.element("div").classes("w-full")
+        self.phase = _IDLE
+        self.opening = False
+        self.turning = asyncio.Lock()
+        self.answering = False
+        self.container = ui.element("div").classes("w-full manager-screens-host")
         self.draw()
 
     def screen(self, number: Placement) -> Screen | None:
@@ -211,7 +235,7 @@ class Picture:
         self.container.clear()
         with self.container:
             with ui.element("div").classes("manager-screens-head"):
-                ui.label(t("manager.screens.hint_cabinet" if self.arrows
+                ui.label(t("manager.screens.hint_cabinet" if self.cabinet
                            else "manager.screens.hint_desktop")).classes("manager-help")
                 if self.show is not None:
                     self._show_numbers()
@@ -223,9 +247,8 @@ class Picture:
                             self._card(screen)
                         if not self.screens:
                             ui.label(t("manager.screens.none_found")).classes("manager-help")
-                    if self.arrows and self.show is not None and self.on.get(PLAYFIELD):
-                        ui.label(t("manager.screens.arrow_help")).classes(
-                            "manager-help manager-screens-arrow-help")
+                    if self._asks_rotation():
+                        self._rotation()
                     self._differs()
 
     def _show_numbers(self) -> None:
@@ -233,7 +256,8 @@ class Picture:
                        else "manager.screens.show_numbers"),
                      self._show, icon=verbs.SHOW_NUMBERS,
                      hint=t("manager.screens.show_numbers.help"),
-                     enabled=not self.showing and bool(self.screens))()
+                     enabled=not self.showing and self.phase != _CHECKING
+                     and bool(self.screens))()
 
     @on_page
     async def _show(self) -> None:
@@ -249,8 +273,6 @@ class Picture:
 
     def _differs(self) -> None:
         said = [part.label for part in self.parts if part.key in self.differs]
-        if self.arrow_differs:
-            said.append(t("manager.screens.playfield_arrow"))
         if not said:
             return
         with ui.element("div").classes("manager-screens-differs"):
@@ -313,10 +335,8 @@ class Picture:
             ui.label(t("manager.screens.not_connected")).classes("manager-part-slot-size")
         else:
             ui.label(screen.said).classes("manager-part-slot-size truncate").tooltip(screen.size)
-        if part.key == PLAYFIELD and self.arrows and screen is not None \
-                and self.point is not None:
-            for arrow in ARROWS:
-                self._arrow(arrow)
+        if part.key == PLAYFIELD and screen is not None and self.turn_known:
+            self._reference()
         self._clear(part)
 
     def _clear(self, part: Part) -> None:
@@ -327,16 +347,15 @@ class Picture:
         clear.on("click.stop", lambda _e, key=part.key: self._put(key, None))
         clear.on("keydown.enter.stop", lambda _e, key=part.key: self._put(key, None))
 
-    def _arrow(self, arrow: str) -> None:
-        words = t(_WORDS[arrow])
-        control = ui.icon(_ICON[arrow]).classes(
-            f"manager-pf-dir manager-pf-dir--{arrow}"
-            + (" manager-pf-dir--chosen" if self.arrow == arrow else "")) \
-            .props("tabindex=0 role=button")
-        control.props["aria-label"] = words
-        control.tooltip(words)
-        control.on("click.stop", lambda _e, one=arrow: self._aim(one))
-        control.on("keydown.enter.stop", lambda _e, one=arrow: self._aim(one))
+    def _reference(self) -> None:
+        """The card as the stored turn has it, small, on the playfield."""
+        card = ui.element("div").classes("manager-pf-card").style(
+            f"transform: rotate({self.rotation}deg)")
+        with card:
+            ui.label(t("manager.screens.card_top")).classes("manager-pf-card-band")
+            ui.icon(verbs.UP).classes("manager-pf-card-arrow")
+            ui.label(t("manager.screens.card_bottom")).classes("manager-pf-card-band")
+        card.tooltip(t("manager.screens.card_reference"))
 
     def _menu(self, part: Part, number: Placement) -> None:
         with ui.menu().props("auto-close"):
@@ -386,14 +405,153 @@ class Picture:
         moved = changes(self.on, after)
         if moved and await self.move(moved):
             self.on = after
+            if self.phase != _IDLE and PLAYFIELD in moved:
+                await self._stop(_IDLE)
         self.draw()
 
     def _may_be_inside(self, key: str) -> bool:
         return any(part.inside for part in self.parts if part.key == key)
 
+    def _asks_rotation(self) -> bool:
+        return (self.point is not None and self.test is not None
+                and self.screen(self.on.get(PLAYFIELD)) is not None)
+
+    def _rotation(self) -> None:
+        with ui.element("div").classes("manager-rotation"):
+            with ui.element("div").classes("manager-rotation-head"):
+                ui.icon(verbs.SCREEN_ROTATION).classes("manager-rotation-icon")
+                ui.label(t("manager.screens.rotation")).classes("manager-rotation-title")
+                if self.rotation:
+                    chip, hint = _TURNED[self.rotation]
+                    ui.label(t(chip)).classes("manager-tier manager-tier--unknown") \
+                        .tooltip(t(hint))
+            if self.phase == _CHECKING:
+                self._checking()
+            elif self.phase == _ASKING:
+                self._asking()
+            elif self.phase == _DONE:
+                self._done()
+            else:
+                self._idle()
+
+    def _idle(self) -> None:
+        ui.label(t("manager.screens.rotation_look")).classes("manager-help")
+        ui.label(t("manager.screens.rotation_top")).classes("manager-help")
+        panel.action(t("manager.screens.test_card_opening" if self.opening
+                       else "manager.screens.test_card"),
+                     self._open_card, icon=verbs.SHOW_NUMBERS,
+                     hint=t("manager.screens.test_card.help"), enabled=not self.opening)()
+
+    def _checking(self) -> None:
+        ui.timer(_HOLD_S, self._hold)
+        ui.label(t("manager.screens.rotation_press")).classes("manager-help")
+        ui.label(t("manager.screens.rotation_stop")).classes("manager-help")
+        self._answers()
+        with ui.element("div").classes("manager-rotation-wide"):
+            panel.action(t("manager.screens.test_card_close"), self._close_card,
+                         icon=verbs.CLOSE, hint=t("manager.screens.test_card_close.help"))()
+
+    def _asking(self) -> None:
+        ui.label(t("manager.screens.rotation_asked")).classes("manager-help")
+        self._answers()
+        with ui.element("div").classes("manager-rotation-wide"):
+            panel.action(t("manager.screens.test_card_opening" if self.opening
+                           else "manager.screens.reopen_card"),
+                         self._open_card, icon=verbs.SHOW_NUMBERS,
+                         hint=t("manager.screens.reopen_card.help"),
+                         enabled=not self.opening)()
+
+    def _answers(self) -> None:
+        with ui.element("div").classes("manager-rotation-turns"):
+            for degrees, words, icon in _TURNS:
+                panel.action(t(words), partial(self._turn_by, degrees), icon=icon,
+                             hint=t(_WAYS[degrees]), enabled=not self.opening)()
+        with ui.element("div").classes("manager-rotation-wide"):
+            panel.action(t("manager.screens.looks_right"), self._looks_right,
+                         icon=verbs.DONE, hint=t("manager.screens.looks_right.help"),
+                         enabled=not self.opening)()
+
+    def _done(self) -> None:
+        with ui.element("div").classes("manager-rotation-done"):
+            ui.icon(verbs.DONE).classes("manager-rotation-icon")
+            ui.label(t("manager.screens.rotated_correctly"))
+        panel.action(t("manager.screens.check_again"), self._check_again,
+                     icon=verbs.REVERT, hint=t("manager.screens.check_again.help"))()
+
+    async def _hold(self) -> None:
+        if self.test is None or await self.test.hold() or self.phase != _CHECKING:
+            return
+        self.phase = _ASKING
+        self.draw()
+
     @on_page
-    async def _aim(self, arrow: str) -> None:
+    async def _open_card(self) -> None:
         screen = self.screen(self.on.get(PLAYFIELD))
-        if self.point is not None and screen is not None and await self.point(arrow, screen):
-            self.arrow = arrow
+        if self.test is None or screen is None:
+            return
+        self.opening = True
+        self.draw()
+        up = False
+        try:
+            up = await self.test.open(screen, self.rotation)
+            if up and not self._on_playfield(screen):
+                await self.test.close()
+                up = False
+        finally:
+            self.opening = False
+            if up:
+                self.phase = _CHECKING
+            self.draw()
+
+    def _on_playfield(self, screen: Screen) -> bool:
+        now = self.screen(self.on.get(PLAYFIELD))
+        return now is not None and now.number == screen.number
+
+    @on_page
+    async def _turn_by(self, degrees: int) -> None:
+        screen = self.screen(self.on.get(PLAYFIELD))
+        if self.point is None or self.test is None or screen is None:
+            return
+        reopen = False
+        async with self.turning:
+            if self.phase not in (_CHECKING, _ASKING) or self.opening:
+                return
+            total = (self.rotation + degrees) % 360
+            if await self.point(total, screen):
+                self.rotation = total
+                if self.phase == _CHECKING:
+                    await self.test.turn(total)
+                else:
+                    reopen = True
+        if reopen and self.phase == _ASKING:
+            await self._open_card()
+        else:
+            self.draw()
+
+    async def _stop(self, phase: str) -> None:
+        if self.test is not None:
+            await self.test.close()
+        self.phase = phase
+        self.draw()
+
+    @on_page
+    async def _looks_right(self) -> None:
+        # Not under `turning`: an answer given while a turn is being kept goes through at once.
+        if self.answering or self.phase not in (_CHECKING, _ASKING):
+            return
+        self.answering = True
+        try:
+            await self._stop(_DONE)
+            if self.test is not None and self.test.apply is not None:
+                await self.test.apply()
+        finally:
+            self.answering = False
+
+    @on_page
+    async def _close_card(self) -> None:
+        await self._stop(_IDLE)
+
+    @on_page
+    async def _check_again(self) -> None:
+        self.phase = _IDLE
         self.draw()

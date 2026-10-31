@@ -154,11 +154,8 @@ REVERT = "replay"
 PIN = "push_pin"
 CONTAIN = "south_west"
 
-# Saying which way a screen's top points, and what to do with a screen on a picture.
-FACES_UP = "arrow_upward"
-FACES_LEFT = "arrow_back"
-FACES_RIGHT = "arrow_forward"
-FACES_DOWN = "arrow_downward"
+# What to do with a screen on a picture, and asking whether it is turned the right way.
+SCREEN_ROTATION = "screen_rotation"
 SHOW_NUMBERS = "filter_1"
 UNPLACE = "close"
 DRAG = "drag_indicator"

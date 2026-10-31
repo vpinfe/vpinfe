@@ -31,18 +31,17 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("<script>", page)
         self.assertIn("&lt;script&gt;", page)
 
-    def test_the_arrow_is_drawn_only_when_asked_for(self) -> None:
+    def test_it_draws_no_arrow(self) -> None:
         self.assertNotIn("<svg", screen_numbers.page(1, "", "1 x 1"))
-        self.assertIn("<svg", screen_numbers.page(1, "", "1 x 1", arrow=True))
 
 
 class AddressTests(unittest.TestCase):
     def test_it_is_the_page_itself_as_a_data_address(self) -> None:
-        address = screen_numbers.address(3, "A & B", "1 x 1", arrow=True)
+        address = screen_numbers.address(3, "A & B", "1 x 1")
 
         self.assertTrue(address.startswith("data:text/html;charset=utf-8,"))
         self.assertEqual(unquote(address.split(",", 1)[1]),
-                         screen_numbers.page(3, "A & B", "1 x 1", arrow=True))
+                         screen_numbers.page(3, "A & B", "1 x 1"))
 
     def test_it_holds_nothing_that_ends_an_address_early(self) -> None:
         address = screen_numbers.address(1, "", "1 x 1")
@@ -71,7 +70,7 @@ class ShowTests(unittest.TestCase):
                                          default_chrome_options=True)))
         self.enterContext(mock.patch.object(screen_numbers, "cfg_get", return_value=""))
         self.sleep = self.enterContext(mock.patch.object(screen_numbers.time, "sleep"))
-        self.enterContext(mock.patch.object(screen_numbers, "_compositor", return_value=None))
+        self.enterContext(mock.patch.object(screen_numbers, "window_commands", return_value=None))
         self.launch = self.manager.return_value.launch_window
         self.launch.return_value = _window()
 
@@ -83,13 +82,6 @@ class ShowTests(unittest.TestCase):
         self.assertEqual((second.args[0], second.args[2], second.args[3]), ("screen2", TWO, 2))
         self.assertIn("Dell P2419H", unquote(first.args[1]))
         self.assertIn("1280 x 390", unquote(second.args[1]))
-
-    def test_only_the_arrowed_screen_has_the_arrow(self) -> None:
-        screen_numbers.show([ONE, TWO], arrowed=2)
-
-        [first, second] = self.launch.call_args_list
-        self.assertNotIn("<svg", unquote(first.args[1]))
-        self.assertIn("<svg", unquote(second.args[1]))
 
     def test_the_windows_are_opened_with_the_chromium_options_the_frontend_uses(self) -> None:
         screen_numbers.show([ONE])
@@ -185,7 +177,7 @@ class PlacementTests(unittest.TestCase):
                                                 _output("HDMI-A-1", 0, 0, 2560, 1440)]
         self.compositor.view_of.side_effect = lambda pid: f"view{pid}"
         self.compositor.focused_view.return_value = "table"
-        self.enterContext(mock.patch.object(screen_numbers, "_compositor",
+        self.enterContext(mock.patch.object(screen_numbers, "window_commands",
                                             return_value=self.compositor))
         self.launch = self.manager.return_value.launch_window
         self.launch.side_effect = [_window(pid=1), _window(pid=2)]

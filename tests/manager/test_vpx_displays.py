@@ -65,17 +65,24 @@ class _Library:
     def _values(self, _launcher_id: str) -> dict[str, dict[str, str]]:
         return {key: {"value": value} for key, value in self.flat.items()}
 
+    def launcher_config(self, launcher_id: str) -> dict[str, Any]:
+        """The one read the follow makes. Its groups stay as the fakes above build them, so
+        a test reads them back through `config_groups` patched to hand them over."""
+        return {"values": self.launcher_config_values(launcher_id),
+                "program": self.launcher_program(launcher_id),
+                "groups": self.launcher_config_groups(launcher_id)}
+
 
 async def _inline(function: Any, *args: Any, **kwargs: Any) -> Any:
     return function(*args, **kwargs)
 
 
 def _page(library: Any = None, flat: dict | None = None, *, vpinfe: Any = None,
-          arrows: bool = True, units_now: str = "cm", logged: tuple = ()) -> Any:
+          cabinet: bool = True, units_now: str = "cm", logged: tuple = ()) -> Any:
     library = library or _Library()
     page = vpx_displays.Page(
         library, "vpx-1", Mock(), flat=dict(_flat() if flat is None else flat),
-        vpinfe=vpinfe or _standing(), here=HERE, logged=logged, arrows=arrows,
+        vpinfe=vpinfe or _standing(), here=HERE, logged=logged, cabinet=cabinet,
         units_now=units_now, defaults={"Player.ScreenWidth": "95.89",
                                        "Player.ScreenHeight": "53.94"})
     return page
@@ -184,71 +191,73 @@ class SizeRowGoesBeforeTests(unittest.TestCase):
         self.assertEqual(vpx_displays.size_row_goes_before([]), "")
 
 
-class ArrowOfTests(unittest.TestCase):
-    def test_a_tall_screen_left_at_0_is_up(self) -> None:
-        self.assertEqual(vpx_displays.arrow_of(TALL, "0.0"), picture.UP)
-        self.assertEqual(vpx_displays.arrow_of(TALL, ""), picture.UP)
+class TurnedTests(unittest.TestCase):
+    def _turns(self, **over: str) -> list[str | None]:
+        return [_page(flat=_flat(TableOverride__ViewCabRotation=turn, **over)).turned()
+                for turn in ("0", "90", "180", "270")]
 
-    def test_a_tall_screen_is_turned_clockwise_through_left_down_and_right(self) -> None:
-        self.assertEqual([vpx_displays.arrow_of(TALL, turn) for turn in ("90", "180", "270")],
-                         [picture.LEFT, picture.DOWN, picture.RIGHT])
+    def test_a_tall_screen_left_at_0_is_not_turned(self) -> None:
+        self.assertEqual(_page(flat=_flat(TableOverride__ViewCabRotation="0.0")).turned(), "0")
+        self.assertEqual(_page(flat=_flat(TableOverride__ViewCabRotation="")).turned(), "0")
+
+    def test_a_tall_screen_is_turned_clockwise_a_quarter_at_a_time(self) -> None:
+        self.assertEqual(self._turns(), ["0", "90", "180", "270"])
 
     def test_a_wide_screen_at_0_faces_its_right_edge_to_the_player(self) -> None:
-        self.assertEqual([vpx_displays.arrow_of(BACK, turn) for turn in ("0", "90", "180", "270")],
-                         [picture.RIGHT, picture.UP, picture.LEFT, picture.DOWN])
+        self.assertEqual(self._turns(Player__PlayfieldDisplay=DELL), ["270", "0", "90", "180"])
 
-    def test_a_turn_that_faces_no_edge_chooses_no_arrow(self) -> None:
-        self.assertIsNone(vpx_displays.arrow_of(TALL, "45"))
-        self.assertIsNone(vpx_displays.arrow_of(None, "0"))
-        self.assertIsNone(vpx_displays.arrow_of(Screen(6, "", 1000, 1000, 0, 0), "0"))
+    def test_a_turn_that_faces_no_edge_is_none(self) -> None:
+        self.assertIsNone(_page(flat=_flat(TableOverride__ViewCabRotation="45")).turned())
+
+    def test_a_playfield_with_no_screen_is_none(self) -> None:
+        self.assertIsNone(_page(flat=_flat(Player__PlayfieldDisplay="")).turned())
 
 
 class DifferencesTests(unittest.TestCase):
     def test_a_launcher_that_matches_differs_in_nothing(self) -> None:
-        self.assertEqual(_page().differences(), ([], False))
+        self.assertEqual(_page().differences(), [])
 
     def test_a_part_on_another_screen_differs(self) -> None:
         page = _page(flat=_flat(Backglass__BackglassDisplay=CVT))
 
-        self.assertEqual(page.differences(), (["backglass"], False))
+        self.assertEqual(page.differences(), ["backglass"])
 
     def test_a_part_vpinfe_draws_and_visual_pinball_does_not_differs(self) -> None:
         page = _page(flat=_flat(Backglass__BackglassOutput="0"))
 
-        self.assertEqual(page.differences()[0], ["backglass"])
+        self.assertEqual(page.differences(), ["backglass"])
 
     def test_a_topper_with_no_screen_in_vpinfe_is_visual_pinball_s_alone(self) -> None:
         page = _page(flat=_flat(Topper__TopperOutput="1", Topper__TopperDisplay=CVT))
 
-        self.assertEqual(page.differences(), ([], False))
+        self.assertEqual(page.differences(), [])
 
     def test_a_topper_on_another_screen_than_vpinfe_s_differs(self) -> None:
         page = _page(flat=_flat(Topper__TopperOutput="1", Topper__TopperDisplay=CVT),
                      vpinfe=_standing({"topper": 4}))
 
-        self.assertEqual(page.differences(), (["topper"], False))
+        self.assertEqual(page.differences(), ["topper"])
 
-    def test_the_arrow_differs_where_the_turn_is_known_and_is_not_the_one_vpinfe_gives(
-            self) -> None:
+    def test_a_playfield_turned_otherwise_than_vpinfe_turns_it_differs(self) -> None:
         page = _page(flat=_flat(TableOverride__ViewCabRotation="90"))
 
-        self.assertEqual(page.differences(), ([], True))
+        self.assertEqual(page.differences(), ["playfield"])
 
-    def test_the_arrow_is_not_asked_when_the_playfield_itself_differs(self) -> None:
+    def test_the_playfield_on_another_screen_is_named_once_whatever_its_turn(self) -> None:
         page = _page(flat=_flat(Player__PlayfieldDisplay=LG, TableOverride__ViewCabRotation="90"))
 
-        self.assertEqual(page.differences(), (["playfield"], False))
+        self.assertEqual(page.differences(), ["playfield"])
 
-    def test_a_desk_has_no_arrow_to_differ(self) -> None:
-        page = _page(flat=_flat(TableOverride__ViewCabRotation="90"), arrows=False)
+    def test_a_turn_that_differs_is_named_on_a_desk_too(self) -> None:
+        page = _page(flat=_flat(TableOverride__ViewCabRotation="90"), cabinet=False)
 
-        self.assertEqual(page.differences(), ([], False))
+        self.assertEqual(page.differences(), ["playfield"])
 
     def test_a_turn_vpinfe_holds_that_faces_no_edge_is_not_a_difference(self) -> None:
         page = _page(flat=_flat(TableOverride__ViewCabRotation="90"),
                      vpinfe=_standing(turn=("portrait", "45")))
 
-        self.assertEqual(page.differences(), ([], False))
+        self.assertEqual(page.differences(), [])
 
 
 class MovingTests(unittest.IsolatedAsyncioTestCase):
@@ -326,7 +335,7 @@ class MovingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.notify.call_args.args[0],
                          t("manager.vpx_displays.unnamed", parts=t("manager.screens.backglass")))
 
-    async def test_the_playfield_moved_to_a_tall_screen_keeps_the_arrow_it_had(self) -> None:
+    async def test_the_playfield_moved_to_a_tall_screen_keeps_the_turn_it_had(self) -> None:
         page = _page(self.library, flat=_flat(TableOverride__ViewCabRotation="90"))
 
         await press(page.move, {"playfield": 4})
@@ -334,13 +343,13 @@ class MovingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self._written()["Player.PlayfieldDisplay"], LG)
         self.assertEqual(self._written()["TableOverride.ViewCabRotation"], "90.0")
 
-    async def test_the_playfield_on_a_desk_is_not_turned(self) -> None:
+    async def test_the_playfield_on_a_desk_is_turned_for_its_screen_too(self) -> None:
         page = _page(self.library, flat=_flat(TableOverride__ViewCabRotation="90"),
-                     arrows=False)
+                     cabinet=False)
 
         await press(page.move, {"playfield": 4})
 
-        self.assertNotIn("TableOverride.ViewCabRotation", self._written())
+        self.assertEqual(self._written()["TableOverride.ViewCabRotation"], "90.0")
 
     async def test_the_playfield_moved_to_a_wide_screen_is_turned_for_its_shape(self) -> None:
         page = _page(self.library)
@@ -388,47 +397,6 @@ class MovingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(written["ScoreView.Priority.Nixie"], "2")
         self.assertNotIn("Plugin.B2SLegacy.B2SHideGrill", written)
         self.assertNotIn("ScoreView.Priority.B2SLegacyDMD", written)
-
-
-class PointingTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
-        self.library = _Library()
-        self.enterContext(patch.object(vpx_displays.run, "io_bound",
-                                       new=AsyncMock(side_effect=_inline)))
-        self.notify = self.enterContext(patch.object(vpx_displays.ui, "notify"))
-
-    async def test_up_on_a_tall_screen_is_0(self) -> None:
-        page = _page(self.library, flat=_flat(TableOverride__ViewCabRotation="90"))
-
-        self.assertTrue(await press(page.point, picture.UP, TALL))
-
-        self.library.write_launcher_config.assert_called_once_with(
-            "vpx-1", {"TableOverride.ViewCabRotation": "0.0"})
-        page.rebuild.assert_called_once_with()
-
-    async def test_each_arrow_writes_the_turn_that_faces_the_player(self) -> None:
-        for screen, expected in ((TALL, {picture.UP: "0.0", picture.LEFT: "90.0",
-                                         picture.DOWN: "180.0", picture.RIGHT: "270.0"}),
-                                 (BACK, {picture.UP: "90.0", picture.LEFT: "180.0",
-                                         picture.DOWN: "270.0", picture.RIGHT: "0.0"})):
-            for arrow, value in expected.items():
-                with self.subTest(screen=screen.number, arrow=arrow):
-                    self.library.write_launcher_config.reset_mock()
-                    page = _page(self.library)
-
-                    self.assertTrue(await press(page.point, arrow, screen))
-
-                    self.library.write_launcher_config.assert_called_once_with(
-                        "vpx-1", {"TableOverride.ViewCabRotation": value})
-
-    async def test_an_arrow_on_a_square_screen_says_so_and_writes_nothing(self) -> None:
-        page = _page(self.library)
-
-        self.assertFalse(await press(page.point, picture.UP, Screen(6, "", 1000, 1000, 0, 0)))
-
-        self.library.write_launcher_config.assert_not_called()
-        self.assertEqual(self.notify.call_args.args[0], t("manager.vpx_displays.arrow_square"))
-        page.rebuild.assert_not_called()
 
 
 class MatchingTests(unittest.IsolatedAsyncioTestCase):
@@ -489,14 +457,22 @@ class MatchingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self._written()["Topper.TopperOutput"], "0")
         self.assertIsNone(page.on["topper"])
 
-    async def test_the_arrow_is_matched_too_on_a_cabinet(self) -> None:
+    async def test_the_turn_is_matched_too_on_a_cabinet(self) -> None:
         page = _page(self.library, flat=_flat(TableOverride__ViewCabRotation="90"))
 
         await press(page.match)
 
         self.assertEqual(self._written()["TableOverride.ViewCabRotation"], "0.0")
 
-    async def test_a_launcher_that_already_matches_writes_only_the_arrow(self) -> None:
+    async def test_the_turn_is_matched_on_a_desk_too(self) -> None:
+        page = _page(self.library, flat=_flat(TableOverride__ViewCabRotation="90"),
+                     cabinet=False)
+
+        await press(page.match)
+
+        self.assertEqual(self._written()["TableOverride.ViewCabRotation"], "0.0")
+
+    async def test_a_launcher_that_already_matches_writes_only_the_turn(self) -> None:
         page = _page(self.library)
 
         await press(page.match)
@@ -529,25 +505,32 @@ class DrawnTests(unittest.TestCase):
         self.assertEqual([part.key for part in kwargs["parts"]],
                          ["topper", "backglass", "scoreview", "playfield"])
         self.assertEqual(kwargs["differs"], ["backglass"])
-        self.assertFalse(kwargs["arrow_differs"])
-        self.assertEqual(kwargs["arrow"], picture.UP)
+        self.assertEqual(kwargs["rotation"], "0")
         self.assertEqual(kwargs["match"], page.match)
 
-    def test_an_arrow_that_is_not_vpinfe_s_is_said_to_differ(self) -> None:
+    def test_a_turn_that_is_not_vpinfe_s_is_drawn_and_said_to_differ(self) -> None:
         page = _page(flat=_flat(TableOverride__ViewCabRotation="90"))
         with patch.object(vpx_displays.picture, "Picture") as control:
             page.picture_rows()[1][1]()
 
-        self.assertTrue(control.call_args.kwargs["arrow_differs"])
-        self.assertEqual(control.call_args.kwargs["arrow"], picture.LEFT)
+        self.assertEqual(control.call_args.kwargs["differs"], ["playfield"])
+        self.assertEqual(control.call_args.kwargs["rotation"], "90")
 
-    def test_a_desk_has_no_arrow_to_point(self) -> None:
-        page = _page(arrows=False)
+    def test_the_page_draws_the_card_and_never_asks_the_question(self) -> None:
+        page = _page()
         with patch.object(vpx_displays.picture, "Picture") as control:
             page.picture_rows()[1][1]()
 
-        self.assertIsNone(control.call_args.kwargs["point"])
-        self.assertFalse(control.call_args.kwargs["arrows"])
+        self.assertTrue(control.call_args.kwargs["cabinet"])
+        self.assertNotIn("point", control.call_args.kwargs)
+        self.assertNotIn("test", control.call_args.kwargs)
+
+    def test_a_desk_is_not_a_cabinet(self) -> None:
+        page = _page(cabinet=False)
+        with patch.object(vpx_displays.picture, "Picture") as control:
+            page.picture_rows()[1][1]()
+
+        self.assertFalse(control.call_args.kwargs["cabinet"])
 
 
 class SizeTests(unittest.IsolatedAsyncioTestCase):
@@ -564,7 +547,7 @@ class SizeTests(unittest.IsolatedAsyncioTestCase):
 
     def test_a_size_that_is_neither_is_nothing(self) -> None:
         page = vpx_displays.Page(_Library(), "vpx-1", Mock(), flat={"Player.ScreenWidth": "x"},
-                                 vpinfe=_standing(), here=HERE, logged=(), arrows=True,
+                                 vpinfe=_standing(), here=HERE, logged=(), cabinet=True,
                                  units_now="cm", defaults={})
 
         self.assertEqual(page.size, {"Player.ScreenWidth": 0.0, "Player.ScreenHeight": 0.0})
@@ -718,6 +701,8 @@ class FollowingTests(unittest.TestCase):
 class LaunchersTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.library = _Library()
+        self.enterContext(patch.object(vpx_displays, "config_groups",
+                                       side_effect=lambda found: found["groups"]))
         self.enterContext(patch.object(vpx_displays.run, "io_bound",
                                        new=AsyncMock(side_effect=_inline)))
         self.enterContext(patch.object(vpx_displays.offload, "io",

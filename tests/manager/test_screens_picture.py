@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from types import SimpleNamespace
 from typing import Any
@@ -88,50 +89,29 @@ class InsideTests(unittest.TestCase):
                               if part.key == picture.PLAYFIELD).inside)
 
 
-class ArrowTests(unittest.TestCase):
+class TurnTests(unittest.TestCase):
     """The setups in docs/theme.md: a rotated portrait monitor, one the OS leaves alone, and a
     landscape one."""
 
-    def test_a_tall_window_with_its_top_up_is_portrait_and_not_turned(self) -> None:
-        self.assertEqual(picture.turn(picture.UP, TALL),
-                         {"orientation": "portrait", "rotation": "0"})
+    def test_a_tall_window_not_turned_is_portrait(self) -> None:
+        self.assertEqual(picture.turn(0, TALL), {"orientation": "portrait", "rotation": "0"})
 
-    def test_a_wide_window_with_its_top_sideways_is_portrait_and_turned(self) -> None:
-        self.assertEqual(picture.turn(picture.LEFT, BIG),
-                         {"orientation": "portrait", "rotation": "90"})
-        self.assertEqual(picture.turn(picture.RIGHT, BIG),
-                         {"orientation": "portrait", "rotation": "270"})
+    def test_a_wide_window_turned_a_quarter_is_portrait(self) -> None:
+        self.assertEqual(picture.turn(90, BIG), {"orientation": "portrait", "rotation": "90"})
+        self.assertEqual(picture.turn(270, BIG), {"orientation": "portrait", "rotation": "270"})
 
-    def test_a_wide_window_with_its_top_up_is_landscape_and_not_turned(self) -> None:
-        self.assertEqual(picture.turn(picture.UP, BIG),
-                         {"orientation": "landscape", "rotation": "0"})
+    def test_a_wide_window_not_turned_is_landscape(self) -> None:
+        self.assertEqual(picture.turn(0, BIG), {"orientation": "landscape", "rotation": "0"})
 
-    def test_a_tall_window_with_its_top_sideways_is_landscape(self) -> None:
-        self.assertEqual(picture.turn(picture.LEFT, TALL),
-                         {"orientation": "landscape", "rotation": "90"})
+    def test_a_tall_window_turned_a_quarter_is_landscape(self) -> None:
+        self.assertEqual(picture.turn(90, TALL), {"orientation": "landscape", "rotation": "90"})
 
-    def test_a_top_toward_the_player_is_a_half_turn(self) -> None:
-        self.assertEqual(picture.turn(picture.DOWN, BIG),
-                         {"orientation": "landscape", "rotation": "180"})
-        self.assertEqual(picture.turn(picture.DOWN, TALL),
-                         {"orientation": "portrait", "rotation": "180"})
+    def test_a_half_turn_keeps_the_shape_of_the_screen(self) -> None:
+        self.assertEqual(picture.turn(180, BIG), {"orientation": "landscape", "rotation": "180"})
+        self.assertEqual(picture.turn(180, TALL), {"orientation": "portrait", "rotation": "180"})
 
     def test_a_screen_not_connected_is_taken_as_wide(self) -> None:
-        self.assertEqual(picture.turn(picture.UP, None)["orientation"], "landscape")
-
-    def test_each_arrow_is_what_its_rotation_says(self) -> None:
-        for arrow in picture.ARROWS:
-            with self.subTest(arrow=arrow):
-                turned = picture.turn(arrow, BIG)["rotation"]
-                self.assertEqual(picture.arrow_at(turned), arrow)
-
-    def test_a_rotation_that_is_no_arrow_draws_none(self) -> None:
-        for rotation in ("", None, "45", "auto"):
-            with self.subTest(rotation=rotation):
-                self.assertIsNone(picture.arrow_at(rotation))
-
-    def test_a_rotation_stored_as_a_number_is_read(self) -> None:
-        self.assertEqual(picture.arrow_at(90), picture.LEFT)
+        self.assertEqual(picture.turn(0, None)["orientation"], "landscape")
 
 
 class GuessTests(unittest.TestCase):
@@ -198,7 +178,34 @@ def _classes(body: ui.element) -> list[str]:
     return [name for one in body.descendants() for name in one.classes]
 
 
+def _buttons(body: ui.element) -> list[Any]:
+    return [one.props.get("label") for one in body.descendants() if isinstance(one, ui.button)]
+
+
+def _button(body: ui.element, label: str) -> ui.button:
+    [button] = [one for one in body.descendants()
+                if isinstance(one, ui.button) and one.props.get("label") == label]
+    return button
+
+
+def _test(**kwargs: Any) -> Any:
+    return picture.Test(open=kwargs.get("open", AsyncMock(return_value=True)),
+                        turn=kwargs.get("turn", AsyncMock()),
+                        close=kwargs.get("close", AsyncMock()),
+                        hold=kwargs.get("hold", AsyncMock(return_value=True)),
+                        apply=kwargs.get("apply"))
+
+
+# What a cabinet gives the picture for the rotation check.
+_ASKS: dict[str, Any] = {"point": AsyncMock(return_value=True), "test": _test()}
+
+
 class DrawnTests(unittest.TestCase):
+    def test_the_picture_is_the_container_its_own_layout_queries(self) -> None:
+        control, _ = _drawn({})
+
+        self.assertIn("manager-screens-host", control.container.classes)
+
     def test_every_part_is_drawn_with_its_name(self) -> None:
         _, body = _drawn({})
 
@@ -248,48 +255,68 @@ class DrawnTests(unittest.TestCase):
         self.assertIn(t("manager.screens.none_found"), _labels(body))
         self.assertNotIn("manager-screen-card", _classes(body))
 
-    def test_the_playfield_has_an_arrow_for_each_way_it_can_face(self) -> None:
-        async def point(_arrow: str, _screen: Screen) -> bool:
-            return True
+    def test_the_playfield_carries_a_small_card_turned_to_the_stored_answer(self) -> None:
+        _, body = _drawn({"playfield": 1}, rotation="90")
 
-        _, body = _drawn({"playfield": 1}, point=point, arrow=picture.LEFT)
+        [card] = [one for one in body.descendants() if "manager-pf-card" in one.classes]
+        self.assertIn("rotate(90deg)", card._style.get("transform", ""))
+        labels = [one.text for one in card.descendants() if isinstance(one, ui.label)]
+        self.assertEqual(labels, [t("manager.screens.card_top"), t("manager.screens.card_bottom")])
 
-        classes = _classes(body)
-        for arrow in picture.ARROWS:
-            self.assertIn(f"manager-pf-dir--{arrow}", classes)
-        self.assertEqual(classes.count("manager-pf-dir--chosen"), 1)
+    def test_a_rotation_that_is_no_quarter_turn_draws_the_card_upright(self) -> None:
+        _, body = _drawn({"playfield": 1}, rotation="auto")
 
-    def test_the_arrow_is_the_one_the_playfield_faces(self) -> None:
-        async def point(_arrow: str, _screen: Screen) -> bool:
-            return True
+        [card] = [one for one in body.descendants() if "manager-pf-card" in one.classes]
+        self.assertIn("rotate(0deg)", card._style.get("transform", ""))
 
-        _, body = _drawn({"playfield": 1}, point=point, arrow=picture.DOWN)
+    def test_a_turn_that_is_not_known_draws_no_card(self) -> None:
+        _, body = _drawn({"playfield": 1}, rotation=None)
 
-        chosen = [one for one in body.descendants() if "manager-pf-dir--chosen" in one.classes]
-        self.assertEqual([one for one in chosen[0].classes if one.startswith("manager-pf-dir--")
-                          and one != "manager-pf-dir--chosen"], ["manager-pf-dir--down"])
+        self.assertNotIn("manager-pf-card", _classes(body))
 
-    def test_a_desktop_page_draws_the_picture_without_the_arrows(self) -> None:
-        async def point(_arrow: str, _screen: Screen) -> bool:
-            return True
+    def test_a_desktop_page_asks_the_rotation_question_and_words_its_hint_for_a_desk(self) -> None:
+        _, body = _drawn({"playfield": 1}, cabinet=False, **_ASKS)
 
-        _, body = _drawn({"playfield": 1}, point=point, arrows=False)
-
-        self.assertFalse([name for name in _classes(body) if name.startswith("manager-pf-dir")])
+        self.assertIn("manager-pf-card", _classes(body))
+        self.assertIn("manager-rotation", _classes(body))
         self.assertIn(t("manager.screens.hint_desktop"), _labels(body))
 
-    def test_a_playfield_with_no_screen_has_no_arrows(self) -> None:
-        async def point(_arrow: str, _screen: Screen) -> bool:
-            return True
+    def test_a_playfield_with_no_screen_has_no_card_and_asks_nothing(self) -> None:
+        _, body = _drawn({"playfield": None}, **_ASKS)
 
-        _, body = _drawn({"playfield": None}, point=point)
+        self.assertNotIn("manager-pf-card", _classes(body))
+        self.assertNotIn("manager-rotation", _classes(body))
 
-        self.assertFalse([name for name in _classes(body) if name.startswith("manager-pf-dir")])
+    def test_the_question_is_asked_only_where_something_hears_the_answer(self) -> None:
+        _, none = _drawn({"playfield": 1})
+        _, no_test = _drawn({"playfield": 1}, point=AsyncMock())
+        _, no_point = _drawn({"playfield": 1}, test=_test())
 
-    def test_the_arrows_are_offered_only_where_something_hears_them(self) -> None:
-        _, body = _drawn({"playfield": 1})
+        for body in (none, no_test, no_point):
+            self.assertNotIn("manager-rotation", _classes(body))
 
-        self.assertFalse([name for name in _classes(body) if name.startswith("manager-pf-dir")])
+    def test_the_question_is_asked_beside_the_screens_with_a_card_to_open(self) -> None:
+        _, body = _drawn({"playfield": 1}, **_ASKS)
+
+        labels = _labels(body)
+        self.assertIn(t("manager.screens.rotation"), labels)
+        self.assertIn(t("manager.screens.rotation_look"), labels)
+        self.assertIn(t("manager.screens.rotation_top"), labels)
+        self.assertEqual(_buttons(body), [t("manager.screens.test_card")])
+        self.assertNotIn(t("manager.screens.rotation_press"), labels)
+
+    def test_an_answer_that_is_not_turned_wears_no_chip(self) -> None:
+        _, body = _drawn({"playfield": 1}, rotation="0", **_ASKS)
+
+        self.assertNotIn("manager-tier", _classes(body))
+
+    def test_an_answer_that_is_turned_wears_a_chip_that_says_which_way(self) -> None:
+        for rotation, word in (("90", "turned_right"), ("180", "turned_around"),
+                               ("270", "turned_left")):
+            with self.subTest(rotation=rotation):
+                _, body = _drawn({"playfield": 1}, rotation=rotation, **_ASKS)
+
+                self.assertIn(t(f"manager.screens.{word}"), _labels(body))
 
     def test_show_numbers_is_offered_only_where_something_runs_it(self) -> None:
         _, without = _drawn({})
@@ -366,11 +393,11 @@ class VpxDrawnTests(unittest.TestCase):
                       [one.props.get("label") for one in body.descendants()
                        if isinstance(one, ui.button)])
 
-    def test_the_arrow_differing_is_named_as_the_playfield_arrow(self) -> None:
-        _, body = self._vpx({"playfield": 1}, arrow_differs=True, match=AsyncMock())
+    def test_the_vpx_page_draws_the_card_and_never_asks_the_question(self) -> None:
+        _, body = self._vpx({"playfield": 1}, rotation="270")
 
-        self.assertIn(t("manager.screens.playfield_arrow"), _labels(body))
-        self.assertNotIn("manager-part-name--differs", _classes(body))
+        self.assertIn("manager-pf-card", _classes(body))
+        self.assertNotIn("manager-rotation", _classes(body))
 
     def test_with_nothing_to_match_with_the_line_still_says_it_differs(self) -> None:
         _, body = self._vpx({"playfield": 1, "backglass": 2}, differs=["backglass"])
@@ -449,22 +476,396 @@ class ActedOnTests(unittest.IsolatedAsyncioTestCase):
 
         move.assert_not_awaited()
 
-    async def test_an_arrow_is_reported_with_the_playfield_s_screen(self) -> None:
+    async def test_the_test_card_is_opened_on_the_playfield_s_screen_turned_as_stored(
+            self) -> None:
+        test = _test()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test, rotation="90")
+
+        await press(control._open_card)
+
+        test.open.assert_awaited_once_with(TALL, 90)
+        self.assertEqual(control.phase, "checking")
+        self.assertFalse(control.opening)
+
+    async def test_a_card_that_did_not_come_up_leaves_the_question_to_be_asked_again(
+            self) -> None:
+        test = _test(open=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+
+        await press(control._open_card)
+
+        self.assertEqual(control.phase, "idle")
+        self.assertFalse(control.opening)
+
+    async def test_a_card_that_raises_still_lets_it_be_pressed_again(self) -> None:
+        test = _test(open=AsyncMock(side_effect=RuntimeError("no")))
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+
+        with self.assertRaises(RuntimeError):
+            await press(control._open_card)
+
+        button = _button(body, t("manager.screens.test_card"))
+        self.assertTrue(button.enabled)
+
+    async def test_a_card_that_comes_up_after_the_playfield_moved_is_taken_down(self) -> None:
+        async def open_then_move(_screen: Screen, _rotation: int) -> bool:
+            control.on["playfield"] = 1
+            return True
+
+        test = _test(open=AsyncMock(side_effect=open_then_move))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+
+        await press(control._open_card)
+
+        test.close.assert_awaited_once_with()
+        self.assertEqual(control.phase, "idle")
+
+    async def test_while_checking_it_asks_for_the_turns_and_says_to_stop_when_it_is_right(
+            self) -> None:
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test(),
+                                    show=AsyncMock())
+
+        await press(control._open_card)
+
+        self.assertEqual(_buttons(body)[1:], [t("manager.screens.turn_left"),
+                                          t("manager.screens.turn_around"),
+                                          t("manager.screens.turn_right"),
+                                          t("manager.screens.looks_right"),
+                                          t("manager.screens.test_card_close")])
+        self.assertIn(t("manager.screens.rotation_press"), _labels(body))
+        self.assertIn(t("manager.screens.rotation_stop"), _labels(body))
+        self.assertFalse(_button(body, t("manager.screens.show_numbers")).enabled)
+
+    async def test_each_turn_adds_to_the_stored_rotation_and_turns_the_card(self) -> None:
+        for start, degrees, total in ((0, 90, 90), (0, 180, 180), (0, 270, 270),
+                                      (90, 90, 180), (270, 90, 0), (180, 270, 90)):
+            with self.subTest(start=start, degrees=degrees):
+                point = AsyncMock(return_value=True)
+                test = _test()
+                control, _ = self._drawn({"playfield": 2}, point=point, test=test,
+                                         rotation=str(start))
+                await press(control._open_card)
+
+                await press(control._turn_by, degrees)
+
+                point.assert_awaited_once_with(total, TALL)
+                test.turn.assert_awaited_once_with(total)
+                self.assertEqual(control.rotation, total)
+
+    async def test_two_turns_pressed_together_both_count(self) -> None:
+        async def slow(_total: int, _screen: Screen) -> bool:
+            await asyncio.sleep(0.01)
+            return True
+
+        point = AsyncMock(side_effect=slow)
+        control, _ = self._drawn({"playfield": 2}, point=point, test=_test())
+        await press(control._open_card)
+
+        await asyncio.gather(press(control._turn_by, 90), press(control._turn_by, 90))
+
+        self.assertEqual([call.args[0] for call in point.await_args_list], [90, 180])
+        self.assertEqual(control.rotation, 180)
+
+    async def test_a_turn_after_the_card_has_gone_is_not_made(self) -> None:
         point = AsyncMock(return_value=True)
-        control, _ = self._drawn({"playfield": 2}, point=point, arrow=picture.UP)
+        control, _ = self._drawn({"playfield": 2}, point=point, test=_test())
 
-        await press(control._aim, picture.LEFT)
+        await press(control._turn_by, 90)
 
-        point.assert_awaited_once_with(picture.LEFT, TALL)
-        self.assertEqual(control.arrow, picture.LEFT)
+        point.assert_not_awaited()
 
-    async def test_an_arrow_that_was_not_kept_stays_where_it_was(self) -> None:
+    async def test_a_turn_that_was_not_kept_leaves_the_card_and_the_answer_as_they_were(
+            self) -> None:
+        test = _test()
         control, _ = self._drawn({"playfield": 2}, point=AsyncMock(return_value=False),
-                            arrow=picture.UP)
+                                 test=test, rotation="90")
+        await press(control._open_card)
 
-        await press(control._aim, picture.LEFT)
+        await press(control._turn_by, 90)
 
-        self.assertEqual(control.arrow, picture.UP)
+        test.turn.assert_not_awaited()
+        self.assertEqual(control.rotation, 90)
+
+    async def test_looks_right_takes_the_card_down_and_says_the_screen_is_rotated_correctly(
+            self) -> None:
+        test = _test()
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+
+        await press(control._looks_right)
+
+        test.close.assert_awaited_once_with()
+        self.assertEqual(control.phase, "done")
+        self.assertIn(t("manager.screens.rotated_correctly"), _labels(body))
+        self.assertEqual(_buttons(body), [t("manager.screens.check_again")])
+
+    async def test_looks_right_is_what_puts_the_turn_into_effect(self) -> None:
+        apply = AsyncMock()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test(apply=apply))
+        await press(control._open_card)
+
+        await press(control._looks_right)
+
+        apply.assert_awaited_once_with()
+
+    async def test_closing_the_card_does_not_put_the_turn_into_effect(self) -> None:
+        apply = AsyncMock()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test(apply=apply))
+        await press(control._open_card)
+
+        await press(control._close_card)
+
+        apply.assert_not_awaited()
+
+    async def test_looks_right_after_the_card_is_gone_puts_the_turn_into_effect(self) -> None:
+        apply = AsyncMock()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test(apply=apply))
+        control.phase = "asking"
+
+        await press(control._looks_right)
+
+        apply.assert_awaited_once_with()
+
+    async def test_a_second_press_of_looks_right_does_not_put_the_turn_into_effect_again(
+            self) -> None:
+        apply = AsyncMock()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test(apply=apply))
+        await press(control._open_card)
+
+        await asyncio.gather(press(control._looks_right), press(control._looks_right))
+
+        apply.assert_awaited_once_with()
+
+    async def test_check_again_asks_for_the_card_again_without_opening_it(self) -> None:
+        test = _test()
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+        await press(control._looks_right)
+        test.open.reset_mock()
+
+        await press(control._check_again)
+
+        test.open.assert_not_awaited()
+        self.assertEqual(control.phase, "idle")
+        self.assertIn(t("manager.screens.test_card"), _buttons(body))
+
+    async def test_closing_the_card_goes_back_to_the_start_and_keeps_the_answer(self) -> None:
+        test = _test()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test, rotation="180")
+        await press(control._open_card)
+
+        await press(control._close_card)
+
+        test.close.assert_awaited_once_with()
+        self.assertEqual((control.phase, control.rotation), ("idle", 180))
+
+    async def test_the_page_says_the_card_is_still_wanted(self) -> None:
+        test = _test()
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+
+        await control._hold()
+
+        test.hold.assert_awaited_once_with()
+        self.assertEqual(control.phase, "checking")
+
+    async def test_a_card_that_has_gone_asks_whether_it_faced_the_right_way_up(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+
+        await control._hold()
+
+        self.assertEqual(control.phase, "asking")
+        self.assertIn(t("manager.screens.rotation_asked"), _labels(body))
+        self.assertEqual(_buttons(body), [t("manager.screens.turn_left"),
+                                          t("manager.screens.turn_around"),
+                                          t("manager.screens.turn_right"),
+                                          t("manager.screens.looks_right"),
+                                          t("manager.screens.reopen_card")])
+
+    async def test_closing_the_card_from_the_panel_does_not_ask(self) -> None:
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=_test())
+        await press(control._open_card)
+
+        await press(control._close_card)
+
+        self.assertNotIn(t("manager.screens.rotation_asked"), _labels(body))
+
+    async def test_a_turn_with_the_card_gone_turns_the_answer_and_opens_the_card_turned(
+            self) -> None:
+        for start, degrees, total in ((0, 90, 90), (90, 90, 180), (270, 90, 0)):
+            with self.subTest(start=start, degrees=degrees):
+                point = AsyncMock(return_value=True)
+                test = _test(hold=AsyncMock(return_value=False))
+                control, _ = self._drawn({"playfield": 2}, point=point, test=test,
+                                         rotation=str(start))
+                await press(control._open_card)
+                await control._hold()
+                test.open.reset_mock()
+
+                await press(control._turn_by, degrees)
+
+                point.assert_awaited_once_with(total, TALL)
+                test.open.assert_awaited_once_with(TALL, total)
+                test.turn.assert_not_awaited()
+                self.assertEqual((control.phase, control.rotation), ("checking", total))
+
+    async def test_a_turn_with_the_card_gone_that_was_not_kept_opens_nothing(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(return_value=False),
+                                 test=test, rotation="90")
+        await press(control._open_card)
+        await control._hold()
+        test.open.reset_mock()
+
+        await press(control._turn_by, 90)
+
+        test.open.assert_not_awaited()
+        self.assertEqual((control.phase, control.rotation), ("asking", 90))
+
+    async def test_a_turn_that_cannot_reopen_the_card_leaves_the_question_asked(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(return_value=True),
+                                    test=test)
+        await press(control._open_card)
+        await control._hold()
+        test.open.return_value = False
+
+        await press(control._turn_by, 90)
+
+        self.assertEqual((control.phase, control.rotation), ("asking", 90))
+        self.assertIn(t("manager.screens.reopen_card"), _buttons(body))
+
+    async def test_show_test_card_again_opens_it_turned_as_it_was_left(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test, rotation="180")
+        await press(control._open_card)
+        await control._hold()
+        test.open.reset_mock()
+        test.hold.return_value = True
+
+        await press(control._open_card)
+
+        test.open.assert_awaited_once_with(TALL, 180)
+        self.assertEqual(control.phase, "checking")
+
+    async def test_while_the_card_is_opening_again_the_turns_and_looks_right_are_off(
+            self) -> None:
+        release = asyncio.Event()
+
+        async def slow(_screen: Screen, _rotation: int) -> bool:
+            await release.wait()
+            return True
+
+        test = _test(hold=AsyncMock(return_value=False))
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(return_value=True),
+                                    test=test)
+        await press(control._open_card)
+        await control._hold()
+        test.open.side_effect = slow
+
+        opening = asyncio.ensure_future(press(control._open_card))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        self.assertEqual(_buttons(body)[-1], t("manager.screens.test_card_opening"))
+        for words in ("manager.screens.turn_left", "manager.screens.turn_around",
+                      "manager.screens.turn_right", "manager.screens.looks_right",
+                      "manager.screens.test_card_opening"):
+            with self.subTest(words=words):
+                self.assertFalse(_button(body, t(words)).enabled)
+        release.set()
+        await opening
+
+    async def test_an_answer_given_while_a_turn_is_being_kept_is_not_undone_by_the_card(
+            self) -> None:
+        release = asyncio.Event()
+
+        async def slow(_total: int, _screen: Screen) -> bool:
+            await release.wait()
+            return True
+
+        test = _test(hold=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(side_effect=slow), test=test)
+        await press(control._open_card)
+        await control._hold()
+        test.open.reset_mock()
+
+        turning = asyncio.ensure_future(press(control._turn_by, 90))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await press(control._looks_right)
+        release.set()
+        await turning
+
+        test.open.assert_not_awaited()
+        self.assertEqual(control.phase, "done")
+
+    async def test_looks_right_with_the_card_gone_is_the_answer(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, body = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+        await control._hold()
+
+        await press(control._looks_right)
+
+        self.assertEqual(control.phase, "done")
+        self.assertEqual(_buttons(body), [t("manager.screens.check_again")])
+
+    async def test_moving_the_playfield_with_the_card_gone_asks_again_from_the_start(
+            self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2, "backglass": None}, point=AsyncMock(),
+                                 test=test)
+        await press(control._open_card)
+        await control._hold()
+
+        await press(control._put, "playfield", 1)
+
+        self.assertEqual(control.phase, "idle")
+
+    async def test_a_card_that_has_gone_after_the_answer_leaves_the_answer(self) -> None:
+        test = _test(hold=AsyncMock(return_value=False))
+        control, _ = self._drawn({"playfield": 2}, point=AsyncMock(), test=test)
+        await press(control._open_card)
+        await press(control._looks_right)
+
+        await control._hold()
+
+        self.assertEqual(control.phase, "done")
+
+    async def test_moving_the_playfield_while_checking_takes_the_card_down(self) -> None:
+        test = _test()
+        control, _ = self._drawn({"playfield": 2, "backglass": None}, point=AsyncMock(),
+                                 test=test)
+        await press(control._open_card)
+
+        await press(control._put, "playfield", 1)
+
+        test.close.assert_awaited_once_with()
+        self.assertEqual(control.phase, "idle")
+
+    async def test_moving_the_playfield_after_the_answer_asks_again(self) -> None:
+        control, _ = self._drawn({"playfield": 2, "backglass": None}, point=AsyncMock(),
+                                 test=_test())
+        await press(control._open_card)
+        await press(control._looks_right)
+
+        await press(control._put, "playfield", 1)
+
+        self.assertEqual(control.phase, "idle")
+
+    async def test_moving_another_part_while_checking_leaves_the_card_up(self) -> None:
+        test = _test()
+        control, _ = self._drawn({"playfield": 2, "backglass": None}, point=AsyncMock(),
+                                 test=test)
+        await press(control._open_card)
+
+        await press(control._put, "backglass", 1)
+
+        test.close.assert_not_awaited()
+        self.assertEqual(control.phase, "checking")
 
     async def test_show_numbers_is_given_what_is_where_and_can_be_pressed_again(self) -> None:
         show = AsyncMock()

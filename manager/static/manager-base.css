@@ -4147,13 +4147,14 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-screens-head > .manager-help { flex: 1; max-width: none; }
 .manager-screens { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
 .manager-screens, .manager-screens-head { max-width: var(--row-measure); }
-/* A panel too narrow for both side by side puts the screens under the picture. */
-@container (max-width: 760px) {
+/* A panel too narrow for both side by side puts the screens under the picture. The host is
+   the container, so the rule holds in a dialog as well as on a settings page. */
+.manager-screens-host { container: manager-screens / inline-size; }
+@container manager-screens (max-width: 760px) {
   .manager-screens { grid-template-columns: minmax(0, 1fr); }
 }
 .manager-screens-side { flex-wrap: nowrap; align-items: stretch; min-width: 0; }
 .manager-screens-tray { display: flex; flex-direction: column; gap: 8px; }
-.manager-screens-arrow-help { margin-top: 6px; line-height: 1.5; }
 .manager-cab {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 6px;
   border-radius: 8px; background: var(--surface-work); border: 1px solid var(--line-soft);
@@ -4190,21 +4191,35 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   font-size: 16px; color: var(--ink-3); cursor: pointer;
 }
 .manager-part-slot-clear:hover { color: var(--ink); background: var(--line-soft); }
-/* The playfield's own page, turned to face the player: which way is up on the cabinet. */
-.manager-pf-dir {
-  position: absolute; width: 26px; height: 26px; border: 1px solid var(--line);
-  border-radius: 5px; background: var(--surface-work); color: var(--ink-2);
-  font-size: 18px; cursor: pointer;
+/* The card as the stored turn has it. A square turns without clipping. */
+.manager-pf-card {
+  position: absolute; left: 8px; bottom: 8px; width: 46px; height: 46px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: 3px 0; border: 1px solid var(--ink-3); border-radius: 4px;
+  background: var(--surface-work); color: var(--ink-2); line-height: 1;
 }
-.manager-pf-dir:hover { border-color: var(--ink-3); color: var(--ink); }
-.manager-pf-dir--chosen { border-color: var(--accent); background: var(--accent); color: var(--surface-work); }
-.manager-pf-dir--up { top: 5px; left: 50%; transform: translateX(-50%); }
-.manager-pf-dir--down { bottom: 5px; left: 50%; transform: translateX(-50%); }
-.manager-pf-dir--left { left: 5px; top: 50%; transform: translateY(-50%); }
-.manager-pf-dir--right { right: 5px; top: 50%; transform: translateY(-50%); }
+.manager-pf-card-band { font-size: 8px; font-weight: 700; letter-spacing: .04em; }
+.manager-pf-card-arrow { font-size: 16px; }
+.manager-rotation {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px;
+  padding: 12px; border: 1px solid var(--line-soft); border-radius: 8px;
+  background: var(--surface-work);
+}
+.manager-rotation-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; }
+.manager-rotation-icon { font-size: var(--icon-mark); color: var(--accent); }
+.manager-rotation-title { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
+.manager-rotation-turns {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%;
+  margin-top: 4px;
+}
+.manager-rotation-turns .q-btn, .manager-rotation-wide .q-btn { width: 100%; }
+.manager-rotation-turns .q-btn__content { flex-direction: column; gap: 2px; }
+.manager-rotation-turns .q-btn .q-icon { margin: 0; }
+.manager-rotation-wide { width: 100%; }
+.manager-rotation-done { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .manager-screen-card { padding: 8px 12px; gap: 12px; display: flex; align-items: center; cursor: grab; }
 .manager-screen-card:active { cursor: grabbing; }
-.manager-screen-card-name { color: var(--ink); font-weight: 600; font-size: var(--fs-body); }
+.manager-screen-card-name { color: var(--ink); font-weight: 600; font-size: var(--fs-body); max-width: 100%; }
 .manager-screen-use { margin-left: auto; white-space: nowrap; }
 .manager-screen-used { color: var(--accent); }
 .manager-screen-grip { color: var(--ink-3); }

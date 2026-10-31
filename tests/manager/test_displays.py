@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from collections.abc import Mapping
 from typing import Any, cast
@@ -234,19 +235,20 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(moved)
         self.write.assert_awaited_once_with({"windows.topper": {"screen_id": 1}})
 
-    def test_the_arrows_are_for_a_cabinet_and_not_for_a_desk(self) -> None:
+    def test_the_rotation_check_is_offered_on_a_cabinet_and_on_a_desk(self) -> None:
         on_a_cab = self._drawn({"presentation": {"cab_mode": "true"}})
         on_a_desk = self._drawn({"presentation": {"cab_mode": "false"}})
 
-        self.assertTrue(on_a_cab["arrows"])
-        self.assertIsNotNone(on_a_cab["point"])
-        self.assertFalse(on_a_desk["arrows"])
-        self.assertIsNone(on_a_desk["point"])
+        self.assertTrue(on_a_cab["cabinet"])
+        self.assertFalse(on_a_desk["cabinet"])
+        for drawn in (on_a_cab, on_a_desk):
+            self.assertIsNotNone(drawn["point"])
+            self.assertIsNotNone(drawn["test"])
 
-    def test_the_arrow_is_the_stored_rotation(self) -> None:
+    def test_the_picture_is_given_the_stored_rotation(self) -> None:
         drawn = self._drawn(_values(playfield={"rotation": "270"}))
 
-        self.assertEqual(drawn["arrow"], picture.RIGHT)
+        self.assertEqual(drawn["rotation"], "270")
 
     async def test_a_part_moved_is_written_as_its_screen_id(self) -> None:
         drawn = self._drawn()
@@ -282,17 +284,17 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
 
         self.refill.assert_not_called()
 
-    async def test_an_arrow_is_written_as_the_playfield_s_mounting_and_turn(self) -> None:
+    async def test_a_turn_is_written_as_the_playfield_s_mounting_and_rotation(self) -> None:
         drawn = self._drawn({"presentation": {"cab_mode": "true"}})
 
-        self.assertTrue(await drawn["point"](picture.LEFT, FIRST))
+        self.assertTrue(await drawn["point"](90, FIRST))
 
         self.write.assert_awaited_once_with(
             {"windows.playfield": {"orientation": "portrait", "rotation": "90"}})
 
     async def test_the_turn_just_chosen_is_the_one_a_later_move_keeps(self) -> None:
         drawn = self._drawn({"presentation": {"cab_mode": "true"}})
-        await drawn["point"](picture.LEFT, FIRST)
+        await drawn["point"](90, FIRST)
         self.write.reset_mock()
 
         await drawn["move"]({"playfield": 1})
@@ -300,10 +302,10 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         self.write.assert_awaited_once_with(
             {"windows.playfield": {"screen_id": 0, "orientation": "portrait"}})
 
-    async def test_an_arrow_that_was_not_saved_is_not_the_turn_kept(self) -> None:
+    async def test_a_turn_that_was_not_saved_is_not_the_turn_kept(self) -> None:
         drawn = self._drawn({"presentation": {"cab_mode": "true"}})
         self.write.return_value = False
-        await drawn["point"](picture.LEFT, FIRST)
+        await drawn["point"](90, FIRST)
         self.write.reset_mock()
         self.write.return_value = True
 
@@ -312,8 +314,7 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         self.write.assert_awaited_once_with(
             {"windows.playfield": {"screen_id": 0, "orientation": "landscape"}})
 
-    async def test_show_numbers_is_given_the_screens_and_the_playfield_on_a_cabinet(
-            self) -> None:
+    async def test_show_numbers_is_given_the_screens_and_nothing_else(self) -> None:
         local = self.enterContext(patch.object(displays.device_client, "local"))
         self.enterContext(patch.object(displays.run, "io_bound", new=AsyncMock()))
         drawn = self._drawn({"presentation": {"cab_mode": "true"}})
@@ -324,16 +325,7 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         args = cast(Any, displays.run.io_bound).await_args.args
         self.assertIs(args[0], local.return_value.show_numbers)
         self.assertEqual([one.number for one in args[1]], [1, 2])
-        self.assertEqual(args[2], 2)
-
-    async def test_show_numbers_on_a_desk_marks_no_playfield(self) -> None:
-        self.enterContext(patch.object(displays.device_client, "local"))
-        self.enterContext(patch.object(displays.run, "io_bound", new=AsyncMock()))
-        drawn = self._drawn()
-
-        await press(drawn["show"], {"playfield": 2})
-
-        self.assertIsNone(cast(Any, displays.run.io_bound).await_args.args[2])
+        self.assertEqual(len(args), 2)
 
     async def test_show_numbers_that_cannot_open_a_window_says_why(self) -> None:
         self.enterContext(patch.object(displays.device_client, "local"))
@@ -349,11 +341,67 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("No browser", notify.call_args.kwargs["caption"])
 
 
+class TestCardTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.local = self.enterContext(patch.object(displays.device_client, "local"))
+        self.io = self.enterContext(patch.object(displays.run, "io_bound", new=AsyncMock()))
+        self.enterContext(patch("manager.kit.on_page.ui"))
+
+    async def test_opening_is_the_device_s_card_on_that_screen_and_turn(self) -> None:
+        device = self.local.return_value
+        self.io.side_effect = [None, True]
+
+        opened = await displays.test_card().open(FIRST, 90)
+
+        self.assertTrue(opened)
+        self.assertEqual([call.args for call in self.io.await_args_list],
+                         [(device.show_test_card, FIRST, 90), (device.test_card_open,)])
+
+    async def test_a_card_that_did_not_stay_open_says_so(self) -> None:
+        self.io.side_effect = [None, False]
+        notify = self.enterContext(patch.object(displays.ui, "notify"))
+
+        self.assertFalse(await displays.test_card().open(FIRST, 0))
+
+        self.assertEqual(notify.call_args.args, (t("manager.screens.test_card_failed"),))
+
+    async def test_a_card_that_cannot_open_says_why(self) -> None:
+        self.io.side_effect = RuntimeError("No browser")
+        notify = self.enterContext(patch.object(displays.ui, "notify"))
+
+        opened = await displays.test_card().open(FIRST, 0)
+
+        self.assertFalse(opened)
+        self.assertEqual(notify.call_args.args, (t("manager.screens.test_card_failed"),))
+        self.assertIn("No browser", notify.call_args.kwargs["caption"])
+
+    async def test_turn_close_and_hold_reach_the_device(self) -> None:
+        card = displays.test_card()
+        self.io.return_value = True
+
+        await card.turn(180)
+        await card.close()
+        held = await card.hold()
+
+        device = self.local.return_value
+        self.assertEqual([call.args for call in self.io.await_args_list],
+                         [(device.turn_test_card, 180), (device.close_test_card,),
+                          (device.keep_test_card,)])
+        self.assertIs(held, True)
+
+
 class FollowTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.write = AsyncMock(return_value=True)
         self.follow = AsyncMock()
         self.control = self.enterContext(patch.object(displays.picture, "Picture"))
+        self.tasks: list[asyncio.Task[Any]] = []
+        self.enterContext(patch.object(
+            displays.background_tasks, "create",
+            side_effect=lambda coro, **_: self.tasks.append(asyncio.ensure_future(coro))))
+
+    async def _settled(self) -> None:
+        await asyncio.gather(*self.tasks)
 
     def _drawn(self, values: dict | None = None) -> Mapping[str, Any]:
         entries = displays.rows(values or {"presentation": {"cab_mode": "true"}}, SCHEMA,
@@ -366,6 +414,7 @@ class FollowTests(unittest.IsolatedAsyncioTestCase):
         drawn = self._drawn()
 
         await drawn["move"]({"backglass": 2})
+        await self._settled()
 
         [(before, after, here)] = [call.args for call in self.follow.await_args_list]
         self.assertEqual(before.on["backglass"], None)
@@ -377,15 +426,17 @@ class FollowTests(unittest.IsolatedAsyncioTestCase):
         drawn = self._drawn()
 
         await drawn["move"]({"playfield": 2})
+        await self._settled()
 
         [(before, after, _)] = [call.args for call in self.follow.await_args_list]
         self.assertEqual(before.turn, ("landscape", "0"))
         self.assertEqual(after.turn, ("portrait", "0"))
 
-    async def test_an_arrow_tells_the_turn_it_made(self) -> None:
+    async def test_a_turn_tells_the_turn_it_made(self) -> None:
         drawn = self._drawn()
 
-        await drawn["point"](picture.LEFT, FIRST)
+        await drawn["point"](90, FIRST)
+        await self._settled()
 
         [(before, after, _)] = [call.args for call in self.follow.await_args_list]
         self.assertEqual((before.turn, after.turn), (("landscape", "0"), ("portrait", "90")))
@@ -396,7 +447,7 @@ class FollowTests(unittest.IsolatedAsyncioTestCase):
         drawn = self._drawn()
 
         await drawn["move"]({"backglass": 2})
-        await drawn["point"](picture.LEFT, FIRST)
+        await drawn["point"](90, FIRST)
 
         self.follow.assert_not_awaited()
 
@@ -405,10 +456,49 @@ class FollowTests(unittest.IsolatedAsyncioTestCase):
 
         await drawn["move"]({"backglass": 2})
         await drawn["move"]({"backglass": 1})
+        await self._settled()
 
         [(_, first, _), (before, after, _)] = [call.args for call in self.follow.await_args_list]
         self.assertEqual(before.on, first.on)
         self.assertEqual(after.on["backglass"], 1)
+
+    async def test_the_picture_does_not_wait_for_the_following(self) -> None:
+        release = asyncio.Event()
+        async def follow(*_: Any) -> None:
+            await release.wait()
+
+        self.follow.side_effect = follow
+        drawn = self._drawn()
+
+        kept = await asyncio.wait_for(drawn["move"]({"backglass": 2}), timeout=1)
+        await asyncio.sleep(0)
+
+        self.assertTrue(kept)
+        self.follow.assert_awaited_once()
+        self.assertFalse(self.tasks[0].done())
+        release.set()
+        await self._settled()
+
+    async def test_one_following_ends_before_the_next_begins(self) -> None:
+        seen: list[str] = []
+        release = asyncio.Event()
+
+        async def follow(before: Any, after: Any, _here: Any) -> None:
+            seen.append(f"begin {after.on['backglass']}")
+            await release.wait()
+            seen.append(f"end {after.on['backglass']}")
+
+        self.follow.side_effect = follow
+        drawn = self._drawn()
+
+        await drawn["move"]({"backglass": 2})
+        await drawn["move"]({"backglass": 1})
+        await asyncio.sleep(0.01)
+        self.assertEqual(seen, ["begin 2"])
+        release.set()
+        await self._settled()
+
+        self.assertEqual(seen, ["begin 2", "end 2", "begin 1", "end 1"])
 
     async def test_nothing_is_asked_to_follow_where_nothing_is_listening(self) -> None:
         entries = displays.rows({}, SCHEMA, [BIG], [""], self.write, Mock())
@@ -416,6 +506,84 @@ class FollowTests(unittest.IsolatedAsyncioTestCase):
         draw()
 
         self.assertTrue(await self.control.call_args.kwargs["move"]({"backglass": 1}))
+
+
+def _waiting(*keys: str, waits_for: str = "reopen", reopen: bool = True) -> dict[str, Any]:
+    return {"reopen": reopen,
+            "waiting": [{"section": "windows.playfield", "key": key, "waits_for": waits_for}
+                        for key in keys]}
+
+
+class WaitsForReopenTests(unittest.TestCase):
+    def test_a_turn_waiting_on_the_windows_is_applied_by_reopening_them(self) -> None:
+        for keys in (("rotation",), ("orientation",), ("orientation", "rotation")):
+            with self.subTest(keys=keys):
+                self.assertTrue(displays.waits_for_reopen(_waiting(*keys)))
+
+    def test_nothing_waiting_is_nothing_to_reopen_for(self) -> None:
+        self.assertFalse(displays.waits_for_reopen(_waiting()))
+        self.assertFalse(displays.waits_for_reopen({}))
+
+    def test_a_turn_waiting_on_a_restart_is_left_to_the_bar(self) -> None:
+        self.assertFalse(displays.waits_for_reopen(_waiting("rotation", waits_for="restart")))
+
+    def test_a_reopen_that_cannot_be_done_here_is_not_asked_for(self) -> None:
+        self.assertFalse(displays.waits_for_reopen(_waiting("rotation", reopen=False)))
+
+    def test_another_setting_waiting_is_not_the_turn(self) -> None:
+        answer = {"reopen": True, "waiting": [
+            {"section": "windows.backglass", "key": "screen_id", "waits_for": "reopen"}]}
+
+        self.assertFalse(displays.waits_for_reopen(answer))
+
+
+async def _apply() -> None:
+    apply = displays.test_card().apply
+    assert apply is not None
+    await apply()
+
+
+class ApplyTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.client = self.enterContext(patch.object(displays, "ApiClient")).return_value
+        self.io = self.enterContext(patch.object(displays.run, "io_bound", new=AsyncMock()))
+        self.notify = self.enterContext(patch.object(displays.ui, "notify"))
+        self.enterContext(patch("manager.kit.on_page.ui"))
+
+    async def test_a_turn_waiting_on_the_windows_reopens_them(self) -> None:
+        self.io.side_effect = [_waiting("rotation"), {"performed": True}]
+
+        await _apply()
+
+        self.assertEqual([call.args for call in self.io.await_args_list],
+                         [(self.client.config_waiting,),
+                          (self.client.perform_action, "frontend", "restart")])
+        self.assertEqual(self.notify.call_args.args, (t("manager.devices.windows_reopened"),))
+
+    async def test_nothing_waiting_on_the_turn_reopens_nothing(self) -> None:
+        self.io.side_effect = [_waiting()]
+
+        await _apply()
+
+        self.assertEqual([call.args for call in self.io.await_args_list],
+                         [(self.client.config_waiting,)])
+        self.notify.assert_not_called()
+
+    async def test_a_reopen_that_did_not_happen_says_so(self) -> None:
+        self.io.side_effect = [_waiting("rotation"), {"performed": False}]
+
+        await _apply()
+
+        self.assertEqual(self.notify.call_args.args[0], t(
+            "manager.devices.not_happen", label=t("manager.waiting.reopen_windows")))
+
+    async def test_a_reopen_that_failed_says_why(self) -> None:
+        self.io.side_effect = RuntimeError("No frontend")
+
+        await _apply()
+
+        self.assertEqual(self.notify.call_args.args, (t("said.action_failed"),))
+        self.assertIn("No frontend", self.notify.call_args.kwargs["caption"])
 
 
 if __name__ == "__main__":

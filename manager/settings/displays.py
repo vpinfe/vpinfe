@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import background_tasks, run, ui
 
 from common.devices import device_client
 from common.failures import why
 from common.i18n import t
+from common.settings import settings_waiting
+from common.values import quarter_turn
 from manager.kit import panel
+from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.settings import screens
 from manager.settings import screens_picture as picture
@@ -94,8 +98,63 @@ def writes(moved: Mapping[str, picture.Placement], screens_here: Sequence[Screen
     if isinstance(number, int):
         screen = next((one for one in screens_here if one.number == number), None)
         found["windows.playfield"]["orientation"] = picture.turn(
-            picture.arrow_at(rotation) or picture.UP, screen)["orientation"]
+            quarter_turn(rotation), screen)["orientation"]
     return found
+
+
+def test_card() -> picture.Test:
+    """The rotation check's card, opened on this device by the Manager."""
+    @on_page
+    async def open_card(screen: Screen, rotation: int) -> bool:
+        device = device_client.local()
+        try:
+            await run.io_bound(device.show_test_card, screen, rotation)
+        except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+            ui.notify(t("manager.screens.test_card_failed"), caption=why(exc), type="negative")
+            return False
+        if await run.io_bound(device.test_card_open):
+            return True
+        ui.notify(t("manager.screens.test_card_failed"), type="negative")
+        return False
+
+    async def turn(rotation: int) -> None:
+        await run.io_bound(device_client.local().turn_test_card, rotation)
+
+    async def close() -> None:
+        await run.io_bound(device_client.local().close_test_card)
+
+    async def hold() -> bool:
+        return bool(await run.io_bound(device_client.local().keep_test_card))
+
+    @on_page
+    async def apply() -> None:
+        client = ApiClient()
+        try:
+            answer = await run.io_bound(client.config_waiting) or {}
+            if not waits_for_reopen(answer):
+                return
+            done = await run.io_bound(client.perform_action, "frontend", "restart") or {}
+        except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+            ui.notify(t("said.action_failed"), caption=why(exc), type="negative")
+            return
+        if done.get("performed"):
+            ui.notify(t("manager.devices.windows_reopened"), type="positive")
+        else:
+            ui.notify(t("manager.devices.not_happen",
+                        label=t("manager.waiting.reopen_windows")), type="warning")
+
+    return picture.Test(open_card, turn, close, hold, apply)
+
+
+def waits_for_reopen(answer: Mapping[str, Any]) -> bool:
+    """Whether the saved playfield turn is waiting on windows being reopened, which can be
+    done here. A turn that waits on a restart, or on nothing, is left to the bar over the
+    page."""
+    turned = [one for one in answer.get("waiting") or []
+              if one.get("section") == "windows.playfield"
+              and one.get("key") in ("orientation", "rotation")]
+    return bool(answer.get("reopen")) and bool(turned) and all(
+        one.get("waits_for") == settings_waiting.WAITS_REOPEN for one in turned)
 
 
 def rows(values: Mapping[str, Any], schema: Sequence[dict], monitors: Sequence[Any],
@@ -107,10 +166,25 @@ def rows(values: Mapping[str, Any], schema: Sequence[dict], monitors: Sequence[A
     held = placed(values, schema)
     turned = {"orientation": standing(values, schema).turn[0],
               "rotation": stored(values, schema, "windows.playfield", "rotation")}
-    arrows = cabinet(values, schema)
+    on_cabinet = cabinet(values, schema)
 
     def now() -> Standing:
         return Standing(dict(held), (str(turned["orientation"]), str(turned["rotation"])))
+
+    behind = asyncio.Lock()
+
+    def follows(before: Standing) -> None:
+        if follow is None:
+            return
+        # Called here and awaited below: `follow` runs under the page that is current when it
+        # is called, and the task that awaits it has none.
+        following = follow(before, now(), here)
+
+        async def go() -> None:
+            async with behind:
+                await following
+
+        background_tasks.create(go(), name="manager-follow-screens")
 
     async def move(moved: dict[str, picture.Placement]) -> bool:
         lost = any(isinstance(number, int) and not any(one.number == number for one in here)
@@ -124,32 +198,28 @@ def rows(values: Mapping[str, Any], schema: Sequence[dict], monitors: Sequence[A
             "orientation", turned["orientation"])
         if lost:
             refill()
-        if follow is not None:
-            await follow(before, now(), here)
+        follows(before)
         return True
 
-    async def point(arrow: str, screen: Screen) -> bool:
-        found = picture.turn(arrow, screen)
+    async def point(degrees: int, screen: Screen) -> bool:
+        found = picture.turn(degrees, screen)
         before = now()
         if not await write({"windows.playfield": found}):
             return False
         turned.update(found)
-        if follow is not None:
-            await follow(before, now(), here)
+        follows(before)
         return True
 
     @on_page
-    async def show(on: Mapping[str, picture.Placement]) -> None:
-        playfield = on.get(picture.PLAYFIELD)
+    async def show(_on: Mapping[str, picture.Placement]) -> None:
         try:
-            await run.io_bound(device_client.local().show_numbers, here,
-                               playfield if arrows and isinstance(playfield, int) else None)
+            await run.io_bound(device_client.local().show_numbers, here)
         except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
             ui.notify(t("manager.screens.show_failed"), caption=why(exc), type="negative")
 
     def draw() -> None:
-        picture.Picture(here, held, move=move, arrows=arrows, show=show,
-                        arrow=picture.arrow_at(turned["rotation"]),
-                        point=point if arrows else None)
+        picture.Picture(here, held, move=move, cabinet=on_cabinet, show=show,
+                        rotation=turned["rotation"],
+                        point=point, test=test_card())
 
     return [(panel.HEADING, t("manager.settings.section_screens")), (panel.FULL, draw)]

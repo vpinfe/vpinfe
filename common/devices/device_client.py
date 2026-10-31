@@ -67,11 +67,39 @@ class LocalDevice:
             logger.debug("Could not enumerate this machine's screens", exc_info=True)
             return []
 
-    def show_numbers(self, screens: Sequence[Any], arrowed: int | None = None) -> None:
+    def show_numbers(self, screens: Sequence[Any]) -> None:
         """Put each screen's number and name on it for a few seconds. Blocking."""
         from frontend import screen_numbers
 
-        screen_numbers.show(screens, arrowed)
+        screen_numbers.show(screens)
+
+    def show_test_card(self, screen: Any, rotation: Any) -> None:
+        """Put the test card on `screen`, turned by `rotation`, and leave it there until
+        `close_test_card`. Blocking while it is placed."""
+        from frontend import screen_card
+
+        screen_card.show(screen, rotation)
+
+    def turn_test_card(self, rotation: Any) -> None:
+        from frontend import screen_card
+
+        screen_card.turn(rotation)
+
+    def keep_test_card(self) -> bool:
+        """Say the card is still wanted, and whether it is still up."""
+        from frontend import screen_card
+
+        return screen_card.keep()
+
+    def test_card_open(self) -> bool:
+        from frontend import screen_card
+
+        return screen_card.is_open()
+
+    def close_test_card(self) -> None:
+        from frontend import screen_card
+
+        screen_card.close()
 
     def browser_path(self) -> str | None:
         """Which browser this device would open its windows with, or None."""

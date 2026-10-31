@@ -201,10 +201,11 @@ rewrites, so read the next section first.
   opens on the IP address and swaps the name in when this device answers to it.
 - **Frontend** - On Sway, Show Numbers puts each number window on its own screen and opens
   again any window the browser drops while it starts.
-- **Manager** - On a cabinet, Displays asks "Is the Screen Rotated Correctly?" in place of
+- **Manager** - Displays asks "Is the Playfield Rotated Correctly?" in place of
   four arrow buttons. Show Test Card opens a card on the playfield screen with TOP at one edge,
   and Turn Left, Turn Around and Turn Right turn it until TOP is toward the backglass. Looks
-  Right ends the check, and a chip beside the question says how the screen is turned. It sets
+  Right ends the check and reopens the open windows so the playfield turns at once, a key or a click on the card closes it and the panel asks whether the card
+  faced the right way up, and a chip beside the question says how the screen is turned. It sets
   Rotation and Mounting for you. Visual Pinball's launcher page now shows the same card without
   changing anything from it, and a launcher turned differently lists Playfield under Different
   from VPinFE.

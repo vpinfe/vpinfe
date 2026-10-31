@@ -225,6 +225,20 @@ tests = [
   "tests/theming/test_separation.py",
 ]
 
+# The rotation check's test card, its window, and the Manager panel that opens it.
+[[area]]
+paths = [
+  "frontend/screen_card.py",
+  "frontend/screen_numbers.py",
+  "manager/settings/screens_picture.py",
+  "manager/settings/displays.py",
+]
+tests = [
+  "tests/manager/test_displays.py",
+  "tests/manager/test_screens_picture.py",
+  "tests/theming/test_screen_card.py",
+]
+
 # The frontend: what core draws, themes, and the wheel.
 [[area]]
 paths = ["frontend/*", "common/online/*"]

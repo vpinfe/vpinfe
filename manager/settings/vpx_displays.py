@@ -22,6 +22,7 @@ from common.devices import device_client
 from common.failures import why
 from common.host import display_service
 from common.i18n import t
+from common.values import quarter_turn
 from manager.kit import offload, panel, units
 from manager.kit.data import config_groups
 from manager.kit.failed_together import Failures
@@ -91,12 +92,6 @@ def size_row_goes_before(shown: Sequence[tuple[Any, list[Any]]]) -> str:
     return ""
 
 
-def arrow_of(screen: Screen | None, rotation: str) -> str | None:
-    """The arrow that VPX's turn on this screen amounts to, or None where it faces none of
-    the screen's four edges."""
-    return picture.arrow_at(vpx.vpinfe_rotation(screen, rotation))
-
-
 class Page:
     """One launcher's Displays, with VPinFE's screens beside it.
 
@@ -106,7 +101,7 @@ class Page:
 
     def __init__(self, library: Any, launcher_id: str, rebuild: Callable[[], Any], *,
                  flat: dict[str, str], vpinfe: displays.Standing, here: Sequence[Screen],
-                 logged: Sequence[str], arrows: bool, units_now: str,
+                 logged: Sequence[str], cabinet: bool, units_now: str,
                  defaults: Mapping[str, str],
                  program: Mapping[str, Any] | None = None) -> None:
         self.library = library
@@ -116,7 +111,7 @@ class Page:
         self.vpinfe = vpinfe
         self.here = list(here)
         self.logged = list(logged)
-        self.arrows = arrows
+        self.cabinet = cabinet
         self.units = units_now
         self.defaults = dict(defaults)
         self.program = program
@@ -130,19 +125,24 @@ class Page:
     def rotation(self) -> str:
         return self.flat.get(vpx.VIEW_CAB_ROTATION, "")
 
-    def arrow(self) -> str | None:
-        return arrow_of(self.screen(self.on.get(vpx.PLAYFIELD)), self.rotation())
+    def turned(self) -> str | None:
+        """The VPinFE rotation that VPX's turn on the playfield's screen amounts to, or None
+        where it faces none of the screen's four edges."""
+        return vpx.vpinfe_rotation(self.screen(self.on.get(vpx.PLAYFIELD)), self.rotation())
 
     def wanted_rotation(self) -> str | None:
         """What VPinFE's turn says VPX's should be, where that is known."""
         return vpx.view_cab_rotation(self.screen(self.vpinfe.on.get(vpx.PLAYFIELD)),
                                      self.vpinfe.turn[1])
 
-    def differences(self) -> tuple[list[str], bool]:
+    def differences(self) -> list[str]:
+        """The parts held otherwise than VPinFE holds them. The playfield counts where it is
+        on the same screen and turned another way."""
         parts = vpx.differs(self.vpinfe.on, self.on)
-        arrow = (self.arrows and vpx.PLAYFIELD not in parts
-                 and vpx.rotation_differs(self.wanted_rotation(), self.rotation()))
-        return parts, bool(arrow)
+        if (vpx.PLAYFIELD not in parts
+                and vpx.rotation_differs(self.wanted_rotation(), self.rotation())):
+            parts.append(vpx.PLAYFIELD)
+        return parts
 
     def _cm(self, key: str) -> float:
         for said in (self.flat.get(key), self.defaults.get(key)):
@@ -179,12 +179,11 @@ class Page:
 
     def _turn_to(self, number: Placement) -> tuple[str, str] | None:
         """The playfield's (orientation, rotation) on the screen it is moving to, with the
-        arrow it has now, else VPinFE's, else up."""
+        turn it has now, else VPinFE's."""
         screen = self.screen(number)
-        if not self.arrows or screen is None:
+        if screen is None:
             return None
-        arrow = (self.arrow() or picture.arrow_at(self.vpinfe.turn[1]) or picture.UP)
-        found = picture.turn(arrow, screen)
+        found = picture.turn(quarter_turn(self.turned() or self.vpinfe.turn[1]), screen)
         return found["orientation"], found["rotation"]
 
     async def move(self, moved: dict[str, Placement]) -> bool:
@@ -200,19 +199,8 @@ class Page:
         self.rebuild()
         return True
 
-    async def point(self, arrow: str, screen: Screen) -> bool:
-        found = picture.turn(arrow, screen)
-        value = vpx.view_cab_rotation(screen, found["rotation"])
-        if value is None:
-            ui.notify(t("manager.vpx_displays.arrow_square"), type="warning")
-            return False
-        if not await self.write({vpx.VIEW_CAB_ROTATION: value}):
-            return False
-        self.rebuild()
-        return True
-
     async def match(self) -> None:
-        """VPinFE's parts and arrow. With no topper screen in VPinFE, the topper is left
+        """VPinFE's parts and turn. With no topper screen in VPinFE, the topper is left
         where it is unless a part now needs its screen."""
         wanted = {part: self.vpinfe.on.get(part)
                   for part in (vpx.BACKGLASS, vpx.SCOREVIEW, vpx.PLAYFIELD)}
@@ -224,8 +212,8 @@ class Page:
         if not has_topper and isinstance(topper, int) and topper in wanted.values():
             moved[vpx.TOPPER] = None
         after = {**self.on, **moved}
-        turn = self.vpinfe.turn if self.arrows else None
-        written = vpx.answer(moved, after, self.here, self.logged, self.flat, turn=turn,
+        written = vpx.answer(moved, after, self.here, self.logged, self.flat,
+                             turn=self.vpinfe.turn,
                              program=self.program)
         if self._refused(written):
             return
@@ -235,21 +223,17 @@ class Page:
         self.rebuild()
 
     @on_page
-    async def show(self, on: Mapping[str, Placement]) -> None:
-        playfield = on.get(picture.PLAYFIELD)
+    async def show(self, _on: Mapping[str, Placement]) -> None:
         try:
-            await run.io_bound(device_client.local().show_numbers, self.here,
-                               playfield if self.arrows and isinstance(playfield, int) else None)
+            await run.io_bound(device_client.local().show_numbers, self.here)
         except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
             ui.notify(t("manager.screens.show_failed"), caption=why(exc), type="negative")
 
     def picture_rows(self) -> Entries:
         def draw() -> None:
-            parts, arrow_differs = self.differences()
             picture.Picture(self.here, self.on, move=self.move, parts=picture.vpx_parts(),
-                            arrows=self.arrows, arrow=self.arrow(), show=self.show,
-                            point=self.point if self.arrows else None,
-                            differs=parts, arrow_differs=arrow_differs, match=self.match)
+                            cabinet=self.cabinet, rotation=self.turned(), show=self.show,
+                            differs=self.differences(), match=self.match)
 
         return [(panel.HEADING, t("manager.settings.section_screens")), (panel.FULL, draw)]
 
@@ -314,8 +298,8 @@ async def entries(context: dict[str, Any], group: Any, shown: Sequence[tuple[Any
                   rows: Callable[..., Awaitable[Entries]],
                   redraw: Callable[[], Coroutine[Any, Any, Any]] | None = None) -> Entries:
     """The page's rows. `rows` draws the settings of some headings as the launcher's
-    other areas do, given `pairs` and `ahead`. `redraw` is awaited after a move or a point
-    in place of the page's rebuild."""
+    other areas do, given `pairs` and `ahead`. `redraw` is awaited after a move in place of
+    the page's rebuild."""
     library = context["library"]
     try:
         vpinfe, schema, monitors, names = await _beside(library)
@@ -340,7 +324,7 @@ async def entries(context: dict[str, Any], group: Any, shown: Sequence[tuple[Any
         vpinfe=displays.standing(vpinfe, schema), here=here,
         logged=sorted({name for key in vpx.DISPLAY.values() if key in by_key
                        for name in by_key[key].reported}),
-        arrows=displays.cabinet(vpinfe, schema),
+        cabinet=displays.cabinet(vpinfe, schema),
         units_now=units.resolved(displays.stored(vpinfe, schema, "manager", "units")),
         defaults={key: str(by_key[key].default or "") for key in vpx.SCREEN_SIZE
                   if key in by_key}, program=program)
@@ -442,9 +426,9 @@ def filling(standing: displays.Standing, here: Sequence[Screen], logged: Sequenc
     return keys
 
 
-async def _flat_values(library: Any, launcher_id: str) -> dict[str, str]:
-    held = await offload.io(library.launcher_config_values, launcher_id)
-    return {key: str((one or {}).get("value") or "") for key, one in held.items()}
+def _flat_values(found: Mapping[str, Any]) -> dict[str, str]:
+    return {key: str((one or {}).get("value") or "")
+            for key, one in (found.get("values") or {}).items()}
 
 
 async def _follow_panel(library: Any, kind: str, launcher_id: str) -> None:
@@ -455,12 +439,11 @@ async def _follow_panel(library: Any, kind: str, launcher_id: str) -> None:
 
 async def _follow_one(library: Any, launcher_id: str, *, before: displays.Standing,
                       after: displays.Standing, here: Sequence[Screen]) -> None:
-    flat = await _flat_values(library, launcher_id)
-    program = await offload.io(library.launcher_program, launcher_id)
-    groups = await offload.io(library.launcher_config_groups, launcher_id)
-    logged = sorted({name for group in groups if applies(group) for one in group.settings
+    found = await offload.io(library.launcher_config, launcher_id)
+    logged = sorted({name for group in config_groups(found) if applies(group)
+                     for one in group.settings
                      if one.key in vpx.DISPLAY.values() for name in one.reported})
-    keys = following(before, after, here, logged, flat, program)
+    keys = following(before, after, here, logged, _flat_values(found), found.get("program"))
     if keys:
         await run.io_bound(library.write_launcher_config, launcher_id, keys, create=True)
 

@@ -39,6 +39,9 @@ CAPWORDS = re.compile(r"^_?[A-Z][A-Za-z0-9]*$")
 BORROWED = {
     # Python's own throwaway.
     "_",
+    # http.server dispatches to `do_` plus the request's method, so the name is its own.
+    "do_GET",
+    "do_POST",
 }
 
 

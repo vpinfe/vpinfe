@@ -1,6 +1,6 @@
 import unittest
 
-from common.values import is_truthy, newer_version, parse_version
+from common.values import is_truthy, newer_version, parse_version, quarter_turn
 
 
 class IsTruthyTests(unittest.TestCase):
@@ -42,6 +42,18 @@ class VersionTests(unittest.TestCase):
         self.assertFalse(newer_version((3, 0), (3, 0, 0)))
         self.assertTrue(newer_version((3, 0, 1), (3, 0)))
         self.assertTrue(newer_version((1, 10), (1, 9, 9)))
+
+
+class QuarterTurnTests(unittest.TestCase):
+    def test_a_quarter_turn_is_read_as_a_number(self) -> None:
+        for given, expected in (("0", 0), (90, 90), ("180", 180), (" 270 ", 270)):
+            with self.subTest(given=given):
+                self.assertEqual(expected, quarter_turn(given))
+
+    def test_anything_that_is_no_quarter_turn_is_none(self) -> None:
+        for given in (None, "", "auto", "45", 360, -90):
+            with self.subTest(given=given):
+                self.assertEqual(0, quarter_turn(given))
 
 
 if __name__ == "__main__":

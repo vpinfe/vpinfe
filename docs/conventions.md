@@ -1302,9 +1302,13 @@ sends that one to where this one came from. Clicking a part opens a menu that do
 and an empty part reads **No screen**.
 
 A screen is called by its model name, and by its size when it has none. It is numbered from
-1, as a person counts, and a window stores that number less one. The playfield's arrows say
-which way its top points and are drawn only for Cabinet Mode; a desktop page draws the
-picture without them.
+1, as a person counts, and a window stores that number less one. The picture asks
+Is the Playfield Rotated Correctly? under the screens, answered with a test card on the
+playfield screen that a key or a click closes, and three turns, and the playfield's box keeps a small card turned to the
+stored answer, whatever Cabinet Mode says. **Looks Right** reopens the open windows when the
+saved turn is waiting on that, so the playfield picks it up; closing the card another way keeps
+the turn and leaves it waiting. A launcher's page for Visual Pinball draws only
+the small card, whatever Cabinet Mode says.
 
 Window placement is a set of rows, `manager/settings/placement_panel.py`, that a page mounts under the
 screens picture: Displays does today and the Screens step of Setup can. The rows write
