@@ -228,7 +228,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `name` | string |  | What to call this device where one is listed. Defaults to its hostname. |
 | `features` | list | `library,frontend,devices,overview` | What this device is for. Each one you add appears in the Manager. |
 | `language` | choice (auto, en) | `auto` | What language VPinFE speaks. Your library's own words - table names and the rest - are never translated. |
-| `update_channel` | choice (stable, beta) | `stable` | Stable is for everyday use. Early access may be unstable but gets updates first. |
+| `update_channel` | choice (stable, beta) | `stable` | Stable is for everyday use. Beta may be unstable but gets updates first. |
 
 ### `network`
 

@@ -786,7 +786,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
             summary = found.get("summary")
             # Setup's own, since a callable cannot travel as JSON: `gate` says whether the
             # answer is complete, asked again after every change; `before()` draws above
-            # the fields and `draw(values)` below them, writing into the values itself.
+            # the fields, `draw(values)` below them, writing into the values itself, and
+            # `after(values)` below the notes.
             gate: Callable[[dict[str, Any]], bool] | None = found.get("gate")
             # Whether the answer as it stands is the last, for a step that carries a
             # `confirm` but may still lead on: where it says no, the forward button is Next.
@@ -852,6 +853,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
                     _acts(list(found["acts"]), _act)
                 _lines(list(found.get("notes") or []),
                        t("manager.ext_action.worth_knowing") if summary else "")
+                if found.get("after"):
+                    found["after"](walk.values)
                 if not found.get("ready", True):
                     ui.label(str(found.get("reason") or "")).classes("manager-help px-3")
             foot()

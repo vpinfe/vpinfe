@@ -22,6 +22,7 @@ from common.release import release_notes, whats_new
 from common.vpinfe_version import get_version
 from manager.kit import offload, panel, wizard
 from manager.kit.on_page import on_page
+from manager.system import early_access
 
 CHANGED = "changed"
 FILES = "files"
@@ -120,7 +121,8 @@ def _row(shown: list[Part], here: Part) -> list[dict[str, Any]]:
     return row
 
 
-def _step(found: whats_new.Review, shown: list[Part], part: Part) -> dict[str, Any]:
+def _step(found: whats_new.Review, shown: list[Part], part: Part,
+          offer: Callable[[], None] | None = None) -> dict[str, Any]:
     step: dict[str, Any] = {
         "step": part.key,
         "title": t(part.title),
@@ -133,10 +135,13 @@ def _step(found: whats_new.Review, shown: list[Part], part: Part) -> dict[str, A
         step["steps"] = _row(shown, part)
     if part is shown[-1]:
         step["confirm"] = t("word.done")
+        if offer is not None:
+            step["after"] = lambda values: offer()
     return step
 
 
-def calls(found: whats_new.Review, shown: list[Part]) -> wizard.Calls:
+def calls(found: whats_new.Review, shown: list[Part],
+          offer: Callable[[], None] | None = None) -> wizard.Calls:
     """The wizard's four calls over the parts. Reading is the only thing a step asks, so
     Next is a step forward and the last one's answer is the end."""
     def part(key: str | None) -> Part:
@@ -147,13 +152,13 @@ def calls(found: whats_new.Review, shown: list[Part]) -> wizard.Calls:
         return shown[min(index + 1, len(shown) - 1)]
 
     async def first(key: str | None) -> dict:
-        return _step(found, shown, part(key))
+        return _step(found, shown, part(key), offer)
 
     async def check(values: dict[str, Any], key: str) -> dict:
-        return _step(found, shown, after(key))
+        return _step(found, shown, after(key), offer)
 
     async def act(key: str, values: dict[str, Any], step: str) -> dict:
-        return _step(found, shown, part(step))
+        return _step(found, shown, part(step), offer)
 
     async def finish(values: dict[str, Any], key: str) -> dict:
         return {"ok": True}
@@ -172,12 +177,13 @@ async def open_whats_new(*, again: bool = False) -> bool:
     opened."""
     found = await offload.io(whats_new.review, _config(), get_version(), again=again)
     shown = parts(found)
+    offer = await early_access.offer(get_version(), again=again) if shown else None
     if again and not shown:
         ui.notify(t("manager.whats_new.nothing"))
     try:
         if shown:
             await wizard.open_dialog(
-                label=t("manager.whats_new.title"), calls=calls(found, shown),
+                label=t("manager.whats_new.title"), calls=calls(found, shown, offer),
                 under="whats_new", aside=t("word.close"), close_when_done=True)
     finally:
         if not again:

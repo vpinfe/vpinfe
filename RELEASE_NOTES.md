@@ -139,7 +139,7 @@ rewrites, so read the next section first.
   a library kept on another device. Windows may ask to let VPinFE through the firewall the
   first time, and a network that filters multicast still takes an address manually.
   Settings > VPinFE > This Device shows the version running and the latest, and a Channel:
-  Stable for everyday use, or Early access to be offered beta builds as well.
+  Stable for everyday use, or Beta to be offered beta builds as well.
 - **Manager, Core** - Backups: VPinFE keeps a copy before it changes something it cannot
   easily undo, and System > Backups lists, restores or clears them. A backup of your whole
   setup can be taken at any time and carried to another device.

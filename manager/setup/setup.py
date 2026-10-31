@@ -25,11 +25,13 @@ from common.devices import install_setup, serving
 from common.games import launchers as launcher_model
 from common.host import addresses
 from common.i18n import t
+from common.vpinfe_version import get_version
 from manager.kit import deeplink, offload, wizard
 from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.settings import screens
 from manager.setup import setup_appearance, setup_controls, setup_screens, setup_tables, setup_vpx
+from manager.system import early_access
 
 logger = logging.getLogger("vpinfe.manager.setup.setup")
 
@@ -69,6 +71,7 @@ class Session:
     # Set once the install has been finished, which a job that is polled more than once
     # must not do again.
     finished: bool = False
+    offer: Callable[[], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +294,8 @@ def _framed(session: Session, step: Step, found: dict[str, Any]) -> dict[str, An
 async def _ask(session: Session, step: Step) -> dict[str, Any]:
     found = await step.ask(session)
     found["step"] = step.key
+    if step.key == TABLES and session.offer is not None:
+        found["after"] = lambda values, offer=session.offer: offer()
     _framed(session, step, found)
     if _after(session, step) is None:
         found["confirm"] = t("word.finish")
@@ -376,6 +381,7 @@ async def open_setup(*, window: bool = False) -> None:
     vpx = await offload.io(setup_vpx.gather)
     session = Session(again=not install_setup.pending(_config()), window=window, vpx=vpx,
                       tables=await offload.io(setup_tables.gather, vpx.chosen))
+    session.offer = await early_access.offer(get_version(), again=session.again)
     session.vpx.answered = not session.again and VPX in install_setup.answered()
     session.screens.answered = not session.again and SCREENS in install_setup.answered()
     handed: list[str] = []
