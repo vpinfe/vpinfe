@@ -197,7 +197,8 @@ def _local_id(context: dict[str, Any]) -> str:
 async def _wont_play(context: dict[str, Any]) -> dict[str, list[str]]:
     """Each video in the lens that some device won't play, and those devices in words."""
     devices = context["devices"]
-    if not plays_on.asks_codecs(devices):
+    local = _local_id(context)
+    if not plays_on.asks_codecs(devices, local):
         return {}
     try:
         codecs = await offload.io(context["library"].video_codecs, context["game_id"],
@@ -205,7 +206,6 @@ async def _wont_play(context: dict[str, Any]) -> dict[str, list[str]]:
     except Exception:  # noqa: BLE001 - a codec not read is no warning
         logger.debug("No codecs for %s", context["game_id"], exc_info=True)
         return {}
-    local = _local_id(context)
     found = {kind: [one.label for one in plays_on.refusals(codec, devices, local)]
              for kind, codec in codecs.items()}
     return {kind: labels for kind, labels in found.items() if labels}

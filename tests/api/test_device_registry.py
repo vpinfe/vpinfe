@@ -334,6 +334,14 @@ class BrowserTests(unittest.TestCase):
 
         self.assertEqual(said["formats"], {"vp9": True})
 
+    def test_it_keeps_which_library_the_frontend_plays_where_it_said(self) -> None:
+        self.assertEqual(browser_said({"state": "plays", "library": "Rrrr111111"})["library"],
+                         "Rrrr111111")
+        self.assertNotIn("library", browser_said({"state": "plays"}))
+
+    def test_a_library_that_did_not_answer_is_kept_as_empty_not_as_unsaid(self) -> None:
+        self.assertEqual(browser_said({"state": "plays", "library": ""})["library"], "")
+
     def test_an_answer_from_before_formats_keeps_none(self) -> None:
         self.assertEqual(browser_said({"state": "plays"})["formats"], {})
 

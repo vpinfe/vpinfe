@@ -76,16 +76,20 @@ def mint_device_id() -> str:
 
 def browser_said(report: dict[str, Any]) -> dict[str, Any]:
     """What an entry keeps of a `GET /frontend/browser` answer: `state`, `name`,
-    `formats` and `checked_at`. Empty where the answer has no state."""
+    `formats`, `checked_at` and, where the device said, `library`: an install id, or empty
+    where the library it plays did not answer. An answer from a version that predates it has
+    none. Empty where the answer has no state."""
     if not report.get("state"):
         return {}
     formats = report.get("formats")
+    library = report.get("library")
     return {"state": str(report["state"]), "name": str(report.get("browser") or ""),
             "formats": {str(key)[:16]: value
                         for key, value in list(formats.items())[:32]
                         if value is None or isinstance(value, bool)}
             if isinstance(formats, dict) else {},
-            "checked_at": utc_now_iso()}
+            "checked_at": utc_now_iso(),
+            **({"library": library[:64]} if isinstance(library, str) else {})}
 
 
 def address_problem(address: str) -> str:
@@ -148,8 +152,9 @@ class Device:
     # asked and got an answer. The one that means "available", and the only one of the
     # three that a device being switched off ever stops advancing.
     last_reachable: str = ""
-    # What its frontend's browser plays, as `browser_said` keeps it. Empty where it runs no
-    # frontend or has never said.
+    # What its frontend's browser plays, and the install whose library that frontend plays
+    # (`library`, absent until the device is on a version that says), as `browser_said` keeps
+    # it. Empty where it runs no frontend or has never said.
     browser: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 

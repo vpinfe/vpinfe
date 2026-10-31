@@ -1026,6 +1026,7 @@ frontend's controller window found when it last opened with that browser:
  "plays": ["VP9", "AV1", "MP3", "Vorbis", "Opus"],
  "does_not_play": ["H.264", "HEVC", "AAC"],
  "reported_at": "2026-09-27T20:14:02Z",
+ "library": "Aaaa111111",
  "finding": "Most shared videos won't play in this browser",
  "fix": {"key": "frontend_browser.fix.install_chrome_linux", "action": "", "chrome_path": ""},
  "fix_text": "Install Google Chrome, and VPinFE uses it from then on"}
@@ -1038,6 +1039,10 @@ frontend's controller window found when it last opened with that browser:
 - `default_path` and `default_bundled` are the browser VPinFE finds on its own, which is
   what an empty `chromium.path` stands for. They differ from `path` when `chromium.path` names
   another browser.
+- `library` is the install id of the library this frontend plays: its own install's where it
+  holds the library, the install `network.library_url` names where it reads one from, and
+  empty where that install did not answer. It is how another install's Media page judges only
+  the devices that use its media.
 - A format is `true`, `false`, or `null` where the probe could not tell. H.264 and VP9 are
   decoded from a real file, not only asked of `canPlayType`, because a file can load with no
   picture.
@@ -1622,8 +1627,8 @@ else.
 
 Probing a device that answers and runs the frontend also asks it `GET /frontend/browser`,
 and its entry keeps what it said as `browser`: `state`, one of that route's; `name`, the
-browser and its version; `formats`, that route's true, false or null for each format; and
-`checked_at`. It is the last known answer, so a device that is
+browser and its version; `formats`, that route's true, false or null for each format;
+`library`, that route's, kept where the device said one; and `checked_at`. It is the last known answer, so a device that is
 switched off still has one. A device that no longer runs the frontend has it cleared, and one
 too old to serve the route, or that fails to answer it, keeps what was held. The probe's
 answer carries the same field. An install's own entry is written by its frontend as it

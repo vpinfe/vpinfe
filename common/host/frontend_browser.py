@@ -12,13 +12,15 @@ import os
 import platform
 import re
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
 from common.atomic_write import write_atomic
 from common.config import paths
-from common.devices import device_registry, install_identity
+from common.devices import device_registry, install_identity, serving
 from common.i18n import t, t_source
+from common.security import http_client
 from common.timestamps import utc_now_iso
 
 logger = logging.getLogger("vpinfe.common.host.frontend_browser")
@@ -65,6 +67,13 @@ _FINDINGS = {NO_H264: "frontend_browser.finding.no_h264",
 
 _lock = threading.Lock()
 _logged: tuple[str, str] | None = None
+
+# How long a library is left alone before it is asked again: sooner when it did not answer.
+_LIBRARY_RETRY_S = 60
+_LIBRARY_HELD_S = 600
+_LIBRARY_ASK_S = 2
+# By library URL: the install id it gave, or "" where it did not answer, and when it was asked.
+_libraries: dict[str, tuple[str, float]] = {}
 
 
 @dataclass(frozen=True)
@@ -269,16 +278,47 @@ def record(raw: Any) -> dict[str, Any]:
     answer = current(held)
     _log(answer["state"], browser, path, bundled, formats,
          Fix(**answer["fix"]) if answer["fix"] else None)
-    _record_self(answer)
+    _record_self({**answer, "library": library_played()})
     return answer
 
 
-def _record_self(answer: dict[str, Any]) -> None:
+def library_played() -> str:
+    """The install id of the library this frontend plays: this install's own where it holds
+    the library, the named install's where `network.library_url` is set, and "" where that
+    install does not answer. Never raises."""
+    try:
+        url = serving.network(paths.get_ini_config().config).library_url
+    except Exception:  # noqa: BLE001 - a config that cannot be read names no library
+        logger.debug("Could not read the library this frontend plays", exc_info=True)
+        return ""
+    if not url:
+        return install_identity.install_id()
+    held, asked = _libraries.get(url, ("", 0.0))
+    if asked and time.monotonic() - asked < (_LIBRARY_HELD_S if held else _LIBRARY_RETRY_S):
+        return held
+    try:
+        said = http_client.get_json(url.rstrip("/") + "/api/v1", timeout=_LIBRARY_ASK_S,
+                                    headers=device_registry.paired_header(url))
+        held = str((said or {}).get("install_id") or "") if isinstance(said, dict) else ""
+    except Exception:  # noqa: BLE001 - one unanswered question is retried, not raised
+        logger.debug("The library at %s did not give its install id", url, exc_info=True)
+        held = ""
+    _libraries[url] = (held, time.monotonic())
+    return held
+
+
+def with_library() -> dict[str, Any]:
+    """`current()`, with the library this frontend plays. Not in `current()` itself: for a
+    remote library it can ask over the network, and most callers want only the state."""
+    return {**current(), "library": library_played()}
+
+
+def _record_self(report: dict[str, Any]) -> None:
     """Into this install's own registry entry, which no probe of it asks about."""
     try:
         device_registry.get_device_registry().record_reachable(
             install_identity.install_id(),
-            browser=device_registry.browser_said(answer))
+            browser=device_registry.browser_said(report))
     except Exception:
         logger.debug("Could not keep the browser report in this install's registry entry",
                      exc_info=True)
@@ -333,3 +373,4 @@ def reset_for_tests() -> None:
     global _logged
     with _lock:
         _logged = None
+        _libraries.clear()

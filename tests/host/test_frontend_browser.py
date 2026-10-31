@@ -13,6 +13,7 @@ from unittest import mock
 from starlette.testclient import TestClient
 
 import httpapi
+from common.config.config_access import NetworkConfig
 from common.devices import device_client, device_registry, install_identity
 from common.host import frontend_browser as fb
 
@@ -220,7 +221,102 @@ class LogTests(_Isolated):
         self.assertFalse([line for line in seen.output if line.startswith("WARNING")])
 
 
+class LibraryPlayedTests(_Isolated):
+    """Which install's library this frontend plays, which is what lets another install's
+    badge judge only the devices that use its media."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        install_identity.ensure_id()
+
+    def _network(self, url: str) -> Any:
+        patch = mock.patch.object(fb.serving, "network",
+                                  return_value=NetworkConfig(library_url=url))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def _asks(self, **result: Any) -> Any:
+        patch = mock.patch.object(fb.http_client, "get_json", **result)
+        asked = patch.start()
+        self.addCleanup(patch.stop)
+        return asked
+
+    def test_an_install_holding_its_library_plays_its_own(self) -> None:
+        self._network("")
+
+        self.assertEqual(fb.library_played(), install_identity.install_id())
+        self.assertTrue(fb.library_played())
+
+    def test_a_named_library_is_the_install_that_answered_for_it(self) -> None:
+        self._network("http://nas:8001/")
+        asked = self._asks(return_value={"install_id": "Rrrr111111"})
+
+        self.assertEqual(fb.library_played(), "Rrrr111111")
+        self.assertEqual(fb.library_played(), "Rrrr111111")
+        self.assertEqual(asked.call_count, 1)
+        self.assertEqual(asked.call_args.args[0], "http://nas:8001/api/v1")
+
+    def test_a_library_that_does_not_answer_is_nobodys_until_it_is_asked_again(self) -> None:
+        self._network("http://nas:8001")
+        asked = self._asks(side_effect=OSError("down"))
+
+        self.assertEqual(fb.library_played(), "")
+        self.assertEqual(fb.library_played(), "")
+        self.assertEqual(asked.call_count, 1)
+        with mock.patch.object(fb.time, "monotonic", return_value=1e9):
+            asked.side_effect = None
+            asked.return_value = {"install_id": "Rrrr111111"}
+            self.assertEqual(fb.library_played(), "Rrrr111111")
+
+    def test_an_id_that_was_read_is_asked_for_again_after_a_while(self) -> None:
+        self._network("http://nas:8001")
+        asked = self._asks(return_value={"install_id": "Rrrr111111"})
+        fb.library_played()
+        asked.return_value = {"install_id": "Ssss222222"}
+
+        self.assertEqual(fb.library_played(), "Rrrr111111")
+        with mock.patch.object(fb.time, "monotonic", return_value=1e9):
+            self.assertEqual(fb.library_played(), "Ssss222222")
+
+    def test_a_library_that_did_not_answer_is_filed_as_empty_in_this_installs_entry(self) -> None:
+        self._network("http://nas:8001")
+        self._asks(side_effect=OSError("down"))
+        fb.record(BUNDLED_145)
+
+        held = device_registry.get_device_registry().get(install_identity.install_id())
+        assert held is not None
+        self.assertEqual(held.browser["library"], "")
+
+    def test_an_answer_with_no_install_id_names_no_library(self) -> None:
+        self._network("http://nas:8001")
+        self._asks(return_value=["not", "a", "document"])
+
+        self.assertEqual(fb.library_played(), "")
+
+    def test_the_report_is_filed_with_the_library_in_this_installs_entry(self) -> None:
+        self._network("")
+        fb.record(BUNDLED_145)
+
+        held = device_registry.get_device_registry().get(install_identity.install_id())
+        assert held is not None
+        self.assertEqual(held.browser["library"], install_identity.install_id())
+
+
 class ServedTests(_Isolated):
+    def test_the_route_names_the_library_the_frontend_plays(self) -> None:
+        install_identity.ensure_id()
+        self._own()
+        client = TestClient(httpapi.create_api_app(), raise_server_exceptions=False)
+
+        self.assertEqual(client.get("/frontend/browser").json()["library"],
+                         install_identity.install_id())
+
+    def _own(self) -> None:
+        patch = mock.patch.object(fb.serving, "network",
+                                  return_value=NetworkConfig(library_url=""))
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_the_route_serves_the_report(self) -> None:
         fb.record(BUNDLED_145)
         client = TestClient(httpapi.create_api_app(), raise_server_exceptions=False)

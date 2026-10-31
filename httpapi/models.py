@@ -107,6 +107,9 @@ class DeviceBrowser(ApiModel):
     name: str = ""
     formats: dict[str, bool | None] = Field(default_factory=dict)
     checked_at: str = ""
+    # The install id of the library that frontend plays. Empty from a device whose version
+    # does not say.
+    library: str = ""
 
 
 class DeviceResource(ApiModel):
@@ -642,6 +645,10 @@ class FrontendBrowser(ApiModel):
     finding: str = ""
     fix: FrontendBrowserFix | None = None
     fix_text: str = ""
+    # The install id of the library this frontend plays: this install's own where it holds
+    # the library, the named install's where `network.library_url` is set, empty where that
+    # install does not answer.
+    library: str = ""
 
 
 class ShowCollectionRequest(ApiModel):

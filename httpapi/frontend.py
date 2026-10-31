@@ -31,7 +31,7 @@ def get_frontend_state() -> models.FrontendState:
 @router.get("/browser", summary="What the frontend's browser can play",
             dependencies=[requires(scopes.PLAY_READ)])
 def get_frontend_browser() -> models.FrontendBrowser:
-    return models.FrontendBrowser.model_validate(frontend_browser.current())
+    return models.FrontendBrowser.model_validate(frontend_browser.with_library())
 
 
 @router.put("/collection", summary="Show a collection on the frontend", status_code=202,

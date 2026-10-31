@@ -3,6 +3,11 @@
 Never the Manager's own browser: it is not the cabinet, and it previews perfectly a file
 the cabinet cannot play at all. Only what a device's frontend reported about itself, as
 the device registry keeps it.
+
+Only the devices that play this install's library are judged: this install's own frontend,
+and any device whose frontend said it plays this library. A device that is merely in the
+registry, or on a version that does not say which library it plays, is left out - a file it
+cannot play is no concern of this library's.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from typing import Any
 from common.host import frontend_browser
 from common.i18n import t
 from manager.devices.devices import device_label
+from manager.kit import when
 from manager.settings import settings
 
 _NAMES = {one.id: one.name for one in frontend_browser.FORMATS}
@@ -34,35 +40,55 @@ def _formats(device: dict[str, Any]) -> dict[str, Any]:
     return dict((device.get("browser") or {}).get("formats") or {})
 
 
-def asks_codecs(devices: Sequence[dict[str, Any]]) -> bool:
-    """Whether any device said no to a video format: until one does, no file's codec
-    can matter."""
-    return any(_formats(device).get(one) is False for device in devices for one in _VIDEO)
+def plays_here(device: dict[str, Any], local_id: str) -> bool:
+    """Whether this device's frontend plays the library `local_id` holds. A device that
+    said which library plays it only if that is this one, and one whose library did not
+    answer is not judged. One that did not say counts only where it is this install, whose
+    frontend plays its own library until it says otherwise."""
+    said = (device.get("browser") or {}).get("library")
+    if isinstance(said, str):
+        return bool(said) and said == local_id
+    return str(device.get("device_id") or "") == local_id
+
+
+def asks_codecs(devices: Sequence[dict[str, Any]], local_id: str) -> bool:
+    """Whether a device that plays this library said no to a video format: until one does,
+    no file's codec can matter."""
+    return any(_formats(device).get(one) is False for device in devices
+               if plays_here(device, local_id) for one in _VIDEO)
 
 
 def refusals(codec: str | None, devices: Sequence[dict[str, Any]],
              local_id: str) -> list[Refusal]:
-    """One for each of `devices`, the whole registry, whose browser said it does not play
-    `codec`."""
+    """One for each of `devices` that plays this library and whose browser said it does
+    not play `codec`, naming the codec."""
     if not codec:
         return []
-    alone = all(str(device.get("device_id") or "") == local_id for device in devices)
+    playing = [device for device in devices if plays_here(device, local_id)]
+    alone = all(str(device.get("device_id") or "") == local_id for device in playing)
+    name = _NAMES.get(codec, codec)
     found = []
-    for device in devices:
+    for device in playing:
         if _formats(device).get(codec) is not False:
             continue
         here = str(device.get("device_id") or "") == local_id
-        label = t("manager.plays_on.wont_play_here") if here and alone \
-            else t("manager.plays_on.wont_play_on", device=device_label(device))
+        label = t("manager.plays_on.wont_play_here", codec=name) if here and alone \
+            else t("manager.plays_on.wont_play_on", device=device_label(device), codec=name)
         found.append(Refusal(label, _why(device, codec, here)))
     return found
 
 
 def _why(device: dict[str, Any], codec: str, here: bool) -> str:
     name = _NAMES.get(codec, codec)
-    state = str((device.get("browser") or {}).get("state") or "")
+    browser = device.get("browser") or {}
+    state = str(browser.get("state") or "")
     if codec not in _FIXED_BY_ITS_BROWSER.get(state, set()):
-        return t("manager.plays_on.why", codec=name)
-    place = " › ".join(settings.place_of("chromium"))
-    return t("manager.plays_on.why_fix_here" if here else "manager.plays_on.why_fix_there",
-             codec=name, place=place)
+        cause = t("manager.plays_on.why", codec=name)
+    else:
+        place = " › ".join(settings.place_of("chromium"))
+        cause = t("manager.plays_on.why_fix_here" if here else "manager.plays_on.why_fix_there",
+                  codec=name, place=place)
+    checked = str(browser.get("checked_at") or "")
+    if not checked:
+        return cause
+    return " ".join((cause, t("manager.plays_on.as_of", when=when.local(checked))))
