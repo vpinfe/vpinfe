@@ -74,6 +74,29 @@ class OneDefaultTests(TempTree):
         self.assertEqual([r["filename"] for r in rows if r["default"]], [ALPHA])
         self.assertEqual([r["filename"] for r in rows if r["automatic"]], [CHARLIE])
 
+    def test_the_rest_lens_says_which_table_the_game_is_locked_to(self) -> None:
+        assert self.game.meta_config is not None
+        self.game.meta_config["vpinfe"]["default_table"] = "tbl0000001"
+
+        rows = table_lens.table_rows(self.game, {"game_dir": str(self.folder)})
+
+        self.assertEqual([r["filename"] for r in rows if r["locked"]], [ALPHA])
+
+    def test_the_rest_lens_locks_nothing_with_no_choice_recorded(self) -> None:
+        rows = table_lens.table_rows(self.game, {"game_dir": str(self.folder)})
+
+        self.assertEqual([r["filename"] for r in rows if r["locked"]], [])
+
+    def test_a_locked_table_that_is_hidden_is_locked_and_not_the_default(self) -> None:
+        assert self.game.meta_config is not None
+        self.game.meta_config["vpinfe"]["default_table"] = "tbl0000002"
+
+        rows = {r["filename"]: r for r in
+                table_lens.table_rows(self.game, {"game_dir": str(self.folder)})}
+
+        self.assertTrue(rows[BRAVO]["locked"])
+        self.assertFalse(rows[BRAVO]["default"])
+
     def test_the_library_lens_says_where_a_cleared_choice_goes(self) -> None:
         assert self.game.meta_config is not None
         self.game.meta_config["vpinfe"]["default_table"] = "tbl0000001"

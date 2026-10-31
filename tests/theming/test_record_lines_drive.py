@@ -30,7 +30,7 @@ CUT = ("(root => { const box = root && root.querySelector('.manager-file-name');
        " box.firstElementChild.innerText]; })(%s)")
 DELTA_ROW = ("[...document.querySelectorAll('.manager-section-work .manager-member-row')]"
              ".find(r => r.innerText.startsWith('Delta'))")
-DELTA_TABLE = ("[...document.querySelectorAll('.manager-member-main')]"
+DELTA_TABLE = ("[...document.querySelectorAll('.manager-section-work .manager-member-row')]"
                ".find(r => r.innerText.includes('lw'))")
 # Words, color and size of each part of a line: the name's selector, then the root.
 PARTS = ("(root => { if (!root) return null;"

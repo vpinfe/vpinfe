@@ -380,6 +380,10 @@ def table_rows(game: Game, row: dict, *, launcher_settings: bool = False,
             # the one that is, not a field every row carries a blank for.
             "default_kind": default_kind if native == default else "",
             "automatic": bool(automatic) and native == automatic,
+            # The table the game's recorded default names, whether or not it is the one
+            # playing: a locked table that cannot be offered leaves another as the default.
+            "locked": tables.is_recorded(
+                recorded, str(described_entry.get(TABLE_ID_KEY, "")), described_entry),
             "hidden": native in hidden or described_entry.get("hidden") is True,
             # The table's own rating, which this lens has to carry as well as the play
             # lens - tables are read here and would otherwise all look unrated.
@@ -681,6 +685,7 @@ def _game_rows(game_id: str, entry: Any, media: str, media_settings: Any,
             "default": bool(table.get("default")),
             "default_kind": str(table.get("default_kind") or ""),
             "automatic": bool(table.get("automatic")),
+            "locked": bool(table.get("locked")),
             "hidden": bool(table.get("hidden")),
             "available": bool(table.get("available")),
             "absent_since": table.get("absent_since"),

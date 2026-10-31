@@ -230,15 +230,49 @@ def made(row: dict[str, Any]) -> str:
 
 
 def table_name(table: dict[str, Any]) -> str:
-    """Which table this is: version then author, one order everywhere.
+    """Which table this is: the release it is matched to, else the file's own version and
+    authors, else the file name. Presentation only; nothing is written over the file's data."""
+    return _release_name(table) or _version_and_author(table) or _file_of(table)
 
-    The filename only as a fallback: it is what the pair above exists to avoid falling
-    back to. `authors` is a list on the wire
-    and `author` a joined string in a grid row; both are read, because both call this.
+
+def release_version_and_authors(table: dict[str, Any]) -> tuple[str, str] | None:
+    """The version and authors of the release this table is matched to, or None where it
+    has no match or the release lists neither.
+
+    The version is the one VPS listed when the table was matched: the file is that
+    version, and an update is measured from it. A release the catalog no longer holds
+    names nothing, so such a table is named by its file.
     """
-    # An entry with no file has no version or author either - nothing read one. What
-    # names it is what its program calls it, or the file it points at.
-    return _version_and_author(table) or _file_of(table)
+    source = table.get("source") or {}
+    if not source.get("vps_file_id"):
+        return None
+    authors = ", ".join(str(a) for a in (source.get("authors") or []) if str(a).strip())
+    listed = str(source.get("version") or "").strip()
+    version = str(source.get("vps_version") or "").strip() or listed
+    if not (listed or authors):
+        return None
+    return version, authors
+
+
+def _release_name(table: dict[str, Any]) -> str:
+    named = release_version_and_authors(table)
+    return JOIN.join(part for part in (named or ()) if part)
+
+
+def named_version_and_authors(table: dict[str, Any]) -> tuple[str, str]:
+    """The version and authors a table is named by: the release's, else the file's. Both
+    from one place, never one of each."""
+    named = release_version_and_authors(table)
+    if named is not None:
+        return named
+    return _file_version(table), _file_authors(table)
+
+
+def file_says(table: dict[str, Any]) -> str:
+    """What the file itself reads as, where the table is named by something else and
+    that differs; "" where they agree or the file reads as nothing."""
+    own = _version_and_author(table)
+    return own if own and own != table_name(table) else ""
 
 
 def named_in(row: dict[str, Any], tables: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -327,17 +361,22 @@ def usual_launcher(tables: list[dict[str, Any]]) -> str:
 def names_a_file(table: dict[str, Any]) -> bool:
     """Whether `table_name` fell back to a file, whose end is the part worth keeping
     when there is no room for all of it."""
-    return not _version_and_author(table)
+    return not (_release_name(table) or _version_and_author(table))
+
+
+def _file_authors(table: dict[str, Any]) -> str:
+    authors = table.get("authors")
+    if isinstance(authors, list):
+        return ", ".join(str(a) for a in authors if str(a).strip())
+    return str(table.get("author") or "").strip()
+
+
+def _file_version(table: dict[str, Any]) -> str:
+    return str(table.get("version") or "").strip()
 
 
 def _version_and_author(table: dict[str, Any]) -> str:
-    authors = table.get("authors")
-    if isinstance(authors, list):
-        author = ", ".join(str(a) for a in authors if str(a).strip())
-    else:
-        author = str(table.get("author") or "").strip()
-    version = str(table.get("version") or "").strip()
-    return JOIN.join(part for part in (version, author) if part)
+    return JOIN.join(part for part in (_file_version(table), _file_authors(table)) if part)
 
 
 def offered(table: dict[str, Any]) -> bool:
@@ -396,6 +435,50 @@ def lock_act(table: dict[str, Any],
             return False, t("manager.game_tables.unlock_to", table=table_name(goes))
         return False, t("manager.game_tables.unlock")
     return (True, t("manager.game_tables.lock")) if len(tables) > 1 else None
+
+
+def is_locked(tables: list[dict[str, Any]]) -> bool:
+    """Whether the game plays a table somebody chose, rather than the newest one."""
+    return any(row.get("default") and (row.get("default_kind") or "") == CHOSEN
+               for row in tables)
+
+
+def automatic_table(tables: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The table the game plays with no choice recorded."""
+    return next((row for row in tables if row.get("automatic")), None)
+
+
+def fell_from(tables: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The table somebody locked that can no longer be played, so another is the default."""
+    return next((row for row in tables if row.get("locked") and not row.get("default")), None)
+
+
+def file_line(table: dict[str, Any], game: str) -> str:
+    """The file's name under the table's, without the game's own name where it begins
+    with it, and "" where the table is named by its file already."""
+    if names_a_file(table):
+        return ""
+    name = _file_of(table)
+    game = game.strip()
+    if game and name[:len(game)].casefold() == game.casefold():
+        rest = name[len(game):].lstrip(" -–_·")
+        if os.path.splitext(rest)[0]:
+            return rest
+    return name
+
+
+def locked_said(game: str, table: dict[str, Any]) -> str:
+    """The notification once `table` is chosen as its game's default."""
+    return t("manager.game_tables.result_locked", game=game, table=table_name(table))
+
+
+def automatic_said(game: str, after: list[dict[str, Any]]) -> str:
+    """The notification once the game is back on Automatic, `after` being its tables as
+    the write left them."""
+    now = next((row for row in after if row.get("default")), None)
+    if now is None:
+        return t("manager.game_tables.automatic")
+    return t("manager.game_tables.result_automatic", game=game, table=table_name(now))
 
 
 def lock_said(game: str, table: dict[str, Any], after: list[dict[str, Any]], *,

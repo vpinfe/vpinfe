@@ -13,6 +13,7 @@ from nicegui import run, ui
 
 from common.devices import install_identity
 from common.failures import why
+from common.games import ties
 from common.i18n import t
 from common.online import sites
 from manager.backups import backup_rows
@@ -49,6 +50,7 @@ from manager.library.match_group import (
     unmatched,
 )
 from manager.settings import dof
+from manager.workbench import game_default
 from manager.workbench.core import (
     _KEEP_SCROLL,
     FULL,
@@ -57,6 +59,7 @@ from manager.workbench.core import (
     _choose,
     _outside,
     _rows,
+    _said_file,
     _said_name,
     _save,
     _save_game_overrides,
@@ -66,13 +69,8 @@ from manager.workbench.core import (
 )
 from manager.workbench.game_match import (
     _based_on,
-    _default_mark,
-    _launch_button,
-    _lock_button,
     _pick_a_release,
     _read_releases,
-    _release_button,
-    _release_line,
     _release_shown,
 )
 from manager.workbench.launcher import _feature_chips, _launcher_report, _play_action
@@ -124,7 +122,7 @@ async def _game_block(context: dict[str, Any]) -> None:
         # outside that grid and needs the same edge.
         with ui.column().classes("gap-0 w-full px-3"):
             # A region: hiding a table changes which one plays, and the list says so.
-            context["tables_list"] = panel.region(partial(_tables_block, context, held))
+            context["tables_list"] = panel.region(partial(_tables_block, context))
             context["tables_list"]()
         ext_groups.fill(context, "details", "game")
 
@@ -173,30 +171,46 @@ async def _selection_settings(context: dict[str, Any]) -> None:
 
 async def _release_match(context: dict[str, Any],
                          table: dict[str, Any]) -> list[tuple[Any, Any]]:
-    """Which build of the machine this file is, as the table's Match group."""
+    """Which build of the machine this file is, as the table's VPS Release group.
+
+    No group at all where the game has no VPS entry.
+    """
     entry = str(context["game"].get("vps_id") or "")
+    if not entry:
+        return []
     source = table.get("source") or {}
     bound = str(source.get("vps_file_id") or "")
     rows: list[tuple[Any, Any]] = [(HEADING, t("manager.workbench.vps_release"))]
-    if not entry:
-        return rows + unmatched(release_match_gap(entry, bound, True))
+    # A table whose file is gone has nothing to match.
+    can_match = bool(table.get("available"))
 
     async def pick() -> None:
         await _pick_a_release(context, table)
 
+    def acts(*, matched: bool) -> list[tuple[Any, Any]]:
+        return [(FULL, change_match(pick, matched=matched, release=True))] if can_match else []
+
     if not bound:
-        return rows + unmatched(release_match_gap(entry, bound, True)) \
-            + [(FULL, change_match(pick, matched=False, release=True))]
+        none = game_states.release().state(ties.release_state(
+            {"game_vps_id": entry, "source": source}))
+        return rows + ([(FULL, panel.state(none.word, "off", hint=none.meaning))]
+                       if none else []) + acts(matched=False)
     releases, unread = await _read_releases(context, entry)
     release = next((one for one in releases
                     if str(one.get("vps_file_id") or "") == bound), None)
     # Found across the whole catalog, though no longer under this entry.
-    if release is None and (source.get("version") or source.get("authors")):
-        release = {"version": source.get("version"), "authors": source.get("authors")}
+    named = game_tables.release_version_and_authors(table)
+    if release is None and named is not None:
+        release = {"version": named[0], "authors": source.get("authors")}
     if release is not None:
         rows.append((FULL, partial(_release_shown, release)))
         if source.get("mod_of"):
             rows.append((FULL, partial(_based_on, source["mod_of"])))
+        how = game_states.release().state(ties.release_state(
+            {"game_vps_id": entry, "source": source}))
+        if how is not None:
+            rows.append((t("manager.workbench.match_how"),
+                         panel.state(how.word, "off", hint=how.meaning)))
     else:
         try:
             held = not unread and await offload.io(context["library"].vps_catalog_held)
@@ -205,7 +219,7 @@ async def _release_match(context: dict[str, Any],
             held, unread = False, why(exc)
         rows += unmatched(release_match_gap(entry, bound, held, read=not unread),
                           hint=unread)
-    return rows + [(FULL, change_match(pick, matched=True, release=True))]
+    return rows + acts(matched=True)
 
 
 def _override(effective: str, found: str | None, source: str,
@@ -668,16 +682,12 @@ def _table_entries(table: dict[str, Any],
             # to do is make the location reachable, not forget the entry.
             entries.append(panel.note(
                 t("manager.workbench.file_offline")))
-        entries += [
-            (t("word.version"), table.get("version") or "-"),
-            (t("word.author"), ", ".join(table.get("authors") or []) or "-"),
-        ]
+        entries += _file_facts(table)
     else:
         entries += [
             (HEADING, game_tables.FILE),
             (t("manager.workbench.filename"), table.get("filename") or "-"),
-            (t("word.version"), table.get("version") or "-"),
-            (t("word.author"), ", ".join(table.get("authors") or []) or "-"),
+            *_file_facts(table),
             (t("manager.workbench.hash"), table.get("file_hash") or "-"),
             *_made_from(table, context),
         ]
@@ -714,6 +724,15 @@ def _table_entries(table: dict[str, Any],
         entries.append(_launcher_report(context, table))
         entries += [(FULL, _play_action(context, table))]
     return entries
+
+
+def _file_facts(table: dict[str, Any]) -> list[tuple[Any, Any]]:
+    """What the file itself says. One quiet line where the table is named by the release
+    it is matched to and the file reads differently, else its version and authors."""
+    if says := game_tables.file_says(table):
+        return [(t("manager.workbench.file_says"), says)]
+    return [(t("word.version"), table.get("version") or "-"),
+            (t("word.author"), ", ".join(table.get("authors") or []) or "-")]
 
 
 def _made_from(table: dict[str, Any],
@@ -1340,111 +1359,84 @@ async def _contain_table(context: dict[str, Any], table: dict[str, Any]) -> None
     await _table_list_changed(context)
 
 
-def _tables_block(context: dict[str, Any], held: bool = True) -> None:
-    """This game's tables, and which one it offers first.
+def _tables_block(context: dict[str, Any]) -> None:
+    """This game's tables, and which one it plays.
 
     A block inside Game Details rather than a rail entry of its own: most games hold one
     table, so "Tables (1)" would be a place you went to read a single row, and the rail
-    holds places. This is the shape instead - a sub-table, a related collection with its
-    own columns.
-
-    Version and author, and a filename only for what separates two rows that match on
-    both.
+    holds places. A row is the table's name, the file under it, Missing or Hidden where
+    that is so, and the way to Table Details, where the match and every act on the table
+    are. The radios and Automatic show only where there is a choice.
     """
     tables = context["tables"]
     showing = str(context.get("lens") or "")
-    # Only where there is a choice to describe. A count beside one row says nothing.
-    said = t("manager.workbench.tables_2", count=(len(tables))) if len(tables) > 1 \
+    several = len(tables) > 1
+    game = str(context["game"].get("name") or "")
+    said = t("manager.workbench.tables_2", count=(len(tables))) if several \
         else t("manager.workbench.table_3")
     with ui.row().classes("items-center gap-2 w-full no-wrap manager-heading-row"):
         ui.label(said if tables else t("manager.workbench.tables")) \
             .classes("manager-card-title manager-fact-heading grow")
     if not tables:
         ui.label(t("manager.workbench.no_tables")).classes("manager-help")
+    if several:
+        ui.label(t("manager.workbench.tables_default_help")).classes("manager-help")
+        game_default.fell_note(tables)
+        game_default.automatic_choice(context, tables)
     arrived, at = context["state"].get("arrived_table") or ("", 0.0)
     if time.monotonic() - at > _ARRIVED_S:
         arrived = ""
-    usual = game_tables.usual_launcher(tables)
-    apart = game_tables.told_apart(tables)
     for table in tables:
         since = str(table.get("absent_since") or "")
         here = str(table.get("id") or "") == showing
-        with ui.column().classes("gap-0 w-full manager-member-row") as row:
+        with ui.row().classes("items-start gap-2 w-full no-wrap manager-member-row") as row:
             if arrived and table.get("id") == arrived:
                 row.classes(add="manager-member-row--new")
-            # Chips gathered before anything is drawn: they wrap under the name rather
-            # than competing with it for the line, and an empty run must draw no row.
-            chips: list[tuple[str, str, str]] = []
-            if since:
-                # Stated, not judged: how long it has been gone is what tells a
-                # deletion from a share that was late mounting, and that call is
-                # the user's.
-                chips.append((game_tables.word_for(game_tables.FILE_WORDS, True),
-                              "manager-tier manager-tier--warn",
-                              t("manager.workbench.absent_since", value=when.local(since))))
-            if table.get("hidden"):
-                chips.append((game_tables.HIDDEN_WORDS[0], "manager-chip-warn",
-                              game_tables.hidden_hint(table, tables)))
-            launcher = str(table.get("launcher_name") or "")
-            if launcher and str(table.get("launcher") or "") != usual:
-                chips.append((launcher, "manager-tier manager-tier--off", ""))
-
-            with ui.row().classes("items-start gap-2 w-full no-wrap"):
-                # On every row, and leading. `docs/conventions.md`: show varying state
-                # on every row rather than let a reader take meaning from absence -
-                # which is what a chip on the default alone asked them to do. A game
-                # has exactly one default, so the control that says so is a radio.
-                _default_mark(context, table, several=len(tables) > 1)
-                # The name and what qualifies it on one line, wrapping only when the
-                # line runs out - and wrapping onto the name's own left edge rather
-                # than the radio's, because they belong to the name. One unwrapped row
-                # spent the name's width on the chips and left a file called "VP..."
-                # to tell two builds apart.
-                with ui.row().classes("items-center gap-2 grow min-w-0 "
-                                      "manager-member-main"):
+            if several:
+                game_default.table_choice(context, table)
+            with ui.column().classes("gap-0 grow min-w-0"):
+                with ui.row().classes("items-center gap-2 w-full no-wrap"):
                     name = _said_name(table, game_tables.table_name(table)) \
                         .classes("manager-member-name min-w-0")
-                    differs = apart.get(str(table.get("id") or ""))
-                    if differs:
-                        ui.label(differs).classes("manager-cell-quiet truncate min-w-0") \
-                            .tooltip(str(table.get("filename") or ""))
-                    # Which of them the panel beside this is about. Without it the block
-                    # repeats the grid you are already looking at; with it, it is where
-                    # you are - this game has two, you are on one, that one is default.
                     if here:
                         name.classes(add="manager-member-name--here")
                     if since:
                         name.classes(add="opacity-60")
-                    elif table.get("default") \
-                            and (table.get("default_kind") or "") == game_tables.CHOSEN:
-                        word, why = game_tables.DEFAULT_WORDS[game_tables.CHOSEN]
-                        with ui.row().classes("items-center gap-1 no-wrap manager-cell-quiet"):
-                            ui.icon(verbs.LOCKED).classes("manager-member-lock")
-                            ui.label(word).tooltip(why)
-                    for text, tone, why in chips:
-                        chip = ui.label(text).classes(f"manager-member-chip {tone}")
-                        if why:
-                            chip.tooltip(why)
-                with ui.element("div").classes("manager-row-action"):
-                    if game_tables.is_referenced(table):
-                        ui.button(icon=verbs.CONTAIN,
-                                  on_click=lambda _, t=table: _contain_table(context, t)) \
-                            .props("flat dense round size=sm") \
-                            .tooltip(t("manager.workbench.copy_game"))
-                    # An entry the folder does not hold can always be forgotten: nothing
-                    # on disk here will mint it again, which is the opposite of a table
-                    # that is there - dropping that record only means the next scan
-                    # re-adds it.
-                    if game_tables.can_forget(table):
-                        ui.button(icon=verbs.FORGET,
-                                  on_click=lambda _, t=table: _forget_table(context, t)) \
-                            .props("flat dense round size=sm color=warning") \
-                            .tooltip(t("word.forget"))
-                    if not since:
-                        _lock_button(context, table, tables)
-                        _release_button(context, table)
-                        _launch_button(context, table)
-            _release_line(table, held)
+                    if several and table.get("default"):
+                        ui.label(t("manager.workbench.default_word")) \
+                            .classes("manager-cell-quiet") \
+                            .tooltip(t("manager.workbench.default_word.help"))
+                if line := game_tables.file_line(table, game):
+                    _said_file(line, str(table.get("filename") or ""))
+            # Only what explains what the frontend does with the table. How it was
+            # matched and the launcher are in Table Details.
+            if since:
+                ui.label(game_tables.word_for(game_tables.FILE_WORDS, True)) \
+                    .classes("manager-member-chip manager-tier manager-tier--warn") \
+                    .tooltip(t("manager.workbench.absent_since", value=when.local(since)))
+            if table.get("hidden"):
+                ui.label(game_tables.HIDDEN_WORDS[0]) \
+                    .classes("manager-member-chip manager-chip-warn") \
+                    .tooltip(game_tables.hidden_hint(table, tables))
+            with ui.element("div").classes("manager-row-action"):
+                if game_tables.is_referenced(table):
+                    ui.button(icon=verbs.CONTAIN,
+                              on_click=lambda _, t=table: _contain_table(context, t)) \
+                        .props("flat dense round size=sm") \
+                        .tooltip(t("manager.workbench.copy_game"))
+                # An entry the folder does not hold can always be forgotten: nothing
+                # on disk here will mint it again, which is the opposite of a table
+                # that is there - dropping that record only means the next scan
+                # re-adds it.
+                if game_tables.can_forget(table):
+                    ui.button(icon=verbs.FORGET,
+                              on_click=lambda _, t=table: _forget_table(context, t)) \
+                        .props("flat dense round size=sm color=warning") \
+                        .tooltip(t("word.forget"))
+            with panel.link_tile(to=_table_address(context, str(table.get("id") or "")),
+                                 classes="manager-member-go") as go:
+                ui.icon(verbs.DRILL)
+            go.tooltip(t("manager.workbench.table_details"))
     # Drawn even where the list is empty: a folder with nothing in it yet is exactly
     # where one of these is added.
     with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):

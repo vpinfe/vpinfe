@@ -1090,7 +1090,9 @@ def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, 
              **{f"asset_{key}": _resolved_word((row.get("assets") or {}).get(key))
                 for key in TABLE_ASSET_KEYS},
              "rom_state": _rom_state(row),
-             "author": ", ".join(row.get("authors") or []),
+             # What the table is named by, so a column and the name beside it agree.
+             "version": game_tables.named_version_and_authors(row)[0],
+             "author": game_tables.named_version_and_authors(row)[1],
              "on_vps": str((row.get("source") or {}).get("version") or ""),
              "release": ties.release_state(row, bases),
              FIXES_COLUMN: [],

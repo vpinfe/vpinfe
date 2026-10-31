@@ -7,7 +7,7 @@ from nicegui import ui
 
 from common.i18n import t
 from manager.kit import game_tables
-from manager.workbench import core, game_match, game_play, game_table
+from manager.workbench import core, game_default, game_play, game_table
 
 
 def _table(table_id: str, **extra: Any) -> dict[str, Any]:
@@ -111,7 +111,7 @@ class TableSectionTests(unittest.TestCase):
 def _radio(table: dict[str, Any]) -> tuple[ui.element, str]:
     """The radio a row draws, and its tooltip."""
     with ui.card() as card:
-        game_match._default_mark(_context(), table, several=True)
+        game_default.table_choice(_context(), table)
     radio, tip = card.default_slot.children
     assert isinstance(tip, ui.tooltip)
     return radio, tip.text

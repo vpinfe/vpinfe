@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import ui
 
 from common import icons
 from common.failures import why
@@ -30,30 +30,6 @@ from manager.workbench.core import _write
 logger = logging.getLogger("vpinfe.manager.workbench.game_match")
 
 
-def _release_line(table: dict[str, Any], held: bool = True) -> None:
-    """Which build of the machine this file is, once somebody has said.
-
-    Nothing at all until then, which is the honest reading of an absent record: no
-    matcher has examined this and none exists, so a row that read "not matched" would
-    be reporting a search that never happened.
-
-    Drawn from what the row already carries. Reaching for the release list here puts a
-    blocking API call inside a synchronous draw, and the rows after it never appear.
-    """
-    source = table.get("source") or {}
-    if not source.get("vps_file_id"):
-        return
-    version = str(source.get("version") or "")
-    made_by = ", ".join(str(name) for name in (source.get("authors") or [])[:3])
-    told = " \u00b7 ".join(part for part in (version, made_by) if part)
-    if not told and not held:
-        return
-    with ui.row().classes("items-center gap-2 w-full no-wrap manager-member-table-line"):
-        ui.label(told or t("manager.workbench.delisted_table")) \
-            .classes("manager-help truncate")
-    _based_on(source.get("mod_of"), "manager-member-table-line")
-
-
 def _based_on(mod: dict[str, Any] | None, classes: str = "") -> None:
     """What a table's release is a mod of, one level up: the way to that table where the
     library holds it, in whichever game, and Missing with the way to VPS where not."""
@@ -74,26 +50,6 @@ def _based_on(mod: dict[str, Any] | None, classes: str = "") -> None:
             .classes("manager-member-chip manager-tier manager-tier--off")
         if mod.get("url"):
             panel.out(to=str(mod["url"]), hint=t("manager.vps_match.open_in_vps"))()
-
-
-def _release_button(context: dict[str, Any], table: dict[str, Any]) -> None:
-    """The way to say which build this file is.
-
-    Shown whether or not one is recorded, because with nothing recorded there is
-    otherwise no way in: the row says nothing about its release until somebody has
-    answered, so the affordance cannot be the answer.
-    """
-    entry = str(context["game"].get("vps_id") or "")
-    button = ui.button(icon="link",
-                       on_click=lambda: _pick_a_release(context, table)) \
-        .props("flat dense round size=sm")
-    if entry:
-        button.tooltip(t("manager.workbench.release"))
-        return
-    # A release belongs to an entry, so there is nothing to choose among until the
-    # game is matched. Said on the control rather than in a dialog that opens empty.
-    button.disable()
-    button.tooltip(t("manager.workbench.releases_unmatched"))
 
 
 async def _match_line(context: dict[str, Any], kind: str, matched_to: Any) -> str:
@@ -280,85 +236,3 @@ async def _read_releases(context: dict[str, Any],
     except Exception as exc:
         logger.warning("manager: could not read VPS for %s", vps_id, exc_info=True)
         return [], why(exc)
-
-
-def _launch_button(context: dict[str, Any], table: dict[str, Any]) -> None:
-    """Play this one. The row names the table, so the act on it is unambiguous - which
-    is what lets Game Details offer a launch without inventing a game-level one whose
-    target would be implicit."""
-    filename = game_tables.native_key(table)
-
-    @on_page
-    async def go() -> None:
-        try:
-            await run.io_bound(context["library"].launch, context["game_id"], filename)
-        except Exception as exc:
-            ui.notify(t("manager.workbench.launch_failed"), caption=why(exc), type="negative")
-
-    button = ui.button(icon="play_arrow", on_click=go) \
-        .props("flat dense round size=sm").tooltip(t("manager.workbench.play_table"))
-    if not table.get("available"):
-        button.disable()
-
-
-def _default_mark(context: dict[str, Any], table: dict[str, Any], *,
-                  several: bool) -> None:
-    """Which table the game offers, and the way to change it. A table that cannot be the
-    default is shown unset, with why."""
-    chosen = bool(table.get("default"))
-    mark = ui.icon("radio_button_checked" if chosen else "radio_button_unchecked") \
-        .classes("manager-default-mark")
-    if chosen:
-        mark.classes(add="manager-default-mark--on")
-        automatic = several and (table.get("default_kind") or "") == game_tables.DERIVED
-        mark.tooltip(game_tables.DEFAULT_WORDS[game_tables.DERIVED][1] if automatic
-                     else t("manager.workbench.offered_table"))
-        return
-    if why := game_tables.why_not_default(table):
-        mark.classes(add="opacity-30")
-        mark.tooltip(why)
-        return
-    mark.classes(add="cursor-pointer")
-    mark.tooltip(t("manager.workbench.make_default"))
-    mark.on("click", lambda t=table: _make_default(context, t))
-
-
-def _lock_button(context: dict[str, Any], table: dict[str, Any],
-                 tables: list[dict[str, Any]]) -> None:
-    act = game_tables.lock_act(table, tables)
-    if act is None:
-        return
-    lock, hint = act
-    ui.button(icon=verbs.LOCK if lock else verbs.UNLOCK,
-              on_click=lambda: _lock_default(context, table, lock=lock)) \
-        .props("flat dense round size=sm").tooltip(hint)
-
-
-@on_page
-async def _lock_default(context: dict[str, Any], table: dict[str, Any], *,
-                        lock: bool) -> None:
-    try:
-        after = await run.io_bound(context["library"].set_default_table, context["game_id"],
-                                   str(table.get("id") or "") if lock else "")
-    except Exception as exc:
-        ui.notify(t("manager.workbench.change_failed"), caption=why(exc), type="negative")
-        return
-    ui.notify(game_tables.lock_said(str(context["game"].get("name") or ""), table,
-                                    (after or {}).get("tables") or [], lock=lock),
-              type="positive")
-    await context["rebuild"]()
-
-
-@on_page
-async def _make_default(context: dict[str, Any], table: dict[str, Any]) -> None:
-    """Hand the game a different default. Everything downstream that follows the game
-    rather than one table moves with it, which is the point of following."""
-    try:
-        await run.io_bound(context["library"].set_default_table,
-                           context["game_id"], str(table.get("id") or ""))
-    except Exception as exc:
-        ui.notify(t("manager.workbench.change_failed"), caption=why(exc), type="negative")
-        return
-    ui.notify(game_tables.now_plays(str(context["game"].get("name") or ""), table),
-              type="positive")
-    await context["rebuild"]()

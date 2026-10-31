@@ -431,6 +431,15 @@ def _said_name(table: dict[str, Any], said: str) -> ui.element:
     return box
 
 
+def _said_file(line: str, tip: str) -> ui.element:
+    """A file name under a table's name, cut at its front like a file name standing as
+    the table's name: what tells two builds apart is at the end."""
+    with ui.element("div").classes(f"{grid.FILE_CLASS} manager-member-table").tooltip(tip) \
+            as box:
+        ui.label(line)
+    return box
+
+
 def _table_line(table: dict[str, Any], tables: list[dict[str, Any]] | None = None) -> str:
     """Which of a game's tables this is, told apart from the rest of `tables`. One form,
     owned by `subject`.

@@ -3008,7 +3008,7 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
      page away from the label naming it - and the eye crossing a gutter to reach a
      control is the thing that made a settings page hard to read. The pane's labels sit
      under this and never wrap. */
-  grid-template-columns: fit-content(var(--label-max)) 1fr;
+  grid-template-columns: fit-content(var(--label-max)) minmax(0, 1fr);
   /* Rows grow with what they hold - a textarea, a wrapped line of chips - and the gap
      is what keeps two fields apart, on every surface that draws facts. */
   grid-auto-rows: auto;
@@ -3371,8 +3371,6 @@ input.manager-path-input { padding-right: 0.6ch; }
 /* The name and its chips share a line and wrap together, so a chip that will not fit
    drops onto the name's own left edge rather than squeezing the name. The name yields
    only once it is alone on the line and still too long. */
-.manager-member-main { flex-wrap: wrap; row-gap: 2px; }
-.manager-member-main > .manager-member-name { flex: 0 1 auto; }
 
 /* The first group opens the section - there is nothing above it to be separated from,
    and a rule there would read as the section's own top edge. */
@@ -4959,3 +4957,22 @@ svg.manager-cell-noart {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The table Automatic plays, under its word, so the way back says where it lands. */
+.manager-default-target { padding-top: 2px; }
+/* A column lines its children up at the start, which sizes each to its text. Without a
+   cap a long file name is as wide as it is and the ellipsis never gets a turn. */
+.manager-member-row .manager-member-name,
+.manager-member-row .manager-member-table,
+.manager-member-row .manager-default-target { max-width: 100%; }
+/* The way to Table Details, at the right edge of a row and last on it. */
+.manager-member-go {
+  display: inline-flex; align-items: center; flex: none; align-self: center;
+  color: var(--ink-3);
+}
+a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visible {
+  text-decoration: none;
+}
+.manager-member-go:hover { color: var(--ink); }
+.manager-member-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.manager-member-go .q-icon { font-size: var(--icon-row); }

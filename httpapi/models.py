@@ -1850,6 +1850,9 @@ class Table(ApiModel):
     default_kind: str = ""
     # The table the default is with no choice recorded: where clearing one moves it.
     automatic: bool = False
+    # Whether this is the table the game's recorded default names, playing or not. A locked
+    # table that cannot be offered leaves another as the default and this still marks it.
+    locked: bool = False
     # Null on almost every table, and that is the honest answer rather than a gap:
     # nothing has looked, which is a different state from having looked and found
     # nothing. Only a matcher can produce the second, and there is no matcher.
@@ -2099,6 +2102,9 @@ class TableRow(ApiModel):
     default_kind: str = ""
     # The table the default is with no choice recorded: where clearing one moves it.
     automatic: bool = False
+    # Whether this is the table the game's recorded default names, playing or not. A locked
+    # table that cannot be offered leaves another as the default and this still marks it.
+    locked: bool = False
     hidden: bool = False
     available: bool = True
     absent_since: str | None = None

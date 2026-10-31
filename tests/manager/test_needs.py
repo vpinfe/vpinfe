@@ -614,7 +614,7 @@ class WhatTheLibrarysMetadataRaises(unittest.TestCase):
             [one.label for one in group.rows])
 
 
-class TablesWithNoReleasePicked(unittest.TestCase):
+class TablesWithNoReleaseMatched(unittest.TestCase):
     def _rows(self, *tables):
         lib = FakeLibrary([game("g1"), game("g2")], list(tables))
         return {one.key: one for one in needs.collect(lib, {})}
@@ -668,11 +668,11 @@ class TablesWithNoReleasePicked(unittest.TestCase):
 
         self.assertEqual(("tables", games.UNTIED), (row.opens.view, row.opens.arriving))
         self.assertEqual(needs.MUTED, row.tone)
-        self.assertEqual("No VPS Release Picked", row.label)
+        self.assertEqual("No VPS Release Matched", row.label)
 
     def test_it_can_be_set_aside_and_named_while_it_is_not_checked(self):
         self.assertTrue(needs.can_set_aside("untied"))
-        self.assertEqual("No VPS Release Picked", needs.name_of("untied"))
+        self.assertEqual("No VPS Release Matched", needs.name_of("untied"))
         self.assertTrue(needs.comes_back("untied"))
         arranged = needs.arrange([], {}, {"untied"})
         self.assertEqual(["untied"], [one.key for one in arranged.aside])
