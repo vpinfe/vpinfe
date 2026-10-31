@@ -13,6 +13,7 @@ dialog with a tab for this device's disk draws the same browser in the tab.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import re
@@ -47,12 +48,16 @@ def _free_name(folders: list[dict[str, Any]]) -> str:
     return name
 
 
-def _icon_for(name: str, path: str) -> str:
-    """Home by the name the listing gives it, which is the only thing that says so: the
-    Manager may be drawing for a machine whose home it cannot see."""
-    if name == t("word.home"):
+def _icon_for(place: dict[str, Any]) -> str:
+    """Home and Downloads by the name the listing gives them, which is the only thing that
+    says so: the Manager may be drawing for a machine whose home it cannot see."""
+    if place.get("icon"):
+        return str(place["icon"])
+    if place.get("name") == t("word.home"):
         return verbs.HOME
-    return verbs.DRIVE if _DRIVE_PATH.match(path) else "folder"
+    if place.get("name") == t("word.downloads"):
+        return verbs.DOWNLOADS
+    return verbs.DRIVE if _DRIVE_PATH.match(str(place.get("path") or "")) else "folder"
 
 
 def suffixes_named(suffixes: tuple[str, ...]) -> str:
@@ -128,9 +133,18 @@ class Browser:
     can_name: bool
 
 
+_DISK_TOPS = ("", "/", "/Volumes", "/media", "/mnt")
+
+
+def _is_disk_top(path: str) -> bool:
+    """The top of a disk or the folder that holds the mounted ones: a place that is there
+    whether or not the drive a path was on still is."""
+    return path.rstrip("\\/") in _DISK_TOPS or bool(re.fullmatch(r"[A-Za-z]:[\\/]*", path))
+
+
 async def read_start(list_entries: Callable[..., dict], start: str = "", *,
                      kind: str = "dir", suffixes: tuple[str, ...] = (),
-                     nearest: bool = False) -> Start:
+                     nearest: bool = False, fallback: str = "") -> Start:
     """The folder to open at.
 
     A `start` that cannot be listed opens at the kind's own start, saying why, instead
@@ -138,7 +152,9 @@ async def read_start(list_entries: Callable[..., dict], start: str = "", *,
     has since gone away, or one inside a private folder.
 
     With `nearest`, a `start` that is not there opens at the closest folder above it that
-    is, saying nothing.
+    is, saying nothing. Where a `fallback` is given, a closest folder that is the top of a
+    disk or the one that holds the mounted ones, which a gone drive leaves behind, is not
+    taken: the picker opens at `fallback`, saying why.
     """
     refused: Exception | None = None
     here: Any = None
@@ -147,12 +163,15 @@ async def read_start(list_entries: Callable[..., dict], start: str = "", *,
     except Exception as exc:  # noqa: BLE001 - a stale saved path is not a reason to refuse
         refused = exc
         above = enclosing(start) if nearest else ""
-        while above and here is None:
+        while above and not (fallback and _is_disk_top(above)) and here is None:
             try:
                 here = await offload.io(list_entries, above, kind, suffixes)
                 refused = None
             except Exception:  # noqa: BLE001 - keep climbing
                 above = enclosing(above)
+    if here is None and fallback:
+        with contextlib.suppress(Exception):
+            here = await offload.io(list_entries, fallback, kind, suffixes)
     if here is None:
         here = await offload.io(list_entries, "", kind, suffixes)
     return Start(here, start, refused)
@@ -276,8 +295,8 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
             field["control"] = control
             with control.add_slot("prepend"):
                 ui.icon(_ROW_ICON[kind] if kind != "dir" and state["selected"]
-                        else _icon_for(named.get(here_now["path"], {}).get("name", ""),
-                                       here_now["path"])).classes("manager-path-mark")
+                        else _icon_for(named.get(here_now["path"], {"path": here_now["path"]}))
+                        ).classes("manager-path-mark")
             with control.add_slot("append"):
                 mark = ui.element("div").classes("manager-value-state")
                 panel.copy_path(control)
@@ -324,7 +343,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
         """One entry per place, the current one ticked."""
         def entry(place: dict[str, Any]) -> None:
             current = place["path"] == state["here"]["path"]
-            icon = _icon_for(place["name"], place["path"])
+            icon = _icon_for(place)
             panel.menu_entry(
                 place["name"], None if current else _opens(place["path"]),
                 mark=lambda: ui.icon(icon).classes("manager-menu-mark"),

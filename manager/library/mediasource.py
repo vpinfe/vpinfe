@@ -40,6 +40,7 @@ from common.media.media_specs import (
 )
 from common.online import sources as source_registry
 from manager.kit import (
+    acting,
     art,
     busy,
     candidates,
@@ -47,6 +48,7 @@ from manager.kit import (
     deeplink,
     folder_picker,
     game_tables,
+    kind_words,
     media_ownership,
     offload,
     panel,
@@ -54,7 +56,7 @@ from manager.kit import (
 )
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import picker_online, record, uploads
+from manager.library import picker_memory, picker_online, record, uploads
 from manager.settings import recording
 
 logger = logging.getLogger("vpinfe.manager.library.mediasource")
@@ -62,9 +64,6 @@ logger = logging.getLogger("vpinfe.manager.library.mediasource")
 # Enough of a list to scroll rather than to page. A folder of artwork is tens of files,
 # not thousands, and a picker with pages in it is a database browser.
 _LIST_MAX = 60
-
-# Where `.manager-source-host` cuts the tab's label, at 20ch.
-_HOST_NAME_MAX = 20
 
 _FIND_FROM = 8
 
@@ -168,6 +167,9 @@ class _Sources:
         self.current = current
         self.dialog: Any = None
         self.tabs: Any = None
+        # Whether the host tab is also where a file is dropped, because the browser is
+        # on the device VPinFE runs on.
+        self.merged = False
         # Filled when the host tab loads: where a file shown from the library is served.
         self.browse_roots: list[dict[str, Any]] = []
 
@@ -190,6 +192,17 @@ class _Sources:
 
     def fits(self, item: dict[str, Any]) -> bool:
         return True
+
+    def memory_kind(self) -> str:
+        """What the folder a file came from is remembered under."""
+        return ""
+
+    def kinds_word(self) -> str:
+        """Several of what this takes, for the Places entry that names where the last came from."""
+        return self.label
+
+    def remember(self, path: str) -> None:
+        picker_memory.record(self.memory_kind(), path)
 
     async def use_file(self, path: str) -> None:
         """Take the file at `path` on the host."""
@@ -247,8 +260,11 @@ class _Sources:
             # Ordered by how far the file has to travel: your own device, this library,
             # the machine VPinFE runs on, then the internet.
             host = _host_name(self.library)
+            # A browser on the device VPinFE runs on has one device: the tab for its files
+            # is the one that takes a drop, and Upload is not a second way in.
+            merged = self.merged = self.uploads and acting.browser_is_here()
             with ui.tabs().props("dense no-caps align=left").classes("w-full px-3") as tabs:
-                if self.uploads:
+                if self.uploads and not merged:
                     ui.tab("upload", label=t("manager.mediasource.upload"),
                            icon=verbs.FROM_FILE)
                 if self.backglass:
@@ -257,10 +273,13 @@ class _Sources:
                 if self.games:
                     ui.tab("games", label=t("manager.mediasource.its_games"),
                            icon=icons.GAMES)
-                named = ui.tab("host", label=host, icon=verbs.FROM_HOST) \
+                named = ui.tab(
+                    "host", icon=verbs.FROM_FILE if merged else verbs.FROM_HOST,
+                    label=t("manager.mediasource.this_device") if merged
+                    else t("manager.mediasource.on_device", device=host)) \
                     .classes("manager-source-host")
-                if len(host) > _HOST_NAME_MAX:
-                    named.tooltip(host)
+                named.tooltip(t("manager.mediasource.this_device.help") if merged
+                              else t("manager.mediasource.on_device.help", device=host))
                 if self.online:
                     ui.tab("online", label=t("manager.mediasource.online"),
                            icon=verbs.FROM_ONLINE)
@@ -275,9 +294,9 @@ class _Sources:
             keyed_body: ui.column | None = None
             record_body: ui.column | None = None
             backglass_body: ui.column | None = None
-            first = self.first or ("upload" if self.uploads else "host")
+            first = self.first or ("upload" if self.uploads and not merged else "host")
             with ui.tab_panels(tabs, value=first).classes("w-full manager-sources-panels"):
-                if self.uploads:
+                if self.uploads and not merged:
                     with ui.tab_panel("upload"), \
                             ui.column().classes("manager-slot-blank manager-source-zone "
                                                 "items-center gap-2"):
@@ -291,6 +310,11 @@ class _Sources:
                         games_body = ui.column().classes("w-full gap-2 manager-source-fill")
                 with ui.tab_panel("host"):
                     host_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                    if merged:
+                        with ui.column().classes("w-full manager-online-base"), \
+                                ui.row().classes("w-full items-center gap-x-3 gap-y-1 "
+                                                 "manager-dropbox"):
+                            self.zone(card)
                 if self.online:
                     with ui.tab_panel("online"):
                         online_body = ui.column().classes("w-full gap-2 manager-source-fill")
@@ -363,9 +387,10 @@ class _Sources:
         suffixes = self.suffixes()
         try:
             starts = await offload.io(self.starts)
+            today = self._opens_at(starts)
             first = await folder_picker.read_start(
-                self.library.folders, self._opens_at(starts), kind="file",
-                suffixes=suffixes, nearest=True)
+                self.library.folders, picker_memory.last(self.memory_kind()) or today,
+                kind="file", suffixes=suffixes, nearest=True, fallback=today)
         except Exception as exc:
             if self.shown():
                 with body:
@@ -376,9 +401,14 @@ class _Sources:
             return
         self.browse_roots = starts
         with body:
+            if not self.merged:
+                ui.label(t("manager.mediasource.on_device.line", device=_host_name(self.library))) \
+                    .classes("manager-help")
             folder_picker.draw_browser(
                 first, self.library.folders, kind="file", suffixes=suffixes,
-                take=self.use_file, places=_places(starts),
+                take=self.use_file,
+                places=picker_memory.places(self.memory_kind(), self.kinds_word(),
+                                            _places(starts)),
                 file_row=self.file_row, keep=self.fits, folder_extra=self._folder_extra,
                 empty=t("manager.mediasource.nothing_use", kind=self.label),
                 limit=_LIST_MAX, embedded=True)
@@ -584,6 +614,12 @@ class _Slot(_OnlineTab, _OneFile):
         self.filename_note: Any = None
         self._marks: dict[str, Any] = {}
 
+    def memory_kind(self) -> str:
+        return self.source_kind
+
+    def kinds_word(self) -> str:
+        return kind_words.plural(self.kind, not self.target.file)
+
     def title(self) -> str:
         return t("manager.mediasource.title_table" if self.table_id
                  else "manager.mediasource.title_game", kind=self.label)
@@ -655,7 +691,7 @@ class _Slot(_OnlineTab, _OneFile):
         table = str(item.get("table") or "")
         row = ui.column().classes("gap-0 w-full manager-placement")
         with row:
-            with ui.row().classes("items-center gap-2 w-full no-wrap"):
+            with ui.row().classes("items-start gap-2 w-full no-wrap manager-placement-line"):
                 mark = ui.icon("radio_button_unchecked").classes("manager-placement-mark")
                 tier = media_ownership.tier_for(
                     media_ownership.TABLE if table else media_ownership.GAME)
@@ -834,6 +870,7 @@ class _Slot(_OnlineTab, _OneFile):
             ui.notify(t("manager.mediasource.import_failed"), caption=why(exc),
                       type="negative")
             return
+        self.remember(path)
         await self.place(name, data)
 
     def file_row(self, item: dict[str, Any]) -> None:
@@ -1042,6 +1079,12 @@ class _Folder(_OnlineTab):
         self.adds_table = False
         self._busy = False
 
+    def memory_kind(self) -> str:
+        return self.kind
+
+    def kinds_word(self) -> str:
+        return kind_words.plural(self.kind)
+
     def title(self) -> str:
         return t("manager.mediasource.title_game", kind=self.label)
 
@@ -1111,6 +1154,7 @@ class _Folder(_OnlineTab):
         except Exception as exc:  # noqa: BLE001
             ui.notify(t("manager.uploads.read_failed"), caption=why(exc), type="negative")
             return
+        self.remember(path)
         await self._import(upload_id, _file_name(path))
 
     @on_page
@@ -1262,6 +1306,7 @@ class _Table(_Folder):
         except Exception as exc:  # noqa: BLE001
             ui.notify(t("said.add_failed"), caption=why(exc), type="negative")
             return
+        self.remember(path)
         pick = self.view.pick
         table = str(made.get("id") or "") if isinstance(made, dict) else ""
         if pick is not None and table:
@@ -1377,6 +1422,12 @@ class _Image(_OneFile):
         super().__init__(library, label, done, IMAGE_FAMILY)
         self.name = name
 
+    def memory_kind(self) -> str:
+        return "picture"
+
+    def kinds_word(self) -> str:
+        return t("word.pictures")
+
     def title(self) -> str:
         return t("manager.mediasource.title_collection", kind=self.label)
 
@@ -1388,6 +1439,7 @@ class _Image(_OneFile):
             ui.notify(t("manager.mediasource.image_failed"), caption=why(exc),
                       type="negative")
             return
+        self.remember(path)
         await self.took(_file_name(path), data)
 
     def file_row(self, item: dict[str, Any]) -> None:

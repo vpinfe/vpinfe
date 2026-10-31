@@ -87,6 +87,17 @@ def _page_acting() -> Acting | None:
                   auth.caller_is_encrypted(request))
 
 
+def browser_is_here() -> bool:
+    """Whether the page being served is open on the device VPinFE runs on. A browser behind
+    a reverse proxy, or one that arrived forwarded, is on another device."""
+    try:
+        client = _page_client()
+        request = client.request if client is not None else None
+    except Exception:  # noqa: BLE001 - no page, no browser to say
+        return False
+    return request is not None and auth.caller_is_local(request)
+
+
 def play_only() -> bool:
     """Whether the page being served is open in a browser that came in with a Remote pass,
     which holds Play and nothing more."""

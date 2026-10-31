@@ -11,7 +11,8 @@ from manager.kit import confirm
 from manager.library import mediamap, mediasource
 
 LIBRARY = SimpleNamespace(placements=None, displaced_by=None, place_media=None,
-                          folders=None, offers_online=lambda kind: False)
+                          folders=None, offers_online=lambda kind: False,
+                          discovery=lambda: {"display_name": "Cabinet"})
 
 
 async def _nothing() -> None:

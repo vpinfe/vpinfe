@@ -175,8 +175,11 @@ FALLBACK = {"open": OPEN_OUT, "change": EDIT, "add": ADD, "remove": CANCEL}
 # A collection whose rules add games. The plain gear is Settings'.
 SMART = "settings_suggest"
 OPENS_ON = "home"
-# The picker's places: Home, and a drive or the root.
+# The picker's places: Home, Downloads, the folder the last file came from, and a drive or
+# the root.
 HOME = "home"
+DOWNLOADS = "download"
+LAST_USED = "history"
 DRIVE = "storage"
 # A collection's row held to one table.
 LOCKED = "lock"

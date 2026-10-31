@@ -211,6 +211,34 @@ class APlayPassTests(unittest.TestCase):
             self.assertFalse(acting.play_only())
 
 
+class BrowserIsHereTests(unittest.TestCase):
+    def page_for(self, peer, cookies):
+        request = SimpleNamespace(client=SimpleNamespace(host=peer), headers={},
+                                  cookies=cookies, method="GET")
+        return mock.patch.object(acting, "_page_client",
+                                 return_value=SimpleNamespace(request=request))
+
+    def test_a_page_on_this_device_is_here(self) -> None:
+        with self.page_for("127.0.0.1", {}):
+            self.assertTrue(acting.browser_is_here())
+
+    def test_a_page_on_another_device_is_not(self) -> None:
+        with self.page_for("192.168.1.21", {}):
+            self.assertFalse(acting.browser_is_here())
+
+    def test_a_forwarded_page_is_not_even_from_this_device(self) -> None:
+        request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"),
+                                  headers={"x-forwarded-for": "192.168.1.21"},
+                                  cookies={}, method="GET")
+        with mock.patch.object(acting, "_page_client",
+                               return_value=SimpleNamespace(request=request)):
+            self.assertFalse(acting.browser_is_here())
+
+    def test_no_page_is_not(self) -> None:
+        with mock.patch.object(acting, "_page_client", return_value=None):
+            self.assertFalse(acting.browser_is_here())
+
+
 class WorkWithNoPageTests(unittest.TestCase):
     def test_inside_a_page_it_is_that_pages_client(self) -> None:
         async def inside() -> Any:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
 from pathlib import Path
 
 from common import service_errors
@@ -155,14 +156,66 @@ def _home_place() -> list[dict]:
     return [{"name": t("word.home"), "path": str(home)}] if home.is_dir() else []
 
 
+def _windows_downloads() -> Path | None:
+    import ctypes
+    from ctypes import wintypes
+
+    folder_id = uuid.UUID("374DE290-123F-4565-9164-39C4925E467B").bytes_le
+    try:
+        out = ctypes.c_wchar_p()
+        ctypes.windll.shell32.SHGetKnownFolderPath(  # type: ignore[attr-defined]
+            folder_id, 0, wintypes.HANDLE(0), ctypes.byref(out))
+        found = out.value
+        ctypes.windll.ole32.CoTaskMemFree(out)  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return None
+    return Path(found) if found else None
+
+
+def _linux_downloads(home: Path) -> Path:
+    named = os.environ.get("XDG_DOWNLOAD_DIR", "")
+    if not named:
+        config = Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config")
+        try:
+            lines = (config / "user-dirs.dirs").read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            key, _, value = line.partition("=")
+            if key.strip() == "XDG_DOWNLOAD_DIR":
+                named = value.strip().strip('"').replace("$HOME", str(home))
+    return Path(named) if named else home / "Downloads"
+
+
+def downloads_folder() -> Path | None:
+    """Where this account's browser puts what it downloads, or nothing where there is no
+    such folder: the Known Folder on Windows, `~/Downloads` on macOS, and on Linux the
+    folder `XDG_DOWNLOAD_DIR` names before `~/Downloads`."""
+    home = _home()
+    if not home.is_dir() or home == Path(home.anchor):
+        return None
+    if sys.platform == "win32":
+        found = _windows_downloads() or home / "Downloads"
+    elif sys.platform == "darwin":
+        found = home / "Downloads"
+    else:
+        found = _linux_downloads(home)
+    return found if found.is_dir() and found != home else None
+
+
+def _downloads_place() -> list[dict]:
+    found = downloads_folder()
+    return [{"name": t("word.downloads"), "path": str(found)}] if found else []
+
+
 def _common_roots() -> list[dict]:
     if sys.platform == "win32":
         found = [{"name": f"{letter}:", "path": f"{letter}:\\"} for letter in
                  (chr(code) for code in range(ord("A"), ord("Z") + 1))
                  if Path(f"{letter}:\\").exists()]
-        found += _home_place()
+        found += _home_place() + _downloads_place()
         return found
-    found = [{"name": "/", "path": "/"}, *_home_place()]
+    found = [{"name": "/", "path": "/"}, *_home_place(), *_downloads_place()]
     if sys.platform == "darwin" and Path("/Volumes").exists():
         found.append({"name": t("word.volumes"), "path": "/Volumes"})
     if sys.platform == "linux":

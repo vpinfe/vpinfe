@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
 import unittest
 from unittest.mock import patch
@@ -132,6 +133,72 @@ class FolderApiTests(TempTree):
 
         names = {one["path"]: one["name"] for one in body["roots"]}
         self.assertEqual(names[str(self.root)], "Home")
+
+    def test_downloads_is_a_place_where_the_account_has_one(self) -> None:
+        home = self.root / "home"
+        (home / "Downloads").mkdir(parents=True)
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "darwin"):
+            names = {one["path"]: one["name"] for one in folder_browse._roots("file")}
+
+        self.assertEqual(names[str(home / "Downloads")], "Downloads")
+
+    def test_downloads_is_not_offered_where_the_folder_is_not_there(self) -> None:
+        home = self.root / "home"
+        home.mkdir()
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "darwin"):
+            self.assertIsNone(folder_browse.downloads_folder())
+
+    def test_downloads_is_not_offered_without_a_home_folder(self) -> None:
+        with patch("common.media.folder_browse.Path.home", side_effect=RuntimeError("no home")):
+            self.assertIsNone(folder_browse.downloads_folder())
+
+    def test_linux_downloads_that_is_the_home_folder_is_not_offered(self) -> None:
+        home = self.root / "home"
+        home.mkdir()
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "linux"), \
+                patch.dict(os.environ, {"XDG_DOWNLOAD_DIR": str(home)}):
+            self.assertIsNone(folder_browse.downloads_folder())
+
+    def test_linux_downloads_follows_xdg_before_the_default_folder(self) -> None:
+        home = self.root / "home"
+        (home / "Downloads").mkdir(parents=True)
+        (home / "Fetched").mkdir()
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "linux"), \
+                patch.dict(os.environ, {"XDG_DOWNLOAD_DIR": str(home / "Fetched")}):
+            self.assertEqual(folder_browse.downloads_folder(), home / "Fetched")
+
+    def test_linux_downloads_reads_the_user_dirs_file(self) -> None:
+        home = self.root / "home"
+        (home / ".config").mkdir(parents=True)
+        (home / "Incoming").mkdir()
+        (home / ".config" / "user-dirs.dirs").write_text(
+            'XDG_DOWNLOAD_DIR="$HOME/Incoming"\n', encoding="utf-8")
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("XDG_DOWNLOAD_DIR", "XDG_CONFIG_HOME")}
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "linux"), \
+                patch.dict(os.environ, env, clear=True):
+            self.assertEqual(folder_browse.downloads_folder(), home / "Incoming")
+
+    def test_windows_downloads_is_the_known_folder(self) -> None:
+        home = self.root / "home"
+        home.mkdir()
+        moved = self.root / "D-downloads"
+        moved.mkdir()
+
+        with patch("common.media.folder_browse.Path.home", return_value=home), \
+                patch("common.media.folder_browse.sys.platform", "win32"), \
+                patch("common.media.folder_browse._windows_downloads", return_value=moved):
+            self.assertEqual(folder_browse.downloads_folder(), moved)
 
     def test_a_program_pickers_places_name_home_too(self) -> None:
         with patch("common.media.folder_browse.Path.home", return_value=self.root):

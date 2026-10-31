@@ -3889,6 +3889,8 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-placement { padding: 4px 2px; cursor: pointer; border-radius: 4px; }
 .manager-placement:hover { background: var(--wash-hover); }
 .manager-placement-mark { font-size: var(--icon-mark); color: var(--ink-3); }
+/* A name that wraps keeps the mark and the chip on its first line. */
+.manager-placement-line > .manager-tier { align-self: flex-start; margin-top: 1px; }
 .manager-placement-note { padding-left: calc(var(--icon-mark) + 8px); }
 /* Accent, because this is the one chosen - which is what accent is for. */
 .manager-placement-mark--on { color: var(--accent); }
@@ -4112,7 +4114,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 
 .manager-source-zone { min-height: 200px; padding: 20px 16px; flex: 1 1 auto; }
-/* Past `_HOST_NAME_MAX` in mediasource.py the tab also carries a tooltip. */
+/* A long device name is cut here; the tab's tooltip names it whole. */
 .manager-source-host .q-tab__label {
   max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
