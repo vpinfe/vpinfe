@@ -89,10 +89,15 @@ def release(lock: Path = LOCK) -> None:
         lock.unlink(missing_ok=True)
 
 
-def record(seconds: float, tests: int, ok: bool, log: Path = LOG, now: float | None = None) -> None:
-    """Append one run to the log. A log that cannot be written is skipped."""
+def record(seconds: float, tests: int, ok: bool, log: Path = LOG, now: float | None = None,
+           failed: list[str] | None = None, sandboxed: list[str] | None = None) -> None:
+    """Append one run to the log. A log that cannot be written is skipped.
+
+    `failed` names the modules that failed, errored or never finished; `sandboxed` the browser
+    modules that skipped, which ran without a browser and so have not passed.
+    """
     line = {"at": time.time() if now is None else now, "seconds": round(seconds, 1),
-            "tests": tests, "ok": ok}
+            "tests": tests, "ok": ok, "failed": failed or [], "sandboxed": sandboxed or []}
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as handle:

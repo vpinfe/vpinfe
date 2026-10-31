@@ -26,6 +26,7 @@ from tests.support.library import write_game
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk, clicked
 
+RELEASE_ONLY = True
 ROOT = Path(__file__).resolve().parents[2]
 
 # Sections whose screens are mostly not ours to translate, and so cannot be read this

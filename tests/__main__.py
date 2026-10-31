@@ -48,10 +48,17 @@ _DRIVES_A_BROWSER = re.compile(
     r"|\s+import\b.*\b(?:live_instance|browser_session)\b)",
     re.MULTILINE)
 
+# A module that sets this runs when a run names it or passes --release, not in a whole run
+# or --affected.
+_RELEASE_ONLY = re.compile(r"^RELEASE_ONLY\s*=\s*True\s*$", re.MULTILINE)
+
 _PROGRESS_EVERY = 30.0
 _SLOWEST = 10
 
 Record = dict[str, Any]
+
+# What every browser test says when it skips for want of a browser (`chromium_path()` is None).
+NO_BROWSER = "no Chromium on this machine"
 
 
 # -- what runs -------------------------------------------------------------------------
@@ -78,6 +85,19 @@ def _name(path: Path, top: Path) -> str:
 
 def _path(name: str, top: Path = REPO) -> Path:
     return top.joinpath(*name.split(".")).with_suffix(".py")
+
+
+def release_only(names: list[str], top: Path = REPO) -> list[str]:
+    """The modules among `names` that run only before a release."""
+    found = []
+    for name in names:
+        try:
+            source = _path(name, top).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _RELEASE_ONLY.search(source):
+            found.append(name)
+    return found
 
 
 # -- where it runs ---------------------------------------------------------------------
@@ -204,6 +224,7 @@ def _record(name: str, result: unittest.TextTestResult[Any], seconds: float) -> 
     return {"module": name, "seconds": round(seconds, 3), "tests": result.testsRun,
             "failures": len(result.failures), "errors": len(result.errors),
             "skipped": len(result.skipped), "expected_failures": len(result.expectedFailures),
+            "no_browser": sum(NO_BROWSER in reason for _, reason in result.skipped),
             "unexpected_successes": len(result.unexpectedSuccesses), "report": report}
 
 
@@ -386,6 +407,26 @@ def failures(shards: list[Shard]) -> list[str]:
     return lines
 
 
+def failed_modules(shards: list[Shard]) -> list[str]:
+    """Modules that failed or errored, and those a stopped process never got to finish."""
+    names = []
+    for shard in shards:
+        names += [record["module"] for record in shard.records
+                  if record["failures"] or record["errors"]]
+        if shard.stopped:
+            done = {record["module"] for record in shard.records}
+            names += [name for name in shard.modules if name not in done]
+    return sorted(names)
+
+
+def sandboxed_modules(records: list[Record]) -> list[str]:
+    """Modules with a test that skipped for want of a browser: that test has not passed.
+
+    A drive that skips a test for another reason (a device that cannot send keys) is not here.
+    """
+    return sorted(record["module"] for record in records if record["no_browser"])
+
+
 def summary(records: list[Record], seconds: float, stopped: int) -> tuple[list[str], int]:
     """unittest's closing lines for the whole run, and its exit code."""
     total = {key: sum(record[key] for record in records)
@@ -481,14 +522,17 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m tests",
         description="Run the suite across processes, each test module whole in one.")
     parser.add_argument("-j", "--jobs", type=_processes,
-                        default=max(1, (os.cpu_count() or 2) // 2),
-                        help="how many processes; 1 runs in this one (default: half the "
-                             "cores)")
+                        default=max(1, (os.cpu_count() or 2) * 3 // 5),
+                        help="how many processes; 1 runs in this one (default: three "
+                             "fifths of the cores)")
     parser.add_argument("paths", nargs="*", type=Path, default=[PACKAGE],
                         help="a directory or a test file under tests/ (default: all of it)")
     parser.add_argument("--affected", nargs="?", const="HEAD", metavar="REV",
                         help="only what the changes since REV reach (default: HEAD, so the "
                              "working tree), plus the invariants; see tests/affected.py")
+    parser.add_argument("--release", action="store_true",
+                        help="also run the modules that are left out of a whole run and "
+                             "--affected because they are only needed before a release")
     parser.add_argument("--overlap", action="store_true",
                         help="start a whole-suite run even though another is going")
     parser.add_argument("--shard", type=Path, help=argparse.SUPPRESS)
@@ -517,6 +561,10 @@ def main(argv: list[str] | None = None) -> int:
         if not where.exists() or not where.is_relative_to(PACKAGE):
             parser.error(f"{path} is not a directory or a file under {PACKAGE}")
         names.extend(name for name in modules(where) if name not in names)
+    left_out: list[str] = []
+    if (args.affected or args.paths == [PACKAGE]) and not args.release:
+        left_out = release_only(names)
+        names = [name for name in names if name not in left_out]
     processes = min(args.jobs, max(1, len(names)))
     refused = refusal(processes, tests.CALLER_CONFIG_DIR)
     if refused:
@@ -560,9 +608,17 @@ def main(argv: list[str] | None = None) -> int:
     closing, code = summary(records, seconds, sum(bool(shard.stopped) for shard in shards))
     count: list[str] = []
     if whole:
-        wholesuite.record(seconds, sum(r["tests"] for r in records), code == 0)
+        sandboxed = sandboxed_modules(records)
+        wholesuite.record(seconds, sum(r["tests"] for r in records), code == 0,
+                          failed=failed_modules(shards), sandboxed=sandboxed)
         runs, spent = wholesuite.today()
         count = [f"Whole-suite runs today: {runs}, {spent / 60:.0f} minutes."]
+        if sandboxed:
+            count.append(f"{len(sandboxed)} browser modules skipped: they ran in the sandbox "
+                         f"and have not passed.")
+    if left_out:
+        count.append(f"Left out, needed only before a release (--release runs them): "
+                     f"{', '.join(left_out)}")
     if tree_before and code == 0 and _tree_hash() == tree_before:
         stamp.record(REPO, tree_before)
     for line in [*failures(shards), "-" * 70, *slowest(records, recorded), *count, "-" * 70,

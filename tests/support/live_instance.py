@@ -58,6 +58,10 @@ class LiveInstance:
         # The instance's home folder, so Setup's write of Visual Pinball's ini stays here.
         self._home_tmp = TemporaryDirectory(prefix="vpinfe-home0")
         self.home = Path(self._home_tmp.name)
+        # What the instance makes in its temp folder (an upload session left open when a
+        # drive ends) goes with the instance. Stopping it with a signal runs none of its own
+        # clean-up, so in the shared one it outlives the test.
+        self._scratch_tmp = TemporaryDirectory(prefix="vpinfe-scratch0")
         self.proc: subprocess.Popen | None = None
         self._log: TextIOWrapper | None = None
         self.ports: dict[str, int] = {}
@@ -107,7 +111,9 @@ class LiveInstance:
     def _home_env(self) -> dict[str, str]:
         """Every variable a platform resolves home and preferences from: any one left
         pointing at the real folder is the one that gets written."""
+        scratch = self._scratch_tmp.name
         return {
+            "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch,
             "HOME": str(self.home),
             "USERPROFILE": str(self.home),
             "APPDATA": str(self.home / "AppData" / "Roaming"),
@@ -132,6 +138,7 @@ class LiveInstance:
         self._stop()
         self._tmp.cleanup()
         self._home_tmp.cleanup()
+        self._scratch_tmp.cleanup()
 
     # -- setup -------------------------------------------------------------
 

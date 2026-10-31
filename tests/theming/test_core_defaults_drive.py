@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from tests.support.browser_session import BrowserSession, chromium_path
-from tests.support.library import TempTree, write_game
+from tests.support.library import write_game
 from tests.support.live_instance import LiveInstance
 
 PNG = bytes.fromhex(
@@ -33,31 +35,43 @@ def _info(name: str) -> dict:
 
 
 @unittest.skipIf(chromium_path() is None, "no Chromium on this machine")
-class CoreDefaultsDriveTests(TempTree):
-    BOOTS_PER_TEST = "The contract and the theme's config are read once, at boot."
+class CoreDefaultsDriveTests(unittest.TestCase):
+    instance: LiveInstance
+    theme: Path
+    shipped: str
 
-    def setUp(self) -> None:
-        super().setUp()
-        write_game(self.root, "Alpha Table", info=_info("Alpha Table"),
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        tmp = TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        write_game(Path(tmp.name), "Alpha Table", info=_info("Alpha Table"),
                    medias={"wheel.png": PNG, "table.png": PNG,
                            "bg.png": PNG, "dmd.png": PNG})
+        cls.instance = cls.enterClassContext(LiveInstance(Path(tmp.name)))
+        cls.theme = cls.instance.config_dir / "frontend_themes" / cls.instance.theme
+        cls.shipped = (cls.theme / "manifest.json").read_text()
+
+    def setUp(self) -> None:
+        # The contract is read per payload and the config per page load, so a test's
+        # change to either is seen by the next page and has to be put back first.
+        (self.theme / "manifest.json").write_text(self.shipped)
+        (self.theme / "config.json").unlink(missing_ok=True)
 
     def _capabilities(self, *, contract_1: bool = False, config: dict | None = None) -> dict:
         async def run(instance: LiveInstance):
-            theme = instance.config_dir / "frontend_themes" / instance.theme
             if contract_1:
-                manifest = json.loads((theme / "manifest.json").read_text())
+                manifest = json.loads(self.shipped)
                 manifest.pop("min_vpinfe")
-                (theme / "manifest.json").write_text(json.dumps(manifest))
+                (self.theme / "manifest.json").write_text(json.dumps(manifest))
             if config is not None:
-                (theme / "config.json").write_text(json.dumps(config))
+                (self.theme / "config.json").write_text(json.dumps(config))
             async with BrowserSession(chromium_path() or "") as browser:
                 await browser.navigate(instance.theme_url("playfield"))
                 await browser.wait_for("document.body.dataset.ready === 'true'", timeout=90.0)
                 return json.loads(await browser.evaluate(READ))
 
-        with LiveInstance(self.root) as instance:
-            return asyncio.run(run(instance))
+        return asyncio.run(run(self.instance))
 
     def test_contract_2_has_every_one_on(self) -> None:
         self.assertEqual(self._capabilities(), dict.fromkeys(CAPABILITIES, True))
@@ -93,8 +107,7 @@ class CoreDefaultsDriveTests(TempTree):
                     src = await browser.wait_for(SHOWN, timeout=90.0)
                     return src, list(browser.failed_requests)
 
-        with LiveInstance(self.root, windows=("playfield", window)) as instance:
-            return asyncio.run(run(instance))
+        return asyncio.run(run(self.instance))
 
     def test_core_draws_the_backglass_and_the_score_view(self) -> None:
         for window in ("backglass", "scoreview"):
@@ -107,9 +120,8 @@ class CoreDefaultsDriveTests(TempTree):
 
     def _indicator(self, config: dict | None, *events: str) -> int:
         async def run(instance: LiveInstance):
-            theme = instance.config_dir / "frontend_themes" / instance.theme
             if config is not None:
-                (theme / "config.json").write_text(json.dumps(config))
+                (self.theme / "config.json").write_text(json.dumps(config))
             async with BrowserSession(chromium_path() or "") as browser:
                 await browser.navigate(instance.theme_url("playfield"))
                 await browser.wait_for("document.body.dataset.ready === 'true'", timeout=90.0)
@@ -118,8 +130,7 @@ class CoreDefaultsDriveTests(TempTree):
                 return await browser.evaluate(
                     "document.querySelectorAll('.vpinfe-launch-indicator').length")
 
-        with LiveInstance(self.root) as instance:
-            return asyncio.run(run(instance))
+        return asyncio.run(run(self.instance))
 
     def test_a_launch_shows_the_indicator(self) -> None:
         self.assertEqual(self._indicator(None, "TableLaunching"), 1)
@@ -139,8 +150,7 @@ class CoreDefaultsDriveTests(TempTree):
                     " seen *= Number(getComputedStyle(n).opacity);"
                     " return seen > 0.99 && 'seen'; })()", timeout=15.0)
 
-        with LiveInstance(self.root) as instance:
-            self.assertEqual(asyncio.run(run(instance)), "seen")
+        self.assertEqual(asyncio.run(run(self.instance)), "seen")
 
     def test_a_second_launching_message_does_not_add_another(self) -> None:
         self.assertEqual(self._indicator(None, "TableLaunching", "TableLaunching"), 1)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -88,6 +89,15 @@ class CountTests(unittest.TestCase):
         wholesuite.record(300.0, 10, True, log, now=time.time() - 2 * 86400)
         self.assertEqual(wholesuite.today(log), (2, 180.0))
         self.assertEqual(wholesuite.today(log, date.today() - timedelta(days=2)), (1, 300.0))
+
+    def test_a_run_logs_the_modules_that_failed_and_the_ones_that_ran_without_a_browser(
+            self) -> None:
+        log = Path(self.enterContext(tempfile.TemporaryDirectory())) / "runs.jsonl"
+        wholesuite.record(60.0, 10, False, log, failed=["tests.a"], sandboxed=["tests.b"])
+        wholesuite.record(60.0, 10, True, log)
+        first, second = (json.loads(line) for line in log.read_text().splitlines())
+        self.assertEqual((["tests.a"], ["tests.b"]), (first["failed"], first["sandboxed"]))
+        self.assertEqual(([], []), (second["failed"], second["sandboxed"]))
 
 
 if __name__ == "__main__":

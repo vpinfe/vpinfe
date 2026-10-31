@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from tests.support.browser_session import BrowserSession, chromium_path
-from tests.support.library import TempTree, write_game
+from tests.support.library import write_game
 from tests.support.live_instance import LiveInstance
 
 PNG = bytes.fromhex(
@@ -22,14 +24,19 @@ TOPPER = "document.querySelector('[data-vpin-media] img')?.src || ''"
 
 
 @unittest.skipIf(chromium_path() is None, "no Chromium on this machine")
-class CoreTopperDriveTests(TempTree):
-    BOOTS_PER_TEST = "Each test reads what the one window drew."
+class CoreTopperDriveTests(unittest.TestCase):
+    instance: LiveInstance
 
-    def setUp(self) -> None:
-        super().setUp()
-        write_game(self.root, "Alpha Table",
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        tmp = TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        write_game(Path(tmp.name), "Alpha Table",
                    info={"Info": {"Name": "Alpha Table"}, "VPinFE": {}, "User": {}},
                    medias={"wheel.png": PNG, "table.png": PNG, "topper.png": PNG})
+        cls.instance = cls.enterClassContext(
+            LiveInstance(Path(tmp.name), windows=("playfield", "topper")))
 
     @staticmethod
     def _url(instance: LiveInstance) -> str:
@@ -51,8 +58,7 @@ class CoreTopperDriveTests(TempTree):
                     src = await browser.wait_for(TOPPER, timeout=90.0)
                     return src, list(browser.failed_requests)
 
-        with LiveInstance(self.root, windows=("playfield", "topper")) as instance:
-            src, failed = asyncio.run(run(instance))
+        src, failed = asyncio.run(run(self.instance))
         self.assertIn("topper", src)
         self.assertEqual(failed, [])
 
@@ -65,8 +71,7 @@ class CoreTopperDriveTests(TempTree):
                     await browser.wait_for(TOPPER, timeout=90.0)
                     return await browser.evaluate("window.vpin.windowMediaKind")
 
-        with LiveInstance(self.root, windows=("playfield", "topper")) as instance:
-            self.assertEqual(asyncio.run(run(instance)), "topper")
+        self.assertEqual(asyncio.run(run(self.instance)), "topper")
 
 
 if __name__ == "__main__":

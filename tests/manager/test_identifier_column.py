@@ -1,8 +1,4 @@
-"""Every grid marks the one column its rows are scanned by.
-
-The render half is tests/theming/test_identifier_ink.py: nothing here can tell
-whether the class resolves to a color.
-"""
+"""Every grid marks the one column its rows are scanned by."""
 
 from __future__ import annotations
 

@@ -39,6 +39,11 @@ tests = [
   "tests/supportpackage/test_display_section.py",
 ]
 
+# The list of test modules that predate the rule that a module says what it protects.
+[[area]]
+paths = ["tests/protects_baseline.txt"]
+tests = ["tests/invariants/test_a_new_test_module_says_what_it_protects.py"]
+
 # The Node tests and the files they load.
 [[area]]
 paths = ["tests/js/*"]
@@ -70,10 +75,8 @@ tests = [
   "tests/theming/test_drop_targets_drive.py",
   "tests/theming/test_escape_in_dialogs_drive.py",
   "tests/theming/test_folder_picker_drive.py",
-  "tests/theming/test_identifier_ink.py",
   "tests/theming/test_manager_back_button_drive.py",
   "tests/theming/test_manager_pages_drive.py",
-  "tests/theming/test_nav_rail_width_drive.py",
   "tests/theming/test_panel_pages_stack_drive.py",
   "tests/theming/test_primary_nav_drive.py",
   "tests/theming/test_pseudo_locale.py",
@@ -137,8 +140,6 @@ tests = [
   "tests/theming/test_setup_first_run_drive.py",
   "tests/theming/test_setup_tables_drive.py",
   "tests/theming/test_shape_suggestion_drive.py",
-  "tests/theming/test_wizard_frame_drive.py",
-  "tests/theming/test_wizard_wait_drive.py",
 ]
 
 # Settings pages: folders, input, VPX settings.
@@ -289,5 +290,4 @@ paths = ["main.py", "common/*", "httpapi/*", "manager/*", "frontend/*", "apps/*"
 tests = [
   "tests/theming/test_grid_selection_drive.py",
   "tests/theming/test_pane_reopen_drive.py",
-  "tests/theming/test_wizard_frame_drive.py",
 ]

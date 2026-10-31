@@ -229,6 +229,62 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(1, code)
 
 
+class LoggedRunTests(unittest.TestCase):
+    """What a whole run leaves in the log: which modules failed, and which never had a browser."""
+
+    def _record(self, module: str, **counts: int) -> dict:
+        return {"module": module, "tests": 1, "failures": 0, "errors": 0, "skipped": 0,
+                "expected_failures": 0, "no_browser": 0, "unexpected_successes": 0,
+                "report": "", **counts}
+
+    def test_failed_modules_name_failures_errors_and_what_a_stopped_process_never_finished(
+            self) -> None:
+        ran = runner.Shard(0, ["a", "b", "c"], records=[
+            self._record("a"), self._record("b", failures=1), self._record("c", errors=2)])
+        stopped = runner.Shard(1, ["d", "e", "f"], records=[self._record("d")],
+                               stopped="timed out")
+        self.assertEqual(["b", "c", "e", "f"], runner.failed_modules([ran, stopped]))
+        self.assertEqual([], runner.failed_modules([runner.Shard(2, ["g"],
+                                                                 records=[self._record("g")])]))
+
+    def test_only_a_skip_for_want_of_a_browser_counts_as_sandboxed(self) -> None:
+        records = [self._record("tests.no_browser", skipped=1, no_browser=1),
+                   self._record("tests.other_skip", skipped=2),
+                   self._record("tests.ran")]
+        self.assertEqual(["tests.no_browser"], runner.sandboxed_modules(records))
+
+
+class ReleaseOnlyTests(unittest.TestCase):
+    def test_only_a_module_that_sets_the_marker_is_release_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            top = Path(tmp)
+            (top / "tests").mkdir()
+            sources = {"held": "RELEASE_ONLY = True\n", "off": "RELEASE_ONLY = False\n",
+                       "plain": "import unittest\n",
+                       "quoted": 'DOC = "RELEASE_ONLY = True"\n'}
+            for name, source in sources.items():
+                (top / "tests" / f"{name}.py").write_text(source, encoding="utf-8")
+            names = [f"tests.{name}" for name in (*sources, "missing")]
+            self.assertEqual(["tests.held"], runner.release_only(names, top))
+
+    def test_a_whole_run_leaves_it_out_and_release_runs_it(self) -> None:
+        held = "tests.theming.test_pseudo_locale"
+        asked: list[list[str]] = []
+        with mock.patch.object(runner, "run_modules",
+                               side_effect=lambda names, *_: asked.append(list(names))), \
+                mock.patch.object(runner.wholesuite, "take", return_value=None), \
+                mock.patch.object(runner.wholesuite, "release"), \
+                mock.patch.object(runner.wholesuite, "record"), \
+                mock.patch.object(runner, "write_durations"), \
+                redirect_stderr(io.StringIO()) as said:
+            runner.main(["-j", "1"])
+            runner.main(["-j", "1", "--release"])
+        self.assertNotIn(held, asked[0])
+        self.assertIn(held, asked[1])
+        self.assertIn(f"Left out, needed only before a release (--release runs them): {held}",
+                      said.getvalue())
+
+
 class LeakGateTests(unittest.TestCase):
     def _root(self, tmp: str, *, number: int = 0) -> Path:
         root = Path(tmp)

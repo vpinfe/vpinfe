@@ -75,7 +75,12 @@ class RemoteShellDrive(unittest.TestCase):
             await browser.wait_for(f"{SHEET_TEXT}.length > 0")
             seen["dots sheet"] = await browser.evaluate(SHEET_TEXT)
 
-            for name in ("wheel", "games", "now"):
+            # Before the wheel's offer is pressed, which changes what the instance is.
+            for old in ("control", "play"):
+                await opened(f"/remote?screen={old}")
+                seen[f"lit on {old}"] = await browser.evaluate(LIT_TAB)
+
+            for name in ("games", "now", "wheel"):
                 await opened(f"/remote?screen={name}")
                 seen[f"lit on {name}"] = await browser.evaluate(LIT_TAB)
                 if name == "wheel":
@@ -84,10 +89,6 @@ class RemoteShellDrive(unittest.TestCase):
                     await browser.tap(".remote-viewport .remote-action", nth=0)
                     await browser.wait_for(f"{NOTICES}.length > 0")
                     seen["after opening"] = await browser.evaluate(NOTICES)
-
-            for old in ("control", "play"):
-                await opened(f"/remote?screen={old}")
-                seen[f"lit on {old}"] = await browser.evaluate(LIT_TAB)
         return seen
 
     def test_the_tabs_are_the_wheel_the_games_and_now(self) -> None:
