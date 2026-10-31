@@ -105,6 +105,9 @@ INPUT_CAPTURE_RELEASED = "input_capture.released"
 
 DEFAULT_PRIORITY = 100
 
+# Per-item or timer events: no debug line, handlers still run.
+_UNLOGGED = frozenset({JOB_PROGRESS, INPUT_CAPTURE_ARMED})
+
 
 @dataclass
 class _Registrations:
@@ -161,7 +164,8 @@ def emit(name: str, **payload: Any) -> None:
         hooks = [entry[2] for entry in slot.hooks]
         subscribers = list(slot.subscribers)
 
-    logger.debug("emit %s hooks=%s subscribers=%s", name, len(hooks), len(subscribers))
+    if name not in _UNLOGGED:
+        logger.debug("emit %s hooks=%s subscribers=%s", name, len(hooks), len(subscribers))
 
     for handler in hooks:
         handler(**payload)

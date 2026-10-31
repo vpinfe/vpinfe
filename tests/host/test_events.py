@@ -100,6 +100,34 @@ class BusTests(unittest.TestCase):
         self.assertEqual(events.registered("t.e"), (0, 0))
 
 
+class EmitLoggingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        events.clear()
+        self.addCleanup(events.clear)
+
+    def test_a_burst_of_progress_writes_no_per_item_lines(self) -> None:
+        told = []
+        events.subscribe(events.JOB_PROGRESS, lambda **p: told.append(p["pct"]))
+
+        with self.assertNoLogs("vpinfe.common.events", level="DEBUG"):
+            for pct in range(191):
+                events.emit(events.JOB_PROGRESS, job_id="j", pct=pct, message="")
+
+        self.assertEqual(len(told), 191, "handlers still hear every one")
+
+    def test_the_input_capture_heartbeat_is_not_logged(self) -> None:
+        with self.assertNoLogs("vpinfe.common.events", level="DEBUG"):
+            events.emit(events.INPUT_CAPTURE_ARMED, armed=True, ttl_ms=1000,
+                        browser="b", device="")
+
+    def test_job_done_and_ordinary_events_are_still_logged(self) -> None:
+        for name in (events.JOB_DONE, events.GAME_SELECTED):
+            with self.subTest(name=name):
+                with self.assertLogs("vpinfe.common.events", level="DEBUG") as logged:
+                    events.emit(name)
+                self.assertIn(f"emit {name} ", logged.output[0])
+
+
 class PeripheralLaunchTests(unittest.TestCase):
     """DOF and real-DMD are the bus's first consumers, and the reason hooks exist."""
 
