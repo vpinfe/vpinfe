@@ -63,6 +63,13 @@ KIND_MEDIA_CAPTURE = "media.capture"
 # Turning pictures and videos in place. One at a time: two turns of one file would each
 # read it as it was and the second would undo or double the first.
 KIND_MEDIA_ROTATE = "media.rotate"
+# Converting pictures, sounds and videos to formats a device plays. One at a time, and not
+# beside anything else that writes media files: a file filled, recorded or turned while it is
+# converted would be read as it was and overwritten by the result.
+KIND_MEDIA_CONVERT = "media.convert"
+# Bringing an upload into the library, where it converts files first. One at a time: two
+# imports into one folder would each plan against a folder the other is writing.
+KIND_UPLOAD_IMPORT = "upload.import"
 # Carrying backups into a new backups folder. One at a time: two moves of the same folder
 # would each find a file still there and the second would fail on it.
 KIND_BACKUPS_MOVE = "backups.move"
@@ -100,6 +107,8 @@ _BUSY = {KIND_LIBRARY_SCAN: "error.jobs.library_busy",
          KIND_MEDIA_LOOK: "error.media_look.busy",
          KIND_MEDIA_CAPTURE: "error.capture.busy",
          KIND_MEDIA_ROTATE: "error.media_rotate.busy",
+         KIND_MEDIA_CONVERT: "error.media_convert.busy",
+         KIND_UPLOAD_IMPORT: "error.uploads.import_busy",
          KIND_BACKUPS_MOVE: "error.backups.move_busy",
          KIND_TOOL_GET: "error.jobs.getting_tool",
          KIND_TABLE_SETTINGS: "error.jobs.settings_busy",
@@ -110,7 +119,13 @@ _BUSY = {KIND_LIBRARY_SCAN: "error.jobs.library_busy",
 
 # Kinds refused while another kind runs, and what the refusal says.
 _BLOCKED_BY = {(KIND_MEDIA_CAPTURE, KIND_MEDIA_FILL): "error.capture.fill_running",
-               (KIND_MEDIA_FILL, KIND_MEDIA_CAPTURE): "error.media_fill.recording"}
+               (KIND_MEDIA_FILL, KIND_MEDIA_CAPTURE): "error.media_fill.recording",
+               (KIND_MEDIA_CONVERT, KIND_MEDIA_FILL): "error.media_convert.blocked",
+               (KIND_MEDIA_CONVERT, KIND_MEDIA_CAPTURE): "error.media_convert.blocked",
+               (KIND_MEDIA_CONVERT, KIND_MEDIA_ROTATE): "error.media_convert.blocked",
+               (KIND_MEDIA_FILL, KIND_MEDIA_CONVERT): "error.media_convert.running",
+               (KIND_MEDIA_CAPTURE, KIND_MEDIA_CONVERT): "error.media_convert.running",
+               (KIND_MEDIA_ROTATE, KIND_MEDIA_CONVERT): "error.media_convert.running"}
 
 
 class JobBusyError(service_errors.BlockedError):
@@ -200,6 +215,9 @@ class Job:
     # One line on what it did, counts mostly. Written when the work finishes, by the
     # describer registered for its kind or by the work itself.
     detail: str = ""
+    # What each named part of the work is doing, for work a caller watches part by part:
+    # `{"state": "waiting" | "working" | "done", "pct": 0-100, ...}` per part, in order.
+    parts: list[dict[str, object]] = field(default_factory=list)
     # The extension that started it and the tier of the request that did, so the API shows
     # it only to callers who reach that tier. Empty `extension` is core's own work.
     extension: str = ""
@@ -254,6 +272,7 @@ class Job:
             "problems": self.problems,
             "report": self.kept,
             "detail": self.detail,
+            "parts": [dict(part) for part in self.parts],
         }
         if with_result:
             found["result"] = self.result

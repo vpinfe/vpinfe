@@ -20,8 +20,10 @@ from nicegui import run, ui
 from common.i18n import literal_or, t
 from common.release import release_notes, whats_new
 from common.vpinfe_version import get_version
-from manager.kit import offload, panel, wizard
+from manager.kit import offload, panel, verbs, wizard
+from manager.kit.data import Library
 from manager.kit.on_page import on_page
+from manager.overview import needs as overview_needs
 from manager.system import early_access
 
 CHANGED = "changed"
@@ -52,6 +54,37 @@ def _wrapped(text: str) -> Callable[[], None]:
     def draw() -> None:
         ui.label(text).classes("manager-fact-value min-w-0")
     return draw
+
+
+@dataclass(frozen=True)
+class Line:
+    """A thing an update leaves for a person to do about their own files, counted now
+    rather than declared with the release, and gone once the count is."""
+
+    label: str
+    text: str
+    actions: tuple[tuple[str, overview_needs.Opens], ...]
+
+
+def lines(found: overview_needs.Unplayable) -> list[Line]:
+    """One line for each kind of file that cannot be used as it is, with the ways to fix
+    it. None offered is presumed: the sentence says either fixes it."""
+    out: list[Line] = []
+    if found.wont_play:
+        out.append(Line(
+            t("manager.needs.wont_play"),
+            t("manager.whats_new.wont_play", count=len(found.wont_play),
+              devices=", ".join(found.devices)),
+            (*(((t("manager.whats_new.browser_settings"),
+                 overview_needs.Opens("settings", keys={"settings_page": "frontend.chromium"})),)
+               if found.here else ()),
+             (t("manager.whats_new.convert_videos"), overview_needs.wont_play_opens()))))
+    if found.unsupported:
+        out.append(Line(
+            t("manager.needs.unsupported"),
+            t("manager.whats_new.unsupported", count=len(found.unsupported)),
+            ((t("manager.media_convert.convert"), overview_needs.unsupported_opens()),)))
+    return out
 
 
 def _release(found: release_notes.Release) -> list[tuple[Any, Any]]:
@@ -88,15 +121,43 @@ def _files(found: whats_new.Review) -> Callable[[], None]:
     return draw
 
 
-def _needs(found: whats_new.Review) -> Callable[[], None]:
+def _dialog_around() -> ui.dialog | None:
+    element: Any = ui.context.slot.parent
+    while element is not None and not isinstance(element, ui.dialog):
+        slot = element.parent_slot
+        element = slot.parent if slot is not None else None
+    return element
+
+
+def _line_value(one: Line, go: Callable[[overview_needs.Opens], None]) -> Callable[[], None]:
     def draw() -> None:
-        panel.facts(ui, [(t(f"needs.{one.key}.label"), _wrapped(t(f"needs.{one.key}.help")))
-                         for one in found.needs])
+        ui.label(one.text).classes("manager-fact-value min-w-0")
+        dialog = _dialog_around()
+        with ui.row().classes("items-center gap-2"):
+            for label, opens in one.actions:
+                def leave(opens: overview_needs.Opens = opens) -> None:
+                    go(opens)
+                    if dialog is not None:
+                        dialog.submit(True)
+
+                panel.action(label, leave, icon=verbs.GO,
+                             hint=t("manager.whats_new.go_hint", label=label))()
     return draw
 
 
-def parts(found: whats_new.Review) -> list[Part]:
+def _needs(found: whats_new.Review, asked: list[Line],
+           go: Callable[[overview_needs.Opens], None]) -> Callable[[], None]:
+    def draw() -> None:
+        panel.facts(ui, [(t(f"needs.{one.key}.label"), _wrapped(t(f"needs.{one.key}.help")))
+                         for one in found.needs]
+                    + [(one.label, _line_value(one, go)) for one in asked])
+    return draw
+
+
+def parts(found: whats_new.Review, asked: list[Line] | None = None,
+          go: Callable[[overview_needs.Opens], None] = lambda opens: None) -> list[Part]:
     """The parts that have something to say, in the order they are read."""
+    asked = asked or []
     def part(key: str, draw: Callable[[], None], notes: tuple[str, ...] = ()) -> Part:
         return Part(key, f"manager.whats_new.step.{key}", f"manager.whats_new.title.{key}",
                     draw, notes)
@@ -106,8 +167,8 @@ def parts(found: whats_new.Review) -> list[Part]:
         shown.append(part(CHANGED, _changed(found)))
     if found.files:
         shown.append(part(FILES, _files(found), (t("manager.whats_new.files_undo"),)))
-    if found.needs:
-        shown.append(part(NEEDS, _needs(found)))
+    if found.needs or asked:
+        shown.append(part(NEEDS, _needs(found, asked, go)))
     return shown
 
 
@@ -170,13 +231,18 @@ def calls(found: whats_new.Review, shown: list[Part],
 
 
 @on_page
-async def open_whats_new(*, again: bool = False) -> bool:
+async def open_whats_new(library: Library, state: dict[str, Any], *, again: bool = False) -> bool:
     """The review over the page this is called from, until it is closed. `again` is the
     running version alone, from About; otherwise it is everything since the last read,
     and closing it, however it is left, says it has been read. Returns whether a dialog
     opened."""
     found = await offload.io(whats_new.review, _config(), get_version(), again=again)
-    shown = parts(found)
+    asked = lines(overview_needs.unplayable(
+        await offload.io(library.read_media_watch),
+        str(library.discovery().get("install_id") or ""),
+        await offload.io(library.refresh_dismissed), library.stopped()))
+    chosen: list[overview_needs.Opens] = []
+    shown = parts(found, asked, chosen.append)
     offer = await early_access.offer(get_version(), again=again) if shown else None
     if again and not shown:
         ui.notify(t("manager.whats_new.nothing"))
@@ -188,4 +254,6 @@ async def open_whats_new(*, again: bool = False) -> bool:
     finally:
         if not again:
             await run.io_bound(whats_new.mark_seen)
+    if chosen:
+        await state["open_on"](chosen[-1])
     return bool(shown)

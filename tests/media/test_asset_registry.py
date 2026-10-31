@@ -28,7 +28,9 @@ class AssetRegistryTests(unittest.TestCase):
             ("mm_105b.pac", "altcolor_vni"),
             ("Medieval Madness.ini", "ini"),
             ("wheel.png", "media"),
+            ("wheel.apng", "media"),
             ("bg.mp4", "media"),
+            ("bg.webm", "media"),
             ("audio.mp3", "media"),
             ("roms.zip", None),        # archives are inspected, not bare-classified
             ("pack.7z", None),
@@ -50,6 +52,18 @@ class AssetRegistryTests(unittest.TestCase):
             ("wheel.png", "wheel"),
             ("audio.mp3", "audio"),
             ("realdmd-color.png", "real_dmd_color"),
+        ]
+        for filename, expected in cases:
+            with self.subTest(filename=filename):
+                self.assertEqual(match_media_kind(filename), expected)
+
+    def test_a_webm_is_a_video_of_the_kind_its_name_gives(self):
+        cases = [
+            ("table.webm", "playfield_video"),
+            ("backglass.webm", "backglass_video"),
+            ("dmd.webm", "scoreview_video"),
+            ("(Playfield) Doom.webm", "playfield_video"),
+            ("(Playfield) Doom.png", "playfield"),
         ]
         for filename, expected in cases:
             with self.subTest(filename=filename):

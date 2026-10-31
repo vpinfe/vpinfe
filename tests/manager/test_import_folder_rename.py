@@ -1,67 +1,47 @@
-"""The import dialog's rows, following the new game's folder name as it is typed."""
+"""The import dialog's sheet, planned again as the new game's folder name is typed."""
 
 from __future__ import annotations
 
 import unittest
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, patch
 
 from manager.library import import_dialog
 
-ASKED: dict[str, Any] = {"game_dir": "", "rom_name": "", "allow_new_game": True,
-                         "media_kind": "", "location_id": "", "asset_kind": "",
-                         "add_table": False}
-ROW: dict[str, Any] = {"index": 0, "name": "wheel.png", "action": "replace_media",
-                       "destination": "/games/New Name/medias/(Wheel) New Name.png"}
-RENAMED: dict[str, Any] = {"game_dir": "/games/New Name", "new_game_dir_name": "New Name",
-                           "items": [ROW]}
 
-
-async def _now(callback: Any, *args: Any, **kwargs: Any) -> Any:
-    return callback(*args, **kwargs)
-
-
-class TheRowsFollowTheFolderName(unittest.IsolatedAsyncioTestCase):
-    def _following(self, library: Mock) -> tuple[dict[str, Any], Mock, Any]:
+class TheSheetFollowsTheFolderName(unittest.IsolatedAsyncioTestCase):
+    def _following(self) -> tuple[dict[str, Any], AsyncMock, Any]:
         named: dict[str, Any] = {"folder": "Old Name", "vps_id": ""}
-        redraw = Mock()
+        replan = AsyncMock()
         with patch.object(import_dialog.ui, "timer") as timer:
-            import_dialog._following(library, "u-1", ASKED, named, redraw)
-        return named, redraw, timer.call_args.args[1]
+            import_dialog._following(named, replan)
+        return named, replan, timer.call_args.args[1]
 
-    async def test_a_new_name_is_planned_and_the_rows_redrawn(self) -> None:
-        library = Mock()
-        library.upload_plan.return_value = RENAMED
-        named, redraw, look = self._following(library)
+    async def test_a_new_name_plans_again_without_a_notice_on_refusal(self) -> None:
+        named, replan, look = self._following()
 
         named["folder"] = "New Name"
-        with patch("manager.kit.offload.run.io_bound", new=_now):
-            await look()
+        await look()
 
-        library.upload_plan.assert_called_once_with(
-            "u-1", **ASKED, vps_id="", new_game_dir_name="New Name")
-        redraw.assert_called_once_with(RENAMED)
-        self.assertEqual("medias/(Wheel) New Name.png", import_dialog._where(RENAMED, ROW))
+        replan.assert_awaited_once_with(quiet=True)
 
     async def test_the_same_name_asks_nothing(self) -> None:
-        library = Mock()
-        _named, redraw, look = self._following(library)
+        _named, replan, look = self._following()
 
         await look()
 
-        library.upload_plan.assert_not_called()
-        redraw.assert_not_called()
+        replan.assert_not_awaited()
 
-    async def test_a_name_the_install_refuses_leaves_the_rows(self) -> None:
-        library = Mock()
-        library.upload_plan.side_effect = RuntimeError("needs a name")
-        named, redraw, look = self._following(library)
+    async def test_a_name_is_asked_once_until_it_changes_again(self) -> None:
+        named, replan, look = self._following()
 
-        named["folder"] = ""
-        with patch("manager.kit.offload.run.io_bound", new=_now):
-            await look()
+        named["folder"] = "New Name"
+        await look()
+        await look()
+        named["folder"] = "Newer Name"
+        await look()
 
-        redraw.assert_not_called()
+        self.assertEqual(replan.await_count, 2)
 
 
 if __name__ == "__main__":

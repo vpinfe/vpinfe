@@ -1036,6 +1036,16 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
             choices=("4k", "1k"),
             legacy=(("Media", "playfieldvideoresolution"),),
         ),
+        # What Convert preselects. `auto` holds no preference, so the ask recommends.
+        ConfigOption("preferred_picture", type="choice", default="auto",
+                     choices=("auto", "png", "webp", "jpg"),
+                     group=setting_groups.PREFERRED_FORMATS, legacy=()),
+        ConfigOption("preferred_sound", type="choice", default="auto",
+                     choices=("auto", "mp3", "ogg"),
+                     group=setting_groups.PREFERRED_FORMATS, legacy=()),
+        ConfigOption("keep_originals", type="choice", default="auto",
+                     choices=("auto", "keep", "discard"),
+                     group=setting_groups.PREFERRED_FORMATS, legacy=()),
         # Art keyed by a game's manufacturer rather than owned by one game.
         ConfigOption(
             "manufacturer_logos_dir",

@@ -59,6 +59,9 @@ class FakeLibrary:
     def watched(self):
         return self._watched
 
+    def discovery(self):
+        return {"install_id": "me"}
+
     def metadata_state(self):
         return {"unreadable": self._unreadable, **self._metadata}
 
@@ -235,7 +238,9 @@ class AReadThatFailedIsSaid(unittest.TestCase):
                                  extension_needs=lambda: {"needs": []},
                                  unaccepted_themes=lambda: {"themes": []},
                                  extensions=lambda: [],
-                                 launchers=lambda: {"launchers": []})
+                                 launchers=lambda: {"launchers": []},
+                                 all_media=lambda: [], devices=lambda: [],
+                                 library_policy=lambda: {})
         library = Library.__new__(Library)
         library._client = client
 
@@ -269,6 +274,135 @@ class MediaFill(unittest.TestCase):
     def test_a_clean_fill_is_not(self):
         lib = FakeLibrary(watched={"fill": self._fill(DONE)})
         self.assertEqual([], needs.collect(lib, {}))
+
+
+def clip(game_id, **rest):
+    return {"game_id": game_id, "path": f"{game_id}.mp4", "kind": "playfield_video",
+            "via": "table", "present": True, "video_codec": "h264", **rest}
+
+
+REFUSES_H264 = {"device_id": "me", "browser": {"formats": {"h264": False}}}
+
+
+class FilesConvertIsFor(unittest.TestCase):
+    def rows(self, files, devices=(REFUSES_H264,), **rest):
+        lib = FakeLibrary(watched={"media_files": list(files), "devices": list(devices)},
+                          **rest)
+        return {one.key: one for one in needs.collect(lib, {})}
+
+    def test_a_file_in_a_format_nothing_uses_is_a_row_opening_the_unsupported_view(self):
+        found = self.rows([clip("a", via="unsupported", video_codec=None, path="a.avi")])
+
+        row = found["unsupported"]
+        self.assertEqual(("a:a.avi",), row.ids)
+        self.assertEqual("media", row.opens.view)
+        self.assertEqual({games.ARRIVE_VIEW: "manager.view.unsupported"}, row.opens.keys)
+        self.assertEqual("1 file", row.counted())
+
+    def test_a_video_a_device_refuses_is_a_row_opening_the_wont_play_view(self):
+        found = self.rows([clip("a"), clip("b")])
+
+        row = found["wont_play"]
+        self.assertEqual(("a:a.mp4", "b:b.mp4"), row.ids)
+        self.assertEqual({games.ARRIVE_VIEW: "manager.view.wont_play"}, row.opens.keys)
+        self.assertEqual(needs.DANGER, row.tone)
+
+    def test_neither_draws_while_nothing_is_refused(self):
+        self.assertEqual({}, self.rows([clip("a")], devices=[]))
+        self.assertEqual({}, self.rows([]))
+
+    def test_a_device_that_plays_another_library_does_not_make_a_row(self):
+        elsewhere = {"device_id": "else", "browser": {"formats": {"h264": False}}}
+
+        self.assertEqual({}, self.rows([clip("a")], devices=[elsewhere]))
+
+    def test_a_file_that_is_not_there_is_missing_not_refused(self):
+        self.assertEqual({}, self.rows([clip("a", present=False)]))
+
+    def test_the_count_is_the_media_views_own(self):
+        from manager.library import file_states, media
+
+        files = [clip("a"), clip("b", video_codec="vp9"), clip("c", via="unsupported"),
+                 clip("d", via="orphan")]
+        grid = media.rows(files, [REFUSES_H264], "me")
+        found = self.rows(files)
+
+        self.assertEqual(
+            {f"{one['game_id']}:{one['path']}" for one in grid
+             if one["reason"] == file_states.WONT_PLAY}, set(found["wont_play"].ids))
+        self.assertEqual(
+            {f"{one['game_id']}:{one['path']}" for one in grid
+             if one["reason"] == file_states.UNSUPPORTED}, set(found["unsupported"].ids))
+
+    def test_the_devices_that_refused_are_named_once_each(self):
+        here = {**REFUSES_H264, "display_name": "Laptop"}
+        also = {"device_id": "cab", "display_name": "Cabinet",
+                "browser": {"formats": {"h264": False}, "library": "me"}}
+        found = needs.unplayable({"media_files": [clip("a"), clip("b")],
+                                  "devices": [here, also]}, "me")
+
+        self.assertEqual(("Laptop", "Cabinet"), found.devices)
+
+    def test_this_install_refusing_is_said_and_another_device_refusing_is_not(self):
+        cab = {"device_id": "cab", "display_name": "Cabinet",
+               "browser": {"formats": {"h264": False}, "library": "me"}}
+        files = {"media_files": [clip("a")]}
+
+        self.assertTrue(needs.unplayable({**files, "devices": [REFUSES_H264]}, "me").here)
+        self.assertFalse(needs.unplayable({**files, "devices": [cab]}, "me").here)
+
+    def test_a_kind_set_aside_with_nothing_new_or_stopped_is_left_out_of_the_count(self):
+        found = {"media_files": [clip("a"), clip("b", via="unsupported", video_codec=None)],
+                 "devices": [REFUSES_H264]}
+
+        both = needs.unplayable(found, "me")
+        aside = needs.unplayable(found, "me", {"wont_play": ["a:a.mp4"],
+                                               "unsupported": ["b:b.mp4"]})
+        new = needs.unplayable(found, "me", {"wont_play": ["z:z.mp4"]})
+        stopped = needs.unplayable(found, "me", None, {"wont_play"})
+
+        self.assertEqual((1, 1), (len(both.wont_play), len(both.unsupported)))
+        self.assertEqual((0, 0), (len(aside.wont_play), len(aside.unsupported)))
+        self.assertEqual(1, len(new.wont_play))
+        self.assertEqual((0, 1), (len(stopped.wont_play), len(stopped.unsupported)))
+
+    def test_both_can_be_set_aside_and_say_when_they_return(self):
+        for key in ("wont_play", "unsupported"):
+            self.assertTrue(needs.can_set_aside(key))
+            self.assertTrue(needs.name_of(key))
+            self.assertTrue(needs.comes_back(key))
+
+    def test_a_read_that_failed_makes_both_blind_and_is_said(self):
+        lib = FakeLibrary(watched={"unread": ["media"]})
+
+        self.assertLessEqual({"wont_play", "unsupported"}, needs.blind(lib))
+        self.assertIn(t("manager.needs.unread_media"), needs.collect(lib, {})[0].tip)
+
+
+class TheMediaReadKeepsOnlyWhatCouldBeRefused(unittest.TestCase):
+    def library(self, rows):
+        client = SimpleNamespace(all_media=lambda: rows, devices=lambda: [REFUSES_H264],
+                                 library_policy=lambda: {})
+        library = Library.__new__(Library)
+        library._client = client
+        return library
+
+    def test_a_picture_that_plays_is_not_kept(self):
+        found, unread = self.library([
+            clip("a", kind="playfield", video_codec=None),
+            clip("b"), clip("c", via="unsupported", video_codec=None)])._watch_media()
+
+        self.assertEqual(["b", "c"], [one["game_id"] for one in found["media_files"]])
+        self.assertEqual([], unread)
+
+    def test_a_read_that_fails_is_unread_not_empty(self):
+        def refused():
+            raise OSError("not allowed")
+
+        library = self.library([])
+        library._client.all_media = refused
+
+        self.assertEqual(({}, ["media"]), library._watch_media())
 
 
 def bare(key, ids=(), token=()):
@@ -867,7 +1001,8 @@ class WhatExtensionsAskFor(unittest.TestCase):
             jobs=lambda limit: [],
             extension_needs=lambda: {"needs": [RAISED], "away": ["old"], "failed": ["old"]},
             unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [],
-            launchers=lambda: {"launchers": []})
+            launchers=lambda: {"launchers": []},
+            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
         library = Library.__new__(Library)
         library._client = client
 
@@ -937,7 +1072,8 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
             update_check=lambda: {}, capture_proposals=lambda: {"proposals": []},
             jobs=lambda limit: [], extension_needs=lambda: {},
             unaccepted_themes=lambda: {"themes": [self.THEME]}, extensions=lambda: [],
-            launchers=lambda: {"launchers": []})
+            launchers=lambda: {"launchers": []},
+            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
         for name, value in replaced.items():
             setattr(client, name, value)
         library = Library.__new__(Library)
@@ -991,7 +1127,8 @@ class WhatProgramsAsk(unittest.TestCase):
                 update_check=lambda: {}, capture_proposals=lambda: {"proposals": []},
                 jobs=lambda limit: [], extension_needs=lambda: {},
                 unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [], asks=asks,
-                launchers=lambda: {"launchers": []})
+                launchers=lambda: {"launchers": []},
+                all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
             read = Library.__new__(Library)
             read._client = client
             return read

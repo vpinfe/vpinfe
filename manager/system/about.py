@@ -51,13 +51,13 @@ def build(library: Library, state: dict[str, Any], redraw: Callable[[], None]) -
                                              hint=why(exc))])
             return
         held["text"] = str(found.get("text") or "")
-        _draw(body, found.get("groups") or [], held, load)
+        _draw(body, found.get("groups") or [], held, load, library, state)
 
     busy.fill(body, load)
 
 
 def _draw(body: Any, groups: list[dict[str, Any]], held: dict[str, Any],
-          reload: Callable[..., Any]) -> None:
+          reload: Callable[..., Any], library: Library, state: dict[str, Any]) -> None:
     body.clear()
     with body:
         with ui.row().classes("items-center gap-2 w-full no-wrap"):
@@ -72,7 +72,7 @@ def _draw(body: Any, groups: list[dict[str, Any]], held: dict[str, Any],
                          support_dialog.open_support_package,
                          icon=verbs.GET_HELP, hint=t("manager.about.support_package_hint"))()
             panel.action(t("manager.about.whats_new"),
-                         lambda: whats_new_page.open_whats_new(again=True),
+                         lambda: whats_new_page.open_whats_new(library, state, again=True),
                          icon=verbs.REVIEW, hint=t("manager.about.whats_new_hint"))()
             panel.action(t("manager.about.refresh"), lambda: reload(True), icon=verbs.REFRESH,
                          hint=t("word.reread"))()

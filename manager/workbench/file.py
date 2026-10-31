@@ -129,7 +129,7 @@ def _media_has_stage(context: dict[str, Any]) -> bool:
     row = context.get("row") or {}
     if not row.get("present"):
         return False
-    if file_acts.is_loose(row):
+    if file_acts.is_standalone(row):
         return bool((context.get("game") or {}).get("folder") and row.get("path"))
     return True
 
@@ -159,7 +159,7 @@ def _file_heading() -> None:
 async def _media_file_block(context: dict[str, Any]) -> None:
     library, game_id, table_id = context["library"], context["game_id"], context["lens"]
     row, kind = context["row"], context["kind"]
-    if file_acts.is_loose(row):
+    if file_acts.is_standalone(row):
         _file_heading()
         _loose_media(context)
         return

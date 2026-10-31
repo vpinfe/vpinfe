@@ -290,12 +290,12 @@ class TablesAndMatchesTests(WizardCase):
 
         rows = dict(one for one in found["summary"] if len(one) == 2)
         self.assertEqual(rows["Games"], "2")
-        self.assertEqual(rows["Left Out"], "2 not selected")
+        self.assertEqual(rows["Skipped"], "2 not selected")
 
     def test_nothing_is_left_out_when_every_game_is_ticked(self) -> None:
         found = self._check(FIXTURE)
 
-        self.assertNotIn("Left Out", dict(one for one in found["summary"] if len(one) == 2))
+        self.assertNotIn("Skipped", dict(one for one in found["summary"] if len(one) == 2))
 
     def test_the_games_the_look_could_not_settle_are_listed_to_look_at(self) -> None:
         found = self._matches()
@@ -588,7 +588,7 @@ class RomSummaryTests(WizardCase):
     def test_a_thing_switched_off_is_left_out_of_what_comes_across(self) -> None:
         rows = self.summary(self.installed(), roms=self.rom_folder(), use_roms=False)
 
-        self.assertEqual(rows["ROMs"], "Left out")
+        self.assertEqual(rows["ROMs"], "Skipped")
 
     def with_scores(self) -> None:
         nvram = self.root / "nvram"

@@ -105,6 +105,9 @@
     "playfield_resolution": "4k",
     "playfield_variant": "table",
     "playfield_video_resolution": "1k",
+    "preferred_picture": "auto",
+    "preferred_sound": "auto",
+    "keep_originals": "auto",
     "wheelset": ""
   },
   "network": {

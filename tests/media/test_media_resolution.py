@@ -69,6 +69,10 @@ class FamilyTests(unittest.TestCase):
 
         self.assertEqual(resolved["wheel"].name, "wheel.png")
 
+    def test_an_apng_wheel_resolves_and_a_png_beats_it_within_a_tier(self) -> None:
+        self.assertEqual(_resolve(["wheel.apng"])["wheel"].name, "wheel.apng")
+        self.assertEqual(_resolve(["wheel.apng", "wheel.png"])["wheel"].name, "wheel.png")
+
     def test_a_higher_tier_jpg_beats_a_lower_tier_png(self) -> None:
         """Tiers outrank families: specificity is the design's axis, format is
         a tie-breaker inside one tier."""
@@ -88,6 +92,30 @@ class FamilyTests(unittest.TestCase):
 
         self.assertEqual(resolved["playfield"].name, f"(Playfield) {FOLDER}.png")
         self.assertEqual(resolved["playfield_video"].name, f"(Playfield) {FOLDER}.mp4")
+
+    def test_a_webm_is_in_the_video_family_and_fills_the_video_kinds(self) -> None:
+        from common.media.media_specs import VIDEO_FAMILY
+
+        self.assertIn(".webm", VIDEO_FAMILY)
+        resolved = _resolve([f"(Playfield) {FOLDER}.webm", "bg.webm", "dmd.webm"])
+
+        self.assertEqual(resolved["playfield_video"].name, f"(Playfield) {FOLDER}.webm")
+        self.assertEqual(resolved["backglass_video"].name, "bg.webm")
+        self.assertEqual(resolved["scoreview_video"].name, "dmd.webm")
+        self.assertIsNone(resolved["playfield"])
+
+    def test_an_mp4_beats_a_webm_within_a_tier_and_a_tier_beats_the_family(self) -> None:
+        both = _resolve(["table.webm", "table.mp4"])
+        higher = _resolve([f"(Playfield) {FOLDER}.webm", "table.mp4"])
+
+        self.assertEqual(both["playfield_video"].name, "table.mp4")
+        self.assertEqual(higher["playfield_video"].name, f"(Playfield) {FOLDER}.webm")
+
+    def test_a_webm_spec_name_is_read_back(self) -> None:
+        from common.media.media_specs import spec_named
+
+        self.assertEqual(spec_named("(Playfield) Doom.webm"), ("playfield_video", "Doom", 1))
+        self.assertEqual(spec_named("(Playfield) Doom.png"), ("playfield", "Doom", 1))
 
     def test_audio_accepts_ogg(self) -> None:
         resolved = _resolve(["audio.ogg"])

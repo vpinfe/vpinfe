@@ -12,7 +12,7 @@ cannot play is no concern of this library's.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,6 +58,14 @@ def asks_codecs(devices: Sequence[dict[str, Any]], local_id: str) -> bool:
                if plays_here(device, local_id) for one in _VIDEO)
 
 
+def players(devices: Sequence[dict[str, Any]], local_id: str) -> list[dict[str, Any]]:
+    """Each device that plays this library as a conversion reads it: a label and what its
+    browser said of each video codec, `None` where it said nothing."""
+    return [{"label": device_label(device),
+             "plays": {one: _formats(device).get(one) for one in sorted(_VIDEO)}}
+            for device in devices if plays_here(device, local_id)]
+
+
 def refusals(codec: str | None, devices: Sequence[dict[str, Any]],
              local_id: str) -> list[Refusal]:
     """One for each of `devices` that plays this library and whose browser said it does
@@ -76,6 +84,27 @@ def refusals(codec: str | None, devices: Sequence[dict[str, Any]],
             else t("manager.plays_on.wont_play_on", device=device_label(device), codec=name)
         found.append(Refusal(label, _why(device, codec, here)))
     return found
+
+
+def refusers(codecs: Iterable[str | None], devices: Sequence[dict[str, Any]],
+             local_id: str) -> list[str]:
+    """The name of each device that plays this library and whose browser said it does not
+    play at least one of `codecs`."""
+    asked = {one for one in codecs if one}
+    return [device_label(device) for device in devices
+            if plays_here(device, local_id)
+            and any(_formats(device).get(one) is False for one in asked)]
+
+
+def refused_here(codecs: Iterable[str | None], devices: Sequence[dict[str, Any]],
+                 local_id: str) -> bool:
+    """Whether this install's own frontend plays this library and said no to one of
+    `codecs`: the case its own Browser settings can fix."""
+    asked = {one for one in codecs if one}
+    return any(str(device.get("device_id") or "") == local_id
+               and plays_here(device, local_id)
+               and any(_formats(device).get(one) is False for one in asked)
+               for device in devices)
 
 
 def _why(device: dict[str, Any], codec: str, here: bool) -> str:

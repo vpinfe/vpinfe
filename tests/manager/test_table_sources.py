@@ -3,6 +3,7 @@ its row."""
 
 from __future__ import annotations
 
+import json
 import unittest
 from collections.abc import Mapping
 from typing import Any
@@ -13,6 +14,7 @@ from nicegui import ui
 from common.i18n import t
 from manager import page
 from manager.library import import_dialog, mediasource, uploads
+from manager.library.drop_target import Where
 from tests.support.clicks import press
 
 
@@ -103,10 +105,9 @@ class ADropOnAGamesRow(unittest.IsolatedAsyncioTestCase):
             patched.start()
             self.addCleanup(patched.stop)
 
-    async def _dropped(self, target: str = uploads.TARGET_GAME,
-                       media_kind: str = "") -> Mapping[str, Any]:
-        drop = uploads.Drop(target=target, row_id="g-1", media_kind=media_kind,
-                            upload_id="u-1", name="Other.vpx")
+    async def _dropped(self, **where: Any) -> Mapping[str, Any]:
+        drop = uploads.Drop(where=Where(row_id="g-1", **where), upload_id="u-1",
+                            name="Other.vpx")
         await press(page._took_a_drop, self.library, {"view": "games"}, Mock(), drop)
         assert self.confirmed.await_args is not None
         return self.confirmed.await_args.kwargs
@@ -118,7 +119,7 @@ class ADropOnAGamesRow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(asked["game_dir"], "/games/Some Game")
 
     async def test_a_drop_on_a_picture_adds_no_table(self) -> None:
-        asked = await self._dropped(target=uploads.TARGET_SLOT, media_kind="wheel")
+        asked = await self._dropped(col_id="media_wheel", cell=("manager-drop-media",))
 
         self.assertFalse(asked["add_table"])
 
@@ -137,10 +138,10 @@ class ADropOnAGamesRow(unittest.IsolatedAsyncioTestCase):
 class AnAddIsSaidOnce(unittest.IsolatedAsyncioTestCase):
     async def _imported(self, report: dict[str, Any]) -> Mock:
         library = Mock()
-        library.upload_import.return_value = report
         said = Mock()
         with patch("manager.kit.offload.run.io_bound", new=_now), \
-                patch.object(import_dialog.frame, "opened", return_value=_Confirmed()), \
+                patch.object(import_dialog.frame, "opened",
+                             return_value=_Confirmed({"report": report})), \
                 patch.object(import_dialog.frame, "footer"), \
                 patch.object(import_dialog.frame, "cancel"), \
                 patch.object(import_dialog.frame, "answer"), \
@@ -163,7 +164,10 @@ class AnAddIsSaidOnce(unittest.IsolatedAsyncioTestCase):
 
 
 class _Confirmed:
-    """The import dialog, answered Import."""
+    """The import dialog, answered with what the import it ran ended in."""
+
+    def __init__(self, answer: dict[str, Any]) -> None:
+        self.answer = answer
 
     def __enter__(self) -> _Confirmed:
         return self
@@ -172,26 +176,23 @@ class _Confirmed:
         return None
 
     def __await__(self) -> Any:
-        return _answered(True).__await__()
+        return _answered(self.answer).__await__()
 
 
 async def _answered(value: Any) -> Any:
     return value
 
 
-class ThePanelTakesTheDrop(unittest.TestCase):
-    def test_it_is_marked_so_the_page_leaves_it_alone(self) -> None:
+class AnAddDialogTakesItsOwnDrop(unittest.TestCase):
+    def test_it_declares_itself_so_the_page_leaves_it_alone(self) -> None:
         element = Mock(_props={})
 
         with patch.object(uploads, "listener"):
-            mediasource.take_table_drops(element, _context(Mock()), AsyncMock())
+            mediasource.take_drops(element, AsyncMock())
 
-        self.assertIn(uploads.OWN_DROP, element._props)
+        self.assertEqual(json.loads(element._props[uploads.DROP]), {"own": True})
         self.assertEqual({"dragover", "dragleave", "drop"},
                          {one.args[0] for one in element.on.call_args_list})
-
-    def test_the_page_script_names_the_same_mark(self) -> None:
-        self.assertIn(f"[{uploads.OWN_DROP}]", uploads._DND_SCRIPT)
 
 
 if __name__ == "__main__":

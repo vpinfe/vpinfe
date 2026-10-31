@@ -31,6 +31,7 @@ from common.i18n import t
 from common.media.media_specs import (
     MEDIA_SPECS,
     MediaSpec,
+    convertible_family,
     fixed_page_name,
     page_numbers,
     page_token,
@@ -68,8 +69,12 @@ def _name(spec: MediaSpec, token: str | None, stem: str, page: int, extension: s
     return f"{page_token(token or '', page)} {stem}{extension}"
 
 
-def target_name(kind: str, stem: str, extension: str, page: int = 1) -> str:
+def target_name(kind: str, stem: str, extension: str, page: int = 1, *,
+                unsupported: bool = False) -> str:
     """The filename that puts this kind at this stem's tier.
+
+    With `unsupported` the extension may be one the kind's family can be converted from: a
+    file kept as it arrived under the name it would have had.
 
     Always the spec token, never an alias: aliases exist so a file someone else named
     still resolves, and writing one would be recommending a spelling we do not. `page`
@@ -79,7 +84,7 @@ def target_name(kind: str, stem: str, extension: str, page: int = 1) -> str:
     if not spec.token:
         raise RuntimeError(f"{kind} has no spec name, so it can only be a default")
     extension = extension.lower()
-    if extension not in spec.family:
+    if extension not in (*spec.family, *(convertible_family(spec.family) if unsupported else ())):
         raise UnplaceableError(t("error.games.wrong_extension", slot=spec.label,
                                  extension=extension, extensions=", ".join(spec.family)))
     if page != 1 and not spec.pages:
@@ -250,7 +255,7 @@ def keep_displaced(game_dir: Path, going: list[Path]) -> None:
 
 
 def place(game_dir: str | Path, kind: str, stem: str, source: str | Path,
-          page: int = 1) -> Path:
+          page: int = 1, *, unsupported: bool = False) -> Path:
     """Install `source` as this kind's file for `stem`, and return where it landed.
 
     Siblings in the same family and at the same tier go: they would otherwise sit
@@ -264,17 +269,21 @@ def place(game_dir: str | Path, kind: str, stem: str, source: str | Path,
     chosen from a source and a download all leave something to put back. The write is
     refused before anything changes when the backups folder cannot be written to. A folder
     whose `.info` holds no game id has nothing to file a copy under and is written as it is.
+
+    `unsupported` places a file the family cannot play as it arrived and displaces nothing:
+    it sits beside whatever works, and the resolver never picks it.
     """
     game_dir = Path(game_dir)
     source = Path(source)
     number = _number_for(game_dir, kind, stem, page)
-    name = target_name(kind, stem, source.suffix, number)
+    name = target_name(kind, stem, source.suffix, number, unsupported=unsupported)
     medias = game_dir / "medias"
-    keep_displaced(game_dir, list(_family_at_tier(game_dir, kind, stem, number)))
+    displaced = [] if unsupported else list(_family_at_tier(game_dir, kind, stem, number))
+    keep_displaced(game_dir, displaced)
     medias.mkdir(parents=True, exist_ok=True)
     target = medias / name
 
-    for sibling in list(_family_at_tier(game_dir, kind, stem, number)):
+    for sibling in displaced:
         # By spelling: where the filesystem ignores case, a Path of another case compares
         # equal, and a file kept under its old spelling would be written over in place.
         if str(sibling) != str(target):

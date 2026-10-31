@@ -29,7 +29,14 @@ from common.media.media_specs import PAGED_KINDS
 from common.online import vps_kinds
 from manager.kit import confirm, game_tables, media_ownership, offload, panel, verbs, walks
 from manager.kit.on_page import on_page
-from manager.library import file_move, media_fill, media_rotate, mediasource, rom_acts
+from manager.library import (
+    file_move,
+    media_convert,
+    media_fill,
+    media_rotate,
+    mediasource,
+    rom_acts,
+)
 from manager.library import record as recorder
 
 logger = logging.getLogger("vpinfe.manager.library.file_acts")
@@ -113,6 +120,18 @@ def tier_of(row: dict[str, Any]) -> str:
 def is_loose(row: dict[str, Any]) -> bool:
     """A file nothing reads: named for a table that is not there, or for no slot."""
     return tier_of(row) in (media_ownership.ORPHAN, media_ownership.UNUSED)
+
+
+def is_standalone(row: dict[str, Any]) -> bool:
+    """A file the panel draws from its own path: the slot it is named for would show
+    another file, or none."""
+    return is_loose(row) or is_unsupported(row)
+
+
+def is_unsupported(row: dict[str, Any]) -> bool:
+    """A file named for a slot in a format VPinFE cannot use, which answers for no slot
+    until it is converted."""
+    return tier_of(row) == media_ownership.UNSUPPORTED
 
 
 def asset_has_acts(row: dict[str, Any]) -> bool:
@@ -228,9 +247,11 @@ async def _noted_after(after: After, game_id: str) -> None:
 def media_acts(library: Any, files: list[File], state: dict[str, Any],
                after: After) -> list[panel.Verb]:
     """What can be done to these media files."""
-    everyone = [one for one in files if not is_loose(one.row)]
+    convert = _convert_verbs(library, files, state, after)
+    everyone = [one for one in files
+                if not is_loose(one.row) and not is_unsupported(one.row)]
     if not everyone:
-        return []
+        return convert
     # A later page is a file of its own that can be replaced or taken out; the rest of
     # what a slot can do is done to the slot, which page 1 stands for.
     files = [one for one in everyone if one.page == 1]
@@ -355,10 +376,27 @@ def media_acts(library: Any, files: list[File], state: dict[str, Any],
     if media_rotate.turnable(rows):
         offered.append(panel.Verb(t("manager.media_rotate.turn"), choices=tuple(
             (t(word), partial(turn, way)) for way, word in media_rotate.MENU)))
+    offered.extend(convert)
     offered.extend(file_move.verbs_for(library, files, core.MEDIA, after))
     if removable:
         offered.append(panel.Verb(t("word.remove"), remove, danger=True))
     return offered
+
+
+def _convert_verbs(library: Any, files: list[File], state: dict[str, Any],
+                   after: After) -> list[panel.Verb]:
+    """Convert, where a selected file is in a format VPinFE cannot use or is a video a device
+    will not play."""
+    rows = [one.row for one in files]
+    if not media_convert.convertible(rows, list(state.get("devices") or []),
+                                     media_convert.local_id_of(library)):
+        return []
+
+    @on_page
+    async def convert() -> None:
+        await media_convert.ask(rows, library, state, partial(after, _games_of(files)))
+
+    return [panel.Verb(t("manager.media_convert.convert"), convert)]
 
 
 # --- assets -----------------------------------------------------------------------

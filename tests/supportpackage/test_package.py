@@ -261,8 +261,8 @@ class TheLogCaps(_Folder):
         self.current.write_text("".join(self.lines(600)), encoding="utf-8")
         with patch.object(package, "MAX_LOG_BYTES", 6000):
             part = part_of(package.build_package(), package.LOG)
-        marker = [one for one in part.text.splitlines() if "lines left out" in one]
-        self.assertEqual(marker, [f"-- {part.omitted} lines left out --"])
+        marker = [one for one in part.text.splitlines() if "lines skipped" in one]
+        self.assertEqual(marker, [f"-- {part.omitted} lines skipped --"])
         kept = len(re.findall(r"line \d{4}", part.text))
         self.assertEqual(kept + part.omitted, 600)
 
@@ -270,7 +270,7 @@ class TheLogCaps(_Folder):
         self.current.write_text("".join(self.lines(20)), encoding="utf-8")
         part = part_of(package.build_package(), package.LOG)
         self.assertEqual((part.omitted, part.lines), (0, 20))
-        self.assertNotIn("left out", part.text)
+        self.assertNotIn("skipped", part.text)
 
     def test_nothing_is_read_once_the_total_is_spent(self) -> None:
         self.write_logs()

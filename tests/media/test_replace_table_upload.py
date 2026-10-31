@@ -4,6 +4,7 @@ swap it back or delete it."""
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -193,6 +194,30 @@ class CompanionsTests(ReplaceCase):
         self.assertTrue(swapped["kept"])
         self.assertTrue((self.game / "Foo 1.2.vpx").exists())
         self.assertFalse((self.game / "Foo 1.1.vpx").exists())
+
+    def test_a_failure_after_the_swap_ran_in_a_job_is_a_result_that_names_the_swap(self) -> None:
+        real = asset_import_service._extract_replace
+
+        def refuse_the_ini(source, entry, dest):
+            if dest.suffix == ".ini":
+                raise ValueError("no room")
+            real(source, entry, dest)
+
+        with mock.patch.object(asset_import_service, "_extract_replace", refuse_the_ini):
+            started = self.client.post(f"/uploads/{self.upload}/import/start",
+                                       json={**self.asked, "carry": []})
+            self.assertEqual(202, started.status_code, started.text)
+            for _ in range(100):
+                finished = self.client.get(f"/jobs/{started.json()['id']}").json()
+                if finished["state"] != "running":
+                    break
+                time.sleep(0.1)
+
+        self.assertEqual("done", finished["state"], finished)
+        result = finished["result"]
+        self.assertTrue(result["failed"])
+        self.assertIn("no room", result["error"])
+        self.assertEqual("t-old", result["replaced_tables"][0]["table"]["id"])
 
     def test_a_failure_with_no_swap_carries_no_details(self) -> None:
         with mock.patch.object(asset_import_service, "_extract_replace",

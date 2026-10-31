@@ -26,12 +26,14 @@ UPLOADS_WRITE = "uploads:write"
 # take `game_dir`; tests/extensions/test_uploads_offered.py holds both lists to the models.
 PLAN_KEYS = frozenset({"vps_id", "game_id", "rom_name", "allow_new_game", "media_kind",
                        "asset_kind", "location_id", "add_table", "new_game_dir_name",
-                       "replace_table", "carry", "instead"})
+                       "replace_table", "carry", "instead", "table_id", "scope",
+                       "page", "assignments", "picks", "convert"})
 EXECUTE_KEYS = PLAN_KEYS | {"selected"}
 
 _TEXT = frozenset({"vps_id", "game_id", "rom_name", "media_kind", "asset_kind", "location_id",
-                   "replace_table"})
+                   "replace_table", "table_id"})
 _FLAGS = frozenset({"allow_new_game", "add_table", "instead"})
+_CONVERT_ROW = frozenset({"to", "video", "quality", "sound_in_video"})
 
 
 class ExtensionUploads:
@@ -120,10 +122,22 @@ class ExtensionUploads:
     def _typed(self, key: str, value: Any) -> None:
         if key in _FLAGS:
             right = isinstance(value, bool)
+        elif key == "scope":
+            right = value in ("", "game", "table")
         elif key in _TEXT:
             right = isinstance(value, str)
+        elif key == "page":
+            right = isinstance(value, int) and not isinstance(value, bool) and value >= 1
         elif key == "new_game_dir_name":
             right = value is None or isinstance(value, str)
+        elif key == "assignments":
+            right = isinstance(value, list) and all(isinstance(one, dict) for one in value)
+        elif key == "convert":
+            self._typed_convert(value)
+            return
+        elif key == "picks":
+            right = isinstance(value, dict) and all(
+                isinstance(k, str) and isinstance(v, str) for k, v in value.items())
         elif key == "carry":
             right = value is None or (isinstance(value, list)
                                       and all(isinstance(one, str) for one in value))
@@ -137,6 +151,22 @@ class ExtensionUploads:
                                            or "\\" in value):
             raise ContractError(f"{self._name} gave a rom_name that is not a plain name; it "
                                 "names the folder the ROM goes in")
+
+    def _typed_convert(self, value: Any) -> None:
+        """`{"rows": {file: {to, video, quality, sound_in_video}}, "wait": bool}`, the sheet's
+        answer for the files that are converted on the way in."""
+        right = isinstance(value, dict) and set(value) <= {"rows", "wait"}
+        if right:
+            rows, wait = value.get("rows", {}), value.get("wait", True)
+            right = isinstance(wait, bool) and isinstance(rows, dict) and all(
+                isinstance(file, str) and isinstance(row, dict)
+                and set(row) <= _CONVERT_ROW
+                and all(one is None or isinstance(one, str) for one in row.values())
+                for file, row in rows.items())
+        if not right:
+            raise ContractError(
+                f"{self._name} gave convert something other than rows, a dict of file name to "
+                f"{', '.join(sorted(_CONVERT_ROW))} as text or None, and wait, a bool")
 
     def _claims(self, declared: Mapping[str, Mapping[str, str]] | None) -> dict[str, Any]:
         from common.games.identity_claims import DeclaredIdentity

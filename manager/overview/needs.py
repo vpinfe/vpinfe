@@ -46,6 +46,10 @@ _UNIT_TABLES = "manager.games.tables"
 _UNIT_FOLDERS = "manager.needs.folders"
 _UNIT_RECORDINGS = "manager.needs.recordings_count"
 _UNIT_SETTINGS = "manager.needs.settings_count"
+_UNIT_FILES = "manager.needs.files_count"
+
+# The rows for files Convert is for, which are also the keys they are set aside under.
+UNSUPPORTED, WONT_PLAY = "unsupported", "wont_play"
 
 
 @dataclass(frozen=True)
@@ -150,6 +154,65 @@ def duplicates_opens() -> Opens:
     return Opens("games", keys={games.ARRIVE_VIEW: games.DUPLICATES_VIEW})
 
 
+@dataclass(frozen=True)
+class Unplayable:
+    """The files Convert is for: what is in a format VPinFE cannot use, and the videos a
+    device refused, each by `game:path`, and the devices that refused them by name."""
+
+    unsupported: tuple[str, ...] = ()
+    wont_play: tuple[str, ...] = ()
+    devices: tuple[str, ...] = ()
+    here: bool = False
+
+    def __bool__(self) -> bool:
+        return bool(self.unsupported or self.wont_play)
+
+
+def unplayable(found: Mapping[str, Any], local_id: str,
+               record: Mapping[str, list[str]] | None = None,
+               stopped: Collection[str] = ()) -> Unplayable:
+    """Counted from the same rows and judgement as the Media view, so a row here and the
+    view it opens agree. `found` is what `Library._watch_media` read. A kind that is
+    stopped, or set aside with nothing new in it, is left out, as `arrange` leaves its row."""
+    from manager.devices import plays_on
+    from manager.library import file_states, media
+
+    devices = list(found.get("devices") or ())
+    unsupported: set[str] = set()
+    wont_play: dict[str, str | None] = {}
+    for row in found.get("media_files") or ():
+        where = f"{row.get('game_id')}:{row.get('path')}"
+        reason = media.reason_of(row, devices, local_id)
+        if reason == file_states.UNSUPPORTED:
+            unsupported.add(where)
+        elif reason == file_states.WONT_PLAY:
+            wont_play[where] = row.get("video_codec")
+    def held(key: str, ids: set[str]) -> bool:
+        return key in stopped or (bool(ids) and ids <= set((record or {}).get(key, ())))
+
+    if held(UNSUPPORTED, unsupported):
+        unsupported = set()
+    if held(WONT_PLAY, set(wont_play)):
+        wont_play = {}
+    return Unplayable(tuple(sorted(unsupported)), tuple(sorted(wont_play)),
+                      tuple(plays_on.refusers(wont_play.values(), devices, local_id)),
+                      plays_on.refused_here(wont_play.values(), devices, local_id))
+
+
+def unsupported_opens() -> Opens:
+    """Media on the Unsupported view."""
+    from manager.library import games, media
+
+    return Opens("media", keys={games.ARRIVE_VIEW: media.UNSUPPORTED_VIEW})
+
+
+def wont_play_opens() -> Opens:
+    """Media on the Won't Play view."""
+    from manager.library import games, media
+
+    return Opens("media", keys={games.ARRIVE_VIEW: media.WONT_PLAY_VIEW})
+
+
 def blank(name: str) -> dict[str, Any]:
     return {name: {"values": [""]}}
 
@@ -161,7 +224,8 @@ def _unread(failed: Any) -> str:
             ("fill", t("manager.needs.unread_fill")),
             ("extensions", t("manager.needs.unread_extensions")),
             ("unaccepted", t("manager.needs.unread_unaccepted")),
-            ("leftovers", t("manager.needs.unread_leftovers")))
+            ("leftovers", t("manager.needs.unread_leftovers")),
+            ("media", t("manager.needs.unread_media")))
     return ", ".join(words for key, words in said if key in failed)
 
 
@@ -264,6 +328,14 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
                          Opens("tables", games.ROM_MISSING),
                          broken, _UNIT_TABLES))
 
+    media_found = Unplayable()
+    if "media_files" in watched:
+        media_found = unplayable(watched, str(library.discovery().get("install_id") or ""))
+    if media_found.wont_play:
+        rows.append(Need(WONT_PLAY, t("manager.needs.wont_play"),
+                         t("manager.needs.wont_play.tip"), DANGER, verbs.CANNOT_PLAY,
+                         wont_play_opens(), media_found.wont_play, _UNIT_FILES))
+
     if any(one.where == feature_checks.WHERE_LAUNCHERS for one in state.get("trouble") or ()):
         rows.append(Need("launchers", t("manager.needs.launchers"),
                          t("manager.needs.launchers.tip"), DANGER, verbs.CANNOT_PLAY,
@@ -291,6 +363,10 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
     rows.append(_games_without("no_tables", found, label=names["no_tables"][0],
                                tip=names["no_tables"][1], tone=WARM, icon=verbs.NO_TABLE,
                                opens=no_tables_opens()))
+    if media_found.unsupported:
+        rows.append(Need(UNSUPPORTED, t("manager.needs.unsupported"),
+                         t("manager.needs.unsupported.tip"), WARM, verbs.NO_MEDIA,
+                         unsupported_opens(), media_found.unsupported, _UNIT_FILES))
     for key, kind in sections.FILLS.items():
         if kind in collected:
             rows.append(_games_without(
@@ -365,7 +441,8 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
 
 # Every row that can be set aside, in cost order. `unread` is not one: it is the page saying
 # it could not look, and setting that aside would hide the one thing it must say.
-ORDER = ("rom_missing", "launchers", "unreadable", "unmatched", "no_tables", "no_playfield",
+ORDER = ("rom_missing", "wont_play", "launchers", "unreadable", "unmatched", "no_tables",
+         "unsupported", "no_playfield",
          "no_backglass", "no_media", "fill_errors", "leftovers", "update", "recordings",
          "untied", "older_format", "no_year")
 
@@ -375,7 +452,7 @@ DEVICE_ROWS = ("launchers", "fill_errors", "leftovers", "update", "recordings")
 
 # What a row's read cannot say while that read failed, by row.
 _READ_BY = {"update": "update", "recordings": "recordings", "fill_errors": "fill",
-            "leftovers": "leftovers"}
+            "leftovers": "leftovers", WONT_PLAY: "media", UNSUPPORTED: "media"}
 
 _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "unreadable": verbs.CANNOT_PLAY, "unmatched": verbs.NO_MATCH,
@@ -384,7 +461,7 @@ _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "no_media": verbs.NO_MEDIA, "fill_errors": verbs.HAD_ERRORS,
           "leftovers": verbs.MOVE, "update": verbs.UPDATE, "recordings": verbs.REVIEW,
           "older_format": verbs.OLDER_FORMAT, "untied": verbs.NO_MATCH,
-          "no_year": verbs.NO_YEAR}
+          "no_year": verbs.NO_YEAR, WONT_PLAY: verbs.CANNOT_PLAY, UNSUPPORTED: verbs.NO_MEDIA}
 
 
 def is_device(key: str) -> bool:
@@ -416,6 +493,8 @@ def blind(library: Any) -> set[str]:
     out |= {key for key, kind in sections.FILLS.items() if kind not in collected}
     if not collected:
         out.add("no_media")
+    if "media" in (library.watched().get("unread") or ()):
+        out |= {WONT_PLAY, UNSUPPORTED}
     return out
 
 
@@ -434,7 +513,9 @@ def name_of(key: str) -> str:
             "update": t("manager.needs.update_unnamed"),
             "older_format": t("manager.needs.older_format"),
             "untied": t("manager.needs.untied"),
-            "recordings": t("manager.needs.recordings")}[key]
+            "recordings": t("manager.needs.recordings"),
+            WONT_PLAY: t("manager.needs.wont_play"),
+            UNSUPPORTED: t("manager.needs.unsupported")}[key]
 
 
 def comes_back(key: str, need: Need | None = None) -> str:
@@ -459,7 +540,9 @@ def comes_back(key: str, need: Need | None = None) -> str:
             "recordings": t("manager.needs.back.recordings"),
             "older_format": t("manager.needs.back.older_format"),
             "untied": t("manager.needs.back.untied"),
-            "no_year": t("manager.needs.back.no_year")}[key]
+            "no_year": t("manager.needs.back.no_year"),
+            WONT_PLAY: t("manager.needs.back.wont_play"),
+            UNSUPPORTED: t("manager.needs.back.unsupported")}[key]
 
 
 @dataclass(frozen=True)

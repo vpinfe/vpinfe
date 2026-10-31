@@ -5,11 +5,13 @@ from __future__ import annotations
 import io
 import os
 import struct
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from common.games.media_probe import probe
+from common.host import tools
 
 
 def _box(kind: bytes, body: bytes) -> bytes:
@@ -181,6 +183,177 @@ class TheHeaderSaysWhatItIs(unittest.TestCase):
 
         os.utime(path, ns=(stamp + 1_000_000_000, stamp + 1_000_000_000))
         self.assertEqual(probe(path)["video_codec"], "vp9")
+
+
+def _element(ident: int, body: bytes, *, unknown: bool = False) -> bytes:
+    """An EBML element: its id as written, a four-byte size, and the body."""
+    named = ident.to_bytes((ident.bit_length() + 7) // 8, "big")
+    size = b"\x01\xff\xff\xff\xff\xff\xff\xff" if unknown else \
+        struct.pack(">I", 0x10000000 | len(body))
+    return named + size + body
+
+
+def _uint_element(ident: int, value: int) -> bytes:
+    return _element(ident, value.to_bytes(max(1, (value.bit_length() + 7) // 8), "big"))
+
+
+def _track(kind: int, codec: str, width: int = 0, height: int = 0) -> bytes:
+    body = _uint_element(0x83, kind) + _element(0x86, codec.encode() + b"\0")
+    if width:
+        body += _element(0xE0, _uint_element(0xB0, width) + _uint_element(0xBA, height))
+    return _element(0xAE, body)
+
+
+def _webm(*, codec: str = "V_VP9", seconds: float | None = 1.5, scale: int | None = None,
+          width: int = 128, height: int = 72, unknown_segment: bool = False,
+          before_tracks: bytes = b"", sound_first: bool = False) -> bytes:
+    info = b""
+    if scale is not None:
+        info += _uint_element(0x2AD7B1, scale)
+    if seconds is not None:
+        info += _element(0x4489, struct.pack(">d", seconds * 1e9 / (scale or 1_000_000)))
+    tracks = (_track(2, "A_OPUS") if sound_first else b"") + _track(1, codec, width, height)
+    cluster = _element(0x1F43B675, _uint_element(0xE7, 0) + bytes(512))
+    ebml = _element(0x1A45DFA3, _element(0x4282, b"webm"))
+    segment = _element(0x15 << 24 | 0x49A966, info) + before_tracks \
+        + _element(0x1654AE6B, tracks) + cluster
+    return ebml + _element(0x18538067, segment, unknown=unknown_segment)
+
+
+def _ffmpeg() -> Path | None:
+    found = tools.resolve(tools.FFMPEG)
+    return found.path if found.state == tools.State.FOUND else None
+
+
+class TheWebmHeaderSaysWhatItIs(unittest.TestCase):
+    def setUp(self) -> None:
+        held = tempfile.TemporaryDirectory()
+        self.addCleanup(held.cleanup)
+        self.root = Path(held.name)
+
+    def _probe(self, data: bytes, name: str = "table.webm") -> dict:
+        path = self.root / name
+        path.write_bytes(data)
+        return probe(path)
+
+    def test_a_video_has_its_codec_size_and_running_time(self) -> None:
+        facts = self._probe(_webm())
+
+        self.assertEqual(("WEBM", "vp9", 128, 72), (facts["format"], facts["video_codec"],
+                                                    facts["width"], facts["height"]))
+        self.assertAlmostEqual(1.5, facts["duration_s"], places=3)
+
+    def test_each_codec_is_named_as_a_browser_is_asked_about_it(self) -> None:
+        named = {codec: self._probe(_webm(codec=codec), f"{n}.webm")["video_codec"]
+                 for n, codec in enumerate(("V_VP9", "V_AV1", "V_MPEG4/ISO/AVC",
+                                            "V_MPEGH/ISO/HEVC", "V_VP8", "V_THEORA"))}
+
+        self.assertEqual(named, {"V_VP9": "vp9", "V_AV1": "av1", "V_MPEG4/ISO/AVC": "h264",
+                                 "V_MPEGH/ISO/HEVC": "hevc", "V_VP8": None,
+                                 "V_THEORA": None})
+
+    def test_the_timecode_scale_sets_the_running_time(self) -> None:
+        facts = self._probe(_webm(seconds=2.0, scale=500_000))
+
+        self.assertAlmostEqual(2.0, facts["duration_s"], places=3)
+
+    def test_a_duration_the_file_does_not_state_is_not_guessed(self) -> None:
+        facts = self._probe(_webm(seconds=None))
+
+        self.assertEqual(("vp9", None), (facts["video_codec"], facts["duration_s"]))
+
+    def test_the_video_track_is_the_one_read_when_a_sound_comes_first(self) -> None:
+        facts = self._probe(_webm(codec="V_AV1", sound_first=True))
+
+        self.assertEqual(("av1", 128), (facts["video_codec"], facts["width"]))
+
+    def test_tracks_are_found_after_elements_that_precede_them(self) -> None:
+        cues = _element(0x1C53BB6B, bytes(300)) + _element(0x114D9B74, bytes(100)) \
+            + _element(0xEC, bytes(2000))
+        facts = self._probe(_webm(before_tracks=cues))
+
+        self.assertEqual(("vp9", 128, 72), (facts["video_codec"], facts["width"],
+                                            facts["height"]))
+
+    def test_a_segment_of_unknown_size_is_read_and_ends(self) -> None:
+        facts = self._probe(_webm(unknown_segment=True))
+
+        self.assertEqual(("WEBM", "vp9", 128), (facts["format"], facts["video_codec"],
+                                               facts["width"]))
+
+    def test_a_cut_off_file_costs_the_numbers_not_the_answer(self) -> None:
+        whole = _webm(before_tracks=_element(0xEC, bytes(300)))
+        full = self._probe(whole, "whole.webm")
+        for cut in (40, 200, 2000):
+            with self.subTest(cut=cut):
+                facts = self._probe(whole[:cut], f"cut{cut}.webm")
+
+                self.assertEqual("WEBM", facts["format"])
+                for field in ("width", "height", "duration_s", "video_codec"):
+                    self.assertIn(facts[field], (None, full[field]))
+        short = self._probe(whole[:40], "short.webm")
+        self.assertEqual((None, None, None), (short["video_codec"], short["width"],
+                                              short["duration_s"]))
+
+    def test_the_magic_and_then_garbage_answers_no_numbers(self) -> None:
+        for name, tail in (("zeros", bytes(500)), ("ones", b"\xff" * 500),
+                           ("noise", bytes(range(256)) * 4)):
+            with self.subTest(tail=name):
+                facts = self._probe(b"\x1a\x45\xdf\xa3" + tail, f"{name}.webm")
+
+                self.assertEqual((None, None, None, None),
+                                 (facts["width"], facts["height"], facts["duration_s"],
+                                  facts["video_codec"]))
+
+    def test_a_file_that_is_only_the_magic_is_read_without_error(self) -> None:
+        facts = self._probe(b"\x1a\x45\xdf\xa3")
+
+        self.assertEqual(("WEBM", None), (facts["format"], facts["video_codec"]))
+
+
+@unittest.skipUnless(_ffmpeg(), "FFmpeg is not installed here")
+class AWebmFromFfmpegIsRead(unittest.TestCase):
+    def setUp(self) -> None:
+        held = tempfile.TemporaryDirectory()
+        self.addCleanup(held.cleanup)
+        self.root = Path(held.name)
+
+    def _made(self, name: str, *args: str) -> Path:
+        path = self.root / name
+        run = subprocess.run(
+            [str(_ffmpeg()), "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+             "testsrc=duration=1:size=128x72:rate=10", "-pix_fmt", "yuv420p", *args,
+             str(path)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        if run.returncode:
+            self.skipTest(f"this FFmpeg cannot make {name}: {run.stderr.strip()[-120:]}")
+        return path
+
+    def test_each_build_names_its_codec_with_its_size_and_running_time(self) -> None:
+        builds = (("vp9.webm", "vp9", ("-c:v", "libvpx-vp9", "-f", "webm")),
+                  ("av1.webm", "av1", ("-c:v", "libsvtav1", "-f", "webm")),
+                  ("h264.webm", "h264", ("-c:v", "libx264", "-f", "matroska")),
+                  ("vp8.webm", None, ("-c:v", "libvpx", "-f", "webm")))
+        for name, codec, args in builds:
+            with self.subTest(name=name):
+                facts = probe(self._made(name, *args))
+
+                self.assertEqual(("WEBM", codec, 128, 72),
+                                 (facts["format"], facts["video_codec"], facts["width"],
+                                  facts["height"]))
+                self.assertAlmostEqual(1.0, facts["duration_s"], delta=0.5)
+
+    def test_a_cut_off_file_is_read_without_error(self) -> None:
+        whole = self._made("vp9.webm", "-c:v", "libvpx-vp9", "-f", "webm").read_bytes()
+        for cut in (40, 200, 2000):
+            with self.subTest(cut=cut):
+                path = self.root / f"cut{cut}.webm"
+                path.write_bytes(whole[:cut])
+
+                facts = probe(path)
+
+                self.assertEqual("WEBM", facts["format"])
+                self.assertIn(facts["video_codec"], (None, "vp9"))
+                self.assertIn(facts["width"], (None, 128))
 
 
 if __name__ == "__main__":

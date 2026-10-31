@@ -2178,8 +2178,14 @@ class MediaSlot(ApiModel):
     # Why this file is the one being used, or why it is not being used at all:
     # "orphan" names a table the folder does not have, and "unused" is correctly named
     # but covered by something more specific - the fallback, which resolves again the
-    # moment what covers it is removed.
+    # moment what covers it is removed. "unsupported" is a file VPinFE named for this kind in
+    # an extension the kind cannot read: here, and as good as no file until it is converted.
     via: str | None = None
+    # An unsupported file's format, from its extension ("TGA"); nothing is opened.
+    format: str | None = None
+    # A video's codec as `GET /frontend/browser` names the format, read from its header;
+    # null for anything else and for a video VPinFE decodes itself.
+    video_codec: str | None = None
     # Who put the file here, as far as the .info ledger recorded. "unknown" is the
     # honest answer for anything placed before the ledger or by another tool.
     origin: str | None = None
@@ -3554,6 +3560,8 @@ class JobResource(ApiModel):
     # What this run is called where its kind is shared by several operations, in the
     # install's language. Empty means the kind's own name.
     title: str = ""
+    # What each part of the work is doing, for a job a caller watches part by part.
+    parts: list[dict[str, Any]] = Field(default_factory=list)
     links: JobLinks
 
 
@@ -3718,6 +3726,75 @@ class MediaRotateRequest(ApiModel):
     files: list[GameFile]
     turn: str
     keep: bool = True
+
+
+class ConvertDevice(ApiModel):
+    """A place files are played and what its browser reports. `plays` maps a video codec
+    (`h264`, `vp9`, `av1`, `hevc`) to true, false, or null where it reported nothing, which is
+    never read as a no."""
+
+    label: str
+    plays: dict[str, bool | None] = {}
+
+
+class MediaConvertRequest(ApiModel):
+    """`files` are media rows' own keys. Every other field is a choice, and one left out takes
+    the recommendation the plan names for it. `devices` is who will play the videos, and left
+    out is this install's own frontend."""
+
+    files: list[GameFile]
+    picture: str | None = None
+    sound: str | None = None
+    container: str | None = None
+    video: str | None = None
+    quality: str | None = None
+    sound_in_video: str | None = None
+    on_clash: str | None = None
+    keep: bool | None = None
+    wait_while_playing: bool | None = None
+    devices: list[ConvertDevice] | None = None
+
+
+class ConvertOption(ApiModel):
+    value: str | bool
+    recommended: bool
+    why: str
+    available: bool = True
+    preferred: bool = False
+
+
+class ConvertChoice(ApiModel):
+    key: str
+    label: str
+    options: list[ConvertOption]
+
+
+class ConvertItem(ApiModel):
+    """One file and what would happen to it: `action` is `convert`, `remux`, `rename` or
+    `skip`, and a skip says why in `reason`."""
+
+    game_id: str
+    path: str
+    action: str
+    size: int = 0
+    kind: str = ""
+    source_format: str = ""
+    target_format: str = ""
+    new_path: str = ""
+    clash: bool = False
+    reason: str = ""
+    note: str = ""
+
+
+class MediaConvertPlan(ApiModel):
+    items: list[ConvertItem]
+    counts: dict[str, int]
+    bytes: int
+    ffmpeg: str
+    choices: dict[str, str | bool]
+    defaulted: list[str]
+    options: list[ConvertChoice]
+    video_blocked: str = ""
 
 
 class ScanRequest(ApiModel):
@@ -3973,16 +4050,20 @@ class DetectedAssetInfo(ApiModel):
 
 
 class Analysis(ApiModel):
-    """`unrecognized` lists source-relative paths no rule claimed; `bundle_info` is
-    the parsed .info when the upload carried one."""
+    """`files` lists every file the source holds as a source-relative path, whether or not
+    a rule claimed it; `unrecognized` lists the ones none did and `placeable` those of them
+    that are pictures, sounds or videos, which an import still offers places to;
+    `bundle_info` is the parsed .info when the upload carried one."""
 
     source_kind: str
     source_name: str
     has_game: bool
     assets: list[DetectedAssetInfo]
+    files: list[str]
     notes: list[str]
     error: str
     unrecognized: list[str]
+    placeable: list[str]
     bundle_info: dict | None
 
 
@@ -4027,6 +4108,53 @@ class ImportChoice(ApiModel):
     table: str
 
 
+class DropConvertOption(ApiModel):
+    """One format a file can be made as. `recommended` marks the advised one, `preferred` the
+    one the Preferred Formats hold, `why` is its sentence, and `available` is false where
+    this install cannot make it."""
+
+    value: str
+    label: str
+    recommended: bool = False
+    why: str = ""
+    available: bool = True
+    preferred: bool = False
+
+
+class DropConvertSetting(ApiModel):
+    key: str
+    label: str
+    value: str
+    options: list[DropConvertOption] = []
+
+
+class DropConvertView(ApiModel):
+    """What the row of a file converted on the way in shows. `to` is the value chosen, or
+    `asis`; `line` the summary of `settings`; `problem` why it cannot be converted at all."""
+
+    kind: str
+    # Where the format `from` came from, as the person knows it: the file's extension.
+    from_: str = Field(alias="from")
+    to: str
+    options: list[DropConvertOption] = []
+    settings: list[DropConvertSetting] = []
+    line: str = ""
+    note: str = ""
+    problem: str = ""
+    reencodes: bool = False
+
+
+class DropConvertState(ApiModel):
+    """What the drop as a whole needs for converting. `reencodes` is whether a video is made
+    again, which is when `wait` for a table playing is asked. `usable` is false only where
+    FFmpeg is missing and a sound or a video in the drop needs it."""
+
+    ffmpeg: str
+    usable: bool
+    reencodes: bool
+    wait: bool
+
+
 class PlanItem(ApiModel):
     """`index` addresses this item in the `selected` list of an import request."""
 
@@ -4054,15 +4182,98 @@ class PlanItem(ApiModel):
     # Set on an item that replaces a table: the table, and each file named for it with
     # whether it goes with the new one. Null on every other item.
     swap: SwapPlan | None = None
+    # The file in the drop this item writes, by its path inside it, and how it was claimed:
+    # `declared` where the sender named the slot, `named` where its name said.
+    member: str = ""
+    basis: str = ""
+    # Offered beside what was asked for rather than part of it: a sheet leaves it unticked.
+    extra: bool = False
+    # Set on a picture, sound or video the slot cannot read: what it can be made as, and the
+    # one-line summary of the choices. Null on every other item.
+    convert: DropConvertView | None = None
+
+
+class PlanTable(ApiModel):
+    id: str
+    label: str
+    default: bool
+
+
+class GroupCandidate(ApiModel):
+    """One file of a group, with the pixel size of a picture (0 where it has none)."""
+
+    member: str
+    name: str
+    size: int
+    basis: str
+    width: int = 0
+    height: int = 0
+
+
+class FileGroup(ApiModel):
+    """Several files for one place, of which one is picked. `key` is what `picks` is keyed
+    by. `preselected` is a hint for a client to start from, never an answer: an import
+    still needs a pick for every group that is not `extra`."""
+
+    key: str
+    kind: str
+    media_kind: str
+    label: str
+    candidates: list[GroupCandidate]
+    preselected: str = ""
+    extra: bool = False
+    table_id: str = ""
+
+
+class FileChoice(ApiModel):
+    kind: str
+    media_kind: str
+    label: str
+    table_id: str = ""
+    suggested: bool = False
+
+
+class UnclaimedFile(ApiModel):
+    """A file the drop could be several things, with the places it could go. An answer is
+    an `assignments` entry."""
+
+    member: str
+    name: str
+    size: int
+    choices: list[FileChoice]
+
+
+class LeftOutFile(ApiModel):
+    """A file nothing was done with, and why. `reason_key` is the catalog key behind `reason`."""
+
+    member: str
+    name: str
+    reason_key: str
+    reason: str
 
 
 class ImportPlanResource(ApiModel):
+    """`tables` lists the game's tables when a file named for a table had none named and
+    went to the default, so a client can ask which one it is for, or when media landed on one
+    table of a game with several; empty otherwise.
+
+    Every file of the drop is in exactly one of `items` (by `member`), `groups`,
+    `unclaimed` or `left_out`."""
+
     game_dir: str
     new_game_dir_name: str
     rom_name: str
     items: list[PlanItem]
     blocked: list[BlockedAsset]
     choice: ImportChoice | None = None
+    tables: list[PlanTable] = []
+    # What media in the drop is named for, `table` or `game`, where it landed on a table of a
+    # game with several; empty otherwise.
+    scope: str = ""
+    groups: list[FileGroup] = []
+    unclaimed: list[UnclaimedFile] = []
+    left_out: list[LeftOutFile] = []
+    convert: DropConvertState | None = None
 
 
 class ImportReport(ApiModel):
@@ -4083,6 +4294,9 @@ class ImportReport(ApiModel):
     added_tables: list[str] = []
     patched_tables: list[str] = []
     replaced_tables: list[dict] = []
+    # The files of the drop that were written, and every other file the plan showed.
+    written: list[str] = []
+    not_written: list[str] = []
 
 
 class DeclaredIdentity(ApiModel):
@@ -4106,6 +4320,38 @@ class DeclaredIdentity(ApiModel):
     confirmed_by: str = ""
 
 
+class FileAssignment(ApiModel):
+    """What one file of the drop is, said by the sender. It names the file, what it is and
+    which table it is for, never where it goes: the destination is worked out on this side.
+    `skip` leaves the file out."""
+
+    member: str
+    kind: str = ""
+    media_kind: str = ""
+    page: int = Field(default=0, ge=0)
+    table_id: str = ""
+    skip: bool = False
+
+
+class DropConvertRow(ApiModel):
+    """What one file of the drop is made as, and how. Each field left out takes the
+    recommendation for that file. `to` is the format its kind is written as, or `asis` to keep
+    the file untouched under its slot's name."""
+
+    to: str | None = None
+    video: str | None = None
+    quality: str | None = None
+    sound_in_video: str | None = None
+
+
+class DropConvertRequest(ApiModel):
+    """The conversions of a drop: `rows` by the file's path inside it, so a file left out
+    takes the recommendation. `wait` holds a video re-encode while a table is playing."""
+
+    rows: dict[str, DropConvertRow] = {}
+    wait: bool = True
+
+
 class PlanRequest(ApiModel):
     """Every field optional: an empty body plans the upload as it stands."""
 
@@ -4114,9 +4360,9 @@ class PlanRequest(ApiModel):
     rom_name: str = ""
     allow_new_game: bool = False
     # Set where the drop named a slot rather than a game. The slot decides the media
-    # key, so nothing is read off the filename: any image works on an image slot and
-    # is written under that slot's own name. Needs `game_dir`, and refuses more than
-    # one file - a slot holds one thing.
+    # key, so nothing is read off the filename: any file of the slot's family fits and is
+    # written under that slot's own name. Needs `game_dir`. Several fitting files are a
+    # group, answered in `picks`.
     media_kind: str = ""
     asset_kind: str = ""
     # A one-time destination for a new game, naming a location. Left out, it goes to the
@@ -4133,8 +4379,25 @@ class PlanRequest(ApiModel):
     # the defaults for an update, or for another release with `instead`.
     carry: list[str] | None = None
     instead: bool = False
+    # Needs `game_dir`. The table the drop landed on. Media and the files named for a table
+    # are named for it; a table file takes its place unless `add_table` is set.
+    table_id: str = ""
+    # With `table_id`, what a media file is named for: "" lets the game decide (a game with
+    # one table is named for the game), "game" the game folder, "table" that table's file.
+    scope: Literal["", "game", "table"] = ""
+    # Where a paged media kind is written, from 1.
+    page: int = Field(default=1, ge=1)
     # A new game's folder. Omitted falls back to the VPS-derived name, then the vpx stem.
     new_game_dir_name: str | None = None
+    # Files of the drop the sender has placed by hand, by path inside it; each takes its
+    # file out of whatever it was and claims it as stated.
+    assignments: list[FileAssignment] = []
+    # The file chosen for each group in the plan, by group key. "" chooses none of them.
+    # A key the plan has no group for is ignored.
+    picks: dict[str, str] = {}
+    # What each picture, sound and video the slot cannot read is made as. Left out, each is
+    # converted as recommended.
+    convert: DropConvertRequest = DropConvertRequest()
 
 
 class ImportRequest(PlanRequest):

@@ -14,6 +14,7 @@ theme; the path is ours and stays here.
 
 from __future__ import annotations
 
+import mimetypes
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -25,9 +26,37 @@ from common.i18n import t
 # Extension families, ordered: resolution tries them in order and the first hit
 # wins. Aligned with what import accepts, so a file import writes is never
 # invisible to the scan - which it was, when resolution demanded one exact name.
-IMAGE_FAMILY = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
-VIDEO_FAMILY = (".mp4",)
+IMAGE_FAMILY = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".apng")
+
+
+def register_mime_types() -> None:
+    """Teach `mimetypes` the image types Python lacks, so a file served by extension is not
+    sent as text/plain. NiceGUI calls `mimetypes.init()` when it is imported, which drops
+    this, so whatever imports NiceGUI calls this again afterwards."""
+    mimetypes.add_type("image/apng", ".apng")
+
+
+register_mime_types()
+
+VIDEO_FAMILY = (".mp4", ".webm")
 AUDIO_FAMILY = (".mp3", ".ogg")
+
+# What the converter tries per class: not read by VPinFE, so a file with one of these
+# extensions is never a slot's file. A file that does not open is skipped when it is
+# converted, so the lists are what is attempted, not a promise.
+CONVERTIBLE_IMAGE = (".tga", ".tif", ".tiff", ".ico", ".psd", ".dds", ".pcx", ".ppm", ".avif",
+                     ".jfif", ".jpe", ".jp2")
+CONVERTIBLE_AUDIO = (".wav", ".flac", ".m4a", ".aac", ".wma", ".aif", ".aiff", ".opus", ".oga")
+CONVERTIBLE_VIDEO = (".mkv", ".avi", ".mov", ".m4v", ".flv", ".f4v", ".wmv", ".mpg", ".mpeg",
+                     ".ogv", ".ts", ".3gp")
+
+
+def convertible_family(family: tuple[str, ...]) -> tuple[str, ...]:
+    """The extensions a kind's family can be made from, or none where nothing converts."""
+    return {IMAGE_FAMILY: CONVERTIBLE_IMAGE, VIDEO_FAMILY: CONVERTIBLE_VIDEO,
+            AUDIO_FAMILY: CONVERTIBLE_AUDIO}.get(family, ())
+
+
 DOC_FAMILY = (".pdf", ".md", ".txt", ".html")
 # A rule sheet is read as a document and is often published as a picture of one.
 RULE_SHEET_FAMILY = (*DOC_FAMILY, *IMAGE_FAMILY)
@@ -352,6 +381,47 @@ def spec_named(filename: str) -> SpecName | None:
     for spec in MEDIA_SPECS:
         if extension not in spec.family:
             continue
+        for token in (spec.token, *spec.alt_tokens):
+            if not token:
+                continue
+            if stem.lower().startswith(f"{token.lower()} "):
+                return SpecName(spec.kind, stem[len(token) + 1:])
+            found = _page_rx(token).match(stem) if spec.pages else None
+            if found is not None and int(found.group(1)) >= 2:
+                return SpecName(spec.kind, stem[found.end():], int(found.group(1)))
+    return None
+
+
+def unsupported_named(filename: str, variant: str = "table") -> SpecName | None:
+    """A file VPinFE would name for a kind if its extension were one the kind reads: a
+    token name or the kind's fixed name, with an extension the converter can make into the
+    kind's family. Judged from the name alone, so an unrelated file of the person's is never
+    one. A fixed name answers an empty stem, as `media_placement.FIXED` does."""
+    return _named(filename, variant, lambda spec: convertible_family(spec.family))
+
+
+def supported_named(filename: str, variant: str = "table") -> SpecName | None:
+    """The same reading for an extension the kind already reads: a token name or the kind's
+    fixed name."""
+    return _named(filename, variant, lambda spec: spec.family)
+
+
+def _named(filename: str, variant: str,
+           extensions: Callable[[MediaSpec], tuple[str, ...]]) -> SpecName | None:
+    name = Path(filename).name
+    stem, dot, extension = name.rpartition(".")
+    if not dot:
+        return None
+    extension = f".{extension.lower()}"
+    for spec in MEDIA_SPECS:
+        if extension not in extensions(spec):
+            continue
+        fixed = spec.stem(variant).lower()
+        if stem.lower() == fixed:
+            return SpecName(spec.kind, "")
+        numbered = re.fullmatch(rf"{re.escape(fixed)} ([2-9]|[1-9]\d+)", stem.lower())
+        if spec.pages and numbered:
+            return SpecName(spec.kind, "", int(numbered.group(1)))
         for token in (spec.token, *spec.alt_tokens):
             if not token:
                 continue

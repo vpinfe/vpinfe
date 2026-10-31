@@ -20,6 +20,7 @@ from common import icons
 from common.games import asset_origin
 from common.i18n import t
 from common.media.media_specs import media_label_map
+from manager.devices import plays_on
 from manager.kit import game_tables, grid, media_ownership, offload, panel, thumbnails, views
 from manager.library import file_acts, file_states
 from manager.library.games import view_control
@@ -63,21 +64,37 @@ def _standing_in(via: str) -> str:
 
 
 
-def _reason(row: dict[str, Any]) -> str:
+def _reason(row: dict[str, Any], refused: bool = False) -> str:
     via = str(row.get("via") or "")
-    if via in (file_states.ORPHAN, file_states.UNUSED):
+    if via in (file_states.ORPHAN, file_states.UNUSED, file_states.UNSUPPORTED):
         return via
-    return file_states.IN_USE if row.get("present") else file_states.MISSING
+    if not row.get("present"):
+        return file_states.MISSING
+    return file_states.WONT_PLAY if refused else file_states.IN_USE
 
 
-def rows(found: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _refused(row: dict[str, Any], devices: list[dict[str, Any]], local_id: str) -> bool:
+    """Whether a device that plays this library cannot play this video, from the codec
+    its header says."""
+    return bool(plays_on.refusals(row.get("video_codec"), devices, local_id))
+
+
+def reason_of(row: dict[str, Any], devices: list[dict[str, Any]], local_id: str) -> str:
+    """What `reason` says of a raw row, for a count that must agree with the grid."""
+    return _reason(row, _refused(row, devices, local_id))
+
+
+def rows(found: list[dict[str, Any]], devices: list[dict[str, Any]] | None = None,
+         local_id: str = "") -> list[dict[str, Any]]:
     """The API's media, flattened for a grid.
 
     Three facts kept apart, because one column carrying two of them is what made a row
     read as a contradiction: `used_by` counts tables and only ever describes a file,
     `reason` speaks only when a file is not the one being used, and `path` says which
-    file, name and folder together.
+    file, name and folder together. `devices` is what a video is judged against, and
+    none leaves every video playing.
     """
+    devices = devices or []
     return [{**row,
              "year": game_tables.year_of(row.get("year")),
              "scope": game_tables.scope_of(row),
@@ -86,11 +103,12 @@ def rows(found: list[dict[str, Any]]) -> list[dict[str, Any]]:
              # thing on nearly every row.
              "path": row.get("path") or "",
              "used_by": row.get("serves"),
-             "reason": _reason(row),
+             "reason": reason_of(row, devices, local_id),
              "source": media_ownership.source_name(str(row.get("origin") or "")),
              "match": str(row.get("matched_to") or ""),
              "covered_by": _standing_in(str(row.get("standing_in") or "")),
-             grid.NO_MENU: file_acts.is_loose(row)}
+             grid.NO_MENU: file_acts.is_loose(row),
+             grid.NO_DROP: row.get("via") in (file_states.ORPHAN, file_states.UNSUPPORTED)}
             for row in found]
 
 
@@ -119,7 +137,7 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.media.source.help")),
     grid.column("used_by", t("word.used_by"), type="numericColumn", group=t(_FILE),
                 help=t("manager.media.used_by.help")),
-    file_states.table("manager.media.unused_meaning").column(
+    file_states.table("manager.media.unused_meaning", converts=True).column(
         "reason", t("word.in_use"), 150, help=t("manager.media.reason.help"), group=t(_FILE)),
     grid.column("match", t("manager.media.match"), 140, group=t(_SOURCE),
                 help=t("manager.media.match.help")),
@@ -137,6 +155,8 @@ _ALL = [definition["field"] for definition in COLUMNS]
 # and says in `help` what it is for rather than what it filters - a reader can see which
 # rows are here; what they cannot see is why this was worth building a view for.
 SOURCES = "manager.view.sources"
+UNSUPPORTED_VIEW = "manager.view.unsupported"
+WONT_PLAY_VIEW = "manager.view.wont_play"
 
 
 def recorded() -> dict[str, Any]:
@@ -144,10 +164,15 @@ def recorded() -> dict[str, Any]:
     return {"source": {"values": [media_ownership.source_name(asset_origin.RECORDED)]}}
 
 
+def arrive_on(library: Any, key: str) -> None:
+    """Make this built-in the view Media opens on next. Writes, so not on the loop."""
+    custom, _active = views.stored(library, SCOPE)
+    views.remember(library, SCOPE, custom, views.builtin_id(key))
+
+
 def arrive_on_sources(library: Any) -> bool:
     """Make Sources the view Media opens on next."""
-    custom, _active = views.stored(library, SCOPE)
-    views.remember(library, SCOPE, custom, views.builtin_id(SOURCES))
+    arrive_on(library, SOURCES)
     return True
 
 
@@ -155,8 +180,9 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.have": views.Preset(
         columns=("game", "label", "path", "source", "used_by", "reason"),
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
-        filters={"reason": {"values": [file_states.IN_USE, file_states.ORPHAN,
-                                       file_states.UNUSED]}},
+        filters={"reason": {"values": [file_states.IN_USE, file_states.WONT_PLAY,
+                                       file_states.ORPHAN, file_states.UNUSED,
+                                       file_states.UNSUPPORTED]}},
         help=t("manager.media.view_have.help")),
     "manager.view.missing": views.Preset(
         columns=("game", "label", "reason"),
@@ -173,11 +199,21 @@ VIEWS: dict[str, list[str] | views.Preset] = {
         sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
         filters={"reason": {"values": [file_states.UNUSED]}},
         help=t("manager.media.view_unused.help")),
+    UNSUPPORTED_VIEW: views.Preset(
+        columns=("game", "label", "path", "reason"),
+        sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
+        filters={"reason": {"values": [file_states.UNSUPPORTED]}},
+        help=t("manager.media.view_unsupported.help")),
+    WONT_PLAY_VIEW: views.Preset(
+        columns=("game", "label", "path", "reason"),
+        sort=({"colId": "game", "sort": "asc", "sortIndex": 0},),
+        filters={"reason": {"values": [file_states.WONT_PLAY]}},
+        help=t("manager.media.view_wont_play.help")),
     SOURCES: views.Preset(
         columns=("game", "label", "path", "source", "used_by", "match"),
         sort=({"colId": "source", "sort": "asc", "sortIndex": 0},
               {"colId": "game", "sort": "asc", "sortIndex": 1}),
-        filters={"reason": {"values": [file_states.IN_USE]}},
+        filters={"reason": {"values": [file_states.IN_USE, file_states.WONT_PLAY]}},
         help=t("manager.media.view_sources.help")),
     "manager.view.everything": views.Preset(
         columns=tuple(_ALL),
@@ -185,8 +221,16 @@ VIEWS: dict[str, list[str] | views.Preset] = {
 }
 
 
+def _judged(library: Any, state: dict[str, Any]
+            ) -> Callable[[list[dict[str, Any]]], list[dict[str, Any]]]:
+    """`rows`, with a video judged against the devices this page last read."""
+    return lambda found: rows(found, list(state.get("devices") or []),
+                              str(library.discovery().get("install_id") or ""))
+
+
 async def refill(library: Any, table: Any, built: list[dict[str, Any]],
-                 by_id: dict[str, Any], game_ids: list[str]) -> None:
+                 by_id: dict[str, Any], game_ids: list[str],
+                 shape: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] = rows) -> None:
     """Read these games' rows again and swap them in place: the search, the view and
     the rest of the selection stay as they were."""
     for game_id in game_ids:
@@ -195,7 +239,7 @@ async def refill(library: Any, table: Any, built: list[dict[str, Any]],
     if table.is_deleted:
         return
     wanted = set(game_ids)
-    fresh = rows([row for row in found if str(row["game_id"]) in wanted])
+    fresh = shape([row for row in found if str(row["game_id"]) in wanted])
     grid.replace_rows(table, built, by_id, fresh, lambda row: str(row["game_id"]) in wanted)
 
 
@@ -205,7 +249,8 @@ def build(found: list[dict[str, Any]], library: Any,
           rescan: Callable[[], Any] | None = None) -> None:
     """The media lens: one row per file, and one per file that is not there."""
     state = state if state is not None else {}
-    built = rows(found)
+    shape = _judged(library, state)
+    built = shape(found)
     columns = _with_kind_filter(
         grid.with_art(grid.with_derived_facets(COLUMNS, built), library.thumbnail_look()), library)
     selected: list[dict[str, Any]] = []
@@ -245,7 +290,7 @@ def build(found: list[dict[str, Any]], library: Any,
                 panel.refresh(rescan, t("manager.media.rescan"))
 
     async def changed(ids: list[str]) -> None:
-        await refill(library, table, built, by_id, ids)
+        await refill(library, table, built, by_id, ids, shape)
 
     def acts_on(chosen: list[dict[str, Any]]) -> list[panel.Verb]:
         return file_acts.media_acts(library, file_acts.files_of(library, chosen), state,
@@ -295,7 +340,7 @@ def build(found: list[dict[str, Any]], library: Any,
     table.on("modelUpdated", counted)
 
     async def refresh_files(game_id: str) -> None:
-        fresh = rows(await offload.io(library.files_of, "media", game_id))
+        fresh = shape(await offload.io(library.files_of, "media", game_id))
         grid.replace_rows(table, built, by_id, fresh, lambda row: row["game_id"] == game_id)
 
     state["refresh_files"] = refresh_files

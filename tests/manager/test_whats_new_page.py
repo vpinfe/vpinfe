@@ -11,6 +11,7 @@ from nicegui import ui
 
 from common.release import migration_ledger, release_notes, upgrade_needs, whats_new
 from manager import page
+from manager.overview import needs
 from manager.system import whats_new as page_whats_new
 
 _PAGE = ui.element()
@@ -118,6 +119,68 @@ class DrawingTests(unittest.TestCase):
         (part,) = page_whats_new.parts(found)
 
         self.assertIn("unnamed", _labels(part.draw))
+
+
+class FilesConvertIsForTests(unittest.TestCase):
+    def found(self, wont_play=2, unsupported=3, devices=("Cabinet",), here=True):
+        return needs.Unplayable(unsupported=tuple(f"u{n}" for n in range(unsupported)),
+                                wont_play=tuple(f"w{n}" for n in range(wont_play)),
+                                devices=devices, here=here)
+
+    def test_nothing_refused_is_no_line_and_no_part(self) -> None:
+        self.assertEqual([], page_whats_new.lines(needs.Unplayable()))
+        self.assertEqual([], page_whats_new.parts(_review(releases=False), []))
+
+    def test_each_kind_is_a_line_with_the_ways_to_fix_it(self) -> None:
+        wont_play, unsupported = page_whats_new.lines(self.found())
+
+        self.assertEqual("2 videos won't play on Cabinet. Change the browser or convert them.",
+                         wont_play.text)
+        self.assertEqual(["Browser Settings", "Convert Videos"],
+                         [label for label, _ in wont_play.actions])
+        self.assertEqual({"settings_page": "frontend.chromium"}, wont_play.actions[0][1].keys)
+        self.assertEqual(needs.wont_play_opens(), wont_play.actions[1][1])
+        self.assertEqual("3 files are in formats VPinFE can't use. Convert them.",
+                         unsupported.text)
+        self.assertEqual([("Convert", needs.unsupported_opens())], list(unsupported.actions))
+
+    def test_browser_settings_is_offered_only_when_this_install_is_one_that_refused(self) -> None:
+        (wont_play, _) = page_whats_new.lines(self.found(here=False))
+
+        self.assertEqual(["Convert Videos"], [label for label, _ in wont_play.actions])
+
+    def test_one_of_each_reads_in_the_singular(self) -> None:
+        wont_play, unsupported = page_whats_new.lines(self.found(1, 1))
+
+        self.assertEqual("1 video won't play on Cabinet. Change the browser or convert it.",
+                         wont_play.text)
+        self.assertEqual("1 file is in a format VPinFE can't use. Convert it.",
+                         unsupported.text)
+
+    def test_the_counts_alone_make_the_needs_part(self) -> None:
+        asked = page_whats_new.lines(self.found())
+
+        keys = [one.key for one in page_whats_new.parts(_review(releases=False), asked)]
+
+        self.assertEqual(["needs"], keys)
+
+    def test_the_part_names_each_line_and_an_action_goes_where_it_says(self) -> None:
+        went: list[needs.Opens] = []
+        asked = page_whats_new.lines(self.found(unsupported=0))
+        (part,) = page_whats_new.parts(_review(releases=False), asked, went.append)
+
+        with _PAGE:
+            holder = ui.element("div")
+            with holder:
+                part.draw()
+        buttons = {one.text: one for one in holder.descendants()
+                   if isinstance(one, ui.button)}
+        for listener in buttons["Convert Videos"]._event_listeners.values():
+            if listener.type == "click" and listener.handler is not None:
+                listener.handler(None)
+
+        self.assertEqual(["Browser Settings", "Convert Videos"], sorted(buttons))
+        self.assertEqual([needs.wont_play_opens()], went)
 
 
 if __name__ == "__main__":

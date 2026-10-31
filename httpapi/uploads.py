@@ -7,6 +7,9 @@ file that was too big is 413, and a session nothing can be made of is 422.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -17,6 +20,7 @@ from common.failures import why
 from common.online import game_offers, vps_lens
 from common.uploads import upload_ops
 
+from . import jobs as jobs_api
 from . import models, scopes
 from .auth import requires
 from .errors import ApiError
@@ -74,9 +78,23 @@ def analyze_upload(upload_id: str) -> models.Analysis:
             dependencies=[requires(scopes.UPLOADS_WRITE)])
 def upload_picture(upload_id: str, request: Request, name: str = Query(...),
                    size: int | None = MEDIA_SIZE) -> Response:
-    """The loose image dropped under `name`, at `size` (256 or 1024) when given. 404 for a
-    file that is not an image, or is inside an archive."""
+    """The image dropped under `name`, or the member of an archive at that path inside it, at
+    `size` (256 or 1024) when given. 404 for a file that is not an image, one the session does
+    not hold, or a member too big to draw."""
     return revalidating_file(upload_ops.picture(upload_id, name, size).path, request)
+
+
+@router.get("/{upload_id}/image", summary="The one picture a session holds",
+            dependencies=[requires(scopes.UPLOADS_WRITE)])
+def upload_image(upload_id: str, request: Request) -> Response:
+    """The dropped picture as it arrived, for a place that takes exactly one. 400 where the
+    session holds several files, a folder or archive, or a file that is not an image. The
+    file is named `picture` plus its own suffix, whatever it was dropped as."""
+    path = upload_ops.single_image(upload_id)
+    response = revalidating_file(path, request)
+    response.headers.update(
+        {"Content-Disposition": f'inline; filename="picture{path.suffix.lower()}"'})
+    return response
 
 
 @router.post("/{upload_id}/plan", summary="Build an import plan",
@@ -92,20 +110,53 @@ def plan_upload(upload_id: str,
         raise ApiError("unprocessable_upload", why(exc), status_code=422) from exc
 
 
+@contextmanager
+def _import_refusals() -> Iterator[None]:
+    """The three ways an import is refused before it starts, as the 422 each one is."""
+    try:
+        yield
+    except upload_ops.UnprocessableUploadError as exc:
+        raise ApiError("unprocessable_upload", why(exc), status_code=422) from exc
+    except upload_ops.PicksNeededError as exc:
+        raise ApiError("choose_one", why(exc), status_code=422, details=exc.details) from exc
+    except upload_ops.NothingImportableError as exc:
+        raise ApiError("no_importable_assets", why(exc), status_code=422,
+                       details=exc.details) from exc
+
+
 @router.post("/{upload_id}/import", summary="Execute an import plan",
              dependencies=[requires(scopes.UPLOADS_WRITE)])
 def import_upload(upload_id: str,
                   payload: models.ImportRequest = Body(default_factory=models.ImportRequest),
                   ) -> models.ImportReport:
-    try:
+    with _import_refusals():
         report = upload_ops.execute(upload_id, payload.model_dump(exclude={"declared"}),
                                     payload.declared)
-    except upload_ops.UnprocessableUploadError as exc:
-        raise ApiError("unprocessable_upload", why(exc), status_code=422) from exc
-    except upload_ops.NothingImportableError as exc:
-        raise ApiError("no_importable_assets", why(exc), status_code=422,
-                       details=exc.details) from exc
     return models.ImportReport(**report)
+
+
+@router.post("/{upload_id}/import/start", summary="Execute an import plan as a job",
+             status_code=202, dependencies=[requires(scopes.UPLOADS_WRITE)])
+def start_import(upload_id: str, response: Response,
+                 payload: models.ImportRequest = Body(default_factory=models.ImportRequest),
+                 ) -> models.JobResource:
+    """`/import`, accepted and not done: converts each file the plan converts, then writes
+    everything, so a conversion that fails or is stopped adds nothing. Refused here for
+    anything `/import` would refuse; what goes wrong afterwards is the job's `error`. The
+    job's `parts` say where each converted file is, by its path inside the drop."""
+    with _import_refusals():
+        job = upload_ops.start_import(upload_id, payload.model_dump(exclude={"declared"}),
+                                      payload.declared)
+    response.headers["Location"] = f"/api/v1/jobs/{job.id}"
+    return models.JobResource(**jobs_api.resource(job))
+
+
+@router.post("/import/stop", summary="Stop the import that is running",
+             dependencies=[requires(scopes.UPLOADS_WRITE)])
+def stop_import() -> models.Acknowledged:
+    """Before anything is written: a stopped import adds nothing and leaves the upload as it
+    was. `ok` is false where none is running."""
+    return models.Acknowledged(ok=upload_ops.stop_import())
 
 
 @vps_router.get("/entry/{vps_id}", summary="One VPSdb entry",

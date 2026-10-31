@@ -32,6 +32,7 @@ TYPE_NAME = re.compile(r"^[a-z][a-z0-9_]*_type$")
 BORROWED = {
     # Python's own.
     "guess_type",        # mimetypes.guess_type
+    "add_type",          # mimetypes.add_type
     "media_type",        # Starlette's keyword on a Response
     "compress_type",     # zipfile.ZipInfo's attribute
     # Holds a class and calls it, which is Python's own sense of the word.

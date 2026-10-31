@@ -49,11 +49,8 @@ def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
             @on_page
             async def arrived(drop: uploads.Drop) -> None:
                 dialog.close()
-                analysis = await uploads.analyzed(library, drop.upload_id)
-                if analysis is None:
-                    return
-                await uploads.confirmed_import(
-                    library, drop.upload_id, analysis, source=drop.name,
+                await uploads.arrived(
+                    library, drop.upload_id, source=drop.name,
                     file_count=drop.count, on_done=on_done, game_id=game_id,
                     game_dir=game_dir, replace_table=table_id, instead=instead,
                     on_imported=tie(library, game_id, release), release=release)

@@ -816,7 +816,7 @@ Any control that takes several values from a list is a `dropdown.Select` with
 `multiple=True`, which draws the chosen ones as chips and drops them from the open list. A
 list that kept them would make picking one a second time remove it, so a click in the list
 means add and the x means remove. `Select` does this itself, so the tags in a panel, the
-ignored Chrome flags, Leave Out and the wizard's multi pickers all behave alike, and a new
+ignored Chrome flags, Skip and the wizard's multi pickers all behave alike, and a new
 chip field gets it by being one. `tests/manager/test_a_chosen_chip_leaves_the_list.py`
 fails on a chip field that offers a chosen option, and on a module that draws chips
 without going through `Select`.

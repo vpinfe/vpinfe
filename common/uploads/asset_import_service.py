@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable, Iterable, Mapping
@@ -25,7 +26,7 @@ from common.games import (
     media_placement,
     table_swap,
 )
-from common.games.asset_registry import ARCHIVE_EXTENSIONS, lens_kind, spec_for
+from common.games.asset_registry import spec_for
 from common.games.formats.vpx_parser import VPXParser
 from common.games.game_repository import refresh_game
 from common.games.game_service import (
@@ -41,7 +42,7 @@ from common.games.tables import entry_filename, entry_for_filename, table_entrie
 from common.i18n import t
 from common.ids import new_id
 from common.kept_copies import IMPORT, copy_aside
-from common.media.media_specs import media_filename_map
+from common.media.media_specs import PAGED_KINDS
 from common.uploads.asset_analyzer_service import (
     AnalysisResult,
     AssetSource,
@@ -53,9 +54,6 @@ from common.uploads.asset_analyzer_service import (
 
 logger = logging.getLogger("vpinfe.common.uploads.asset_import_service")
 
-_MEDIA_FILENAMES = media_filename_map("table")
-
-
 @dataclass(frozen=True)
 class PlannedItem:
     asset: DetectedAsset
@@ -63,6 +61,12 @@ class PlannedItem:
     action: str             # replace_vpx | add_table | replace_b2s | copy | zip_rom
                             # | extract_tree | replace_media | apply_patch | write_info
     default_enabled: bool = True
+    # The arrival member this item comes from and how it was claimed (declared, named),
+    # where the arrival engine planned it.
+    member: str = ""
+    basis: str = ""
+    # Offered beside what was asked for, so left out of an import that names no selection.
+    extra: bool = False
     # A replace_vpx item names the table it puts the file in the place of, the file that
     # table has now, the kinds of its own file carried to the new one, and the kinds the
     # drop brings of its own.
@@ -71,6 +75,10 @@ class PlannedItem:
     carry: tuple[str, ...] = ()
     brings: tuple[str, ...] = ()
     instead: bool = False
+    # A replace_media item names what the file is named for and the page it is written as;
+    # the stem is where `page` is resolved, which for a later page is where page 1 is.
+    stem: str = ""
+    page: int = 1
 
 
 @dataclass(frozen=True)
@@ -88,6 +96,9 @@ class ImportPlan:
     rom_name: str
     items: tuple[PlannedItem, ...]
     blocked: tuple[BlockedItem, ...]
+    # Where a per-table file fell back to the default table although the game has several:
+    # the tables it could have been named for, as id, label and default. Empty otherwise.
+    tables: tuple[dict, ...] = ()
 
 
 def _basename(arcname: str) -> str:
@@ -242,7 +253,7 @@ def _in_game(kind: str, base: Path, rom: str = "") -> Path:
 
 def _plan_asset(asset: DetectedAsset, base: Path, vpx_stem: str, rom_name: str,
                 source_name: str, game_kind_action: str,
-                sidecar_stem: str = "") -> PlannedItem | BlockedItem:
+                sidecar_stem: str = "", media_stem: str = "") -> PlannedItem | BlockedItem:
     """Where one detected asset lands, or why it cannot."""
     kind = asset.kind
     spec = spec_for(kind)
@@ -284,7 +295,7 @@ def _plan_asset(asset: DetectedAsset, base: Path, vpx_stem: str, rom_name: str,
         return PlannedItem(asset, str(base / _patched_vpx_name(asset, base, vpx_stem)),
                            "apply_patch")
     if kind == "media":
-        return _plan_media(asset, base)
+        return _plan_media(asset, base, media_stem, asset.page or 1)
     return BlockedItem(asset, t("error.uploads.cannot_import_kind"))
 
 
@@ -324,17 +335,18 @@ def _one_file_each(assets: Iterable[DetectedAsset]) -> list[DetectedAsset]:
 
 def _one_to_a_name(items: list[PlannedItem],
                    blocked: list[BlockedItem]) -> tuple[list[PlannedItem], list[BlockedItem]]:
-    """Two color files that would take one name: the first stays, the rest are refused."""
+    """Two files that would take one name: the first stays, the rest are refused. A name is
+    the same whatever its case, as it is on a case-insensitive disk."""
     taken: set[str] = set()
     kept: list[PlannedItem] = []
     refused = list(blocked)
     for item in items:
-        if item.asset.kind in _COLOR_KINDS:
-            if item.destination in taken:
-                refused.append(BlockedItem(item.asset, t(
-                    "error.uploads.color_same_name", name=Path(item.destination).name)))
-                continue
-            taken.add(item.destination)
+        name = item.destination.lower()
+        if name in taken:
+            refused.append(BlockedItem(item.asset, t(
+                "error.uploads.same_name", name=Path(item.destination).name)))
+            continue
+        taken.add(name)
         kept.append(item)
     return kept, refused
 
@@ -343,11 +355,45 @@ def _info_path(base: Path) -> Path:
     return base / f"{base.name}.info"
 
 
-def _plan_media(asset: DetectedAsset, base: Path) -> PlannedItem:
-    """A media file for the whole game: the name the panel's Add gives it."""
-    suffix = PurePosixPath(asset.entries[0].arcname).suffix
-    name = media_placement.target_name(asset.media_kind, base.name, suffix)
-    return PlannedItem(asset, str(base / "medias" / name), "replace_media")
+def _plan_media(asset: DetectedAsset, base: Path, stem: str = "", page: int = 1) -> PlannedItem:
+    """A media file for the game, or for the table `stem` names: the name the panel's Add
+    gives it."""
+    convert = asset.convert
+    suffix = convert.suffix if convert else PurePosixPath(asset.entries[0].arcname).suffix
+    stem = stem or base.name
+    where = media_placement.page_stem(base, asset.media_kind, stem, stem, page)
+    name = media_placement.target_name(asset.media_kind, where, suffix, page,
+                                       unsupported=bool(convert and convert.as_is))
+    return PlannedItem(asset, str(base / "medias" / name), "replace_media",
+                       stem=where, page=page)
+
+
+def held_tables(base: Path) -> list[dict]:
+    """The tables the library holds for the game in `base`, each as `table_swap.choices`
+    gives it. Empty for a folder the library does not hold."""
+    game_id = table_swap.game_id_of(base)
+    return table_swap.choices(game_id) if game_id else []
+
+
+def table_stem(base: Path, table_id: str) -> str:
+    """The file stem of one of the game's tables, or a ValueError where it has no such
+    table."""
+    found = next((one for one in held_tables(base) if one["id"] == table_id), None)
+    if found is None:
+        raise ValueError(t("error.games.swap_not_contained"))
+    return Path(found["filename"]).stem
+
+
+def media_stem(base: Path, table_id: str, scope: str) -> str:
+    """What media is named for: the game's folder, or the table's file where the drop
+    named a table. A game with one table has nothing to tell apart, so a table the drop did
+    not ask for by `scope` means the game there."""
+    if not table_id or scope == "game":
+        return base.name
+    stem = table_stem(base, table_id)
+    if scope != "table" and len(held_tables(base)) < 2:
+        return base.name
+    return stem
 
 
 def _new_games_under(location_id: str = "") -> str:
@@ -427,13 +473,28 @@ def _swapping(items: list[PlannedItem], blocked: list[BlockedItem], analysis: An
                     and one.asset.kind in asset_resolver.PER_TABLE_KINDS)], refused
 
 
+# What is named for one table's file and nothing else: the table's own backglass, settings,
+# script, point of view, score view and NIX file.
+SIDECAR_KINDS = ("backglass", "ini", "script", "pov", "scv", "nix")
+
+
+def tables_to_choose(base: Path) -> tuple[dict, ...]:
+    """The game's tables, where there is more than one to name a file for."""
+    held = held_tables(base)
+    if len(held) < 2:
+        return ()
+    return tuple({"id": one["id"], "label": one["label"], "default": one["default"]}
+                 for one in held)
+
+
 def build_import_plan(analysis: AnalysisResult, *, game_dir: Path | None = None,
                       game_row: dict | None = None, rom_name: str = "",
                       allow_new_game: bool = False,
                       games_path: str | None = None,
                       location_id: str = "", add_table: bool = False,
                       replace_table: str = "", carry: Iterable[str] | None = None,
-                      instead: bool = False) -> ImportPlan:
+                      instead: bool = False, table_id: str = "",
+                      scope: str = "") -> ImportPlan:
     """Route detected assets to destinations for an existing game or a new game bundle.
 
     For an existing game, a table in the drop takes the place of `replace_table`, or of the
@@ -441,6 +502,11 @@ def build_import_plan(analysis: AnalysisResult, *, game_dir: Path | None = None,
     more. `carry` is the kinds of file named for the replaced table that follow it to the
     new one; none given takes the defaults for an update, or for another release with
     `instead`. A game the library does not hold has no table to replace, so its drop joins.
+
+    `table_id` is the table the drop landed on. What the drop brings that is named for a
+    table follows it, except that a table the drop itself brings names its own. `scope`
+    ("game" or "table") says what media is named for; empty lets the game's table count
+    decide.
     """
     rom_name = require_plain_rom(rom_name)
     items: list[PlannedItem] = []
@@ -471,22 +537,40 @@ def build_import_plan(analysis: AnalysisResult, *, game_dir: Path | None = None,
             vpx_stem = _find_vpx_file(base).stem
         except (FileNotFoundError, OSError):
             vpx_stem = ""
-        sidecar_stem = (_arriving_stem(analysis.assets)
+        arriving = _arriving_stem(analysis.assets)
+        landed_on = table_stem(base, table_id) if table_id else ""
+        sidecar_stem = (arriving or landed_on
                         or _sidecar_stem(analysis.assets, base, vpx_stem))
-        swap = None if add_table else _swap_target(base, replace_table)
+        landed_media = media_stem(base, table_id, scope)
+        named = {} if arriving or landed_on else {
+            Path(one["filename"]).stem.lower(): Path(one["filename"]).stem
+            for one in held_tables(base)}
+        defaulted = False
+        swap = None if add_table else _swap_target(base, replace_table or table_id)
         for asset in _one_file_each(analysis.assets):
+            own = Path(_basename(asset.entries[0].arcname)).stem.lower()
+            hit = named.get(own, "") if asset.kind in SIDECAR_KINDS else ""
+            stem = hit or sidecar_stem
+            for_media = landed_media
+            if asset.table_id:
+                stem = table_stem(base, asset.table_id)
+                for_media = media_stem(base, asset.table_id, scope)
             planned = _plan_asset(asset, base, vpx_stem, rom_name,
                                   analysis.source_name,
                                   game_kind_action="replace_vpx" if swap else "add_table",
-                                  sidecar_stem=sidecar_stem)
+                                  sidecar_stem=stem, media_stem=for_media)
             if isinstance(planned, PlannedItem):
                 items.append(planned)
+                defaulted = defaulted or (
+                    asset.kind in SIDECAR_KINDS and not hit and not asset.table_id
+                    and not arriving and not landed_on)
             else:
                 blocked.append(planned)
         if swap:
             items, blocked = _swapping(items, blocked, analysis, base, swap, carry, instead)
         items, blocked = _one_to_a_name(items, blocked)
-        return ImportPlan(str(base), "", rom_name, tuple(items), tuple(blocked))
+        return ImportPlan(str(base), "", rom_name, tuple(items), tuple(blocked),
+                          tables_to_choose(base) if defaulted else ())
 
     for asset in analysis.assets:
         if spec_for(asset.kind).requires_game:
@@ -494,51 +578,6 @@ def build_import_plan(analysis: AnalysisResult, *, game_dir: Path | None = None,
         else:
             blocked.append(BlockedItem(asset, t("error.uploads.target_library")))
     return ImportPlan("", "", rom_name, (), tuple(blocked))
-
-
-def build_media_slot_plan(source_path: Path, *, game_dir: Path, media_kind: str) -> ImportPlan:
-    """Plan a targeted media-slot import from a single dropped file.
-
-    The slot dictates the media key (no filename inference); the file only has to
-    belong to the kind's family. Unsuitable drops come back as a blocked item with the
-    reason.
-    """
-    if media_kind not in _MEDIA_FILENAMES:
-        raise ValueError(t("error.uploads.unknown_slot", media_kind=media_kind))
-    src = Path(source_path)
-    try:
-        size = src.stat().st_size
-    except OSError:
-        size = 0
-    entry = SourceEntry(src.name, src.name, size, False)
-    asset = DetectedAsset("media", "Media", (entry,), media_kind=media_kind,
-                          size=size, detail=f"{src.name} → {media_kind}")
-
-    if src.is_dir() or src.suffix.lower() in ARCHIVE_EXTENSIONS:
-        blocked = BlockedItem(asset, t("error.uploads.slot_file"))
-        return ImportPlan(str(game_dir), "", "", (), (blocked,))
-
-    try:
-        item = _plan_media(asset, game_dir)
-    except media_placement.UnplaceableError as exc:
-        return ImportPlan(str(game_dir), "", "", (), (BlockedItem(asset, why(exc)),))
-    return ImportPlan(str(game_dir), "", "", (item,), ())
-
-
-def build_readme_plan(source_path: Path, *, game_dir: Path) -> ImportPlan:
-    src = Path(source_path)
-    try:
-        size = src.stat().st_size
-    except OSError:
-        size = 0
-    entry = SourceEntry(src.name, src.name, size, False)
-    asset = DetectedAsset("readme", spec_for("readme").label, (entry,), size=size,
-                          detail=src.name)
-    if src.is_dir() or src.suffix.lower() in ARCHIVE_EXTENSIONS:
-        blocked = BlockedItem(asset, t("error.uploads.notes_shape"))
-        return ImportPlan(str(game_dir), "", "", (), (blocked,))
-    item = PlannedItem(asset, str(game_dir / f"readme{src.suffix.lower()}"), "copy")
-    return ImportPlan(str(game_dir), "", "", (item,), ())
 
 
 def vps_folder_name(vps_entry: dict) -> str:
@@ -571,19 +610,6 @@ def find_vps_entry(vps_id: str) -> dict | None:
     return None
 
 
-def only_kind(plan: ImportPlan, asset_kind: str) -> ImportPlan:
-    """The plan narrowed to the one kind a slot takes, named as the asset lens names it.
-
-    Everything else it would have brought is listed as not imported. "" keeps the plan.
-    """
-    if not asset_kind:
-        return plan
-    taken = tuple(item for item in plan.items if lens_kind(item.asset.kind) == asset_kind)
-    why = t("error.uploads.only_the_kind", kind=t(f"asset.kind.{asset_kind}.label"))
-    left = tuple(BlockedItem(item.asset, why) for item in plan.items if item not in taken)
-    return replace(plan, items=taken, blocked=(*plan.blocked, *left))
-
-
 def select_plan_items(plan: ImportPlan, indices: list[int] | None = None,
                       new_game_dir_name: str | None = None) -> ImportPlan:
     """Narrow a plan to the chosen item indices and optionally rename a new-game target.
@@ -596,7 +622,8 @@ def select_plan_items(plan: ImportPlan, indices: list[int] | None = None,
         chosen = plan.items
     else:
         wanted = set(indices)
-        chosen = tuple(item for index, item in enumerate(plan.items) if index in wanted)
+        chosen = _closed_pages(plan, tuple(item for index, item in enumerate(plan.items)
+                                           if index in wanted))
 
     if not plan.new_game_dir_name:
         return replace(plan, items=chosen)
@@ -614,9 +641,39 @@ def select_plan_items(plan: ImportPlan, indices: list[int] | None = None,
     return replace(plan, game_dir=str(new_base), new_game_dir_name=new_name, items=rebased)
 
 
+def _closed_pages(plan: ImportPlan, chosen: tuple[PlannedItem, ...]) -> tuple[PlannedItem, ...]:
+    """The chosen pages of a paged kind, numbered one after another from where the plan began
+    them: a page left out does not leave a gap the write would refuse."""
+    def place(item: PlannedItem) -> tuple | None:
+        if item.action == "replace_media" and item.asset.media_kind in PAGED_KINDS:
+            return (item.asset.media_kind, item.stem)
+        return None
+
+    first: dict[tuple, int] = {}
+    for item in plan.items:
+        if (key := place(item)) is not None:
+            first[key] = min(first.get(key, item.page), item.page)
+    counted: dict[tuple, int] = {}
+    out = []
+    for item in chosen:
+        key = place(item)
+        if key is None:
+            out.append(item)
+            continue
+        number = first[key] + counted.get(key, 0)
+        counted[key] = counted.get(key, 0) + 1
+        if number != item.page:
+            moved = _plan_media(item.asset, Path(plan.game_dir), item.stem, number)
+            item = replace(item, destination=moved.destination, stem=moved.stem, page=number)
+        out.append(item)
+    return tuple(out)
+
+
 def _moved(item: PlannedItem, old_base: str, new_base: Path) -> PlannedItem:
     if item.action == "replace_media":
-        return replace(item, destination=_plan_media(item.asset, new_base).destination)
+        stem = "" if item.stem == Path(old_base).name else item.stem
+        moved = _plan_media(item.asset, new_base, stem, item.page)
+        return replace(item, destination=moved.destination, stem=moved.stem)
     if item.action == "write_info":
         return replace(item, destination=str(_info_path(new_base)))
     return replace(item, destination=item.destination.replace(old_base, str(new_base), 1))
@@ -789,14 +846,21 @@ def _extract_tree(source: AssetSource, asset: DetectedAsset, base_dir: Path) -> 
         source.extract_member(entry.path, dest)
 
 
-def _import_media(source: AssetSource, asset: DetectedAsset, game_dir: Path) -> None:
-    entry = asset.entries[0]
-    suffix = PurePosixPath(entry.arcname).suffix
+def _import_media(source: AssetSource, item: PlannedItem, game_dir: Path,
+                  converted: Mapping[str, Path]) -> None:
+    entry = item.asset.entries[0]
+    convert = item.asset.convert
+    suffix = convert.suffix if convert else PurePosixPath(entry.arcname).suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
         scratch = Path(handle.name)
     try:
-        source.extract_member(entry.path, scratch)
-        written = media_placement.place(game_dir, asset.media_kind, game_dir.name, scratch)
+        if entry.arcname in converted:
+            shutil.copyfile(converted[entry.arcname], scratch)
+        else:
+            source.extract_member(entry.path, scratch)
+        written = media_placement.place(game_dir, item.asset.media_kind,
+                                        item.stem or game_dir.name, scratch, item.page,
+                                        unsupported=bool(convert and convert.as_is))
         media_placement.record_origin(game_dir, written)
     finally:
         scratch.unlink(missing_ok=True)
@@ -890,8 +954,12 @@ def _sha256(path: Path) -> str:
 
 def execute_import_plan(plan: ImportPlan, source_path: Path,
                         *, progress_cb: Callable[[str], None] | None = None,
-                        declared: dict | None = None) -> dict:
+                        declared: dict | None = None,
+                        converted: Mapping[str, Path] | None = None) -> dict:
     """Execute an import plan, streaming each asset from source_path to its destination.
+
+    `converted` is the files already made for the assets that are converted, keyed by the
+    name the file has in the drop; each is placed from there instead of from the drop.
 
     `declared` is what the sender said each uploaded file is, keyed by the name it arrived
     under. Recorded after the files are on disk, so a failed import writes no claim.
@@ -938,7 +1006,7 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
             elif item.action == "write_info":
                 _import_game_info(source, item.asset, base)
             elif item.action == "replace_media":
-                _import_media(source, item.asset, base)
+                _import_media(source, item, base, converted or {})
                 media_kinds.append(item.asset.media_kind)
             else:
                 raise RuntimeError(f"Unknown import action: {item.action}")

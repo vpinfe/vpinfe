@@ -307,6 +307,7 @@ async def _draw_file(container: ui.column, title: ui.column, library: Library,
             context, f"file:{found.get('id')}",
             lambda: build_file(container, title, library, found, state, family),
             refresh_with="refresh_files")
+        state["panel_rebuild"] = context["rebuild"]
         if settings is not None:
             context["file_settings"] = {**settings, "state": state,
                                         "rebuild": context["rebuild"],

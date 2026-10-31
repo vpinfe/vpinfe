@@ -12,6 +12,7 @@ one that was already made.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -23,11 +24,11 @@ from nicegui import run, ui
 from common import i18n
 from common.failures import why
 from common.i18n import t
-from common.media.media_specs import IMAGE_FAMILY, media_label_map
+from common.media.media_specs import CONVERTIBLE_IMAGE, IMAGE_FAMILY, media_label_map
 from manager.kit import art, candidates, game_tables, offload, panel, verbs
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import import_swap
+from manager.library import convert_row, drop_sheet, import_swap
 
 logger = logging.getLogger("vpinfe.manager.library.import_dialog")
 
@@ -53,10 +54,21 @@ class ReleaseMatch:
     reason: str = ""
 
 
-def not_imported(one: dict[str, Any]) -> str:
-    return t("manager.import_dialog.not_imported_row",
-             kind=t(f"asset.kind.{one.get('kind') or ''}.label"),
-             reason=one.get("reason") or "")
+def initial_ticks(plan: dict[str, Any]) -> dict[int, bool]:
+    return {int(one["index"]): bool(one.get("default_enabled", True))
+            for one in plan.get("items") or ()}
+
+
+def kept_ticks(ticks: dict[int, bool], was: dict[str, Any],
+               fresh: dict[str, Any]) -> dict[int, bool]:
+    """The ticks a person made carried to the items of a fresh plan, matched by what the item
+    is rather than its place in the list."""
+    def key(one: dict[str, Any]) -> tuple[Any, ...]:
+        return one["kind"], one.get("name"), one.get("action"), one.get("member")
+
+    before = {key(one): ticks.get(int(one["index"]), True) for one in was.get("items") or ()}
+    return {int(one["index"]): before.get(key(one), bool(one.get("default_enabled", True)))
+            for one in fresh.get("items") or ()}
 
 
 def _where(plan: dict[str, Any], item: dict[str, Any]) -> str:
@@ -163,14 +175,6 @@ async def _pick(library: Any, reason: str, offered: list[dict[str, Any]],
     return said
 
 
-def dropped_title(source: str, file_count: int) -> str:
-    if source:
-        return t("manager.import_dialog.import_2", name=source)
-    if file_count > 1:
-        return t("manager.import_dialog.import_files", count=file_count)
-    return t("manager.import_dialog.import_drop")
-
-
 @on_page
 async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
                    source: str = "", file_count: int = 0, game_dir: str = "",
@@ -178,6 +182,7 @@ async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
                    allow_new_game: bool = False, media_kind: str = "",
                    location_id: str = "", asset_kind: str = "", add_table: bool = False,
                    replace_table: str = "", instead: bool = False,
+                   table_id: str = "", scope: str = "", page: int = 1,
                    declared: dict | None = None, release: ReleaseMatch | None = None,
                    on_done: Callable[[dict], Any] | None = None) -> None:
     """Show the plan and, if it is confirmed, run it.
@@ -191,47 +196,31 @@ async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
     table, and `instead` that the drop is another release, not a newer file.
     """
     live: dict[str, Any] = {"plan": plan}
-    blocked = list(plan.get("blocked") or [])
+    sheet = drop_sheet.Sheet(plan)
     new_folder = str(plan.get("new_game_dir_name") or "")
-    chosen: dict[int, bool] = {}
-    # A single item with nothing blocked is not a choice, so it gets no checkbox - the
-    # button already says what will happen.
+    chosen = initial_ticks(plan)
     named: dict[str, Any] = {"folder": new_folder, "vps_id": ""}
     asked = {"game_dir": game_dir, "rom_name": rom_name, "allow_new_game": allow_new_game,
              "media_kind": media_kind, "location_id": location_id,
              "asset_kind": asset_kind, "add_table": add_table, "replace_table": replace_table,
-             "instead": instead}
+             "instead": instead, "table_id": table_id, "scope": scope, "page": page}
     swapping = import_swap.Swapping.of(plan.get("choice"), instead=instead)
     game_name = Path(str(plan.get("game_dir") or "")).name
-    base_title = (dropped_title(source, file_count) if new_folder
-                  else t("manager.import_dialog.import_3", name=game_name))
+    base_title = drop_sheet.title(game=game_name, asked=asked, new_game=bool(new_folder),
+                                  source=source)
+    waiting = {"on": sheet.seeded}
+    progress = convert_row.Progress()
+    stopping = {"asked": False}
 
     def table_on() -> bool:
         return import_swap.table_on(live["plan"], chosen)
 
     def asking() -> dict[str, Any]:
-        return {**asked, **(swapping.asked(table_on()) if swapping else {})}
+        return {**asked, **(swapping.asked(table_on()) if swapping else {}), **sheet.asked()}
 
     def items_of(shown: dict[str, Any]) -> list[dict[str, Any]]:
         return list(shown.get("items") or [])
 
-    def single() -> bool:
-        return len(items_of(live["plan"])) == 1 and not blocked
-
-    def kept_choices(shown: dict[str, Any]) -> None:
-        """The ticks a person made carried to the items of a fresh plan, matched by what
-        the item is rather than its place in the list."""
-        def key(one: dict[str, Any]) -> tuple[Any, ...]:
-            return one["kind"], one.get("name"), one.get("action")
-
-        was = {key(one): chosen.get(int(one["index"]), True) for one in items_of(live["plan"])}
-        chosen.clear()
-        chosen.update({int(one["index"]): was.get(key(one),
-                                                  bool(one.get("default_enabled", True)))
-                       for one in items_of(shown)})
-
-    chosen.update({int(one["index"]): bool(one.get("default_enabled", True))
-                   for one in items_of(plan)})
     if swapping is not None:
         swapping.settle(plan)
 
@@ -242,35 +231,45 @@ async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
             ui.label(t("manager.import_dialog.folder_note")) \
                 .classes("manager-help px-3")
             _folder_row(library, named, plan)
-        elif not single() and source:
-            ui.label(t("manager.import_dialog.from", source=(source))) \
+        elif not sheet.single() and source:
+            ui.label(t("manager.drop_sheet.from_pack", source=source, count=file_count)
+                     if file_count > 1 else t("manager.import_dialog.from", source=source)) \
                 .classes("manager-help px-3")
         choice_box = ui.column().classes("gap-2 w-full px-3") if swapping else None
+        table_box = ui.column().classes("gap-2 w-full px-3")
         rows = ui.column().classes("gap-0 w-full manager-import-rows px-3")
-
-        if blocked:
-            with panel.disclosure(t("manager.import_dialog.not_imported", count=len(blocked))) \
-                    .classes("manager-import-blocked px-3"):
-                for one in blocked:
-                    ui.label(not_imported(one)).classes("manager-help")
-
-        count = ui.label("").classes("manager-help px-3")
+        freeze, thaw = drop_sheet.hold_scroll(rows, ui.run_javascript)
+        notice_box = ui.column().classes("gap-0 w-full px-3")
         if release is not None:
             _release_row(release)
 
         def recount() -> None:
+            """The button says what it will do, or what is still to choose."""
             wanted = sum(1 for value in chosen.values() if value)
-            count.text = ("" if single() else
-                          t("manager.import_dialog.imported", wanted=(wanted),
-                                  count=len(items_of(live["plan"]))))
+            base = import_swap.confirm_label(swapping, import_swap.table_on(live["plan"], chosen))
+            go.text = (t("manager.import_dialog.importing") if progress.running
+                       else drop_sheet.go_label(sheet, base, wanted))
+            if (items_of(live["plan"]) and not sheet.reason() and not waiting["on"]
+                    and not progress.running):
+                go.enable()
+            else:
+                go.disable()
 
         def draw(shown: dict[str, Any]) -> None:
+            if shown is not sheet.plan:
+                sheet.take(shown)
             rows.clear()
             with rows:
-                for one in items_of(shown):
-                    _draw_row(one, shown, chosen, single(),
-                              replan if one.get("swap") else recount,
-                              upload_id if _pictured(one, source) else "")
+                _draw_sheet(sheet, shown, chosen, upload_id, replan, recount, progress,
+                            repaint)
+            table_box.clear()
+            with table_box:
+                drop_sheet.draw_table_line(sheet, asked, replan)
+            notice_box.clear()
+            if sheet.ffmpeg_missing():
+                with notice_box:
+                    convert_row.draw_notice(library, replan)
+            footer_aside()
             on = import_swap.table_on(shown, chosen)
             heading.text = (import_swap.title(shown, swapping, release.label if release else "",
                                               on) or base_title)
@@ -278,69 +277,134 @@ async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
                 import_swap.draw(choice_box, shown, swapping, game=game_name,
                                  release_label=release.label if release else "",
                                  changed=replan, on=on)
-                go.text = import_swap.confirm_label(swapping, on)
+
+        def repaint() -> None:
+            """The rows drawn again from the plan already held, for what the server need not
+            be asked about."""
+            freeze()
+            draw(live["plan"])
+            recount()
+            thaw()
+
+        def footer_aside() -> None:
+            aside.clear()
+            with aside:
+                if progress.running:
+                    ui.label(t("manager.drop_sheet.not_added_until")).classes("manager-help")
+                elif sheet.reencodes():
+                    convert_row.draw_wait(sheet)
 
         @on_page
-        async def replan() -> None:
+        async def replan(*, quiet: bool = False) -> None:
             go.disable()
+            freeze()
             try:
-                fresh = await offload.io(library.upload_plan, upload_id, **asking(),
-                                         vps_id=str(named["vps_id"] or ""))
+                fresh = await offload.io(
+                    library.upload_plan, upload_id, **asking(),
+                    vps_id=str(named["vps_id"] or ""),
+                    new_game_dir_name=(str(named["folder"]) if new_folder else None))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("manager: no plan for %r", asking(), exc_info=True)
-                ui.notify(t("manager.uploads.no_destination"), caption=why(exc),
-                          type="negative")
+                if not quiet:
+                    ui.notify(t("manager.uploads.no_destination"), caption=why(exc),
+                              type="negative")
+                waiting["on"] = False
+                recount()
+                thaw()
                 return
-            kept_choices(fresh)
+            ticks = kept_ticks(chosen, live["plan"], fresh)
+            chosen.clear()
+            chosen.update(ticks)
             live["plan"] = fresh
+            sheet.take(fresh)
             if swapping is not None:
                 swapping.settle(fresh, import_swap.table_on(fresh, chosen))
+            seeded = sheet.seeded
+            waiting["on"] = seeded
             draw(fresh)
             recount()
-            if items_of(fresh):
-                go.enable()
+            if seeded:
+                await replan()
+            else:
+                thaw()
+
+        @on_page
+        async def leave() -> None:
+            """Cancel: before the import it closes the sheet, during it it stops the import,
+            which ends with nothing added."""
+            if progress.running:
+                stopping["asked"] = True
+                await offload.io(library.stop_upload_import)
+                return
+            dialog.submit(False)
+
+        @on_page
+        async def run_import() -> None:
+            if sheet.single():
+                wanted = [int(one["index"]) for one in sheet.items()]
+            else:
+                wanted = [i for i, on in sorted(chosen.items()) if on]
+            if not wanted:
+                dialog.submit({"none": True})
+                return
+            progress.running = True
+            progress.parts = {}
+            # Escape cannot leave a run: the answer it ends on is drawn from this dialog.
+            dialog.props("persistent")
+            repaint()
+            try:
+                job = await offload.io(
+                    library.start_upload_import, upload_id, **asking(),
+                    vps_id=str(named["vps_id"] or ""),
+                    new_game_dir_name=(str(named["folder"]) if new_folder else None),
+                    selected=wanted, declared=declared)
+            except Exception as exc:  # noqa: BLE001
+                reason = why(exc)
+                dialog.submit({"failed": reason, "kept": []})
+                return
+            if stopping["asked"]:
+                # Cancel was pressed before the server had a job to stop.
+                await offload.io(library.stop_upload_import)
+            dialog.submit(await _follow_job(library, str(job.get("id") or ""), progress,
+                                            repaint))
 
         with frame.footer():
-            frame.cancel(lambda: dialog.submit(False))
-            go = frame.answer(import_swap.confirm_label(swapping),
-                              lambda: dialog.submit(True), icon=verbs.IMPORT)
-            if not items_of(plan):
-                go.disable()
+            aside = ui.row().classes("items-center gap-2 manager-dialog-aside")
+            frame.cancel(leave)
+            go = frame.answer(import_swap.confirm_label(swapping), run_import,
+                              icon=verbs.IMPORT)
 
         draw(plan)
         recount()
-        follow = _following(library, upload_id, asked, named, draw) if new_folder else None
+        if waiting["on"]:
+            ui.timer(0.05, replan, once=True)
+        follow = _following(named, replan) if new_folder else None
 
     said = await dialog
     if follow is not None:
         follow.cancel(with_current_invocation=True)
     if not said:
+        if progress.running:
+            await offload.io(library.stop_upload_import)
         await run.io_bound(library.abort_upload, upload_id)
         return
-
-    wanted = None if single() else [i for i, on in sorted(chosen.items()) if on]
-    if wanted is not None and not wanted:
+    if said.get("none"):
         await run.io_bound(library.abort_upload, upload_id)
         ui.notify(t("manager.import_dialog.none_selected"), type="warning")
         return
-
-    note = ui.notification(t("manager.import_dialog.importing"), spinner=True, timeout=None)
-    try:
-        report = await offload.io(
-            library.upload_import, upload_id, **asking(),
-            vps_id=str(named["vps_id"] or ""),
-            new_game_dir_name=(str(named["folder"]) if new_folder else None),
-            selected=wanted, declared=declared)
-    except Exception as exc:  # noqa: BLE001
-        note.dismiss()
-        ui.notify(t("manager.import_dialog.import_failed"), caption=why(exc),
+    if said.get("stopped"):
+        await run.io_bound(library.abort_upload, upload_id)
+        ui.notify(t("manager.drop_sheet.stopped"), type="info")
+        return
+    if "failed" in said:
+        ui.notify(t("manager.import_dialog.import_failed"), caption=str(said["failed"]),
                   type="negative")
         await run.io_bound(library.abort_upload, upload_id)
-        kept = list((getattr(exc, "details", None) or {}).get("replaced_tables") or ())
+        kept = list(said.get("kept") or ())
         if kept:
             await _swap_kept(library, kept, swapping, live["plan"], release, on_done)
         return
-    note.dismiss()
+    report = said["report"]
     swapped = list(report.get("replaced_tables") or ())
     if not report.get("added_tables") and not swapped:
         brought = len(report.get("imported") or ())
@@ -386,14 +450,84 @@ async def _swap_kept(library: Any, kept: list[dict[str, Any]],
 # Past this many rows a bundle is a list to read, not pictures to look at.
 PICTURES_UP_TO = 12
 
+POLL_S = 0.4
+# Reads of the job that may fail in a row before the import is reported lost. The job runs on
+# whether or not it is watched, so one dropped read is not an answer.
+LOST_AFTER = 5
 
-def _pictured(item: dict[str, Any], source: str) -> bool:
-    """Whether the row leads with the picture of its file: a loose image, which is the only
-    thing the upload serves. A file inside an archive is not extracted until it is imported,
-    so where the drop was an archive there is no picture to ask for."""
+
+async def _follow_job(library: Any, job_id: str, progress: convert_row.Progress,
+                      repaint: Callable[[], Any]) -> dict[str, Any]:
+    """An import job followed to its end, redrawing the rows as its files move. Answers one
+    of `{"report": ...}`, `{"stopped": True}` and `{"failed": why, "kept": [swapped tables]}`."""
+    missed = 0
+    while True:
+        await asyncio.sleep(POLL_S)
+        try:
+            found = await offload.io(library.job, job_id)
+        except Exception as exc:  # noqa: BLE001
+            missed += 1
+            if missed < LOST_AFTER:
+                continue
+            reason = why(exc)
+            return {"failed": reason, "kept": []}
+        missed = 0
+        parts = {str(one["member"]): one for one in found.get("parts") or ()}
+        if parts != progress.parts:
+            progress.parts = parts
+            repaint()
+        if found.get("state") == "running":
+            continue
+        result = dict(found.get("result") or {})
+        if found.get("state") == "failed":
+            return {"failed": str(found.get("error") or ""), "kept": []}
+        if found.get("stopped") or result.get("stopped"):
+            return {"stopped": True}
+        if result.get("failed"):
+            return {"failed": str(result.get("error") or ""),
+                    "kept": list(result.get("replaced_tables") or ())}
+        return {"report": result}
+
+
+def _pictured(item: dict[str, Any]) -> bool:
+    """Whether the row leads with the picture of its file: an image, loose or inside the
+    archive, which the upload serves by the path the file has in the drop."""
     name = str(item.get("name") or "")
-    return (int(item["index"]) < PICTURES_UP_TO and Path(name).suffix.lower() in IMAGE_FAMILY
-            and (not source or source == name))
+    return (int(item["index"]) < PICTURES_UP_TO
+            and Path(name).suffix.lower() in IMAGE_FAMILY + CONVERTIBLE_IMAGE)
+
+
+def _draw_sheet(sheet: drop_sheet.Sheet, shown: dict[str, Any], chosen: dict[int, bool],
+                upload_id: str, replan: Callable[[], Any], recount: Callable[[], Any],
+                progress: convert_row.Progress, repaint: Callable[[], Any]) -> None:
+    """The rows: a lone file as it is, anything more under a heading for each kind of thing
+    it holds, with the variants to choose between above the plain rows of their kind."""
+    def changed(one: dict[str, Any]) -> Callable[[], Any]:
+        return replan if one.get("swap") else recount
+
+    def row(one: dict[str, Any], single: bool,
+            goes_to: Callable[[], None] | None = None) -> None:
+        _draw_row(sheet, one, shown, chosen, single, changed(one),
+                  upload_id if _pictured(one) else "", goes_to,
+                  progress=progress, replan=replan, redraw=repaint)
+
+    if sheet.single():
+        for one in shown.get("items") or ():
+            row(one, True)
+        return
+    sections = sheet.sections()
+    for section in sections:
+        if len(sections) > 1:
+            ui.label(drop_sheet.heading(section.key)).classes("manager-fact-heading")
+        for group in section.groups:
+            drop_sheet.draw_group(sheet, group, upload_id=upload_id, changed=replan)
+        for one in section.items:
+            row(one, False, drop_sheet.place_select(sheet, str(one["member"]), replan)
+                if sheet.has_place(one) else None)
+        for one in section.unclaimed:
+            drop_sheet.draw_unclaimed(sheet, one, upload_id=upload_id, changed=replan)
+        for one in section.refused:
+            drop_sheet.draw_refused(one)
 
 
 def _slot(item: dict[str, Any]) -> str:
@@ -403,41 +537,70 @@ def _slot(item: dict[str, Any]) -> str:
     return media_label_map().get(kind) or str(item.get("label") or item.get("kind") or "")
 
 
-def _draw_row(item: dict[str, Any], plan: dict[str, Any], chosen: dict[int, bool],
-              single: bool, changed: Callable[[], Any], upload_id: str = "") -> None:
+GLYPHS = {"sound": "graphic_eq", "video": "movie"}
+
+
+def _sub_line(plan: dict[str, Any], item: dict[str, Any],
+              view: dict[str, Any] | None) -> str:
+    """What the file is for, where it lands, what it replaces, how big it is and what
+    converting does to it. A fact appears once: a file kept in the game folder says so in
+    place of the folder."""
+    line = [_slot(item)]
+    if item.get("basis") == "other":
+        line.append(t("manager.drop_sheet.other_saved"))
+    elif not item.get("media_kind"):
+        line.append(_where(plan, item))
+    if item.get("replaces"):
+        line.append(str(item["replaces"]))
+    line.append(i18n.size(int(item.get("size") or 0)))
+    said = convert_row.note(view)
+    if said:
+        line.append(said)
+    return game_tables.JOIN.join(line)
+
+
+def _draw_row(sheet: drop_sheet.Sheet, item: dict[str, Any], plan: dict[str, Any],
+              chosen: dict[int, bool], single: bool, changed: Callable[[], Any],
+              upload_id: str = "", goes_to: Callable[[], None] | None = None, *,
+              progress: convert_row.Progress, replan: Callable[[], Any],
+              redraw: Callable[[], Any]) -> None:
     """One thing that will land: its picture, what it is called, what it is for and what it
     does to what is there. Where it goes is the tooltip, since the slot says what the path
-    would."""
+    would. `goes_to` draws the choice of place for a file somebody placed; a picture, sound
+    or video draws the choice of what it is converted to."""
     index = int(item["index"])
     name = str(item.get("name") or "")
-    with ui.row().classes("items-center gap-3 w-full no-wrap manager-import-row"):
+    member = str(item.get("member") or name)
+    view = sheet.view(member)
+    with ui.row().classes("items-center gap-3 w-full manager-import-row"
+                          + (" manager-convert-row" if view else " no-wrap")):
         if not single:
             box = ui.checkbox(value=chosen[index]).props("dense")
+            if progress.running:
+                box.disable()
 
             def picked() -> Any:
                 chosen[index] = bool(box.value)
                 return changed()
 
             box.on_value_change(picked)
-        if upload_id or item.get("media_kind"):
-            candidates.thumb(art.upload_picture(upload_id, name, size=art.CELL)
-                             if upload_id else "", "")
-        with ui.column().classes("gap-0 grow min-w-0"):
+        if upload_id or item.get("media_kind") or view:
+            glyph = GLYPHS.get(str((view or {}).get("kind") or ""), "")
+            candidates.thumb(art.upload_picture(upload_id, member, size=art.CELL)
+                             if upload_id and not glyph else "", glyph)
+        with ui.column().classes("gap-0 grow min-w-0 manager-convert-text"):
             ui.label(name).classes("manager-member-name truncate")
-            line = [_slot(item)]
-            if not item.get("media_kind"):
-                line.append(_where(plan, item))
-            if item.get("replaces"):
-                line.append(str(item["replaces"]))
-            ui.label(game_tables.JOIN.join(line)).classes("manager-member-table truncate") \
+            ui.label(_sub_line(plan, item, view)).classes("manager-member-table truncate") \
                 .tooltip(f"→ {_where(plan, item)}")
             made = game_tables.made_from_it_line(list(item.get("made_from_it") or []))
             if made:
                 with ui.row().classes("items-center gap-1 no-wrap min-w-0"):
                     ui.icon("error_outline").classes("manager-attention-icon")
                     ui.label(made).classes("manager-member-table truncate")
-        ui.label(i18n.size(int(item.get("size") or 0))) \
-            .classes("manager-member-qualifier")
+        if goes_to is not None:
+            goes_to()
+        convert_row.draw(sheet, member, ticked=single or chosen.get(index, True),
+                         progress=progress, replan=replan, redraw=redraw)
 
 
 def _folder_row(library: Any, named: dict[str, Any], plan: dict[str, Any]) -> None:
@@ -495,10 +658,9 @@ def _release_row(release: ReleaseMatch) -> None:
                      (panel.FULL, draw)])
 
 
-def _following(library: Any, upload_id: str, asked: dict[str, Any], named: dict[str, Any],
-               draw: Callable[[dict[str, Any]], None]) -> ui.timer:
-    """The rows drawn again from the plan under the folder name as typed, asked once the
-    typing pauses. A name the install will not take leaves them; the import says why."""
+def _following(named: dict[str, Any], replan: Callable[..., Any]) -> ui.timer:
+    """The sheet planned again under the folder name as typed, asked once the typing pauses.
+    A name the install will not take leaves the rows without a notice; the import says why."""
     seen = {"was": str(named["folder"])}
 
     async def look() -> None:
@@ -506,15 +668,7 @@ def _following(library: Any, upload_id: str, asked: dict[str, Any], named: dict[
         if folder == seen["was"]:
             return
         seen["was"] = folder
-        try:
-            fresh = await offload.io(library.upload_plan, upload_id, **asked,
-                                     vps_id=str(named["vps_id"] or ""),
-                                     new_game_dir_name=folder)
-        except Exception:  # noqa: BLE001
-            logger.debug("manager: no plan under %r", folder, exc_info=True)
-            return
-        if folder == str(named["folder"]):
-            draw(fresh)
+        await replan(quiet=True)
 
     return ui.timer(0.3, look)
 

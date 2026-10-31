@@ -14,7 +14,7 @@ from manager.extensions import ext_groups, ext_mark
 from manager.frontend import players as players_page
 from manager.frontend import themes as themes_page
 from manager.kit import busy, deeplink, game_tables, panel
-from manager.library import mediasource, row_drag
+from manager.library import row_drag
 from manager.workbench.all_settings import (
     _all_settings,
     _all_settings_shown,
@@ -51,7 +51,6 @@ from manager.workbench.game_guides import _guides_block, _guides_label
 from manager.workbench.game_media import _media_block
 from manager.workbench.game_play import _play_block
 from manager.workbench.game_table import (
-    _after_an_add,
     _collections_block,
     _collections_label,
     _game_block,
@@ -65,6 +64,9 @@ from manager.workbench.game_table import (
 from manager.workbench.launcher import _app_keeps_settings, _config_backups, _launcher_details
 from manager.workbench.subject_verbs import SUBJECT_VERBS
 from manager.workbench.tag import _tag_details, _tag_games
+
+# The subjects whose panel is a place a picture can be dropped, and the field naming whose.
+PICTURE_OWNERS = {"collection": "name", "player": "id"}
 
 
 def sections_for(subject: str) -> tuple[Section, ...]:
@@ -120,6 +122,11 @@ async def _rail(context: dict[str, Any], subject: str,
     verbs_of = SUBJECT_VERBS.get(subject)
     if header is not None and verbs_of is not None:
         panel.subject_menu(header, verbs_of(context))
+    if subject in ("game", "table") and (declare_drop := state.get("declare_drop")):
+        declare_drop(game=context["game_id"], table=context.get("lens") or "")
+    elif subject in PICTURE_OWNERS and (declare_drop := state.get("declare_drop")):
+        key = PICTURE_OWNERS[subject]
+        declare_drop(picture=str(context[subject].get(key) or ""), of=subject)
     declared = context.get("rail") or (
         (*sections_for(subject), *_group_sections(context)) if subject in ("game", "table")
         else sections_for(subject))
@@ -137,8 +144,6 @@ async def _rail(context: dict[str, Any], subject: str,
     with ui.element("div").classes("w-full grow min-h-0 manager-sections") as sections:
         if subject == "collection":
             sections._props[row_drag.TARGET] = context["collection"]["name"]
-        if subject in ("game", "table"):
-            mediasource.take_table_drops(sections, context, _after_an_add(context))
         # The rows are their own region so they can scroll without taking the work with
         # them. A rail longer than the panel is the ordinary case for a device, and one
         # that moves what you are reading is the wrong half to move.

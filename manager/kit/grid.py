@@ -54,6 +54,10 @@ NO_MENU = "menuless"
 # A row whose data says this is true cannot be ticked, where the grid is given
 # `rows_not_selectable` (an empty list will do).
 NOT_SELECTABLE = "unselectable"
+# A row whose data says this is true takes no dropped file: it carries the class the page
+# script reads to show the no-drop cursor.
+NO_DROP = "dropless"
+NO_DROP_CLASS = "manager-drop-no"
 
 
 @dataclass
@@ -1087,6 +1091,8 @@ def build(columns: list[dict[str, Any]], rows: list[dict[str, Any]], scope: str,
         # The ":" prefix marks this as JavaScript. Without it AG Grid calls a string and
         # the grid dies as an empty table rather than an error.
         ":getRowId": "params => params.data.id",
+        ":getRowClass": f"params => params.data && params.data[{json.dumps(NO_DROP)}] "
+                        f"? {json.dumps(NO_DROP_CLASS)} : undefined",
         # The checkbox belongs to the row, so it stays with the row's left edge.
         "selectionColumnDef": {"pinned": "left"},
         # The workbench follows the focused row, and focus is not selection: arrowing

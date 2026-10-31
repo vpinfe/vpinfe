@@ -2246,6 +2246,7 @@ The plan lists each thing it found with where it will go, and `blocked` is what 
 
 - Name a game with `game_id=` and `add_table=True` to add the table to a game already in the library instead of making a new one.  The manifest then needs `games:read` as well.
 - Without `add_table`, a table for a game that has one takes the place of its default table and keeps its entry.  Pass `replace_table=` with a table id to replace another, and `carry=[...]`, the kinds of file named for the old table (`backglass`, `ini`, `pov`...) that follow it to the new one; each plan item that replaces a table says what is carried in `swap`.  The old files go to Backups.
+- Name a table of the game with `table_id=` and the media and the files named for a table (`backglass`, `ini`, `script`, `pov`, `scv`, `nix`) are named for that table.  `scope=` (`"game"` or `"table"`) overrides what media is named for, where left out a game with one table is named for the game, and `page=` is the page a paged media kind is written as, from 1.
 - Call `analyze(folder)` first to say what a folder holds before planning.
 - Pass `selected=[...]` to `execute`, the `index` of each plan item to import, to import some of what the plan lists.
 - Pass `declared={"Taxi 1.2.vpx": {"host": "example", "host_item_id": "t-9", "confirmed_by": "declared"}}` to `execute` to record where each file came from.  A claim that names a record has to say how it is known.

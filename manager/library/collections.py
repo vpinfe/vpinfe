@@ -252,7 +252,8 @@ def all_games_row(count: int, opens_on: str = "") -> dict[str, Any]:
             "count": count, "games_said": str(count), "missing_said": "", "hidden_said": "",
             "added": 0, "matched": 0, "excluded": 0, "missing": 0, "hidden": 0,
             "attention": "", "opens_on": not opens_on, "in_frontend": True, "in_menu": MENU_IN,
-            "unsaved": False, "order": "", "limit": None, "pinned": True, "_raw": {}}
+            "unsaved": False, "order": "", "limit": None, "pinned": True, "_raw": {},
+            grid.NO_DROP: True}
 
 
 def _order_line(row: dict[str, Any]) -> str:

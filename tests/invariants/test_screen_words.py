@@ -62,6 +62,7 @@ ASSET = {
     "manager.discovery.gap.backglass_asset": LOADS,
     "manager.discovery.gap.backglasses_asset": LOADS,
     "config.library.hidden_asset_kinds.label": LOADS,
+    "manager.drop_sheet.section_with": LOADS,
     "manager.assets.assets": LOADS,
     "manager.assets.assets_missing": LOADS,
     "manager.assets.search_assets": LOADS,

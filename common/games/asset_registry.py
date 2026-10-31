@@ -18,7 +18,7 @@ logger = logging.getLogger("vpinfe.common.games.asset_registry")
 # Archive containers are opened and inspected, never classified as a bare file.
 ARCHIVE_EXTENSIONS = frozenset({".zip", ".vpxz", ".rar", ".7z"})
 
-VIDEO_EXTENSIONS = frozenset({".mp4"})
+VIDEO_EXTENSIONS = frozenset({".mp4", ".webm"})
 AUDIO_EXTENSIONS = frozenset({".mp3", ".ogg"})
 # Deliberately NOT folded into MEDIA_EXTENSIONS: a bare .txt must never classify
 # as media - ROM and altsound archives carry alias.txt and friends. Doc
@@ -247,8 +247,8 @@ def classify_bare_extension(filename: str) -> AssetSpec | None:
 def match_media_kind(filename: str) -> str | None:
     """Resolve a media file to its canonical media kind (backglass, wheel, ...), or None.
 
-    Exact canonical filenames win; otherwise a keyword in the stem plus the extension
-    family (image vs video vs audio) decides the slot.
+    Exact canonical filenames win; otherwise a keyword that is a whole word of the stem,
+    plus the extension family (image vs video vs audio), decides the slot.
     """
     ext = Path(filename).suffix.lower()
     if ext not in MEDIA_EXTENSIONS and ext not in DOC_EXTENSIONS:
@@ -288,8 +288,9 @@ def match_media_kind(filename: str) -> str | None:
             return "real_dmd_color_video" if color else "real_dmd_video"
         return None
 
+    words = set(re.split(r"[^a-z0-9]+", stem))
     for keywords, image_kind, video_kind in _MEDIA_KEYWORDS:
-        if any(kw in stem for kw in keywords):
+        if words.intersection(keywords):
             if ext in VIDEO_EXTENSIONS:
                 return video_kind
             if ext in IMAGE_EXTENSIONS:

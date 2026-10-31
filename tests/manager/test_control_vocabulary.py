@@ -67,6 +67,10 @@ BUDGET = {
     "import_dialog.py": (2, "the per-item tick in the import confirmation and the "
                             "destination picker's do-not-ask-again - a choice over a list "
                             "and a one-off promise, neither of them a fact row"),
+    "drop_sheet.py": (2, "the tick on a file with no place yet, disabled until it has one, "
+                         "and the one on a refused file, disabled for good: the same "
+                         "per-file choice as the confirmation's rows, which a fact row "
+                         "would draw as a switch"),
     "import_swap.py": (1, "the tick on each file the old table has under its own name, in "
                           "the replace confirmation - a choice among files, which a fact "
                           "row would draw as a switch beside every one"),

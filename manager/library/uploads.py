@@ -16,9 +16,10 @@ name ever does.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
@@ -28,28 +29,37 @@ from common.failures import why
 from common.i18n import t
 from manager.kit import offload
 from manager.kit.on_page import on_page
-from manager.library import import_dialog
+from manager.library import drop_sheet, drop_target, import_dialog
 
 logger = logging.getLogger("vpinfe.manager.library.uploads")
 
-# What a drop lands on, and therefore what it means.
-TARGET_LIBRARY = "library"
-TARGET_GAME = "game"
-TARGET_SLOT = "slot"
-# On a panel's element that takes drops itself. `_DND_SCRIPT` spells it too.
-OWN_DROP = "data-drop-own"
+# The attribute an element declares what a drop on it means with: JSON naming ids, which
+# `drop_target.resolve` reads. The nearest element up from the pointer that has one wins.
+DROP = "data-drop"
+# What a place that takes its own drop declares, so the page-wide handler leaves it alone.
+OWN_ZONE = '{"own": true}'
+
+
+def declaration(**ids: Any) -> str:
+    """What an element's `data-drop` holds for these ids, an id left empty left out."""
+    return json.dumps({key: value for key, value in ids.items() if value})
+
+
+def declare(element: Any, **ids: Any) -> None:
+    """Make `element` mean this target when a file is dropped on it or anything in it.
+    No ids at all takes the declaration away."""
+    named = declaration(**ids)
+    if named != "{}":
+        element._props[DROP] = named
+    else:
+        element._props.pop(DROP, None)
 
 
 @dataclass(frozen=True)
 class Drop:
-    """Where a drop landed, read off the DOM rather than guessed at."""
+    """A finished upload and where it landed, as the page script saw it."""
 
-    target: str = TARGET_LIBRARY
-    # The row's id, which for both grids is the id of the thing the row is about.
-    row_id: str = ""
-    # The media kind, where it landed on a cell that names one.
-    media_kind: str = ""
-    asset_kind: str = ""
+    where: drop_target.Where = field(default_factory=drop_target.Where)
     upload_id: str = ""
     name: str = ""
     count: int = 0
@@ -164,37 +174,39 @@ if (!window.__managerDnd) {
     return cut > 0 ? first.slice(0, cut) : '';
   }
 
-  // Where the pointer is decides the target, and it beats any checked selection: a
-  // person who let go on a row meant that row. Null inside a dialog, which covers the
-  // page: a dialog that takes a drop takes it itself.
+  // What the pointer is over, reported as it is. Nothing here decides which game or slot:
+  // the page does, from these facts and the view it is showing. Null inside a dialog,
+  // which covers the page, and over a place that takes its own drop.
   function landed(target) {
-    if (target.closest && target.closest('.q-dialog')) return null;
-    // A panel with a place that takes drops refuses one anywhere else on it: a drop on
-    // its header read as the page's would make a new game.
-    const pane = target.closest ? target.closest('.manager-workbench') : null;
-    if (pane && pane.querySelector('[data-drop-own]')) return null;
-    const cell = target.closest ? target.closest('.ag-cell') : null;
-    const row = target.closest ? target.closest('.ag-row') : null;
-    if (!row) return {target: 'library'};
-    const rowId = row.getAttribute('row-id') || '';
-    const colId = cell ? (cell.getAttribute('col-id') || '') : '';
-    if (colId.indexOf('media_') === 0 || colId.indexOf('thumb_') === 0) {
-      return {target: 'slot', row_id: rowId,
-              media_kind: colId.replace(/^(media_|thumb_)/, '')};
+    if (!target.closest || target.closest('.q-dialog')) return null;
+    const zone = target.closest('[data-drop]');
+    let declared = null;
+    if (zone) {
+      try { declared = JSON.parse(zone.getAttribute('data-drop')); } catch (e) {}
+      if (declared && declared.own) return null;
     }
-    if (colId.indexOf('asset_') === 0) {
-      return {target: 'game', row_id: rowId, asset_kind: colId.slice(6)};
-    }
-    return {target: 'game', row_id: rowId};
+    const cell = target.closest('.ag-cell');
+    const row = target.closest('.ag-row');
+    return {
+      row_id: row ? (row.getAttribute('row-id') || '') : '',
+      col_id: cell ? (cell.getAttribute('col-id') || '') : '',
+      cell: cell ? Array.from(cell.classList) : [],
+      declared: declared,
+      refused: !declared && document.body.dataset.dropsOn !== 'library',
+      nodrop: !declared && !!(row && row.classList.contains('manager-drop-no')),
+      el: declared ? zone
+        : (cell && cell.matches('.manager-drop-media, .manager-drop-asset')) ? cell : row,
+    };
   }
+
+  const facts = (where) => ({row_id: where.row_id, col_id: where.col_id,
+                             cell: where.cell, declared: where.declared});
 
   const lit = (el, on) => { if (el) el.classList.toggle('manager-drop-lit', on); };
   let hot = null;
 
-  function highlight(where, event) {
-    const el = where.target === 'library' ? null
-      : (event.target.closest(where.target === 'slot' || where.asset_kind
-                              ? '.ag-cell' : '.ag-row'));
+  function highlight(where) {
+    const el = where.el || null;
     if (el !== hot) { lit(hot, false); hot = el; lit(hot, true); }
   }
 
@@ -227,8 +239,14 @@ if (!window.__managerDnd) {
       clear();
       return;
     }
+    if (where.refused || where.nodrop) {
+      event.dataTransfer.dropEffect = 'none';
+      document.body.classList.remove('manager-dropping');
+      clear();
+      return;
+    }
     document.body.classList.add('manager-dropping');
-    highlight(where, event);
+    highlight(where);
   });
   // A place that takes its own drop stops the page's dragover, so a row lit on the way
   // there is put out as the pointer enters it.
@@ -248,7 +266,10 @@ if (!window.__managerDnd) {
     document.body.classList.remove('manager-dropping');
     const where = landed(event.target);
     clear();
-    if (where) send(collect(event.dataTransfer), emit, where);
+    if (!where) return;
+    // Nothing is read for a drop that is refused: the page says why.
+    if (where.refused || where.nodrop) emit({status: 'refused', ...facts(where)});
+    else send(collect(event.dataTransfer), emit, facts(where));
   });
 }
 """
@@ -258,6 +279,13 @@ def install() -> None:
     """Make the whole document a drop target, every grid in it. A drop arrives on
     `manager_dnd`, which the page hears with a `listener`."""
     ui.run_javascript(_DND_SCRIPT)
+
+
+def drops_on(view: str, client: Any) -> None:
+    """Tell the page script whether the view showing takes a file dropped on it. Takes the
+    client, not the slot: a view that reads before it draws renders from a background task."""
+    taken = "library" if drop_target.VIEWS.get(view) else ""
+    client.run_javascript(f"document.body.dataset.dropsOn = {json.dumps(taken)};")
 
 
 def listener(on_arrival: Callable[[Drop], Any]) -> Callable[[Any], None]:
@@ -289,7 +317,7 @@ def listener(on_arrival: Callable[[Drop], Any]) -> Callable[[Any], None]:
                                payload.get("message") or "no browser message")
                 ui.notify(t("manager.uploads.read_failed"), caption=_stopped(payload),
                           type="negative")
-        elif status == "done":
+        elif status == "done" or status == "refused":
             _clear(state)
             if state["busy"]:
                 # One at a time. A second import landing while the first is still being
@@ -332,10 +360,11 @@ async def _handle(state: dict[str, Any], payload: dict[str, Any],
     # like a drop that did nothing.
     client = state["client"]
     try:
-        found = Drop(target=str(payload.get("target") or TARGET_LIBRARY),
-                     row_id=str(payload.get("row_id") or ""),
-                     media_kind=str(payload.get("media_kind") or ""),
-                     asset_kind=str(payload.get("asset_kind") or ""),
+        found = Drop(where=drop_target.Where(
+                         row_id=str(payload.get("row_id") or ""),
+                         col_id=str(payload.get("col_id") or ""),
+                         cell=tuple(str(one) for one in payload.get("cell") or ()),
+                         declared=payload.get("declared") or None),
                      upload_id=str(payload.get("upload_id") or ""),
                      name=str(payload.get("name") or ""),
                      count=int(payload.get("count") or 0))
@@ -352,14 +381,18 @@ async def _handle(state: dict[str, Any], payload: dict[str, Any],
 
 
 @on_page
-async def analyzed(library: Any, upload_id: str) -> dict[str, Any] | None:
+async def analyzed(library: Any, upload_id: str, *,
+                   game_named: bool = False) -> dict[str, Any] | None:
     """What the install makes of what arrived, or None once it has said why not and let
-    the files go."""
+    the files go. Pictures, sounds and videos no name explains are not refused where a game
+    is named: the sheet asks where each goes."""
     try:
         analysis = await offload.io(library.upload_analysis, upload_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("manager: upload %s could not be analyzed", upload_id, exc_info=True)
         analysis = {"error": why(exc)}
+    if game_named and analysis.get("placeable") and not analysis.get("assets"):
+        return {key: value for key, value in analysis.items() if key != "error"}
     if analysis.get("error"):
         logger.warning("manager: upload %s was not read: %s", upload_id, analysis["error"])
         ui.notify(t("manager.uploads.read_failed"), caption=str(analysis["error"]),
@@ -370,6 +403,31 @@ async def analyzed(library: Any, upload_id: str) -> dict[str, Any] | None:
 
 
 @on_page
+async def arrived(library: Any, upload_id: str, *, source: str, on_done: Callable[[], Any],
+                  analysis: dict[str, Any] | None = None, reads_names: bool = True,
+                  **target: Any) -> None:
+    """The one conversation every file that arrives has, whichever zone or picker took it: what
+    it is read as, then the confirmation. `target` is what the zone declared - `confirmed_import`
+    names the fields.
+
+    A caller that has read the files already hands the `analysis` over. `reads_names` is False
+    for a target whose files are taken as the target says they are, never off their names.
+    """
+    if analysis is None:
+        analysis = {}
+        if reads_names:
+            read = await analyzed(library, upload_id,
+                                  game_named=bool(target.get("game_dir"))
+                                  and not target.get("asset_kind")
+                                  and not target.get("media_kind"))
+            if read is None:
+                return
+            analysis = read
+    await confirmed_import(library, upload_id, analysis, source=source, on_done=on_done,
+                           **target)
+
+
+@on_page
 async def confirmed_import(library: Any, upload_id: str, analysis: dict[str, Any], *,
                            source: str, on_done: Callable[[], Any], file_count: int = 0,
                            game_id: str = "",
@@ -377,6 +435,7 @@ async def confirmed_import(library: Any, upload_id: str, analysis: dict[str, Any
                            media_kind: str = "", location_id: str = "",
                            asset_kind: str = "", add_table: bool = False,
                            replace_table: str = "", instead: bool = False,
+                           table_id: str = "", scope: str = "", page: int = 1,
                            on_imported: Callable[[dict, dict], Any] | None = None,
                            release: import_dialog.ReleaseMatch | None = None) -> None:
     """From staged files to the import confirmation, and what follows a yes.
@@ -394,16 +453,16 @@ async def confirmed_import(library: Any, upload_id: str, analysis: dict[str, Any
                                 rom_name=rom_name, allow_new_game=allow_new_game,
                                 media_kind=media_kind, location_id=location_id,
                                 asset_kind=asset_kind, add_table=add_table,
-                                replace_table=replace_table, instead=instead)
+                                replace_table=replace_table, instead=instead,
+                                table_id=table_id, scope=scope, page=page)
     except Exception as exc:  # noqa: BLE001
         logger.warning("manager: upload %s has no destination", upload_id, exc_info=True)
         ui.notify(t("manager.uploads.no_destination"), caption=why(exc),
                   type="negative")
         await run.io_bound(library.abort_upload, upload_id)
         return
-    if not plan.get("items"):
-        reasons = dict.fromkeys(import_dialog.not_imported(one)
-                                for one in plan.get("blocked") or ())
+    if not any(plan.get(name) for name in ("items", "groups", "unclaimed")):
+        reasons = dict.fromkeys(drop_sheet.Sheet(plan).refusals())
         for said in reasons or [t("manager.uploads.nothing_import")]:
             logger.warning("manager: upload %s had nothing to import: %s", upload_id, said)
             ui.notify(said, type="warning")
@@ -427,7 +486,8 @@ async def confirmed_import(library: Any, upload_id: str, analysis: dict[str, Any
         rom_name=rom_name,
         allow_new_game=allow_new_game, media_kind=media_kind, location_id=location_id,
         asset_kind=asset_kind, add_table=add_table, replace_table=replace_table,
-        instead=instead, declared=_declared(analysis, game_id),
+        instead=instead, table_id=table_id, scope=scope, page=page,
+        declared=_declared(analysis, game_id),
         release=release, on_done=done)
 
 

@@ -19,7 +19,7 @@ from nicegui import ui
 from common.i18n import t
 from common.media.media_specs import media_family, media_label_map
 from manager.kit import art, media_ownership, verbs
-from manager.library import mediapages, mediaview
+from manager.library import mediapages, mediaview, uploads
 
 # Top of the cabinet down to the floor. Kinds on the same row are the same screen shown
 # two ways - a still and its video - and share a row so the pair reads as one slot.
@@ -137,6 +137,7 @@ def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
     tile = ui.element("div").classes(
         f"manager-mediatile manager-mediatile--{state}"
         f"{' manager-mediatile--on' if kind == selected else ''}")
+    uploads.declare(tile, game=game_id, table=table_id, slot=kind)
     if on_pick is not None:
         tile.classes("cursor-pointer").on("click", lambda: on_pick(kind))
     with tile:

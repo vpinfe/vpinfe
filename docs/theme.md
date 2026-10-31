@@ -593,6 +593,8 @@ Important: theme code for these windows should support both static images and vi
 
 Do not hardcode these windows to image-only rendering with `getImageURL()` alone, or `bg.mp4` / `dmd.mp4` will never appear even when the files exist.
 
+A video file may be `.mp4` or `.webm`, so `bg.webm` and `dmd.webm` fill the same slots.
+
 **Or leave it to core.** At contract 2 a theme need not ship these pages: core draws the
 selected game's backglass or score view, video first and the still otherwise, on black. A
 theme that wants its own page gets the same result from one attribute, with no script:
@@ -1736,6 +1738,9 @@ Twenty-two. `entry.media` lists the ones a game has a file for, using exactly th
 full-single-screen serves `fss.png` as its `playfield` — the filename changes, the kind
 name does not.
 
+A video kind's file may be `.mp4` or `.webm`: `table.mp4` in the table is the default name,
+and `table.webm` fills the same kind. `/media/<table id>/<kind>` serves whichever is there.
+
 ### How a file is chosen
 
 Three tiers per kind, most specific first:
@@ -1761,8 +1766,8 @@ Within a tier the kind's extension family is tried in order, first hit wins:
 
 | Family | Extensions |
 |---|---|
-| image | `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.gif` |
-| video | `.mp4` |
+| image | `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.gif` `.apng` |
+| video | `.mp4` `.webm` |
 | audio | `.mp3` `.ogg` |
 | document | `.pdf` `.md` `.txt` `.html` |
 

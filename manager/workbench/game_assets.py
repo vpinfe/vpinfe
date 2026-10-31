@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import replace
 from functools import partial
 from typing import Any
 
@@ -13,7 +14,7 @@ from common import i18n
 from common.games.asset_registry import ALWAYS_KEPT as _ALWAYS_KEPT
 from common.i18n import t
 from manager.kit import game_tables, media_ownership, offload, panel, states, verbs
-from manager.library import file_acts, file_states
+from manager.library import file_acts, file_states, uploads
 from manager.workbench.core import HEADING, _asset_name, _rows
 from manager.workbench.file import _asset_detail_of, _asset_file_block, _same_file, _served
 from manager.workbench.game_media import _kept_kinds, _pick_slot
@@ -120,13 +121,15 @@ def _asset_entries(context: dict[str, Any],
 
     entries: list[tuple[Any, ...]] = []
 
-    def row(kind: str, value: Any) -> None:
-        entries.append((_asset_name(kind), value, *((pick(kind),) if pick else ())))
+    def row(kind: str, value: Any, table: str = "") -> None:
+        dropping = replace(pick(kind), drop=uploads.declaration(
+            game=context["game_id"], table=table, asset=kind)) if pick else None
+        entries.append((_asset_name(kind), value, *((dropping,) if dropping else ())))
 
     if chosen is not None:
         entries += [(HEADING, t("manager.workbench.table_4"))]
         for kind, state in sorted(resolved.items()):
-            row(kind, _resolved_row(context, chosen, kind, state))
+            row(kind, _resolved_row(context, chosen, kind, state), str(chosen["id"]))
             if kind == "script" and state.get("resolution") != "none":
                 digest = str(chosen.get("vbs_hash") or "")
                 # The hash travels with the asset rather than sitting in a group of

@@ -36,6 +36,11 @@ class CandidateTests(LogosCase):
 
         self.assertEqual(self.chosen(), {"Bally": "Bally.jpg", "Williams": "Williams.png"})
 
+    def test_an_animated_png_is_a_logo_too(self) -> None:
+        self.make("Stern.apng")
+
+        self.assertEqual(self.chosen(), {"Stern": "Stern.apng"})
+
     def test_the_file_with_no_era_wins_over_the_ones_with_one(self) -> None:
         self.make("Gottlieb (1971-1980).png", "Gottlieb.png", "Gottlieb (1950-1970).png")
 

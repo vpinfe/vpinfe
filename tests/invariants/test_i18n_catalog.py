@@ -252,7 +252,7 @@ SAID_TO_THE_LOG = {
 # Names a person reads the same in every language: products, the systems they run on, and
 # file formats.
 NAMES = frozenset({"VPinFE", "Python", "macOS", "Windows", "Quartz", "Wayland", "X11",
-                   "OGG", "PDF"})
+                   "OGG", "PDF", "WEBM"})
 
 
 def _logged_lines(name: str) -> set[int]:

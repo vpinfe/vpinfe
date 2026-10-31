@@ -217,6 +217,9 @@ Runtime state written by VPinFE, not shown as a setting.
 | `playfield_variant` | choice (table, fss) | `table` | Which playfield picture your library uses: the standard one, or the one captured in Full Single Screen mode |
 | `playfield_resolution` | choice (4k, 1k) | `4k` | The size of playfield pictures VPinFE downloads |
 | `playfield_video_resolution` | choice (4k, 1k) | `1k` | The size of playfield videos VPinFE downloads |
+| `preferred_picture` | choice (auto, png, webp, jpg) | `auto` | The format Convert starts with for pictures. Automatic follows its advice |
+| `preferred_sound` | choice (auto, mp3, ogg) | `auto` | The format Convert starts with for sounds. Automatic follows its advice |
+| `keep_originals` | choice (auto, keep, discard) | `auto` | Whether Convert starts by copying each original to Backups. Automatic keeps them |
 | `manufacturer_logos_dir` | string |  | Put one image per manufacturer here, named for the manufacturer |
 | `wheelset` | string |  | Shows an alternate wheel style, from a folder under medias/wheels/ in each game. A game without it keeps its own wheel. A theme can override this. |
 

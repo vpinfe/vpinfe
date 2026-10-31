@@ -19,6 +19,10 @@ HELPER = "busy.py"
 
 # (file name under manager/, enclosing function) -> why it is not a region's first draw.
 NOT_A_REGION: dict[tuple[str, str], str] = {
+    ("import_dialog.py", "open_for"):
+        "Starts the replan a sheet with a preselected group needs once the dialog is drawn. "
+        "The replan holds the go button and the sheet's scroll itself, and its rows are "
+        "already there.",
     ("page.py", "manager_page"):
         "Puts the update count on the Devices entry once the devices have answered: "
         "a badge in the nav, not a region's content.",

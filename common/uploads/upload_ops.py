@@ -8,11 +8,14 @@ confirm, and it can only be answered on this side - a caller cannot see the inst
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import hashlib
+import logging
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import IO, Any
 
-from common import service_errors
+from common import atomic_write, service_errors
 from common.failures import why
 from common.games import identity_claims, media_browse, media_placement, media_service, table_swap
 from common.games.asset_registry import spec_for
@@ -20,24 +23,22 @@ from common.games.game_metadata import made_from
 from common.games.table_lens import table_settings
 from common.i18n import t
 from common.media import sized_media
-from common.media.media_specs import IMAGE_FAMILY
-from common.uploads import upload_session_service
+from common.media.media_specs import CONVERTIBLE_IMAGE, IMAGE_FAMILY
+from common.runtime import jobs
+from common.uploads import arrival, drop_convert, upload_session_service
 from common.uploads.asset_analyzer_service import (
     AnalysisResult,
     DetectedAsset,
     analyze_path,
-    analyze_upload_session,
+    open_listed,
+    session_source,
 )
 from common.uploads.asset_import_service import (
     ImportPlan,
     PlannedItem,
     SwapKeptError,
-    build_import_plan,
-    build_media_slot_plan,
-    build_readme_plan,
     execute_import_plan,
     find_vps_entry,
-    only_kind,
     require_plain_rom,
     select_plan_items,
     vps_folder_name,
@@ -48,9 +49,12 @@ from common.uploads.upload_session_service import (
     UploadTooLargeError,
 )
 
-__all__ = ["NothingImportableError", "UnprocessableUploadError", "UploadTooLargeError",
+logger = logging.getLogger("vpinfe.common.uploads.upload_ops")
+
+__all__ = ["NothingImportableError", "PicksNeededError", "UnprocessableUploadError",
+           "UploadTooLargeError",
            "abort", "add_file", "analysis_of", "begin", "begin_from", "execute", "picture",
-           "plan_for", "summary"]
+           "plan_for", "single_image", "start_import", "stop_import", "summary"]
 
 
 class UnprocessableUploadError(service_errors.ServiceError):
@@ -59,6 +63,10 @@ class UnprocessableUploadError(service_errors.ServiceError):
 
 class NothingImportableError(service_errors.ServiceError):
     """A plan with no items. `details` carries what was blocked and why."""
+
+
+class PicksNeededError(service_errors.ServiceError):
+    """Groups of files for one place with no pick made. `details` carries the groups."""
 
 
 def _asset_to_dict(asset: DetectedAsset) -> dict:
@@ -74,15 +82,23 @@ def _asset_to_dict(asset: DetectedAsset) -> dict:
     }
 
 
+def _analysis_files(analysis: AnalysisResult) -> list[str]:
+    """Every file the source holds, recognized or not, once each."""
+    held = [entry.arcname for one in analysis.assets for entry in one.entries if not entry.is_dir]
+    return list(dict.fromkeys([*held, *analysis.unrecognized]))
+
+
 def _analysis_to_dict(analysis: AnalysisResult) -> dict:
     return {
         "source_kind": analysis.source_kind,
         "source_name": analysis.source_name,
         "has_game": analysis.has_game,
         "assets": [_asset_to_dict(one) for one in analysis.assets],
+        "files": _analysis_files(analysis),
         "notes": list(analysis.notes),
         "error": analysis.error,
         "unrecognized": list(analysis.unrecognized),
+        "placeable": [one for one in analysis.unrecognized if arrival.offers_places(one)],
         "bundle_info": analysis.bundle_info,
     }
 
@@ -124,6 +140,8 @@ def _replaces(plan: ImportPlan, item: PlannedItem) -> str:
 
 def _media_replaces(base: Path, item: PlannedItem) -> str:
     kind = item.asset.media_kind
+    if item.asset.convert and item.asset.convert.as_is:
+        return ""   # a file kept as it is displaces nothing and takes no slot
     if media_placement.displaced(base, kind, base.name, Path(item.destination).suffix):
         return t("asset.plan.replaces_current")
     shown = media_service.resolved_media(base).get(kind)
@@ -140,7 +158,40 @@ def _made_from_replaced(plan: ImportPlan, item: PlannedItem) -> list[str]:
             if item.replaces else [])
 
 
-def _plan_to_dict(plan: ImportPlan) -> dict:
+def _candidate_dict(one: arrival.Candidate) -> dict:
+    return {"member": one.member, "name": one.name, "size": one.size, "basis": one.basis,
+            "width": one.width, "height": one.height}
+
+
+def _group_dict(group: arrival.Group) -> dict:
+    return {"key": group.key, "kind": group.kind, "media_kind": group.media_kind,
+            "label": group.label, "preselected": group.preselected, "extra": group.extra,
+            "table_id": group.table_id,
+            "candidates": [_candidate_dict(one) for one in group.candidates]}
+
+
+def _unclaimed_dict(one: arrival.Unclaimed) -> dict:
+    return {"member": one.member, "name": one.name, "size": one.size,
+            "choices": [{"kind": c.kind, "media_kind": c.media_kind, "label": c.label,
+                         "table_id": c.table_id, "suggested": c.suggested}
+                        for c in one.choices]}
+
+
+def _left_out_dict(one: arrival.LeftOut) -> dict:
+    return {"member": one.member, "name": one.name, "reason_key": one.reason_key,
+            "reason": one.reason}
+
+
+def _convert_of(drop: drop_convert.Drop | None, item: PlannedItem) -> dict | None:
+    """What the row of a file that is converted on the way in shows and offers."""
+    if drop is None or item.asset.kind != "media":
+        return None
+    return drop.view_of(item.asset)
+
+
+def _plan_to_dict(plan: ImportPlan, found: arrival.Arrival | None = None,
+                  drop: drop_convert.Drop | None = None) -> dict:
+    views = [_convert_of(drop, item) for item in plan.items]
     return {
         "game_dir": plan.game_dir,
         "new_game_dir_name": plan.new_game_dir_name,
@@ -164,12 +215,41 @@ def _plan_to_dict(plan: ImportPlan) -> dict:
                 "replaces": _replaces(plan, item),
                 "made_from_it": _made_from_replaced(plan, item),
                 "swap": _swap_of(plan, item),
+                "member": item.member,
+                "basis": item.basis,
+                "extra": item.extra,
+                "convert": views[index],
             }
             for index, item in enumerate(plan.items)
         ],
+        "convert": _convert_state(drop, views),
         "blocked": _blocked(plan),
         "choice": _choice_of(plan),
+        "tables": list(plan.tables or (found.tables if found else ())),
+        "scope": _scope_of(found),
+        "groups": [_group_dict(one) for one in found.groups] if found else [],
+        "unclaimed": [_unclaimed_dict(one) for one in found.unclaimed] if found else [],
+        "left_out": [_left_out_dict(one) for one in found.left_out] if found else [],
     }
+
+
+def _convert_state(drop: drop_convert.Drop | None, views: list[dict | None]) -> dict | None:
+    """What the drop as a whole needs to know about converting: whether FFmpeg is there, and
+    whether any file is re-encoded, which is when a table playing matters. None where no
+    file in the drop converts."""
+    if drop is None or not any(views):
+        return None
+    return {"ffmpeg": drop.ffmpeg_state(), "usable": not drop.lacks_ffmpeg_for(views),
+            "reencodes": any(one and one.get("reencodes") for one in views),
+            "wait": drop.wait}
+
+
+def _scope_of(found: arrival.Arrival | None) -> str:
+    """What media is named for: the table the drop landed on, or the game. Empty where the
+    drop named no table or the game has one to name it for."""
+    if found is None or not found.target.table_id or not found.tables:
+        return ""
+    return "game" if found.target.scope == "game" else "table"
 
 
 def _swap_of(plan: ImportPlan, item: PlannedItem) -> dict | None:
@@ -215,13 +295,6 @@ def _session_dir(upload_id: str) -> Path:
         raise service_errors.NotFoundError(why(exc)) from exc
 
 
-def _analysis_for(upload_id: str) -> tuple[AnalysisResult, Path]:
-    analysis, source_path = _analyzed(upload_id)
-    if analysis.error:
-        raise UnprocessableUploadError(analysis.error)
-    return analysis, source_path
-
-
 def _vps_entry(vps_id: str) -> dict | None:
     vps_id = (vps_id or "").strip()
     if not vps_id:
@@ -260,6 +333,10 @@ def summary(upload_id: str) -> dict[str, Any]:
 
 
 def abort(upload_id: str) -> None:
+    """Throw the staged files away, unless an import is reading them: that one ends the
+    session itself, or leaves it to expire."""
+    if upload_session_service.is_held(upload_id):
+        return
     upload_session_service.cleanup_session(upload_id)
 
 
@@ -279,115 +356,177 @@ def _source_of(upload_id: str) -> Path | None:
         raise service_errors.NotFoundError(why(exc)) from exc
 
 
-def _analyzed(upload_id: str) -> tuple[AnalysisResult, Path]:
+def _session_source(upload_id: str) -> Path:
     source = _source_of(upload_id)
-    if source is not None:
-        return analyze_path(source), source
-    return analyze_upload_session(_session_dir(upload_id))
+    return source if source is not None else session_source(_session_dir(upload_id))
 
 
-def _single_file(upload_id: str) -> Path:
-    """The one file a slot import takes, or a refusal."""
+def _loose_files(upload_id: str) -> list[Path]:
+    """The files a session holds when it is one file or loose files only; none for a folder
+    or an archive."""
     source = _source_of(upload_id)
     if source is not None:
-        files = [source] if source.is_file() else []
-    else:
-        session = _session_dir(upload_id)
-        if any(one.is_dir() for one in session.iterdir()):
-            files = []
-        else:
-            files = [one for one in session.iterdir() if one.is_file()]
+        return [source] if source.is_file() else []
+    session = _session_dir(upload_id)
+    if any(one.is_dir() for one in session.iterdir()):
+        return []
+    return [one for one in session.iterdir() if one.is_file()]
+
+
+def single_image(upload_id: str) -> Path:
+    """The one picture a session holds, for a place that takes exactly one.
+
+    Refused before anything is read where it is several files, a folder or archive, or a
+    file that is not an image: a table dropped here is a large file for no reason.
+    """
+    files = _loose_files(upload_id)
     if len(files) != 1:
-        raise service_errors.RefusedError(t("error.uploads.slot_file"))
+        raise service_errors.RefusedError(t("error.uploads.picture_file"))
+    if files[0].suffix.lower() not in IMAGE_FAMILY:
+        raise service_errors.RefusedError(t("error.uploads.not_picture", name=files[0].name))
     return files[0]
 
 
 def picture(upload_id: str, name: str, size: int | None) -> sized_media.Served:
-    """A picture in the session, at `size`, by the name it was dropped under.
-
-    Only a loose image: what is inside an archive is not on disk until the import, so it
-    has no picture to draw and is a 404 rather than an extraction.
+    """A picture in the session, at `size`: a loose image by the name it was dropped under,
+    or a member of an archive or folder by its path inside it, taken out to a folder of its
+    own. Anything else is a 404.
     """
-    wanted = PurePosixPath(name).name
-    if wanted != name or Path(wanted).suffix.lower() not in IMAGE_FAMILY:
+    suffix = Path(name).suffix.lower()
+    if suffix not in IMAGE_FAMILY and suffix not in CONVERTIBLE_IMAGE:
         raise service_errors.NotFoundError(t("error.uploads.no_picture", name=name))
     size = sized_media.size_or_refuse(size, "image")
     source = _source_of(upload_id) or _session_dir(upload_id)
-    found = [source] if source.is_file() else sorted(source.rglob(wanted))
-    chosen = next((one for one in found if one.name == wanted and one.is_file()), None)
+    chosen = _loose_picture(source, name) or _member_picture(upload_id, source, name)
+    if chosen is not None and suffix in CONVERTIBLE_IMAGE:
+        chosen = _preview_of(upload_id, chosen)
     if chosen is None:
         raise service_errors.NotFoundError(t("error.uploads.no_picture", name=name))
     return sized_media.served(chosen, size)
 
 
-def analysis_of(upload_id: str) -> dict[str, Any]:
-    analysis, _source = _analyzed(upload_id)
-    return _analysis_to_dict(analysis)
+def _preview_of(upload_id: str, picture_path: Path) -> Path | None:
+    """A PNG of a picture a browser cannot draw, made once. None where it does not open."""
+    from PIL import Image
 
-
-def _slot_plan(upload_id: str, game_dir: str, media_kind: str) -> ImportPlan:
-    """A drop that named a slot, which decides the media key on its own.
-
-    Nothing is read off the filename - any image works on an image slot and is written
-    under that slot's own name. The file only has to belong to the slot's family, and one
-    file only, because a slot holds one thing.
-    """
-    if not game_dir:
-        raise service_errors.RefusedError(
-            t("error.uploads.slot_game"))
+    kept = upload_session_service.picture_folder(upload_id) / (
+        hashlib.blake2b(str(picture_path).encode(), digest_size=8).hexdigest() + "-preview.png")
+    if kept.is_file():
+        return kept
     try:
-        return build_media_slot_plan(_single_file(upload_id), game_dir=Path(game_dir),
-                                     media_kind=media_kind)
-    except ValueError as exc:
-        raise service_errors.RefusedError(why(exc)) from exc
-
-
-def _named_plan(upload_id: str, request: dict[str, Any]) -> ImportPlan | None:
-    """The plan for a drop whose one file the sender has already named, or None where
-    the analysis decides what arrived."""
-    game_dir = request.get("game_dir") or ""
-    if request.get("media_kind"):
-        return _slot_plan(upload_id, game_dir, request["media_kind"])
-    if request.get("asset_kind") != "readme":
+        with Image.open(picture_path) as opened:
+            opened.load()
+            drawn = opened.convert("RGBA" if "A" in opened.getbands() else "RGB")
+        with atomic_write.staged_for(kept) as partial:
+            drawn.save(partial, "PNG")
+        return kept
+    except Exception:  # noqa: BLE001 - a picture that does not open is one that is not there
+        logger.warning("Could not draw %s", picture_path.name, exc_info=True)
         return None
-    if not game_dir:
-        raise service_errors.RefusedError(t("error.uploads.slot_game"))
-    return build_readme_plan(_single_file(upload_id), game_dir=Path(game_dir))
 
 
-def _built_plan(analysis: AnalysisResult, request: dict[str, Any]) -> ImportPlan:
+def _loose_picture(source: Path, name: str) -> Path | None:
+    wanted = PurePosixPath(name).name
+    if wanted != name:
+        return None
+    if source.is_file():
+        return source if source.name == wanted else None
+    if (exact := source / wanted).is_file():
+        return exact
+    found = sorted(source.rglob(wanted), key=lambda one: (len(one.parts), one))
+    return next((one for one in found if one.name == wanted and one.is_file()), None)
+
+
+def _member_picture(upload_id: str, source: Path, name: str) -> Path | None:
+    """The member named `name` of the archive or folder the session reads, extracted once.
+    None where the member is not in it, or it is too big to draw."""
+    kept = (upload_session_service.picture_folder(upload_id)
+            / f"{hashlib.blake2b(name.encode(), digest_size=8).hexdigest()}"
+              f"{PurePosixPath(name).suffix.lower()}")
+    if kept.is_file():
+        return kept
+    held = source if source.is_file() else _session_source(upload_id)
+    reader, entries, _error = open_listed(held)
+    if reader is None:
+        return None
     try:
-        rom_name = require_plain_rom(request.get("rom_name") or "")
+        entry = next((one for one in entries if not one.is_dir and one.arcname == name), None)
+        if entry is None or entry.size > arrival.MEASURE_LIMIT:
+            return None
+        with atomic_write.staged_for(kept) as partial:
+            reader.extract_member(entry.path, partial)
+        return kept
+    except Exception:  # noqa: BLE001 - a damaged member is a picture that is not there
+        logger.warning("Could not take %s out of the upload", name, exc_info=True)
+        return None
+    finally:
+        reader.close()
+
+
+def analysis_of(upload_id: str) -> dict[str, Any]:
+    return _analysis_to_dict(analyze_path(_session_source(upload_id)))
+
+
+def _arrival_for(upload_id: str, request: dict[str, Any]) -> arrival.Arrival:
+    """What the session holds, read for the slot or table the request names, with the
+    sender's assignments taken in. Refused where the request is wrong, 422 where nothing
+    can be made of the drop."""
+    game_dir = request.get("game_dir") or ""
+    if (request.get("media_kind") or request.get("asset_kind") == "readme") and not game_dir:
+        raise service_errors.RefusedError(t("error.uploads.slot_game"))
+    try:
+        found = arrival.read(
+            _session_source(upload_id), game_dir=game_dir or None,
+            media_kind=request.get("media_kind") or "",
+            asset_kind=request.get("asset_kind") or "",
+            rom_name=require_plain_rom(request.get("rom_name") or ""),
+            table_id=request.get("table_id") or "", scope=request.get("scope") or "",
+            page=request.get("page") or 1)
+        if request.get("assignments"):
+            found = arrival.apply(found, request["assignments"])
     except ValueError as exc:
         raise service_errors.RefusedError(why(exc)) from exc
+    if found.refusal:
+        raise UnprocessableUploadError(found.refusal)
+    return found
+
+
+def _drop_for(upload_id: str, found: arrival.Arrival,
+              request: dict[str, Any]) -> drop_convert.Drop:
+    return drop_convert.Drop(found.source_path, upload_session_service.picture_folder(upload_id),
+                             request.get("convert"))
+
+
+def _built_plan(found: arrival.Arrival, request: dict[str, Any], *,
+                require_picks: bool, drop: drop_convert.Drop | None = None) -> ImportPlan:
     try:
-        plan = build_import_plan(
-            analysis,
-            game_dir=Path(request["game_dir"]) if request.get("game_dir") else None,
-            rom_name=rom_name,
+        return arrival.plan(
+            found, picks=request.get("picks"), require_picks=require_picks,
+            converting=drop.conversion_for if drop else None,
             allow_new_game=request.get("allow_new_game", False),
             location_id=request.get("location_id") or "",
             add_table=bool(request.get("add_table")),
             replace_table=request.get("replace_table") or "",
-            carry=request.get("carry"),
-            instead=bool(request.get("instead")),
-        )
+            carry=request.get("carry"), instead=bool(request.get("instead")))
+    except arrival.ChooseOneError as exc:
+        raise PicksNeededError(
+            why(exc), details={"groups": [_group_dict(one) for one in exc.groups]}) from exc
     except ValueError as exc:
+        if any(request.get(named) for named in (
+                "media_kind", "asset_kind", "picks", "assignments", "table_id")):
+            raise service_errors.RefusedError(why(exc)) from exc
         # Nowhere to put it. Something a person fixes - a share to mount, a location to
         # pick - so it is blocked rather than a fault.
         raise service_errors.BlockedError(why(exc)) from exc
-    return only_kind(plan, request.get("asset_kind") or "")
 
 
 def plan_for(upload_id: str, request: dict[str, Any]) -> dict[str, Any]:
     """What the drop would do, before it does any of it."""
-    named = _named_plan(upload_id, request)
-    if named is not None:
-        return _plan_to_dict(named)
-    analysis, _source = _analysis_for(upload_id)
+    found = _arrival_for(upload_id, request)
     vps_entry = _vps_entry(request.get("vps_id") or "")
-    plan = _built_plan(analysis, request)
-    return _plan_to_dict(_as_asked(plan, request, vps_entry, None))
+    drop = _drop_for(upload_id, found, request)
+    plan = _built_plan(found, request, require_picks=False, drop=drop)
+    return _plan_to_dict(_as_asked(plan, request, vps_entry, None), found, drop)
 
 
 def _as_asked(plan: ImportPlan, request: dict[str, Any], vps_entry: dict | None,
@@ -428,51 +567,143 @@ def _declared_identities(declared: Mapping[str, Any] | None) -> dict:
     return out
 
 
-def _run(plan: ImportPlan, source: Path, declared: dict,
-         upload_id: str) -> dict[str, Any]:
+def _run(plan: ImportPlan, source: Path, declared: dict, upload_id: str,
+         drop: drop_convert.Drop | None = None, said: drop_convert.Said | None = None,
+         halted: Callable[[], bool] | None = None) -> dict[str, Any]:
     blocked = _blocked(plan)
-    if not plan.items:
-        raise NothingImportableError(t("error.uploads.nothing_importable"),
-                                     details={"blocked": blocked})
+    converted: Mapping[str, Path] = {}
+    clean: Callable[[], None] = lambda: None  # noqa: E731
+    if drop is not None:
+        converted, clean = drop.convert_all(
+            [item.asset for item in plan.items if item.asset.convert],
+            said or (lambda *_: None), halted or (lambda: False))
     try:
-        report = execute_import_plan(plan, source, declared=declared)
+        if halted is not None and halted():
+            raise drop_convert.StoppedError
+        report = execute_import_plan(plan, source, declared=declared, converted=converted)
     except SwapKeptError as exc:
         raise service_errors.RefusedError(
             why(exc), details={"replaced_tables": exc.replaced}) from exc
     except (ValueError, FileNotFoundError) as exc:
         raise service_errors.RefusedError(why(exc)) from exc
+    finally:
+        clean()
     upload_session_service.cleanup_session(upload_id)
     report["blocked"] = blocked
+    return report
+
+
+def _accounted(found: arrival.Arrival) -> list[str]:
+    """Every member of the drop the plan showed somewhere."""
+    members = [member for claim in found.pool for member in claim.members]
+    members += [one.member for one in found.unclaimed]
+    members += [one.member for one in found.left_out]
+    return sorted(set(members))
+
+
+@dataclass(frozen=True)
+class _Prepared:
+    found: arrival.Arrival
+    plan: ImportPlan
+    identities: dict
+    drop: drop_convert.Drop
+    vps_entry: dict | None
+
+
+def _prepared(upload_id: str, request: dict[str, Any],
+              declared: Mapping[str, Any] | None) -> _Prepared:
+    """Everything an import needs settled before it starts, so that a request that cannot
+    be carried out is refused whole and not part way through."""
+    # Before the session is even looked up: a claim we cannot trust is a bad request
+    # whichever upload it names, and saying so early keeps the reason readable.
+    identities = _declared_identities(declared)
+
+    found = _arrival_for(upload_id, request)
+    vps_entry = _vps_entry(request.get("vps_id") or "")
+    drop = _drop_for(upload_id, found, request)
+    plan = _built_plan(found, request, require_picks=True, drop=drop)
+    if vps_entry is not None and not plan.new_game_dir_name:
+        raise service_errors.RefusedError(t("error.uploads.vps_new_only"))
+
+    # No selection sent takes what the plan ticked: an extra or an unticked file is offered,
+    # not imported.
+    selected = request.get("selected")
+    if selected is None:
+        selected = [index for index, item in enumerate(plan.items) if item.default_enabled]
+    asked = _as_asked(plan, request, vps_entry, selected)
+    if not asked.items:
+        raise NothingImportableError(t("error.uploads.nothing_importable"),
+                                     details={"blocked": _blocked(asked)})
+    return _Prepared(found, asked, identities, drop, vps_entry)
+
+
+def _finished(upload_id: str, ready: _Prepared, said: drop_convert.Said | None = None,
+              halted: Callable[[], bool] | None = None) -> dict[str, Any]:
+    found, plan = ready.found, ready.plan
+    report = _run(plan, found.source_path, ready.identities, upload_id, ready.drop, said,
+                  halted)
+    held = set(_accounted(found))
+    written = sorted({one.arcname for item in plan.items for one in item.asset.entries
+                      if one.arcname in held})
+    report["written"] = written
+    report["not_written"] = [member for member in _accounted(found) if member not in written]
+    if report.get("new_game"):
+        if ready.vps_entry is not None:
+            _associate(report, ready.vps_entry)
+        else:
+            _guess(report)
     return report
 
 
 def execute(upload_id: str, request: dict[str, Any],
             declared: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Bring the session into the library, and clear it."""
-    # Before the session is even looked up: a claim we cannot trust is a bad request
-    # whichever upload it names, and saying so early keeps the reason readable.
-    identities = _declared_identities(declared)
+    return _finished(upload_id, _prepared(upload_id, request, declared))
 
-    named = _named_plan(upload_id, request)
-    if named is not None:
-        # A slot import has one file and no choice to make about it: the slot decided the
-        # destination, so there is nothing to select from and nothing to name.
-        return _run(named, _single_file(upload_id), identities, upload_id)
 
-    analysis, source_path = _analysis_for(upload_id)
-    vps_entry = _vps_entry(request.get("vps_id") or "")
-    plan = _built_plan(analysis, request)
-    if vps_entry is not None and not plan.new_game_dir_name:
-        raise service_errors.RefusedError(t("error.uploads.vps_new_only"))
+def start_import(upload_id: str, request: dict[str, Any],
+                 declared: Mapping[str, Any] | None = None) -> jobs.Job:
+    """`execute` as a job a caller watches: refused before it starts for anything `execute`
+    would refuse. `Job.parts` has one entry per converted file, by its name in the drop. A
+    stopped import has added nothing and leaves the session as it was."""
+    ready = _prepared(upload_id, request, declared)
+    parts: dict[str, dict[str, object]] = {}
+    upload_session_service.hold(upload_id)
 
-    plan = _as_asked(plan, request, vps_entry, request.get("selected"))
-    report = _run(plan, source_path, identities, upload_id)
-    if report.get("new_game"):
-        if vps_entry is not None:
-            _associate(report, vps_entry)
-        else:
-            _guess(report)
-    return report
+    def work(job: jobs.Job) -> dict[str, Any]:
+        def said(member: str, state: str, fraction: float) -> None:
+            parts[member] = {"member": member, "state": state, "pct": int(fraction * 100)}
+            job.parts = list(parts.values())
+            done = sum(1 for one in parts.values() if one["state"] == drop_convert.DONE)
+            job.progress(done, len(parts), PurePosixPath(member).name)
+
+        try:
+            return _finished(upload_id, ready, said, job.halt.is_set)
+        except drop_convert.StoppedError:
+            job.stopped = True
+            return {"stopped": True}
+        except service_errors.RefusedError as exc:
+            kept = (exc.details or {}).get("replaced_tables")
+            if not kept:
+                raise
+            return {"failed": True, "error": why(exc), "replaced_tables": kept}
+        finally:
+            upload_session_service.release(upload_id)
+
+    try:
+        return jobs.submit(jobs.KIND_UPLOAD_IMPORT, work, stoppable=True,
+                           stop_link="/api/v1/uploads/import/stop")
+    except BaseException:
+        upload_session_service.release(upload_id)
+        raise
+
+
+def stop_import() -> bool:
+    """Ask a running import to stop before it adds anything. False where none is running."""
+    running = jobs.active(jobs.KIND_UPLOAD_IMPORT)
+    for job in running:
+        job.halt.set()
+    return bool(running)
 
 
 def _guess(report: dict) -> None:

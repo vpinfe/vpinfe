@@ -126,8 +126,8 @@ class Inspector:
         draft = self.draft
         with ui.row().classes("w-full items-center gap-2"):
             if self.file not in KEPT_WHOLE and not self.needle.strip():
-                panel.action(t("manager.support.inspect.leave_out"), self._leave_out,
-                             icon=verbs.HIDE, hint=t("manager.support.inspect.leave_out_hint"))()
+                panel.action(t("manager.support.inspect.skip_file"), self._leave_out,
+                             icon=verbs.HIDE, hint=t("manager.support.inspect.skip_file_hint"))()
             for name in draft.left_out:
                 panel.action(t("manager.support.inspect.put_back", file=name),
                              lambda name=name: self._put_back(name),

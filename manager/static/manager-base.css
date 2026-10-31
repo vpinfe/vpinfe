@@ -2833,8 +2833,16 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
   max-height: 86vh; display: flex; flex-direction: column;
 }
 .manager-import-rows { max-height: 46vh; overflow-y: auto; }
-.manager-import-row { padding: 4px 0; }
-.manager-import-blocked .q-item { min-height: 0; padding: 2px 0; }
+.manager-import-row { padding: 4px 6px; border-radius: 4px; }
+.manager-import-rows > .manager-import-row:nth-child(even) { background: var(--grid-stripe); }
+/* A file with no place in the drop reads as set aside, not as an error. */
+.manager-import-row--refused .manager-member-name { color: var(--ink-2); }
+/* A picture, sound or video row: the choice of what it is converted to sits at the right and
+   drops under the text where the card narrows. The text column has to shrink - at its own
+   width it would push the choice out of the card. */
+.manager-convert-text { flex: 1 1 0; min-width: 0; }
+.manager-convert-col { flex: 0 0 272px; min-width: 0; }
+@media (max-width: 640px) { .manager-convert-col { flex-basis: 100%; } }
 
 /* The list of names a command can use, folded away because eleven rows between two
    settings is a wall. No card and no border: it is help under a control, and a box

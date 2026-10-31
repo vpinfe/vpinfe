@@ -62,6 +62,7 @@ from manager.library import collections as collections_page
 from manager.library import discovery as discovery_page
 from manager.library import (
     discovery_kinds,
+    drop_target,
     games,
     row_drag,
     tageditor,
@@ -494,14 +495,32 @@ async def _took_a_drop(
         library: Library, state: dict, redraw: Callable[[], None], drop: Any) -> None:
     """What a drop meant, and the conversation that follows it.
 
-    Where somebody let go is the whole of the targeting: a row names that game whatever
-    is ticked elsewhere, a media cell names the slot as well, and the empty space of a
-    grid names nothing - which is what makes it a new game rather than a guess about an
-    existing one.
+    Where somebody let go is the whole of the targeting: `drop_target.resolve` reads the
+    row, the cell and any declaration there against the view showing, and a drop that
+    lands on nothing names the library, which is what makes it a new game rather than a
+    guess about an existing one.
     """
     from manager.library import import_dialog, uploads
 
-    game_id, game_dir, media_kind = await offload.io(_drop_target, library, state, drop)
+    try:
+        target = await offload.io(drop_target.resolve, library,
+                                  str(state.get("view") or ""), drop.where)
+    except Exception:
+        logger.exception("manager: a drop's target could not be resolved")
+        await _turned_away(library, drop, t("manager.uploads.not_work"))
+        return
+    if isinstance(target, drop_target.Refusal):
+        await _turned_away(library, drop, target.text())
+        return
+    if not drop.upload_id:
+        await _turned_away(library, drop, t("manager.drop.not_here"))
+        return
+    if target.picture:
+        await _took_a_picture(library, state, drop, target)
+        return
+    if target.covered:
+        ui.notify(t("manager.drop.covered"), type="info")
+    game_id, game_dir, media_kind = target.game, target.folder, target.slot
 
     # A slot drop is not analyzed at all, and that is the whole point of one: the cell
     # said which game and which slot, so any image belongs on an image slot and is
@@ -509,22 +528,20 @@ async def _took_a_drop(
     # the file this is for - one whose name says nothing.
     analysis: dict[str, Any] = {}
     if not media_kind:
-        read = await uploads.analyzed(library, drop.upload_id)
+        read = await uploads.analyzed(library, drop.upload_id,
+                                      game_named=bool(game_dir) and not target.asset)
         if read is None:
             return
         analysis = read
 
-    if drop.target != uploads.TARGET_LIBRARY and not game_dir:
-        ui.notify(t("manager.page.row_unknown"), type="negative")
-        await run.io_bound(library.abort_upload, drop.upload_id)
-        return
-
-    # A drop with no game named can only be a new one, and only if it brought a table.
+    # A drop with no game named is a new game if it brought a table. Without one it is for
+    # a game that is already there, which only the person who dropped it can say.
     new_game = not game_dir and not media_kind
     if new_game and not analysis.get("has_game"):
-        ui.notify(t("manager.page.drop_hint"), type="warning")
-        await run.io_bound(library.abort_upload, drop.upload_id)
-        return
+        picked = await _which_game(library, drop, analysis)
+        if picked is None:
+            return
+        game_id, game_dir, new_game = picked.game, picked.folder, False
 
     # Where a new game would go is settled before anything is planned, because the
     # answer can be "nowhere" and that is not something to discover halfway through.
@@ -537,40 +554,107 @@ async def _took_a_drop(
             return
         where = chosen
 
-    adds = bool(game_dir) and not media_kind
-    done = await game_table.after_a_row_drop(library, state, game_id, redraw) if adds \
-        else redraw
-    await uploads.confirmed_import(
-        library, drop.upload_id, analysis, source=drop.name, file_count=drop.count,
+    on_a_game = bool(game_dir) and not media_kind and not target.asset
+    done = await game_table.after_a_row_drop(library, state, game_id, redraw) if on_a_game \
+        else _put_right(state, redraw, game_id)
+    await uploads.arrived(
+        library, drop.upload_id, analysis=analysis, source=drop.name, file_count=drop.count,
         on_done=done,
         game_id=game_id, game_dir=game_dir, allow_new_game=new_game,
-        media_kind=media_kind, location_id=where, asset_kind=drop.asset_kind,
-        add_table=adds)
+        media_kind=media_kind, location_id=where, asset_kind=target.asset,
+        add_table=on_a_game and not target.table,
+        replace_table=target.table if on_a_game else "",
+        table_id=target.table, page=target.page)
 
 
-def _drop_target(library: Library, state: dict, drop: Any) -> tuple[str, str, str]:
-    """(game id, game folder, media kind) for where a drop landed. Off the loop: the
-    grid's rows are read again if a write has let them go.
+@on_page
+async def _which_game(library: Library, drop: Any,
+                      analysis: dict[str, Any]) -> drop_target.Target | None:
+    """The game a drop with no table is for, as a drop on that game's row would name it.
+    None, with the upload let go of, where there is nothing to ask about or the answer was
+    to cancel."""
+    from manager.library import which_game
 
-    The row id is the id of whatever that grid's rows are about - a game under Games, a
-    table under Tables - so which grid you are on decides how to read it, and the grid
-    you are on is the view.
-    """
-    from manager.library import uploads
+    if not library.games or not analysis.get("assets"):
+        await _turned_away(library, drop, t("manager.page.drop_hint"))
+        return None
+    try:
+        chosen = await which_game.ask(library, analysis)
+        target = await offload.io(drop_target.resolve, library, "games",
+                                  drop_target.Where(row_id=str(chosen["id"]))) \
+            if chosen else None
+    except Exception:
+        logger.exception("manager: the game a drop is for could not be asked or resolved")
+        await _turned_away(library, drop, t("manager.uploads.not_work"))
+        return None
+    if isinstance(target, drop_target.Refusal):
+        await _turned_away(library, drop, target.text())
+    elif target is None:
+        await run.io_bound(library.abort_upload, drop.upload_id)
+    return target if isinstance(target, drop_target.Target) else None
 
-    if drop.target == uploads.TARGET_LIBRARY or not drop.row_id:
-        return "", "", ""
-    game_id = drop.row_id
-    view = state.get("view")
-    if view in ("tables", "media", "assets"):
-        # These rows are about a file, and carry the game they belong to.
-        rows = (library.load_tables() if view == "tables"
-                else library.load_media_rows() if view == "media"
-                else library.load_asset_rows())
-        row = next((one for one in rows if str(one.get("id")) == drop.row_id), None)
-        game_id = str((row or {}).get("game_id") or "")
-    found = next((one for one in library.games if str(one.get("id")) == game_id), None)
-    return game_id, str((found or {}).get("folder") or ""), drop.media_kind
+
+# The hook each grid registers for putting one game's rows back, by the view it serves.
+_ROW_REFRESH = {"games": "refresh_game", "tables": "refresh_game",
+                "media": "refresh_files", "assets": "refresh_files"}
+
+
+def _put_right(state: dict, redraw: Callable[[], None],
+               game_id: str) -> Callable[[], Awaitable[None]]:
+    """What follows a file dropped on one of a game's slots: the rows it changed, and the
+    panel where it is open on that game, put back in place. A page rebuild sends the grid
+    back to the top, so one is kept for a drop that names no game and for a view with no
+    row to refresh."""
+    async def put_right() -> None:
+        view = str(state.get("view") or "")
+        shown = state.get("panel_rebuild")
+        if game_id and view in _ROW_REFRESH and state.get("game") == game_id \
+                and callable(shown):
+            await shown()
+            return
+        refresh = state.get(_ROW_REFRESH.get(view, ""))
+        if game_id and callable(refresh):
+            await refresh(game_id)
+            return
+        redraw()
+    return put_right
+
+
+@on_page
+async def _took_a_picture(library: Library, state: dict, drop: Any,
+                          target: drop_target.Target) -> None:
+    """The one image a drop brought, set as the picture it landed on. Nothing else is
+    read from the drop, and the session is let go whichever way it ends."""
+    try:
+        name, data = await offload.io(library.upload_image, drop.upload_id)
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
+        await _turned_away(library, drop, why(exc))
+        return
+    await run.io_bound(library.abort_upload, drop.upload_id)
+    redraw: Callable[[], Awaitable[None]] | None = None
+    try:
+        if target.picture_of == drop_target.PLAYER:
+            redraw = await players_page.dropped_picture(library, state, target.picture,
+                                                        name, data)
+        else:
+            await offload.io(library.set_collection_image, target.picture, name, data)
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
+        ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
+        return
+    if redraw is not None:
+        await redraw()
+        return
+    ui.notify(t("manager.mediasource.label_saved", label=t("manager.workbench.wheel")),
+              type="positive")
+    if callable(reread := state.get("refresh_collections")):
+        await reread(target.picture if state.get("collection") == target.picture else "")
+
+
+async def _turned_away(library: Library, drop: Any, said: str) -> None:
+    """Say why a drop goes nowhere, and let go of whatever it had already uploaded."""
+    ui.notify(said, type="warning")
+    if drop.upload_id:
+        await run.io_bound(library.abort_upload, drop.upload_id)
 
 
 def reads_before_drawing(view: str, library: Library) -> Callable[[], Any] | None:
@@ -719,6 +803,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     # An address that names a section has to read what that section needs, because the
     # first draw goes straight to render() and only redraw() reads on the way in. Both
     # are asked at once: neither needs the other's answer.
+    if state["view"] == "media" and state.get("group") == report_groups.UNSUPPORTED:
+        await run.io_bound(media_page.arrive_on, library, media_page.UNSUPPORTED_VIEW)
     reads = reads_before_drawing(state["view"], library)
     await asyncio.gather(
         run.io_bound(library.warm, games.SCOPE + views.VIEWS_SUFFIX,
@@ -1364,7 +1450,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
             return
         keys = dict(opens.keys)
         if view_key := keys.pop(games.ARRIVE_VIEW, None):
-            await run.io_bound(games.arrive_on, library, str(view_key))
+            arrive = media_page.arrive_on if opens.view == "media" else games.arrive_on
+            await run.io_bound(arrive, library, str(view_key))
         state.update(keys)
         if opens.arriving is not None:
             state["arriving"] = opens.arriving
@@ -1376,7 +1463,12 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     splitter = ui.splitter(reverse=True, limits=(WORKBENCH_MIN_PX, WORKBENCH_MAX_PX),
                            value=WORKBENCH_WIDE_PX) \
         .props("unit=px").classes("w-full h-full manager-pane-box")
-    with splitter.after, ui.column().classes("w-full h-full gap-0 manager-workbench"):
+    with splitter.after, ui.column().classes("w-full h-full gap-0 manager-workbench") as workbench:
+        def declare_drop(**ids: Any) -> None:
+            uploads.declare(workbench, **ids)
+            workbench.update()
+
+        state["declare_drop"] = declare_drop
         # The selected game's name shares the row with the toggle rather than sitting
         # under it - same class list, same height and same gutter as the nav's header,
         # so neither the icon's inset from the edge nor its height can drift.
@@ -1730,6 +1822,9 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         """Empty the pane. Sync, so render() can call it without awaiting a rebuild."""
         workbench_title.clear()
         panel.clear()
+        state["panel_rebuild"] = None
+        if (declare_drop := state.get("declare_drop")) is not None:
+            declare_drop()
         # The same two-line shape a selected game gets, so the header does not change
         # height or alignment as the selection comes and goes.
         listed = community_page.find(state["view"], state["extensions"])
@@ -1820,6 +1915,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         splitter.classes(remove="manager-no-pane") if has_pane() \
             else splitter.classes(add="manager-no-pane")
         light_nav()
+        uploads.drops_on(state["view"], content.client)
         if state["view"] == "jobs":
             _jobs_opened()
         content.clear()
@@ -2188,7 +2284,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         background_tasks.create(
             setup_page.open_setup(window=in_the_frontends_window), name="manager-setup")
     elif arrives_in_whats_new(whats_new_due, view, window=in_the_frontends_window):
-        background_tasks.create(whats_new_page.open_whats_new(), name="manager-whats-new")
+        background_tasks.create(whats_new_page.open_whats_new(library, state),
+                                name="manager-whats-new")
 
 
 def read_then_render(state: dict[str, Any], library: Library, content: ui.element,
@@ -2234,9 +2331,14 @@ def read_then_render(state: dict[str, Any], library: Library, content: ui.elemen
         busy.start(content, read_devices_then_draw)
         return
     reads = reads_before_drawing(state["view"], library)
-    if reads is not None:
+    # The Won't Play judgement is made against the devices, which change under an open page.
+    judged_by_devices = state["view"] == "media"
+    if reads is not None or judged_by_devices:
         async def read_then_draw() -> None:
-            await run.io_bound(reads)
+            if reads is not None:
+                await run.io_bound(reads)
+            if judged_by_devices:
+                state["devices"][:] = await offload.io(library.devices)
             render()
             if after is not None:
                 await after()

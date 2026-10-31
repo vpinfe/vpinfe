@@ -27,6 +27,8 @@ NO_WHEEL = "no_wheel"
 DMD_ALONE = "dmd_alone"
 # Listed in the report only: it is files, so Tables has no group of games to narrow to.
 NOT_BROUGHT = "not_brought"
+# Counted from the library when the report is shown, not recorded by the importer.
+UNSUPPORTED = "unsupported"
 FROM_ITEMS = {NEED_ROM: "manager.report.need_rom", NOT_MATCHED: "manager.report.not_matched",
               NO_WHEEL: "manager.report.no_wheel", DMD_ALONE: "manager.report.dmd"}
 
@@ -65,6 +67,11 @@ def _made(job: dict[str, Any]) -> list[dict[str, Any]]:
             if row.get("game_id") and not row.get("error") and not row.get("existing")]
 
 
+def made_games(job: dict[str, Any]) -> tuple[str, ...]:
+    """Every game this run made, whether or not it came with a game file."""
+    return tuple(dict.fromkeys(str(row["game_id"]) for row in _made(job)))
+
+
 def tables_made(job: dict[str, Any]) -> int:
     """The game files this run made, which is how many rows Imported shows in Tables."""
     return sum(1 for row in _made(job) if row.get("table") is not False)
@@ -84,3 +91,8 @@ def report_address(job_id: str) -> str:
 def tables_address(job_id: str, group: str) -> str:
     """Tables, narrowed to one group of one report."""
     return "/manager?" + deeplink.query({"view": "tables", "report": job_id, "group": group})
+
+
+def media_address(group: str) -> str:
+    """Media, on the view that holds one group of files."""
+    return "/manager?" + urlencode({"view": "media", "group": group})

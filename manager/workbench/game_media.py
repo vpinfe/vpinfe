@@ -27,6 +27,7 @@ from manager.library import (
     mediapages,
     mediasource,
     mediaview,
+    uploads,
 )
 from manager.library import record as recorder
 from manager.workbench.core import _outside_lines, _provenance, _table_address, _table_line
@@ -265,7 +266,9 @@ def _slot_art(context: dict[str, Any], kind: str, entry: dict[str, Any],
     to show; Enlarge then steps through all of them, starting there."""
     game_id, table_id = context["game_id"], context["lens"]
     label = media_label_map().get(kind, kind)
-    with ui.element("div").classes("manager-slot-art"):
+    box = ui.element("div").classes("manager-slot-art")
+    uploads.declare(box, game=game_id, table=table_id or "", slot=kind, page=page)
+    with box:
         if entry.get("present"):
             version = entry.get("version")
             mediaview.preview(art.media(game_id, kind, table_id or "", version=version,

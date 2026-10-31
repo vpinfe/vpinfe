@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import unittest
 
 from common.media.media_specs import (
+    IMAGE_FAMILY,
     MEDIA_SPECS,
     apply_media_specs,
     canonical_kind,
     game_media_payload,
     media_family,
     media_filename_map,
+    register_mime_types,
 )
 from tests.support.library import fake_game
 
@@ -33,6 +36,15 @@ class MediaSpecTests(unittest.TestCase):
         self.assertEqual(media_filename_map("fss")["playfield"], "fss.png")
         self.assertEqual(game_media_payload(game)["PlayfieldImagePath"],
                          os.path.join(root, "medias", "fss.png"))
+
+
+class AnApngIsAnImage(unittest.TestCase):
+    def test_it_is_in_the_image_family_and_served_as_an_image(self) -> None:
+        self.assertIn(".apng", IMAGE_FAMILY)
+        mimetypes.init()
+        register_mime_types()
+        self.assertEqual(mimetypes.guess_type("wheel.apng")[0], "image/apng")
+        self.assertEqual(mimetypes.guess_extension("image/apng"), ".apng")
 
 
 class MediaFamilyTests(unittest.TestCase):

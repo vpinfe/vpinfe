@@ -18,6 +18,7 @@ from common.games.game_repository import all_games
 from common.games.info_file import MetaConfig
 from common.media import sized_media
 from common.media.media_specs import (
+    IMAGE_FAMILY,
     MEDIA_SPECS,
     active_set_for,
     list_media_sets,
@@ -42,7 +43,7 @@ THUMB_WARM_CHUNK_SIZE = 8
 
 MEDIA_FILENAME_BY_KIND = media_filename_map("table")
 MEDIA_LABEL_BY_KIND = media_label_map()
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+IMAGE_EXTENSIONS = set(IMAGE_FAMILY)
 
 GAME_ATTR_TO_MEDIA_KIND = media_attr_kind_map("table")
 

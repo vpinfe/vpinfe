@@ -18,13 +18,14 @@ from typing import Protocol
 
 from common.failures import why
 from common.games.asset_registry import (
-    ARCHIVE_EXTENSIONS,
     is_readme,
     match_media_kind,
     spec_for,
 )
 from common.host import tools
 from common.i18n import t
+from common.media.media_specs import IMAGE_FAMILY
+from common.uploads.conversion import Conversion
 
 try:
     import rarfile
@@ -78,6 +79,13 @@ class DetectedAsset:
     size: int = 0
     detail: str = ""
     preview: str = ""       # inline text for readme kinds, shown in the confirm dialog
+    # Set by the arrival engine, never by the rules: the page a paged media kind is written
+    # as (0 leaves it to the planner) and the table a per-table file is named for.
+    page: int = 0
+    table_id: str = ""
+    # Set by the arrival engine for a picture, sound or video the install converts: what it
+    # is written as. None for every file placed as it arrived.
+    convert: Conversion | None = None
 
 
 @dataclass(frozen=True)
@@ -640,7 +648,7 @@ def _readme_preview(source: AssetSource, asset: DetectedAsset) -> str:
     binary readme just shows no preview, never blocks the import."""
     entry = asset.entries[0]
     if entry.size > _README_PREVIEW_BYTES or entry.arcname.lower().endswith(
-            (".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf")):
+            (*IMAGE_FAMILY, ".pdf")):
         return ""
     with tempfile.TemporaryDirectory() as scratch:
         dest = Path(scratch) / "readme"
@@ -675,61 +683,82 @@ def _read_bundle_info(source: AssetSource, asset: DetectedAsset) -> dict | None:
 
 # --- Public API ------------------------------------------------------------
 
-def analyze_path(path: Path) -> AnalysisResult:
-    """Analyze a file, archive, or directory and report the assets it contains."""
+def listed_files(entries: list[SourceEntry]) -> list[SourceEntry]:
+    """The files of a listing that are somebody's: no directories, no OS junk."""
+    return [e for e in _normalize(entries) if not e.is_dir]
+
+
+def open_listed(path: Path) -> tuple[AssetSource | None, list[SourceEntry], str]:
+    """Open a file, archive or directory and list it.
+
+    The source is None, with the reason in words, where it cannot be read. A source that
+    comes back is the caller's to close.
+    """
     path = Path(path)
     try:
         source = open_source(path)
     except _MissingBackendError as exc:
-        return AnalysisResult(_source_kind(path), path.name, (), False, error=why(exc))
+        return None, [], why(exc)
     except Exception:
         logger.exception("Failed to open source: %s", path)
-        return AnalysisResult(
-            _source_kind(path), path.name, (), False,
-            error=t("error.uploads.drop_unreadable"))
+        return None, [], t("error.uploads.drop_unreadable")
 
     # Surface a missing RAR tool up front, before the confirm dialog, rather than
     # failing at extraction time after the user has committed to the import.
     if source.kind == "rar" and not rar_tool_available():
         source.close()
-        return AnalysisResult(source.kind, source.name, (), False, error=rar_tool_hint())
-
+        return None, [], rar_tool_hint()
     try:
-        try:
-            entries = source.entries()
-        except _rar_exec_errors() as exc:
-            logger.warning("RAR backend unavailable: %s", exc)
-            return AnalysisResult(
-                source.kind, source.name, (), False, error=rar_tool_hint())
-        except Exception:
-            logger.exception("Failed to list source: %s", path)
-            return AnalysisResult(
-                source.kind, source.name, (), False,
-                error=t("error.uploads.drop_unreadable"))
+        return source, source.entries(), ""
+    except _rar_exec_errors() as exc:
+        logger.warning("RAR backend unavailable: %s", exc)
+        source.close()
+        return None, [], rar_tool_hint()
+    except Exception:
+        logger.exception("Failed to list source: %s", path)
+        source.close()
+        return None, [], t("error.uploads.drop_unreadable")
 
-        assets, notes, has_game, unrecognized = _analyze_entries(entries)
 
-        # A bundle .info is read up front (it is tiny) so its content can seed the
-        # import dialog and be validated before anything is written.
-        assets = [replace(a, preview=_readme_preview(source, a)) if a.kind == "readme" else a
-                  for a in assets]
+def analyze_members(
+        source: AssetSource, entries: list[SourceEntry],
+) -> tuple[list[DetectedAsset], tuple[str, ...], bool, tuple[str, ...], dict | None]:
+    """What the rules find in these entries of `source`: the assets, the notes, whether a
+    table is among them, the paths no rule claimed and the bundle's .info content."""
+    assets, notes, has_game, unrecognized = _analyze_entries(entries)
 
-        bundle_info = None
-        info_assets = [a for a in assets if a.kind == "game_info"]
-        if info_assets:
-            bundle_info = _read_bundle_info(source, info_assets[0])
-            if bundle_info is None:
-                assets = [a for a in assets if a.kind != "game_info"]
-                unrecognized = unrecognized + tuple(e.arcname for e in info_assets[0].entries)
-                notes = list(notes) + [t("asset.analysis.info_skipped")]
+    # A bundle .info is read up front (it is tiny) so its content can seed the
+    # import dialog and be validated before anything is written.
+    assets = [replace(a, preview=_readme_preview(source, a)) if a.kind == "readme" else a
+              for a in assets]
+
+    bundle_info = None
+    info_assets = [a for a in assets if a.kind == "game_info"]
+    if info_assets:
+        bundle_info = _read_bundle_info(source, info_assets[0])
+        if bundle_info is None:
+            assets = [a for a in assets if a.kind != "game_info"]
+            unrecognized = unrecognized + tuple(e.arcname for e in info_assets[0].entries)
+            notes = list(notes) + [t("asset.analysis.info_skipped")]
+    return assets, tuple(notes), has_game, unrecognized, bundle_info
+
+
+def analyze_path(path: Path) -> AnalysisResult:
+    """Analyze a file, archive, or directory and report the assets it contains."""
+    path = Path(path)
+    source, entries, error = open_listed(path)
+    if source is None:
+        return AnalysisResult(source_kind_of(path), path.name, (), False, error=error)
+    try:
+        assets, notes, has_game, unrecognized, bundle_info = analyze_members(source, entries)
     finally:
         source.close()
 
     if not assets:
-        return AnalysisResult(source.kind, source.name, (), False, tuple(notes),
+        return AnalysisResult(source.kind, source.name, (), False, notes,
                               error=t("error.uploads.nothing_recognized"),
                               unrecognized=unrecognized)
-    return AnalysisResult(source.kind, source.name, tuple(assets), has_game, tuple(notes),
+    return AnalysisResult(source.kind, source.name, tuple(assets), has_game, notes,
                           unrecognized=unrecognized, bundle_info=bundle_info)
 
 
@@ -739,18 +768,21 @@ def analyze_upload_session(session_dir: Path) -> tuple[AnalysisResult, Path]:
     A session holding a single archive analyzes that archive; a single non-archive file
     is analyzed on its own; anything else is treated as a dropped folder tree.
     """
+    source = session_source(session_dir)
+    return analyze_path(source), source
+
+
+def session_source(session_dir: Path) -> Path:
+    """What a staged session is read from: its one file, or else the folder itself."""
     session_dir = Path(session_dir)
     top_files = [p for p in session_dir.iterdir() if p.is_file()]
     top_dirs = [p for p in session_dir.iterdir() if p.is_dir()]
     if len(top_files) == 1 and not top_dirs:
-        only = top_files[0]
-        if only.suffix.lower() in ARCHIVE_EXTENSIONS:
-            return analyze_path(only), only
-        return analyze_path(only), only
-    return analyze_path(session_dir), session_dir
+        return top_files[0]
+    return session_dir
 
 
-def _source_kind(path: Path) -> str:
+def source_kind_of(path: Path) -> str:
     if path.is_dir():
         return "dir"
     ext = path.suffix.lower()

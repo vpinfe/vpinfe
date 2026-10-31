@@ -791,6 +791,19 @@ async def set_picture(context: dict[str, Any], name: str, data: bytes) -> Callab
     return partial(_picture_written, context, player_id)
 
 
+async def dropped_picture(library: Any, state: dict[str, Any], player_id: str,
+                          name: str, data: bytes) -> Callable[[], Awaitable[None]]:
+    """A picture dropped on a player, set the way the picker sets one: saved at once, with
+    Undo. Raises with the API's reason where it cannot be. What it returns redraws the
+    page, and runs after the save is known to have held."""
+    async def rebuild() -> None:
+        await state["show_player"]({"id": player_id})
+
+    context = {"library": library, "player": {"id": player_id}, "state": state,
+               "rebuild": rebuild}
+    return await set_picture(context, name, data)
+
+
 @on_page
 async def use_account_picture(context: dict[str, Any], extension: str) -> Callable:
     """The picture a service has for this player, copied once and saved as an upload

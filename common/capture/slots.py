@@ -10,8 +10,7 @@ from common.games import asset_origin, game_lens, media_lens, media_placement
 
 def _serving(rows: list[dict[str, Any]], table_id: str) -> dict[str, Any] | None:
     rows = [row for row in rows
-            if row.get("present") and row.get("via") not in (media_lens.ORPHAN,
-                                                            media_lens.UNUSED)]
+            if row.get("present") and row.get("via") not in media_lens.LOOSE]
     own = next((row for row in rows if table_id and row["table"] == table_id), None)
     shared = next((row for row in rows if not row["table"]), None)
     return own or shared

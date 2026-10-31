@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from common.i18n import t
 from manager import page
-from manager.library import import_dialog, mediasource, uploads
+from manager.library import drop_sheet, import_dialog, mediasource, uploads
+from manager.library.drop_target import Where
 from tests.support.clicks import press
 
 WITH_ROM = {"id": "g-1", "name": "Medieval Madness", "folder": "/games/Medieval Madness",
@@ -71,7 +72,7 @@ class ThePlanNamesTheGamesRom(_Dropping):
         await self._confirmed(WITHOUT_ROM)
 
         self.assertEqual("", self.planned_rom())
-        self.said.assert_called_once_with(import_dialog.not_imported(NO_ROM), type="warning")
+        self.said.assert_called_once_with(drop_sheet.Sheet(REFUSED).refusals()[0], type="warning")
         self.shown.assert_not_awaited()
         self.library.abort_upload.assert_called_once_with("u-1")
 
@@ -83,8 +84,7 @@ class ThePlanNamesTheGamesRom(_Dropping):
 
 class EveryWayOntoAGameSendsIt(_Dropping):
     async def _dropped_on_the_grid(self, **where: Any) -> None:
-        drop = uploads.Drop(target=uploads.TARGET_GAME, upload_id="u-1",
-                            name="mm_109c.cRZ", **where)
+        drop = uploads.Drop(where=Where(**where), upload_id="u-1", name="mm_109c.cRZ")
         await press(page._took_a_drop, self.library, {"view": "games"}, Mock(), drop)
 
     async def test_a_games_row(self) -> None:
@@ -93,7 +93,8 @@ class EveryWayOntoAGameSendsIt(_Dropping):
         self.assertEqual(("mm_109c", "mm_109c"), (self.planned_rom(), self.imported_rom()))
 
     async def test_an_asset_cell(self) -> None:
-        await self._dropped_on_the_grid(row_id="g-1", asset_kind="alt_color")
+        await self._dropped_on_the_grid(row_id="g-1", col_id="asset_alt_color",
+                                        cell=("manager-drop-asset",))
 
         self.assertEqual(("mm_109c", "mm_109c"), (self.planned_rom(), self.imported_rom()))
 

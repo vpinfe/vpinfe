@@ -70,6 +70,44 @@ class WhatAFailedImportLeavesInTheLog(unittest.IsolatedAsyncioTestCase):
         self.assertIn("u-1", logged.output[0])
         self.assertIn("Nothing in it was recognized", logged.output[0])
 
+    async def test_unnamed_pictures_dropped_on_a_game_go_on_to_be_placed(self) -> None:
+        self.io.return_value = {"error": t("error.uploads.nothing_recognized"),
+                                "placeable": ["IMG_0001.png", "IMG_0002.jpg"]}
+
+        found = await uploads.analyzed(self.library, "u-1", game_named=True)
+
+        self.assertIsNotNone(found)
+        self.assertNotIn("error", found)
+        self.library.abort_upload.assert_not_called()
+
+    async def test_files_with_no_place_dropped_on_a_game_are_still_turned_away(self) -> None:
+        self.io.return_value = {"error": t("error.uploads.nothing_recognized"),
+                                "placeable": []}
+
+        self.assertIsNone(await uploads.analyzed(self.library, "u-1", game_named=True))
+
+    async def test_unnamed_pictures_dropped_where_no_game_is_named_are_turned_away(self) -> None:
+        self.io.return_value = {"error": t("error.uploads.nothing_recognized"),
+                                "placeable": ["IMG_0001.png"]}
+
+        self.assertIsNone(await uploads.analyzed(self.library, "u-1"))
+
+    async def test_the_install_s_language_does_not_decide_whether_pictures_go_on(self) -> None:
+        self.io.return_value = {"error": "Aucun fichier reconnu", "placeable": ["IMG_0001.png"]}
+
+        self.assertIsNotNone(await uploads.analyzed(self.library, "u-1", game_named=True))
+
+    async def test_a_drop_on_an_asset_cell_does_not_get_the_pictures_allowance(self) -> None:
+        asked = mock.AsyncMock(return_value=None)
+        with mock.patch.object(uploads, "analyzed", asked):
+            await uploads.arrived(self.library, "u-1", source="drop", on_done=mock.Mock(),
+                                  game_dir="/lib/Game", asset_kind="rom")
+            await uploads.arrived(self.library, "u-2", source="drop", on_done=mock.Mock(),
+                                  game_dir="/lib/Game")
+
+        self.assertEqual([False, True],
+                         [call.kwargs["game_named"] for call in asked.await_args_list])
+
     async def test_an_analysis_that_raised_is_logged_with_its_traceback(self) -> None:
         self.io.side_effect = RuntimeError("bad archive")
 

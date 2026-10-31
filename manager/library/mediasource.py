@@ -1074,6 +1074,7 @@ class _Folder(_OnlineTab):
         # The kind an import is held to, or "" for whatever the drop brought.
         self.narrows_to = kind
         self.adds_table = False
+        self.reads_names = True
         self._busy = False
 
     def memory_kind(self) -> str:
@@ -1157,23 +1158,18 @@ class _Folder(_OnlineTab):
             return
         self._busy = True
         try:
-            analysis = await self.analysis(upload_id)
-            if analysis is not None:
-                release = self.view.release(source) \
-                    if self.online and self.listing.offered() else None
-                await uploads.confirmed_import(
-                    self.library, upload_id, analysis, source=source,
-                    file_count=file_count, on_done=self._imported, game_id=self.game_id,
-                    game_dir=self.game_dir, asset_kind=self.narrows_to,
-                    add_table=self.adds_table, release=release,
-                    on_imported=picker_online.matched_after(
-                        self.library, self.game_id, self.game_dir, self.listing, release)
-                    if release else None)
+            release = self.view.release(source) \
+                if self.online and self.listing.offered() else None
+            await uploads.arrived(
+                self.library, upload_id, source=source, reads_names=self.reads_names,
+                file_count=file_count, on_done=self._imported, game_id=self.game_id,
+                game_dir=self.game_dir, asset_kind=self.narrows_to,
+                add_table=self.adds_table, release=release,
+                on_imported=picker_online.matched_after(
+                    self.library, self.game_id, self.game_dir, self.listing, release)
+                if release else None)
         finally:
             self._busy = False
-
-    async def analysis(self, upload_id: str) -> dict[str, Any] | None:
-        return await uploads.analyzed(self.library, upload_id)
 
     async def _imported(self) -> None:
         if self.dialog is not None:
@@ -1184,15 +1180,13 @@ class _Folder(_OnlineTab):
 class _Notes(_Folder):
     def __init__(self, context: dict[str, Any], label: str, done: Callable) -> None:
         super().__init__(context, "readme", label, done)
+        self.reads_names = False
 
     def suffixes(self) -> tuple[str, ...]:
         return tuple(DOC_FAMILY)
 
     def folder_use(self, path: str) -> Callable | None:
         return None
-
-    async def analysis(self, upload_id: str) -> dict[str, Any] | None:
-        return {}
 
     def zone(self, card: Any) -> None:
         heard = uploads.listener(self.arrived)
@@ -1248,10 +1242,6 @@ class _Table(_Folder):
         ui.label(t("manager.mediasource.drop_table.help")).classes("manager-help")
         self.choose(heard)
         card.on("drop", heard, js_handler=_MANY)
-
-    def takes_drops(self, element: Any) -> None:
-        """Make `element` a place a table is dropped on to join this game."""
-        take_drops(element, self.arrived)
 
     async def host_tab(self, body: ui.column) -> None:
         body.clear()
@@ -1675,15 +1665,10 @@ def take_drops(element: Any, arrived: Callable[[uploads.Drop], Any]) -> None:
 
     Marked as taking its own drops, so the page-wide handler leaves it alone.
     """
-    element._props[uploads.OWN_DROP] = ""
+    element._props[uploads.DROP] = uploads.OWN_ZONE
     element.on("dragover", js_handler=_LIGHT)
     element.on("dragleave", js_handler=_DIM)
     element.on("drop", uploads.listener(arrived), js_handler=_MANY)
-
-
-def take_table_drops(element: Any, context: dict[str, Any], done: Callable) -> None:
-    """A drop on `element` goes to this game the way the Upload tab's does."""
-    _Table(context, done).takes_drops(element)
 
 
 def open_image_sources(library: Any, name: str, label: str, done: Callable) -> None:

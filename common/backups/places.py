@@ -30,6 +30,7 @@ from common.games.game_identity import game_id as game_id_of
 from common.games.info_migration import copied_from, is_importer_bak, needs_migration
 from common.i18n import t
 from common.kept_copies import (
+    CONVERT,
     DELETE,
     EDIT,
     IMPORT,
@@ -72,6 +73,7 @@ from .copies import (
     PLACE_TABLE,
     PLACE_THEME,
     PLACE_VPX_2X,
+    REASON_CONVERT,
     REASON_DELETE,
     REASON_EDIT,
     REASON_FIRST_CHANGE,
@@ -116,7 +118,7 @@ _RECORD_KINDS = {
 }
 
 _REASON_BY_WORD = {RESTORE: REASON_RESTORE, IMPORT: REASON_IMPORT, RESET: REASON_RESET,
-                   TURN: REASON_TURN, EDIT: REASON_EDIT,
+                   TURN: REASON_TURN, CONVERT: REASON_CONVERT, EDIT: REASON_EDIT,
                    MOVE: REASON_MOVE, REPLACE: REASON_REPLACE,
                    DELETE: REASON_DELETE}
 

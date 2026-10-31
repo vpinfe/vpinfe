@@ -8,13 +8,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from common.i18n import t
+from common.media.media_specs import media_family
+from common.uploads import arrival
 from common.uploads.asset_analyzer_service import analyze_path
 from common.uploads.asset_import_service import (
     build_import_plan,
-    build_media_slot_plan,
     execute_import_plan,
     find_vps_entry,
-    only_kind,
     select_plan_items,
     vps_folder_name,
 )
@@ -145,45 +146,6 @@ class AddTablePlanTests(unittest.TestCase):
         self.assertEqual(self._names(plan), {"backglass": "Foo.directb2s"})
 
 
-class OnlyKindTests(unittest.TestCase):
-    """A slot's Add or a drop on its cell brings that kind and nothing else."""
-
-    def _plan(self, tmp, names):
-        from pathlib import Path
-        game_dir = Path(tmp) / "Foo (Bar 1999)"
-        game_dir.mkdir()
-        (game_dir / "Foo.vpx").write_bytes(b"x")
-        zip_path = Path(tmp) / "assets.zip"
-        make_zip(zip_path, names)
-        return build_import_plan(analyze_path(zip_path), game_dir=game_dir, rom_name="mm")
-
-    def test_a_slot_takes_its_own_kind_and_lists_the_rest(self):
-        from tempfile import TemporaryDirectory
-        with TemporaryDirectory() as tmp:
-            plan = only_kind(self._plan(tmp, ["MyPup/screens.pup", "MyPup/s1/a.mp4",
-                                              "wheel.png", "Foo.directb2s"]), "pup_pack")
-
-            self.assertEqual(["pup_pack"], [item.asset.kind for item in plan.items])
-            left = blocked_reasons(plan)
-            self.assertIn("media", left)
-            self.assertIn("backglass", left)
-            self.assertIn("PUP Pack", left["media"])
-
-    def test_the_lens_name_takes_the_registry_kinds_it_folds(self):
-        from tempfile import TemporaryDirectory
-        with TemporaryDirectory() as tmp:
-            plan = only_kind(self._plan(tmp, ["mm.crz", "wheel.png"]), "alt_color")
-
-            self.assertEqual(["altcolor_serum"], [item.asset.kind for item in plan.items])
-
-    def test_no_kind_keeps_the_plan(self):
-        from tempfile import TemporaryDirectory
-        with TemporaryDirectory() as tmp:
-            plan = self._plan(tmp, ["MyPup/screens.pup", "MyPup/s1/a.mp4", "wheel.png"])
-
-            self.assertIs(plan, only_kind(plan, ""))
-
-
 class SelectPlanItemsTests(unittest.TestCase):
     def _bundle_plan(self, tmp):
         from pathlib import Path
@@ -224,6 +186,12 @@ class SelectPlanItemsTests(unittest.TestCase):
                 select_plan_items(plan, new_game_dir_name='<>:"/\\|?*')
 
 
+def _slot_plan(src, game_dir, media_kind):
+    """The plan for a drop of one file on a slot, or the refusal the arrival made."""
+    found = arrival.read(src, game_dir=game_dir, media_kind=media_kind)
+    return found, (None if found.refusal else arrival.plan(found))
+
+
 class MediaSlotPlanTests(unittest.TestCase):
     def test_family_validation(self):
         from pathlib import Path
@@ -248,16 +216,16 @@ class MediaSlotPlanTests(unittest.TestCase):
                 with self.subTest(filename=filename, media_kind=media_kind):
                     src = Path(tmp) / filename
                     src.write_bytes(b"x")
-                    plan = build_media_slot_plan(src, game_dir=Path(tmp), media_kind=media_kind)
+                    found, plan = _slot_plan(src, Path(tmp), media_kind)
                     if ok:
                         self.assertEqual(len(plan.items), 1)
                         self.assertEqual(plan.items[0].action, "replace_media")
                         self.assertEqual(plan.items[0].asset.media_kind, media_kind)
                     else:
-                        self.assertEqual(plan.items, ())
-                        self.assertTrue(plan.blocked)
+                        self.assertIsNone(plan)
+                        self.assertTrue(found.refusal)
 
-    def test_a_refusal_names_the_slot_and_every_type_it_takes(self):
+    def test_a_refusal_names_the_slot_and_what_it_takes(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
@@ -269,13 +237,10 @@ class MediaSlotPlanTests(unittest.TestCase):
                 with self.subTest(media_kind=media_kind):
                     src = Path(tmp) / filename
                     src.write_bytes(b"x")
-                    plan = build_media_slot_plan(src, game_dir=Path(tmp), media_kind=media_kind)
-                    reason = plan.blocked[0].reason
-                    spec = spec_for_kind(media_kind)
-                    self.assertIn(spec.label, reason)
-                    self.assertIn(src.suffix, reason)
-                    for suffix in spec.family:
-                        self.assertIn(suffix, reason)
+                    found, _plan = _slot_plan(src, Path(tmp), media_kind)
+                    self.assertEqual(found.refusal, t(
+                        "arrival.refusal.nothing_fits", slot=spec_for_kind(media_kind).label,
+                        what=t(f"arrival.family.{media_family(media_kind)}")))
 
     def test_archive_and_unknown_slot_rejected(self):
         from pathlib import Path
@@ -283,10 +248,11 @@ class MediaSlotPlanTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             archive = Path(tmp) / "pack.zip"
             archive.write_bytes(b"x")
-            plan = build_media_slot_plan(archive, game_dir=Path(tmp), media_kind="wheel")
-            self.assertEqual(plan.items, ())
+            found, plan = _slot_plan(archive, Path(tmp), "wheel")
+            self.assertIsNone(plan)
+            self.assertTrue(found.refusal)
             with self.assertRaises(ValueError):
-                build_media_slot_plan(archive, game_dir=Path(tmp), media_kind="not_a_slot")
+                arrival.read(archive, game_dir=Path(tmp), media_kind="not_a_slot")
 
     def test_a_drop_is_the_games_own_file_and_the_games_remove_takes_it(self):
         from pathlib import Path
@@ -301,7 +267,7 @@ class MediaSlotPlanTests(unittest.TestCase):
             src = Path(tmp) / "cool-art.jpg"
             src.write_bytes(b"jpg-bytes")
 
-            plan = build_media_slot_plan(src, game_dir=game_dir, media_kind="logo")
+            _found, plan = _slot_plan(src, game_dir, "logo")
             report = execute_import_plan(plan, src)
 
             own = game_dir / "medias" / "(Logo) Foo (Bar 1999).jpg"
@@ -343,14 +309,14 @@ class MediaSlotReplacesTests(unittest.TestCase):
                 (game_dir / "medias" / name).write_bytes(b"x")
             src = Path(tmp) / "art.png"
             src.write_bytes(b"x")
-            plan = build_media_slot_plan(src, game_dir=game_dir, media_kind="wheel")
+            _found, plan = _slot_plan(src, game_dir, "wheel")
             return upload_ops._plan_to_dict(plan)["items"][0]["replaces"]
 
     def test_nothing_showing_is_an_empty_slot(self):
         self.assertEqual(self._said(), "slot is empty")
 
     def test_the_games_own_file_in_another_extension_is_replaced(self):
-        self.assertEqual(self._said("(Wheel) Foo (Bar 1999).jpg"), "replaces current")
+        self.assertEqual(self._said("(Wheel) Foo (Bar 1999).jpg"), "replaces the current one")
 
     def test_a_file_at_a_lower_tier_is_named_as_the_one_it_goes_in_front_of(self):
         self.assertEqual(self._said("wheel.png"), "used instead of wheel.png, which stays")

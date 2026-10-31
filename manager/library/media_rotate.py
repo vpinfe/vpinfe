@@ -69,7 +69,7 @@ async def ask(picked: list[dict[str, Any]], way: str, state: dict[str, Any],
     answer = await confirm.ask(
         t("manager.media_rotate.ask", count=len(files)),
         detail=[t(_WAYS[way]), t("manager.media_rotate.detail")],
-        lines=([t("manager.media_rotate.also_left_out", count=left_out)]
+        lines=([t("manager.media_rotate.also_skipped", count=left_out)]
                if left_out > 0 else []),
         confirm=t("manager.media_rotate.keep"), icon=_ICONS[way], danger=False,
         second=(t("manager.media_rotate.no_copies"), _ICONS[way]))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 from collections.abc import Iterable, Iterator
 from itertools import takewhile
@@ -1408,6 +1409,16 @@ class ApiClient:
         never moved."""
         return str(self._post("/folders/uploads", {"path": path})["id"])
 
+    def upload_image(self, upload_id: str) -> tuple[str, bytes]:
+        """The one picture the session holds, with the name the server gave it. Raises with
+        the API's reason where the session holds anything else."""
+        route = f"/uploads/{upload_id}/image"
+        _refuse_the_event_loop(route)
+        response = self._session.get(f"{self._base}{route}", timeout=_TIMEOUT)
+        self._answered(response)
+        named = re.search(r'filename="([^"]+)"', response.headers.get("Content-Disposition", ""))
+        return (named.group(1) if named else "picture"), response.content
+
     def add_game_from_vps(self, vps_id: str, location_id: str = "") -> dict:
         """A game with no tables, matched to that catalog entry. Raises when its folder is
         already there, which the caller reports on that row."""
@@ -1428,8 +1439,11 @@ class ApiClient:
                     media_kind: str = "", location_id: str = "",
                     asset_kind: str = "", add_table: bool = False,
                     replace_table: str = "", carry: list[str] | None = None,
-                    instead: bool = False,
-                    new_game_dir_name: str | None = None) -> dict:
+                    instead: bool = False, table_id: str = "", scope: str = "",
+                    page: int = 1, assignments: list[dict] | None = None,
+                    picks: dict[str, str] | None = None,
+                    new_game_dir_name: str | None = None,
+                    convert: dict | None = None) -> dict:
         """Where each of those files would go. Nothing is written by asking."""
         path = f"/uploads/{upload_id}/plan"
         _refuse_the_event_loop(path)
@@ -1439,46 +1453,104 @@ class ApiClient:
             "media_kind": media_kind, "location_id": location_id,
             "asset_kind": asset_kind, "add_table": add_table,
             "replace_table": replace_table, "instead": instead,
+            "table_id": table_id, "scope": scope, "page": page,
         }
         if carry is not None:
             body["carry"] = carry
+        if assignments:
+            body["assignments"] = assignments
+        if picks is not None:
+            body["picks"] = picks
         if new_game_dir_name is not None:
             body["new_game_dir_name"] = new_game_dir_name
+        if convert:
+            body["convert"] = convert
         response = self._session.post(f"{self._base}{path}", json=body, timeout=_TIMEOUT)
         self._answered(response)
         return response.json()
 
-    def upload_import(self, upload_id: str, *, game_dir: str = "", rom_name: str = "",
-                      allow_new_game: bool = False, vps_id: str = "",
-                      media_kind: str = "", location_id: str = "",
-                      asset_kind: str = "", add_table: bool = False,
-                      replace_table: str = "", carry: list[str] | None = None,
-                      instead: bool = False,
-                      new_game_dir_name: str | None = None,
-                      selected: list[int] | None = None,
-                      declared: dict | None = None) -> dict:
-        """Do it. `selected` left out means every item the plan offered."""
-        path = f"/uploads/{upload_id}/import"
-        _refuse_the_event_loop(path)
+    @staticmethod
+    def _import_body(*, game_dir: str, rom_name: str, allow_new_game: bool, vps_id: str,
+                     media_kind: str, location_id: str, asset_kind: str, add_table: bool,
+                     replace_table: str, carry: list[str] | None, instead: bool,
+                     table_id: str, scope: str, page: int, assignments: list[dict] | None,
+                     picks: dict[str, str] | None, new_game_dir_name: str | None,
+                     selected: list[int] | None, declared: dict | None,
+                     convert: dict | None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "game_dir": game_dir, "rom_name": rom_name,
             "allow_new_game": allow_new_game, "vps_id": vps_id,
             "media_kind": media_kind, "location_id": location_id,
             "asset_kind": asset_kind, "add_table": add_table,
             "replace_table": replace_table, "instead": instead,
+            "table_id": table_id, "scope": scope, "page": page,
         }
         if carry is not None:
             body["carry"] = carry
+        if assignments:
+            body["assignments"] = assignments
+        if picks is not None:
+            body["picks"] = picks
         if new_game_dir_name is not None:
             body["new_game_dir_name"] = new_game_dir_name
         if selected is not None:
             body["selected"] = selected
         if declared:
             body["declared"] = declared
+        if convert:
+            body["convert"] = convert
+        return body
+
+    def upload_import(self, upload_id: str, *, game_dir: str = "", rom_name: str = "",
+                      allow_new_game: bool = False, vps_id: str = "",
+                      media_kind: str = "", location_id: str = "",
+                      asset_kind: str = "", add_table: bool = False,
+                      replace_table: str = "", carry: list[str] | None = None,
+                      instead: bool = False, table_id: str = "", scope: str = "",
+                      page: int = 1, assignments: list[dict] | None = None,
+                      picks: dict[str, str] | None = None,
+                      new_game_dir_name: str | None = None,
+                      selected: list[int] | None = None,
+                      declared: dict | None = None,
+                      convert: dict | None = None) -> dict:
+        """Do it. `selected` left out means every item the plan offered."""
+        path = f"/uploads/{upload_id}/import"
+        _refuse_the_event_loop(path)
+        body = self._import_body(
+            game_dir=game_dir, rom_name=rom_name, allow_new_game=allow_new_game,
+            vps_id=vps_id, media_kind=media_kind, location_id=location_id,
+            asset_kind=asset_kind, add_table=add_table, replace_table=replace_table,
+            carry=carry, instead=instead, table_id=table_id, scope=scope, page=page,
+            assignments=assignments, picks=picks, new_game_dir_name=new_game_dir_name,
+            selected=selected, declared=declared, convert=convert)
         response = self._session.post(f"{self._base}{path}", json=body,
                                       timeout=_IMPORT_TIMEOUT)
         self._answered(response)
         return response.json()
+
+    def start_upload_import(self, upload_id: str, **asked: Any) -> dict:
+        """`upload_import` as a job: answered as soon as it is accepted, with the job to
+        watch through `job`. `asked` is `upload_import`'s own keywords."""
+        path = f"/uploads/{upload_id}/import/start"
+        _refuse_the_event_loop(path)
+        names = ("game_dir", "rom_name", "allow_new_game", "vps_id", "media_kind",
+                 "location_id", "asset_kind", "add_table", "replace_table", "carry",
+                 "instead", "table_id", "scope", "page", "assignments", "picks",
+                 "new_game_dir_name", "selected", "declared", "convert")
+        defaults: dict[str, Any] = {
+            "game_dir": "", "rom_name": "", "allow_new_game": False, "vps_id": "",
+            "media_kind": "", "location_id": "", "asset_kind": "", "add_table": False,
+            "replace_table": "", "carry": None, "instead": False, "table_id": "",
+            "scope": "", "page": 1, "assignments": None, "picks": None,
+            "new_game_dir_name": None, "selected": None, "declared": None, "convert": None}
+        body = self._import_body(**{name: asked.get(name, defaults[name]) for name in names})
+        response = self._session.post(f"{self._base}{path}", json=body, timeout=_TIMEOUT)
+        self._answered(response)
+        return dict(response.json() or {})
+
+    def stop_upload_import(self) -> bool:
+        """Stop the import that is running, before it writes anything. False where none is."""
+        return bool(self._post("/uploads/import/stop", {}).get("ok"))
 
     def abort_upload(self, upload_id: str) -> None:
         """Throw the staged files away. Best effort - a session left behind is rubbish
@@ -1695,6 +1767,16 @@ class ApiClient:
         return self._post("/library/media/rotate", {
             "files": [{"game_id": game_id, "path": path} for game_id, path in files],
             "turn": turn, "keep": keep})
+
+    def convertible_media(self, files: list[tuple[str, str]], choices: dict[str, Any],
+                          devices: list[dict[str, Any]]) -> dict:
+        """What converting these files would do, and the choices there are. Nothing changes."""
+        return self._post("/library/media/convertible", _convert_body(files, choices, devices))
+
+    def convert_media(self, files: list[tuple[str, str]], choices: dict[str, Any],
+                      devices: list[dict[str, Any]]) -> dict:
+        """Convert these files. Returns the job to watch."""
+        return self._post("/library/media/convert", _convert_body(files, choices, devices))
 
     def backups_folder_change(self, folder: str) -> dict:
         """What making `folder` the backups folder would do with the backups already taken."""
@@ -2134,6 +2216,14 @@ def _page_params(page: int) -> dict[str, int]:
 
 def _page_query(page: int) -> str:
     return f"?page={page}" if page > 1 else ""
+
+
+def _convert_body(files: list[tuple[str, str]], choices: dict[str, Any],
+                  devices: list[dict[str, Any]]) -> dict[str, Any]:
+    """The request both conversion routes take. A choice left out is the plan's
+    recommendation, and no devices is this install's own frontend."""
+    return {"files": [{"game_id": game_id, "path": path} for game_id, path in files],
+            **choices, "devices": devices or None}
 
 
 def _refuse_the_event_loop(path: str) -> None:

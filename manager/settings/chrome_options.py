@@ -110,7 +110,7 @@ def leave_out(option: dict, value: Any, save: Callable[[Any], Any], *,
         return save("\n".join(event.value or []))
 
     return panel.multi_select(options, held, changed, disabled=not writable or not on,
-                              typed=True, placeholder=t("manager.settings.chrome_leave_out.none"),
+                              typed=True, placeholder=t("manager.settings.chrome_skip.none"),
                               on_control=on_control)
 
 

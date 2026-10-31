@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 from common.i18n import t
 from manager.kit import confirm, game_tables, panel
-from manager.library import import_dialog
+from manager.library import convert_row, drop_sheet, import_dialog
 from manager.workbench import game_table
 from tests.support.clicks import press
 from tests.support.workbench_patch import patch_workbench
@@ -114,8 +114,10 @@ class ReplaceLine(unittest.TestCase):
                 "destination": "/games/Example/Example 2.0.vpx", "action": "replace_vpx",
                 "replaces": "replaces Example.vpx", "made_from_it": ["Example VPW Mod.vpx"]}
         with patch.object(import_dialog, "ui") as ui:
-            import_dialog._draw_row(item, {"game_dir": "/games/Example"}, {0: True}, True,
-                                    lambda: None)
+            plan = {"game_dir": "/games/Example", "items": [item]}
+            import_dialog._draw_row(drop_sheet.Sheet(plan), item, plan, {0: True}, True,
+                                    lambda: None, progress=convert_row.Progress(),
+                                    replan=lambda: None, redraw=lambda: None)
 
         said = [one.args[0] for one in ui.label.call_args_list]
         self.assertIn("Made from it: Example VPW Mod.vpx", said)

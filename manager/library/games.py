@@ -40,7 +40,14 @@ from manager.kit import (
 )
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import collection_adds, game_acts, game_states, mediaview, row_drag
+from manager.library import (
+    collection_adds,
+    drop_target,
+    game_acts,
+    game_states,
+    mediaview,
+    row_drag,
+)
 from manager.settings import sections
 from manager.settings import settings as settings_page
 from manager.workbench import all_settings
@@ -223,6 +230,7 @@ def asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     has = game_states.asset()
     return [has.column(f"asset_{key}", label, width, group=t(_ASSETS),
                        help=t("help.asset_kind", label=label),
+                       cellClass=drop_target.ASSET_CELL,
                        cellStyle={"textAlign": "center"})
             for key, label in sorted(labels.items(), key=lambda kv: kv[1].lower())]
 
@@ -303,7 +311,8 @@ def media_columns(kinds: list[str], shown: list[str] | None = None) -> list[dict
     width = max((grid.header_width(header) for kind, header in headers.items()
                  if kind in sized), default=92)
     return [grid.column(f"media_{kind}", header, max(width, grid.header_width(header)),
-                        cellClass="manager-media-cell", group=t(_MEDIA),
+                        cellClass=f"manager-media-cell {drop_target.MEDIA_CELL}",
+                        group=t(_MEDIA),
                         help=t("help.media_kind", label=(header)),
                         **grid.choice_filter(_STATE_CHOICES),
                         **renderers.drawable("mark", "picture"))
@@ -951,7 +960,8 @@ def table_asset_columns(keys: list[str]) -> list[dict[str, Any]]:
                for key, label in sorted(labels.items(), key=lambda kv: kv[1].lower())}
     width = max((grid.header_width(header) for header in headers.values()), default=92)
     return [grid.column(f"asset_{key}", header, width,
-                        cellClass="manager-media-cell", group=t(_ASSETS),
+                        cellClass=f"manager-media-cell {drop_target.ASSET_CELL}",
+                        group=t(_ASSETS),
                         help=t("help.table_asset_kind", label=(header)),
                         **grid.choice_filter([*_STATE_CHOICES, _UNUSED_CHOICE]),
                         **renderers.drawable("mark"))

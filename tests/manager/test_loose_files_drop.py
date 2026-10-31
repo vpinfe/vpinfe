@@ -6,9 +6,9 @@ import unittest
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from common.i18n import t
 from manager import page
 from manager.library import import_dialog, mediasource, uploads
+from manager.library.drop_target import Where
 from tests.support.clicks import press
 
 GAME = {"id": "g-1", "name": "Medieval Madness", "folder": "/games/Medieval Madness",
@@ -20,20 +20,6 @@ PLANNED = {"game_dir": GAME["folder"], "blocked": [],
 
 async def _now(callback: Any, *args: Any, **kwargs: Any) -> Any:
     return callback(*args, **kwargs)
-
-
-class TheTitleTests(unittest.TestCase):
-    def test_loose_files_are_counted(self) -> None:
-        self.assertEqual(import_dialog.dropped_title("", 3),
-                         t("manager.import_dialog.import_files", count=3))
-
-    def test_a_drop_with_a_name_is_named(self) -> None:
-        self.assertEqual(import_dialog.dropped_title("Medieval Madness", 3),
-                         t("manager.import_dialog.import_2", name="Medieval Madness"))
-
-    def test_a_drop_with_neither_is_this_drop(self) -> None:
-        self.assertEqual(import_dialog.dropped_title("", 0),
-                         t("manager.import_dialog.import_drop"))
 
 
 class TheCountReachesTheDialogTests(unittest.IsolatedAsyncioTestCase):
@@ -54,8 +40,7 @@ class TheCountReachesTheDialogTests(unittest.IsolatedAsyncioTestCase):
         return opened.kwargs["source"], opened.kwargs["file_count"]
 
     async def test_from_the_grid(self) -> None:
-        drop = uploads.Drop(target=uploads.TARGET_GAME, row_id="g-1", upload_id="u-1",
-                            count=3)
+        drop = uploads.Drop(where=Where(row_id="g-1"), upload_id="u-1", count=3)
         await press(page._took_a_drop, self.library, {"view": "games"}, Mock(), drop)
 
         self.assertEqual(("", 3), self.opened_with())

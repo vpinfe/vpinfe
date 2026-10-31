@@ -86,6 +86,20 @@ def _media_rotate(result: Any) -> str:
              turned=int(result["turned"]), skipped=len(result.get("skipped") or ()))
 
 
+def _media_convert(result: Any) -> str:
+    if not isinstance(result, dict) or "converted" not in result:
+        return ""
+    return t("said.job_media_converted", count=int(result.get("games") or 0),
+             converted=int(result["converted"]) + int(result.get("renamed") or 0),
+             skipped=len(result.get("skipped") or ()))
+
+
+def _upload_import(result: Any) -> str:
+    if not isinstance(result, dict) or "written" not in result:
+        return ""
+    return t("said.job_upload_import", count=len(result["written"]))
+
+
 def _backups_moved(result: Any) -> str:
     if not isinstance(result, dict) or "moved" not in result:
         return ""
@@ -137,6 +151,8 @@ _KINDS: dict[str, Callable[[Any], str]] = {
     jobs.KIND_MEDIA_FILL: _media_fill,
     jobs.KIND_MEDIA_LOOK: _media_look,
     jobs.KIND_MEDIA_ROTATE: _media_rotate,
+    jobs.KIND_MEDIA_CONVERT: _media_convert,
+    jobs.KIND_UPLOAD_IMPORT: _upload_import,
     jobs.KIND_BACKUPS_MOVE: _backups_moved,
     jobs.KIND_MEDIA_CAPTURE: _capture,
     jobs.KIND_TOOL_GET: _tool,

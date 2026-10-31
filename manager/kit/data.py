@@ -40,6 +40,9 @@ WATCHED_FRESH_S = 30.0
 FRONT_FRESH_S = 5.0
 WATCHED_JOBS = 100
 
+# What `_watch_media` keeps of a media row: enough to judge it and to name it.
+_WATCHED_FILE = ("game_id", "path", "kind", "via", "present", "video_codec")
+
 # The cell holds the *word*, never the mark. What a cell is worth filtering and sorting
 # on is the state; how it is drawn is the column's business. Holding the drawn mark makes
 # the text filter match `<span class="manager-mark manager-mark--full">`, so typing "full"
@@ -290,7 +293,7 @@ class Library:
         if listing is None:
             listing = self._client.all_media(shared=True)
         rows = [row for row in listing if not row.get("table")
-                and row.get("via") not in (media_ownership.ORPHAN, media_ownership.UNUSED)]
+                and row.get("via") not in media_ownership.LOOSE]
         media = {game["id"]: {spec.kind: dict(_MEDIA_ABSENT) for spec in MEDIA_SPECS}
                  for game in self.games}
         for row in rows:
@@ -1387,7 +1390,8 @@ class Library:
         for found, unread in together(
                 self._watch_update, self._watch_recordings, self._watch_fill,
                 self._watch_extension_needs, self._watch_unaccepted,
-                self._watch_home, self._watch_leftovers, self._watch_asks):
+                self._watch_home, self._watch_leftovers, self._watch_asks,
+                self._watch_media):
             out.update(found)
             out["unread"] += unread
         return out
@@ -1457,6 +1461,26 @@ class Library:
         except Exception:  # noqa: BLE001 - what an upgrade left is not Overview's to fail on
             logger.debug("manager: could not read what an upgrade left behind", exc_info=True)
             return {}, ["leftovers"]
+
+    def _watch_media(self) -> tuple[dict[str, Any], list[str]]:
+        """The files that could be refused, as the media lens reads them, and the devices
+        that would refuse: `media_files` holds only an unsupported file or a video with a
+        codec, of the kinds this library collects, so a library of pictures costs nothing."""
+        try:
+            kept = self.load_kept_kinds()["media"]
+            files = [{key: row.get(key) for key in _WATCHED_FILE}
+                     for row in self._client.all_media()
+                     if row.get("kind") in kept
+                     and (row.get("via") == media_ownership.UNSUPPORTED or row.get("video_codec"))]
+            return {"media_files": files, "devices": self.devices()}, []
+        except Exception:  # noqa: BLE001 - what cannot be played is not Overview's to fail on
+            logger.debug("manager: could not read the media that cannot be played", exc_info=True)
+            return {}, ["media"]
+
+    def read_media_watch(self) -> dict[str, Any]:
+        """What `_watch_media` found, for a page that reads only that. Off the loop; none
+        where the read failed."""
+        return self._watch_media()[0]
 
     def _watch_asks(self) -> tuple[dict[str, Any], list[str]]:
         try:
@@ -2237,6 +2261,9 @@ class Library:
     def upload_from_path(self, path: str) -> str:
         return self._client.upload_from_path(path)
 
+    def upload_image(self, upload_id: str) -> tuple[str, bytes]:
+        return self._client.upload_image(upload_id)
+
     def add_game_from_vps(self, vps_id: str, location_id: str = "") -> dict:
         made = self._client.add_game_from_vps(vps_id, location_id)
         self._forget_games()
@@ -2317,6 +2344,12 @@ class Library:
 
     def upload_import(self, upload_id: str, **asked: Any) -> dict:
         return self._client.upload_import(upload_id, **asked)
+
+    def start_upload_import(self, upload_id: str, **asked: Any) -> dict:
+        return self._client.start_upload_import(upload_id, **asked)
+
+    def stop_upload_import(self) -> bool:
+        return self._client.stop_upload_import()
 
     def abort_upload(self, upload_id: str) -> None:
         self._client.abort_upload(upload_id)

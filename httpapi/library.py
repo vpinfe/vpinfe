@@ -18,6 +18,7 @@ from common.games import (
     game_service,
     library_ops,
     marks_ops,
+    media_convert,
     media_fill,
     media_rotate,
     owned,
@@ -182,6 +183,34 @@ def rotate_media(response: Response, payload: models.MediaRotateRequest) -> mode
     cannot be turned is left as it was and named in the job's result."""
     targets = [media_rotate.Target(one.game_id, one.path) for one in payload.files]
     return _accepted(response, media_rotate.start(targets, payload.turn, payload.keep))
+
+
+def _convert_arguments(payload: models.MediaConvertRequest) -> tuple[
+        list[media_convert.Target], dict[str, object], list[media_convert.Device] | None]:
+    chosen = payload.model_dump(exclude={"files", "devices"}, exclude_none=True)
+    devices = ([media_convert.Device(one.label, one.plays) for one in payload.devices]
+               if payload.devices else None)
+    return [media_convert.Target(one.game_id, one.path) for one in payload.files], chosen, devices
+
+
+@router.post("/media/convertible", summary="What converting these files would do",
+             dependencies=[requires(scopes.GAMES_READ)])
+def plan_media_convert(payload: models.MediaConvertRequest) -> models.MediaConvertPlan:
+    """Nothing is changed. Each file is named with what would happen to it, and each choice
+    that applies is listed with its options, one recommended, and a sentence for each."""
+    targets, chosen, devices = _convert_arguments(payload)
+    return models.MediaConvertPlan.model_validate(
+        media_convert.plan(targets, chosen, devices).made())
+
+
+@router.post("/media/convert", summary="Convert pictures, sounds and videos", status_code=202,
+             dependencies=[requires(scopes.GAMES_WRITE)])
+def convert_media(response: Response, payload: models.MediaConvertRequest) -> models.JobResource:
+    """Accepted, not done. Each file is converted whole or left as it was, and a choice left
+    out takes its recommendation, named in the job's result. With `keep` the original is
+    copied into the backups folder first, and `/backups` lists it."""
+    targets, chosen, devices = _convert_arguments(payload)
+    return _accepted(response, media_convert.start(targets, chosen, devices))
 
 
 @router.get("/dismissed", summary="Which Overview rows are set aside, and over what",

@@ -46,8 +46,6 @@ ALLOWED = {
     "actions.py:perform_action",
     # Builds a StreamingResponse and the SSE headers that keep proxies from buffering it.
     "events.py:subscribe",
-    # Maps two service refusals onto 422, one of them carrying structured details.
-    "uploads.py:import_upload",
     # Schedules the process to quit after the response is sent; doing it inline would take
     # the process down before the caller was told anything.
     "instance.py:perform_update",

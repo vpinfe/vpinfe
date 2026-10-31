@@ -297,8 +297,8 @@ class TheDiscoveryPage(_Offloaded):
 
 
 class TheMediaPage(_Offloaded):
-    async def _headings(self) -> list[str]:
-        library = _library()
+    async def _draw(self, library: MagicMock | None = None) -> None:
+        library = library or _library()
         with patch.object(settings, "_tools_found", new=AsyncMock(return_value=[])), \
                 patch.object(settings, "_browser_found", new=AsyncMock(return_value=None)), \
                 patch.object(settings, "_play_input", new=AsyncMock(return_value=None)), \
@@ -308,10 +308,32 @@ class TheMediaPage(_Offloaded):
                 patch.object(settings, "page_head"):
             await settings._draw_schema_page(
                 library, "library.media", ("media",), [], None, lambda: None, AsyncMock())
+
+    async def _headings(self) -> list[str]:
+        await self._draw()
         return [str(entry[1]) for entry in self.drawn if entry[0] is panel.HEADING]
 
-    async def test_the_groups_are_playfield_media_then_kinds_then_wheels(self) -> None:
-        self.assertEqual(["Playfield Media", "Kinds", "Wheels"], await self._headings())
+    async def test_the_groups_are_playfield_media_preferred_formats_kinds_then_wheels(
+            self) -> None:
+        self.assertEqual(["Playfield Media", "Preferred Formats", "Kinds", "Wheels"],
+                         await self._headings())
+
+    async def test_the_preferred_formats_are_in_the_order_the_ask_draws_them(self) -> None:
+        await self._draw()
+        outline = _outline(self.drawn)
+        start = outline.index("Preferred Formats")
+        end = outline.index("Kinds")
+
+        self.assertEqual(["Pictures", "Sounds", "Videos", "Quality", "Keep Originals"],
+                         [one for one in outline[start + 1:end]
+                          if not one.startswith("note")])
+
+    async def test_videos_is_recordings_video_format_under_the_name_the_ask_uses(self) -> None:
+        await self._draw()
+
+        labels = [entry[0] for entry in self.drawn if isinstance(entry[0], str)]
+        self.assertIn("Videos", labels)
+        self.assertNotIn("Video Format", labels)
 
     async def test_the_online_sources_are_not_on_this_page(self) -> None:
         self.assertEqual((("media_kinds", "manager.settings.heading_kinds", "Wheels"),),

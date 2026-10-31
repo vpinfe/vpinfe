@@ -142,6 +142,8 @@ class Pick:
 
     on_pick: Callable[[], Any]
     picked: bool = False
+    # The row's `data-drop` where a file dropped on it means something; see `uploads`.
+    drop: str = ""
 
 
 def facts(target: Any, entries: Sequence[tuple[Any, ...]]) -> None:
@@ -174,6 +176,8 @@ def _pickable(target: Any, pick: Pick) -> Any:
         .on("click", pick.on_pick, js_handler=_CLICK_OUTSIDE_CONTROLS) \
         .on("keydown.enter.self", pick.on_pick) \
         .on("keydown.space.self.prevent", pick.on_pick)
+    if pick.drop:
+        row._props["data-drop"] = pick.drop
     if pick.picked:
         row.classes(add="manager-fact-pick--on")
         row.props["aria-pressed"] = "true"
@@ -1145,6 +1149,47 @@ class ReasonedSelect(dropdown.Select):
         for option in self._props["options"]:
             reason = self.reasons.get(str(self._values[option["value"]]), "")
             option.update(reason=reason, disable=bool(reason))
+
+
+class ExplainedSelect(dropdown.Select):
+    """One from a list where each option says what choosing it does, under its label.
+
+    `says` maps an option's value to that sentence. `unavailable` maps a value to why it
+    cannot be picked now: it stays in the list, greyed, with the reason in the sentence's
+    place, or with no sentence where the reason is empty. `apart` is the value a rule is
+    drawn above, for the one answer that is not a format like the rest.
+    """
+
+    SLOT = """
+        <q-separator v-if="props.opt.rule" />
+        <q-item v-bind="props.itemProps">
+          <q-item-section>
+            <q-item-label>{{ props.opt.label }}</q-item-label>
+            <q-item-label caption v-if="props.opt.says" class="manager-cell-made">
+              {{ props.opt.says }}</q-item-label>
+          </q-item-section>
+        </q-item>
+    """
+
+    def __init__(self, options: dict[str, str], *, value: str | None,
+                 says: dict[str, str] | None = None,
+                 unavailable: dict[str, str] | None = None, apart: str | None = None,
+                 on_change: Callable[[Any], Any] | None = None,
+                 look: str = dropdown.FIELD) -> None:
+        # Before `super().__init__`, which builds the payload for the first time.
+        self.says = dict(says or {})
+        self.unavailable = dict(unavailable or {})
+        self.apart = apart
+        super().__init__(options, value=value, on_change=on_change, look=look)
+        self.add_slot("option", self.SLOT)
+
+    def _update_options(self) -> None:
+        super()._update_options()
+        for option in self._props["options"]:
+            key = str(self._values[option["value"]])
+            reason = self.unavailable.get(key, "")
+            option.update(says=reason or self.says.get(key, ""),
+                          disable=key in self.unavailable, rule=key == self.apart)
 
 
 class GamePicker(dropdown.Select):

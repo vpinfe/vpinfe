@@ -10,6 +10,7 @@ from common.config.paths import COLLECTIONS_PATH, get_ini_config
 from common.devices.device_registry import get_device_registry
 from common.games.collection_store import CollectionStore
 from common.i18n import t
+from common.media.media_specs import IMAGE_FAMILY
 from common.values import is_truthy
 
 COLLECTION_ICONS_DIR = COLLECTIONS_PATH.parent / "collection_icons"
@@ -29,7 +30,7 @@ def ensure_collection_icons_dir() -> Path:
 
 # What a collection icon may be. Checked on the way in, because the file is served
 # straight back out and the extension is what a browser reads it as.
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+IMAGE_EXTENSIONS = set(IMAGE_FAMILY)
 
 
 def _safe_icon_stem(filename: str) -> str:

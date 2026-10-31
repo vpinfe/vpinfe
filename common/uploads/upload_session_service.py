@@ -62,14 +62,33 @@ def _safe_join(base: Path, relative: str) -> Path:
     return dest
 
 
+_held: set[str] = set()
+
+
+def hold(upload_id: str) -> None:
+    """Keep a session from being swept or aborted while an import reads from it."""
+    with _lock:
+        _held.add(upload_id)
+
+
+def release(upload_id: str) -> None:
+    with _lock:
+        _held.discard(upload_id)
+
+
+def is_held(upload_id: str) -> bool:
+    with _lock:
+        return upload_id in _held
+
+
 def _sweep() -> None:
     now = time.time()
     with _lock:
         stale = [uid for uid, rec in _sessions.items()
-                 if now - rec["created"] > SESSION_TTL_SECONDS]
+                 if now - rec["created"] > SESSION_TTL_SECONDS and uid not in _held]
         records = [_sessions.pop(uid) for uid in stale]
     for rec in records:
-        shutil.rmtree(rec["dir"], ignore_errors=True)
+        _remove(rec)
 
 
 def begin_session(source: Path | None = None) -> UploadSession:
@@ -140,4 +159,22 @@ def cleanup_session(upload_id: str) -> None:
     with _lock:
         rec = _sessions.pop(upload_id, None)
     if rec is not None:
-        shutil.rmtree(rec["dir"], ignore_errors=True)
+        _remove(rec)
+
+
+def _remove(rec: dict) -> None:
+    shutil.rmtree(rec["dir"], ignore_errors=True)
+    if rec.get("pictures"):
+        shutil.rmtree(rec["pictures"], ignore_errors=True)
+
+
+def picture_folder(upload_id: str) -> Path:
+    """Where pictures taken out of an archive are kept for the sheet to draw. It goes with
+    the session and is never inside it, so it is not read as part of the drop."""
+    with _lock:
+        rec = _sessions.get(upload_id)
+        if rec is None:
+            raise UnknownSessionError(t("error.uploads.upload_gone"))
+        if not rec.get("pictures"):
+            rec["pictures"] = tempfile.mkdtemp(prefix="vpinfe_upload_pictures_")
+        return Path(rec["pictures"])

@@ -191,7 +191,7 @@ def _read_log(path: Path, budget: int) -> tuple[str, int, int]:
         tail = handle.read().decode("utf-8", errors="replace")
     tail = tail.split("\n", 1)[1] if "\n" in tail else ""
     omitted = max(0, _count_lines(path) - len(kept) - tail.count("\n"))
-    return f"{head}-- {omitted} lines left out --\n{tail}", omitted, limit
+    return f"{head}-- {omitted} lines skipped --\n{tail}", omitted, limit
 
 
 def _log_jobs(options: Options) -> list[tuple[str, Path]]:

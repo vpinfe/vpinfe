@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from nicegui import ui
 
@@ -122,6 +122,24 @@ class TheAddresses(unittest.TestCase):
         deeplink.apply(state, {"view": "tables", "report": JOB}, views=["tables"], sections=[])
 
         self.assertNotIn("report", state)
+
+    def test_the_media_address_is_read_back_as_the_group_it_names(self) -> None:
+        state: dict[str, Any] = {"view": "games"}
+        params = dict(parse_qsl(urlparse(
+            report_groups.media_address(report_groups.UNSUPPORTED)).query))
+
+        deeplink.apply(state, params, views=["games", "media"], sections=[])
+
+        self.assertEqual(("media", report_groups.UNSUPPORTED), (state["view"], state["group"]))
+        self.assertNotIn("report", state)
+
+    def test_a_group_on_a_view_that_takes_none_is_left_out(self) -> None:
+        state: dict[str, Any] = {"view": "games"}
+
+        deeplink.apply(state, {"view": "games", "group": "unsupported"}, views=["games"],
+                       sections=[])
+
+        self.assertNotIn("group", state)
 
     def test_another_view_leaves_the_report_out_of_its_address(self) -> None:
         state = {"view": "games", "report": JOB, "group": "imported"}

@@ -272,6 +272,53 @@ class TheLibraryIsReadAgain(unittest.TestCase):
         self.assertEqual({import_report.NEED_ROM: {"need_rom-1"}}, job["checked"])
 
 
+class TheFilesVPinFECannotUse(unittest.TestCase):
+    MADE = [{"key": "a", "name": "A", "game_id": "g1", "error": "", "table": True},
+            {"key": "b", "name": "B", "game_id": "g2", "error": "", "table": False}]
+
+    def _counted(self, job: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+        async def inline(call: Any, *args: Any) -> Any:
+            return call(*args)
+
+        client = AsyncMock()
+        client.all_media = lambda: rows
+        with patch.object(import_report, "ApiClient", return_value=client), \
+                patch.object(offload, "io", new=inline):
+            asyncio.run(import_report.check(job))
+        return job
+
+    def test_only_the_games_this_import_made_are_counted(self) -> None:
+        job = self._counted(_job(rows=self.MADE), [
+            {"game_id": "g1", "via": "unsupported", "present": True},
+            {"game_id": "g2", "via": "unsupported", "present": True},
+            {"game_id": "g2", "via": "unsupported", "present": False},
+            {"game_id": "g1", "via": "orphan", "present": True},
+            {"game_id": "old", "via": "unsupported", "present": True}])
+
+        self.assertEqual(2, job["unsupported"])
+
+    def test_an_import_that_made_no_game_reads_nothing(self) -> None:
+        job = self._counted(_job(), [{"game_id": "old", "via": "unsupported"}])
+
+        self.assertNotIn("unsupported", job)
+
+    def test_a_count_over_zero_is_a_line_that_opens_the_unsupported_view(self) -> None:
+        job = {**_job(rows=self.MADE), "unsupported": 3}
+
+        drawn = _below_the_strip(job)
+
+        self.assertIn("Good to Know", drawn)
+        self.assertIn("Files VPinFE Can't Use", drawn)
+        self.assertIn("3 files are in formats VPinFE can't use", drawn)
+        self.assertEqual("/manager?view=media&group=unsupported",
+                         report_groups.media_address(report_groups.UNSUPPORTED))
+
+    def test_no_count_is_no_line(self) -> None:
+        drawn = _below_the_strip(_job(rows=self.MADE))
+
+        self.assertNotIn("Files VPinFE Can't Use", drawn)
+
+
 class TheRetryLinks(unittest.TestCase):
     def _retry(self, keys: list[str], found: list[dict[str, Any]]) -> AsyncMock:
         async def inline(call: Any, *args: Any) -> Any:

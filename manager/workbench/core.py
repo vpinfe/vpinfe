@@ -297,10 +297,18 @@ async def _pane_build(container: ui.column, state: dict[str, Any],
     """
     lock: asyncio.Lock = state.setdefault("build_lock", asyncio.Lock())
     state["build_seq"] = mine = state.get("build_seq", 0) + 1
+    if (declare_drop := state.get("declare_drop")) is not None:
+        declare_drop()
     with busy.held(container, over=True):
         async with lock:
             if state["build_seq"] != mine:
                 return
+            # Cleared again under the lock: a build that was already drawing declares its
+            # own subject after this build's first clear, and a panel that registers
+            # neither leaves no rebuild behind for a drop to run.
+            state["panel_rebuild"] = None
+            if declare_drop is not None:
+                declare_drop()
             await draw()
 
 

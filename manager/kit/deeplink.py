@@ -71,7 +71,7 @@ _ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": _PANEL, "slot": _PANEL,
             "page": ("settings",), "log": ("logs",), "tab": ("discovery",),
             "collection": ("collections", "games"),
             "launcher": ("launchers", "tables"), "sets": ("tables",),
-            "report": ("tables",), "group": ("tables",),
+            "report": ("tables",), "group": ("tables", "media"),
             "player": ("players",), "backup": ("backups",), "entry": ("discovery",),
             "author": ("discovery",), "maker": ("discovery",), "theme": ("discovery",)}
 
@@ -313,8 +313,10 @@ def apply(state: dict[str, Any], params: dict[str, str], *,
         state["launcher"] = str(params["launcher"]).strip()
     if str(params.get("sets") or "").strip():
         state["sets"] = str(params["sets"]).strip()
-    if str(params.get("report") or "").strip() and str(params.get("group") or "").strip():
-        state["report"] = str(params["report"]).strip()
+    if str(params.get("group") or "").strip() and (
+            str(params.get("report") or "").strip() or state["view"] == "media"):
+        if str(params.get("report") or "").strip():
+            state["report"] = str(params["report"]).strip()
         state["group"] = str(params["group"]).strip()
     if str(params.get("player") or "").strip():
         state["player"] = str(params["player"]).strip()

@@ -11,7 +11,6 @@ import logging
 import shutil
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -23,6 +22,7 @@ from common.backups import media as backup_media
 from common.capture.geometry import Turn
 from common.failures import why
 from common.games import game_lens, media_ops, media_placement
+from common.games.media_files import SkipError, Target, inside, stamp
 from common.host import tools
 from common.i18n import t
 from common.media.media_specs import IMAGE_FAMILY, VIDEO_FAMILY
@@ -42,25 +42,10 @@ TURNS = tuple(_CCW)
 _TRANSPOSE = {90: Image.Transpose.ROTATE_90, 180: Image.Transpose.ROTATE_180,
               270: Image.Transpose.ROTATE_270}
 
-# Where a game's media sits: its folder, or the one folder inside it.
-_MEDIAS = "medias"
-
 # A long clip on a small machine takes minutes.
 _VIDEO_TIMEOUT = 3600
 
 _JPEG_QUALITY = 95
-
-
-@dataclass(frozen=True)
-class Target:
-    """A file by its game and its place in the game's folder, the key the media rows carry."""
-
-    game_id: str
-    path: str
-
-
-class SkipError(Exception):
-    """A file left as it was, with the reason in words."""
 
 
 def start(targets: list[Target], turn: str, keep_copies: bool) -> jobs.Job:
@@ -118,48 +103,23 @@ def _turn_one(target: Target, ccw: int, folder: Path | None,
     """One file turned, and the copy of it taken first, as (its game folder, 0 or 1)."""
     game = game_lens.game_for_writing(target.game_id)
     game_dir = Path(str(game.full_path_game))
-    source = _inside(game_dir, target.path)
+    source = inside(game_dir, target.path)
     suffix = source.suffix.lower()
     if suffix not in IMAGE_FAMILY and suffix not in VIDEO_FAMILY:
         raise SkipError(t("error.media_rotate.not_media"))
-    before = _stamp(source)
+    before = stamp(source)
     with atomic_write.staged_for(source) as staged:
         if suffix in IMAGE_FAMILY:
             _turn_image(source, staged, ccw)
         else:
             _turn_video(source, staged, ccw, ffmpeg())
-        if _stamp(source) != before:
+        if stamp(source) != before:
             raise SkipError(t("error.media_rotate.changed"))
         if folder is not None:
             backup_media.keep(folder, target.game_id, source, target.path)
         shutil.copymode(source, staged)
     media_placement.record_origin(game_dir, source)
     return game_dir, int(folder is not None)
-
-
-def _stamp(path: Path) -> tuple[int, int]:
-    """What says a file is still the one that was read: a long turn is a window for another
-    job to write the same slot."""
-    found = path.stat()
-    return found.st_mtime_ns, found.st_size
-
-
-def _inside(game_dir: Path, relative: str) -> Path:
-    """The file a key names, only where it is a file of the game's media: in the game's
-    folder or under its `medias` folder, never reached through a link."""
-    named = PurePosixPath(relative)
-    parts = named.parts
-    shaped = (parts and not named.is_absolute() and "\\" not in relative
-              and not {"..", "."} & set(parts) and ":" not in parts[0]
-              and (len(parts) == 1 or parts[0] == _MEDIAS))
-    if not shaped:
-        raise SkipError(t("error.media_rotate.not_in_game"))
-    source = game_dir.joinpath(*parts)
-    if source.is_symlink() or not source.is_file():
-        raise SkipError(t("error.media_rotate.missing"))
-    if not source.resolve().is_relative_to(game_dir.resolve()):
-        raise SkipError(t("error.media_rotate.not_in_game"))
-    return source
 
 
 def _turn_image(source: Path, staged: Path, ccw: int) -> None:
@@ -183,12 +143,18 @@ def _turn_image(source: Path, staged: Path, ccw: int) -> None:
 
 
 def _turn_video(source: Path, staged: Path, ccw: int, ffmpeg: Path) -> None:
-    """The sound is copied as it is; the picture is encoded again, which a turn needs."""
+    """The sound is copied as it is; the picture is encoded again, which a turn needs. A WebM
+    stays WebM, in VP9, since H.264 does not go in one."""
+    if source.suffix.lower() == ".webm":
+        codec = ["-c:v", "libvpx-vp9", "-crf", "24", "-b:v", "0", "-row-mt", "1"]
+        container = ["-f", "webm"]
+    else:
+        codec = ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
+        container = ["-movflags", "+faststart", "-f", "mp4"]
     argv = [str(ffmpeg), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
             "-i", str(source), "-map", "0:v:0", "-map", "0:a?",
-            "-vf", ",".join(Turn(ccw=ccw).filters), "-c:v", "libx264", "-preset", "medium",
-            "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
-            "-f", "mp4", str(staged)]
+            "-vf", ",".join(Turn(ccw=ccw).filters), *codec, "-pix_fmt", "yuv420p",
+            "-c:a", "copy", *container, str(staged)]
     try:
         subprocess.run(argv, capture_output=True, text=True, errors="replace",
                        stdin=subprocess.DEVNULL, timeout=_VIDEO_TIMEOUT, check=True,

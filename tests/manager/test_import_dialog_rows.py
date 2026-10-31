@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import patch
 
 from manager.kit import candidates
-from manager.library import import_dialog
+from manager.library import convert_row, drop_sheet, import_dialog
 
 
 def _media(name: str = "(RuleSheet) 300.png", **more: object) -> dict:
@@ -21,8 +21,10 @@ def _media(name: str = "(RuleSheet) 300.png", **more: object) -> dict:
 def _drawn(item: dict, upload_id: str = "") -> tuple[list[str], list[Any]]:
     with patch.object(import_dialog, "ui") as ui, \
             patch.object(candidates, "thumb") as thumb:
-        import_dialog._draw_row(item, {"game_dir": "/games/300"}, {0: True}, True,
-                                lambda: None, upload_id)
+        plan = {"game_dir": "/games/300", "items": [item]}
+        import_dialog._draw_row(drop_sheet.Sheet(plan), item, plan, {0: True}, True,
+                                lambda: None, upload_id, progress=convert_row.Progress(),
+                                replan=lambda: None, redraw=lambda: None)
     return [one.args[0] for one in ui.label.call_args_list], thumb.call_args_list
 
 
@@ -30,7 +32,7 @@ class SlotWords(unittest.TestCase):
     def test_a_media_file_says_the_slot_it_fills_not_the_word_media(self) -> None:
         said, _thumbs = _drawn(_media())
 
-        self.assertIn("Rule Sheet · slot is empty", said)
+        self.assertIn("Rule Sheet · slot is empty · 402.3 KB", said)
         self.assertNotIn("Media", said)
 
     def test_the_path_of_a_media_file_is_not_a_line_of_the_row(self) -> None:
@@ -44,7 +46,7 @@ class SlotWords(unittest.TestCase):
                 "destination": "/games/300/300.vpx", "replaces": "replaces 300 old.vpx"}
         said, _thumbs = _drawn(item)
 
-        self.assertIn("Table · the game folder · replaces 300 old.vpx", said)
+        self.assertIn("Table · the game folder · replaces 300 old.vpx · 9 B", said)
 
 
 class Pictures(unittest.TestCase):
@@ -68,21 +70,14 @@ class Pictures(unittest.TestCase):
 
         self.assertEqual([], thumbs)
 
-    def test_an_image_is_pictured_when_the_drop_was_that_file(self) -> None:
-        self.assertTrue(import_dialog._pictured(_media(), "(RuleSheet) 300.png"))
-
-    def test_an_image_in_an_archive_is_not_pictured(self) -> None:
-        self.assertFalse(import_dialog._pictured(_media(), "300 pack.zip"))
-
-    def test_a_drop_of_several_files_has_no_one_source_and_is_pictured(self) -> None:
-        self.assertTrue(import_dialog._pictured(_media(), ""))
+    def test_an_image_is_pictured_whether_it_came_loose_or_in_an_archive(self) -> None:
+        self.assertTrue(import_dialog._pictured(_media()))
 
     def test_a_document_is_not_pictured(self) -> None:
-        self.assertFalse(import_dialog._pictured(_media("rules.pdf"), ""))
+        self.assertFalse(import_dialog._pictured(_media("rules.pdf")))
 
     def test_a_long_bundle_is_pictured_only_as_far_as_the_cap(self) -> None:
-        self.assertFalse(import_dialog._pictured(
-            _media(index=import_dialog.PICTURES_UP_TO), ""))
+        self.assertFalse(import_dialog._pictured(_media(index=import_dialog.PICTURES_UP_TO)))
 
 
 if __name__ == "__main__":

@@ -411,6 +411,7 @@ list of ints.
 | `rom_name` | The ROM name the files go under, for the kinds that live under one.  A plain name: one with a path separator or `..` in it is refused |
 | `location_id` | The library folder to make a new game in, in place of the one marked for new games.  One that names no library folder, or cannot be written to, refuses the import |
 | `new_game_dir_name` | The new game's folder name.  Left out, it is the catalog's name for the entry, then the table's file name |
+| `convert` | What each picture, sound or video core has to convert on the way in is made as: `{"rows": {file: {"to": ..., "video": ..., "quality": ..., "sound_in_video": ...}}, "wait": bool}`, with each file named by the `member` of its `plan` item, and every value text or `None` for no choice.  `to` is the format, or `asis` to keep the file untouched.  A file or a value left out takes the person's Preferred Formats where they hold one, else core's recommendation.  A name that matches no file is ignored.  `wait` (default true) holds a video re-encode while a table is playing, and an `execute` called with it waits until the table stops |
 | `selected` | `execute` only: the `index` of each plan item to import.  Left out, every item the plan lists is imported |
 
 ### `ctx.uploads.analyze`
@@ -419,7 +420,9 @@ list of ints.
 
 What the source holds, as the import would read it.  It answers `source_kind` and `source_name`,
 `has_game` (a table is among it), `assets` (what was recognized, each with its `kind`, `label`,
-`size` and `detail`), `notes`, `unrecognized` (the paths no rule claimed), `bundle_info` (the
+`size` and `detail`), `files` (every file the source holds, as a path inside it), `notes`,
+`unrecognized` (the paths no rule claimed), `placeable` (those of them that are pictures,
+sounds or videos, which an import still offers places to), `bundle_info` (the
 `.info` the source carried, if it did) and `error`, which is empty unless the source could not be
 read.
 

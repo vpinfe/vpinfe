@@ -538,7 +538,9 @@ class ImportWithoutPickTests(TempTree):
         _offline(self, [_entry("fathom", "Fathom")])
         folder = write_game(self.root, name)
         plan = MagicMock(new_game_dir_name=name)
-        with patch.object(upload_ops, "_analysis_for", return_value=(None, self.root)), \
+        found = MagicMock(source_path=self.root)
+        with patch.object(upload_ops, "_arrival_for", return_value=found), \
+                patch.object(upload_ops, "_drop_for"), \
                 patch.object(upload_ops, "_built_plan", return_value=plan), \
                 patch.object(upload_ops, "select_plan_items", return_value=plan), \
                 patch.object(upload_ops, "_run", return_value={

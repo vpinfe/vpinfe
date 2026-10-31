@@ -16,7 +16,7 @@ from nicegui import core, ui
 
 from common import i18n, service_errors
 from common.games.collections_service import IMAGE_EXTENSIONS
-from common.media.media_specs import IMAGE_FAMILY
+from common.media.media_specs import IMAGE_FAMILY, VIDEO_FAMILY, register_mime_types
 from manager.kit import folder_picker
 from manager.kit.data import Library
 from manager.library import mediasource
@@ -62,7 +62,7 @@ class WhatThePickerOffers(unittest.TestCase):
 
     def test_media_offers_its_family(self) -> None:
         self.assertEqual(IMAGE_FAMILY, mediasource._media(LIBRARY, "wheel").accept)
-        self.assertEqual((".mp4",), mediasource._media(LIBRARY, "playfield_video").accept)
+        self.assertEqual(VIDEO_FAMILY, mediasource._media(LIBRARY, "playfield_video").accept)
 
     def test_a_collection_image_offers_what_a_collection_can_save(self) -> None:
         image = mediasource._Image(LIBRARY, "Favorites", "Image", _nothing)
@@ -91,6 +91,7 @@ class ACollectionTakingAGameWheel(unittest.TestCase):
 
     def test_every_image_the_library_serves_is_named_so_a_collection_can_save_it(
             self) -> None:
+        register_mime_types()
         for suffix in IMAGE_FAMILY:
             served = mimetypes.guess_type(f"wheel{suffix}")[0] or ""
             with self.subTest(served=served):

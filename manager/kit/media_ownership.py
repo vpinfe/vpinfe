@@ -67,6 +67,11 @@ def source_names() -> list[str]:
 # lens that enumerates files can.
 ORPHAN = "orphan"
 UNUSED = "unused"
+# A file named for a slot but written in a format VPinFE cannot use, so it answers for
+# nobody until it is converted.
+UNSUPPORTED = "unsupported"
+# The `via` values of a file that serves no slot, which a lens that lists slots leaves out.
+LOOSE = (ORPHAN, UNUSED, UNSUPPORTED)
 
 TABLE = "table"
 GAME = "game"
@@ -114,6 +119,10 @@ _TIERS = {
              "manager.media_ownership.unused_short",
                  "manager-tier--standin", "manager-mark--set",
                  "manager.media_ownership.unused_tip"),
+    UNSUPPORTED: Tier(UNSUPPORTED, "manager.media_ownership.unsupported",
+             "manager.media_ownership.unsupported_short",
+                      "manager-tier--warn", "manager-mark--dashed",
+                      "manager.media_ownership.unsupported_tip"),
 }
 
 # Most specific first. `LEGEND` omits Missing, which a legend does not need - a blank
@@ -138,11 +147,11 @@ def key_of(via: str | None) -> str:
     ours and not the user's. `set` and `fallback` are one state too - either way the
     file serving this slot was named for something other than this slot.
 
-    The two the resolver never says are passed through, because the file lenses do say
+    The ones the resolver never says are passed through, because the file lenses do say
     them: a file can be here and answer for nobody, which is not a tier at all.
     """
     via = str(via or "")
-    if via in (ORPHAN, UNUSED):
+    if via in LOOSE:
         return via
     if via == TABLE:
         return TABLE

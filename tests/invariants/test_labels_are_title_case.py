@@ -47,7 +47,7 @@ _HEADINGS = frozenset({"manager.placement.heading"}) | frozenset(
 _SUMMARY_ROWS = frozenset(
     {f"ext.library_importer.wizard.summary.{name}" for name in (
         "reads_as", "folder", "roms_missing", "matching", "not_matched", "already_here",
-        "left_out", "how", "going_into", "space", "imported", "left_behind", "names",
+        "skipped", "how", "going_into", "space", "imported", "left_behind", "names",
         "details", "wheel_images")}
     | {f"ext.library_importer.count.{name}" for name in (
         "games", "tables", "media", "companions", "history", "matched")}

@@ -24,6 +24,7 @@ from common.games import (
     asset_resolver,
     collation,
     game_repository,
+    media_probe,
     media_service,
     table_lens,
 )
@@ -33,11 +34,13 @@ from common.i18n import t
 from common.media import sized_media
 from common.media.media_specs import (
     MEDIA_SPECS,
+    VIDEO_FAMILY,
     media_candidates,
     media_label_map,
     resolve_media_entries,
     resolve_media_pages,
     spec_named,
+    unsupported_named,
 )
 
 logger = logging.getLogger("vpinfe.common.games.media_lens")
@@ -52,6 +55,13 @@ logger = logging.getLogger("vpinfe.common.games.media_lens")
 # and it resolves again the moment what covers it goes.
 ORPHAN = "orphan"
 UNUSED = "unused"
+# A file VPinFE named for a kind in an extension that kind cannot read: here, and as good
+# as no file until it is converted.
+UNSUPPORTED = "unsupported"
+LOOSE = (ORPHAN, UNUSED, UNSUPPORTED)
+
+# Played by VPinFE's own decoder, so no browser's codecs matter to them.
+_NOT_PLAYED_BY_A_BROWSER = frozenset({"real_dmd_video", "real_dmd_color_video"})
 
 _SHARED_TIERS = frozenset({"game", "default"})
 _TABLE_TIERS = frozenset({"table"})
@@ -99,6 +109,28 @@ def _orphans(files: set[str], medias: set[str], known: set[str]) -> list[tuple[s
             continue
         found.append((parsed.kind, parsed.stem, name if name in files else f"medias/{name}"))
     return found
+
+
+def _unsupported(files: set[str], medias: set[str],
+                 variant: str) -> list[tuple[str, str, int, str]]:
+    """`(kind, stem, page, relative path)` for each file named for a kind in an extension
+    its family does not hold but can be converted to. Judged from the name alone, in the two
+    places `_orphans` looks."""
+    found = []
+    for name in sorted(files | {item for item in medias if "/" not in item}):
+        parsed = unsupported_named(name, variant)
+        if parsed is not None:
+            found.append((parsed.kind, parsed.stem, parsed.page,
+                          name if name in files else f"medias/{name}"))
+    return found
+
+
+def _codec(kind: str, path: Path | None) -> str | None:
+    """The codec a browser would be asked to play, for a video that one plays."""
+    if (path is None or path.suffix.lower() not in VIDEO_FAMILY
+            or kind in _NOT_PLAYED_BY_A_BROWSER):
+        return None
+    return media_probe.probe(path)["video_codec"]
 
 
 def _unused(game_id: str, row: dict, kind: str, path: Path, game_dir: Path,
@@ -215,6 +247,22 @@ def _game_rows(game_id: str, entry: Any, variant: str,
             "standing_in": "",
         })
 
+    for kind, stem, page, relative in _unsupported(files, medias, variant):
+        path = game_dir / relative
+        found.append({
+            **_row(game_id, row, kind, "", stem, page),
+            "id": f"{game_id}:{kind}:{relative}",
+            "serves": 0,
+            "present": True,
+            "file": Path(relative).name,
+            "path": relative,
+            "via": UNSUPPORTED,
+            "format": path.suffix[1:].upper(),
+            "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
+            "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+            "standing_in": "",
+        })
+
     for slot in _KINDS:
         hit = shared.get(slot)
         shared_path = (hit.path if hit is not None and hit.tier in _SHARED_TIERS
@@ -241,6 +289,7 @@ def _game_rows(game_id: str, entry: Any, variant: str,
                 "matched_to": asset_origin.match_of(recorded, game_dir,
                                                     shared_path) or None,
                 "version": sized_media.version(shared_path),
+                "video_codec": _codec(slot, shared_path),
                 "standing_in": (hit.tier if hit is not None and hit.path is not None
                                 and hit.tier not in _SHARED_TIERS else ""),
             }
@@ -269,6 +318,7 @@ def _game_rows(game_id: str, entry: Any, variant: str,
                 "origin": asset_origin.origin_of(hosts, game_dir, own) or None,
                 "matched_to": asset_origin.match_of(recorded, game_dir, own) or None,
                 "version": sized_media.version(own),
+                "video_codec": _codec(slot, own),
                 "standing_in": "",
             }
             found.append(first)
@@ -337,11 +387,11 @@ SHARED_FIELDS = ("game_id", "kind", "page", "present", "file", "path", "via", "o
 def shared_rows() -> list[dict[str, Any]]:
     """What a count of the library's media covers reads: one row per game and kind (a later
     page of a paged kind too) that is the shared file or the lack of one, cut to the fields
-    that count reads. A file named for one table, an orphaned one and an unused one are not
-    here. In the order the games were read, unsorted."""
+    that count reads. A file named for one table, an orphaned one, an unused one and an
+    unsupported one are not here. In the order the games were read, unsorted."""
     return [{field: row.get(field) for field in SHARED_FIELDS}
             for row in library_rows()
-            if not row.get("table") and row.get("via") not in (ORPHAN, UNUSED)]
+            if not row.get("table") and row.get("via") not in LOOSE]
 
 
 def listing(limit: int = 0, offset: int = 0, game: str = "",

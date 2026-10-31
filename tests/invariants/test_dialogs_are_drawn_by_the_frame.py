@@ -32,6 +32,7 @@ NOT_ASKING = {
 # places it says `persistent`, so a further one is a decision made here: a run puts it on
 # and takes it off again, and a request still waiting is drawn with it.
 PERSISTENT = {
+    "import_dialog.py": 1,
     "mediasource.py": 2,
     "sign_in_notice.py": 1,
     "wizard.py": 2,

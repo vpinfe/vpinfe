@@ -1210,7 +1210,7 @@ def build(ctx: Any) -> None:
                 rows.append([ctx.t(f"wizard.things.{key}.label"),
                              ctx.t("wizard.things.count", count=counts[key])
                              if _on(said, things.switch(key))
-                             else ctx.t("wizard.summary.left_out_thing")])
+                             else ctx.t("wizard.summary.skipped_thing")])
         return rows
 
     def _yes(on: bool) -> str:
@@ -1255,8 +1255,8 @@ def build(ctx: Any) -> None:
                                     ("skip", len(made.already) - filled)) if count)])
         left_out = sum(1 for one in made.matches if not one.existing and not one.taken)
         if left_out:
-            rows.append([ctx.t("wizard.summary.left_out"),
-                         ctx.t("wizard.summary.left_out_count", count=left_out)])
+            rows.append([ctx.t("wizard.summary.skipped"),
+                         ctx.t("wizard.summary.skipped_count", count=left_out)])
         inside = ", ".join(dict.fromkeys(
             plan_for.tables_folder(one) for one in plan_for.systems_going(library, games)
             if plan_for.tables_folder(one))) or library.root

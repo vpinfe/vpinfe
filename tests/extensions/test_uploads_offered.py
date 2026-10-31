@@ -19,6 +19,7 @@ from common.extensions.context import ExtensionContext, ExtensionFiles
 from common.extensions.contract import ContractError
 from common.extensions.games import ExtensionGames
 from common.extensions.uploads import EXECUTE_KEYS, PLAN_KEYS, ExtensionUploads
+from common.games import convert_preferences
 from common.uploads import asset_import_service, upload_ops
 from httpapi import models
 from tests.support.library import TempTree
@@ -64,6 +65,33 @@ class AnalyzeAndPlanTests(_Uploads):
 
         self.assertTrue(found["has_game"])
         self.assertIn("media", {one["kind"] for one in found["assets"]})
+
+    def test_the_files_pass_the_wire_model(self) -> None:
+        upload = upload_ops.begin_over(self.incoming)["id"]
+        self.addCleanup(upload_ops.abort, upload)
+
+        found = models.Analysis(**upload_ops.analysis_of(upload))
+
+        self.assertIn("wheel.png", found.files)
+
+    def test_it_lists_every_file_the_source_holds_once(self) -> None:
+        (self.incoming / "notes.xyz").write_bytes(b"x")
+
+        found = self.uploads.analyze(self.incoming)
+
+        self.assertIn("wheel.png", found["files"])
+        self.assertIn("notes.xyz", found["files"])
+        self.assertEqual(len(found["files"]), len(set(found["files"])))
+
+    def test_it_names_the_unrecognized_pictures_an_import_still_offers_places_to(self) -> None:
+        (self.incoming / "IMG_0001.png").write_bytes(b"x")
+        (self.incoming / "notes.xyz").write_bytes(b"x")
+
+        found = self.uploads.analyze(self.incoming)
+
+        self.assertIn("notes.xyz", found["unrecognized"])
+        self.assertEqual(["IMG_0001.png"],
+                         [one for one in found["placeable"] if one.startswith(("IMG", "notes"))])
 
     def test_a_new_game_is_planned_where_the_library_puts_them(self) -> None:
         plan = self.uploads.plan(self.incoming, allow_new_game=True)
@@ -266,6 +294,12 @@ class TheRequestTests(_Uploads):
 
         self.assertIn("add_tables", str(refused.exception))
 
+    def test_assignments_and_picks_are_taken_as_lists_and_a_mapping_of_text(self) -> None:
+        for bad in ({"picks": ["a"]}, {"picks": {"k": 1}}, {"assignments": {"member": "a"}},
+                    {"assignments": ["a"]}):
+            with self.subTest(bad=bad), self.assertRaises(ContractError):
+                self.uploads.plan(self.incoming, game_id="g1", **bad)
+
     def test_a_game_and_a_new_game_together_are_refused(self) -> None:
         with self.assertRaises(ContractError) as refused:
             self.uploads.execute(self.incoming, game_id="g1", allow_new_game=True)
@@ -287,7 +321,8 @@ class TheRequestTests(_Uploads):
     def test_a_value_of_the_wrong_type_is_refused(self) -> None:
         for asked in ({"add_table": "yes"}, {"allow_new_game": 1}, {"vps_id": 7},
                       {"rom_name": ["taxi"]}, {"selected": "0"}, {"selected": ["0"]},
-                      {"selected": [True]}, {"new_game_dir_name": 3}):
+                      {"selected": [True]}, {"new_game_dir_name": 3}, {"table_id": 2},
+                      {"scope": "everything"}, {"page": "2"}, {"page": 0}, {"page": True}):
             with self.subTest(asked=asked), self.assertRaises(ContractError) as refused:
                 self.uploads.execute(self.incoming, **asked)
             self.assertIn(next(iter(asked)), str(refused.exception))
@@ -311,8 +346,59 @@ class TheRequestTests(_Uploads):
 
         self.assertEqual(route, set(PLAN_KEYS))
         self.assertEqual(route | {"selected"}, set(EXECUTE_KEYS))
-        self.assertEqual(set(models.ImportRequest.model_fields) - {"declared", "game_dir"}
-                         | {"game_id"}, set(EXECUTE_KEYS))
+        self.assertEqual(set(models.ImportRequest.model_fields)
+                         - {"declared", "game_dir"} | {"game_id"},
+                         set(EXECUTE_KEYS))
+
+    def test_a_convert_of_the_wrong_shape_is_refused(self) -> None:
+        for asked in ("webp", {"rows": []}, {"rows": {"a.tga": "webp"}},
+                      {"rows": {"a.tga": {"format": "webp"}}},
+                      {"rows": {"a.tga": {"to": 3}}}, {"wait": "yes"}, {"speed": "fast"}):
+            with self.subTest(asked=asked), self.assertRaises(ContractError) as refused:
+                self.uploads.plan(self.incoming, game_id="g1", convert=asked)
+            self.assertIn("convert", str(refused.exception))
+
+    def _a_wheel(self) -> Path:
+        from PIL import Image
+
+        wheel = self.incoming / "wheel.tga"
+        Image.new("RGB", (64, 48), (30, 120, 200)).save(wheel, "TGA")
+        return wheel
+
+    def _made(self) -> list[str]:
+        return sorted(one.suffix for one in (self.game / "medias").iterdir())
+
+    def test_a_convert_choice_is_the_format_written(self) -> None:
+        wheel = self._a_wheel()
+
+        self.uploads.execute(wheel, game_id="g1", media_kind="wheel",
+                             convert={"rows": {"wheel.tga": {"to": "webp"}}})
+
+        self.assertEqual([".webp"], self._made())
+
+    def test_a_choice_left_as_none_is_no_choice(self) -> None:
+        wheel = self._a_wheel()
+
+        self.uploads.execute(wheel, game_id="g1", media_kind="wheel",
+                             convert={"rows": {"wheel.tga": {"to": None, "quality": None}}})
+
+        self.assertEqual([".png"], self._made())
+
+    def test_where_it_passes_none_the_recommendation_is_written(self) -> None:
+        wheel = self._a_wheel()
+
+        self.uploads.execute(wheel, game_id="g1", media_kind="wheel")
+
+        self.assertEqual([".png"], self._made())
+
+    def test_where_it_passes_none_the_preference_is_written(self) -> None:
+        wheel = self._a_wheel()
+        held = convert_preferences.Preferences(picture="jpg")
+
+        with mock.patch.object(convert_preferences, "read", return_value=held):
+            self.uploads.execute(wheel, game_id="g1", media_kind="wheel")
+
+        self.assertEqual([".jpg"], self._made())
 
     def test_a_claim_takes_the_fields_the_routes_take(self) -> None:
         from dataclasses import fields

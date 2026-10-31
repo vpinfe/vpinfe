@@ -8,6 +8,7 @@ on a share pays for each byte.
 from __future__ import annotations
 
 import logging
+import math
 import struct
 import threading
 from collections import OrderedDict
@@ -25,6 +26,10 @@ _OGG_TAIL = 65_536 + 27
 # A sample entry's type, as `GET /frontend/browser` names the format.
 _VIDEO_CODECS = {b"avc1": "h264", b"avc3": "h264", b"hvc1": "hevc", b"hev1": "hevc",
                  b"vp09": "vp9", b"av01": "av1"}
+
+# A WebM track's CodecID, named as the sample entries above are.
+_WEBM_CODECS = {"V_VP9": "vp9", "V_AV1": "av1", "V_MPEG4/ISO/AVC": "h264",
+                "V_MPEGH/ISO/HEVC": "hevc"}
 
 _KEPT = 4096
 _kept: OrderedDict[tuple[str, int, int], dict[str, Any]] = OrderedDict()
@@ -60,6 +65,8 @@ def _probe(path: Path, size: int) -> dict[str, Any]:
             head = handle.read(16)
             if head[4:8] in (b"ftyp", b"moov", b"mdat", b"free", b"wide"):
                 facts.update(_mp4(handle, size))
+            elif head[:4] == _EBML_MAGIC:
+                facts.update(_webm(handle, size))
             elif head[:4] == b"OggS":
                 facts.update(_ogg(handle, size))
             elif head[:3] == b"ID3" or (head[:1] == b"\xff" and head[1] & 0xE0 == 0xE0):
@@ -168,6 +175,116 @@ def _tkhd(handle: IO[bytes], body: int) -> tuple[int, int]:
     handle.seek((32 if version == 1 else 20) + 52, 1)
     width, height = struct.unpack(">II", handle.read(8))
     return width >> 16, height >> 16
+
+
+# --- WebM --------------------------------------------------------------------------
+
+_EBML_MAGIC = b"\x1a\x45\xdf\xa3"
+_SEGMENT, _INFO, _TRACKS, _CLUSTER = 0x18538067, 0x1549A966, 0x1654AE6B, 0x1F43B675
+_TIMECODE_SCALE, _DURATION = 0x2AD7B1, 0x4489
+_TRACK_ENTRY, _TRACK_TYPE, _CODEC_ID, _VIDEO = 0xAE, 0x83, 0x86, 0xE0
+_PIXEL_WIDTH, _PIXEL_HEIGHT = 0xB0, 0xBA
+_TRACK_TYPE_VIDEO = 1
+# Nanoseconds one timecode unit lasts, where Info does not say.
+_DEFAULT_TIMECODE_SCALE = 1_000_000
+# Elements read at one level before the walk gives up, so a file of nothing but padding
+# ends it.
+_EBML_ELEMENTS = 1024
+
+
+def _vint_length(first: int) -> int:
+    """Bytes in an EBML variable-length integer, from its first byte; 9 where invalid."""
+    return 9 - first.bit_length() if first else 9
+
+
+def _elements(handle: IO[bytes], start: int, end: int) -> Iterator[tuple[int, int, int]]:
+    """(id, body start, body end) for each EBML element between two offsets, by seeking.
+    An element of unknown size runs to `end`."""
+    at = start
+    for _ in range(_EBML_ELEMENTS):
+        if at + 2 > end:
+            return
+        handle.seek(at)
+        head = handle.read(12)
+        if not head:
+            return
+        id_length = _vint_length(head[0])
+        if id_length > 4 or len(head) <= id_length:
+            return
+        size_length = _vint_length(head[id_length])
+        if size_length > 8 or len(head) < id_length + size_length:
+            return
+        raw = int.from_bytes(head[id_length:id_length + size_length], "big")
+        unknown = (1 << 7 * size_length) - 1
+        length = raw & unknown
+        body = at + id_length + size_length
+        stop = end if length == unknown else min(body + length, end)
+        yield int.from_bytes(head[:id_length], "big"), body, stop
+        at = stop
+
+
+def _uint(handle: IO[bytes], body: int, end: int) -> int:
+    handle.seek(body)
+    return int.from_bytes(handle.read(max(0, min(end - body, 8))), "big")
+
+
+def _float(handle: IO[bytes], body: int, end: int) -> float | None:
+    handle.seek(body)
+    data = handle.read(max(0, min(end - body, 8)))
+    if len(data) == 4:
+        return float(struct.unpack(">f", data)[0])
+    return float(struct.unpack(">d", data)[0]) if len(data) == 8 else None
+
+
+def _webm(handle: IO[bytes], size: int) -> dict[str, Any]:
+    facts: dict[str, Any] = {"format": "WEBM"}
+    segment = next(((body, end) for ident, body, end in _elements(handle, 0, size)
+                    if ident == _SEGMENT), None)
+    if segment is None:
+        return facts
+    scale, length, tracked = _DEFAULT_TIMECODE_SCALE, None, False
+    for ident, body, end in _elements(handle, *segment):
+        if ident == _INFO:
+            for inner, start, stop in _elements(handle, body, end):
+                if inner == _TIMECODE_SCALE:
+                    scale = _uint(handle, start, stop) or scale
+                elif inner == _DURATION:
+                    length = _float(handle, start, stop)
+        elif ident == _TRACKS:
+            facts.update(_webm_video(handle, body, end))
+            tracked = True
+        elif ident == _CLUSTER:
+            # Media starts here, and an unknown-size cluster would swallow what follows.
+            break
+        if tracked and length is not None:
+            break
+    if length is not None and math.isfinite(length) and length > 0:
+        facts["duration_s"] = length * scale / 1e9
+    return facts
+
+
+def _webm_video(handle: IO[bytes], body: int, end: int) -> dict[str, Any]:
+    """The first video track's codec and pixel size, where Tracks has one."""
+    for ident, start, stop in _elements(handle, body, end):
+        if ident != _TRACK_ENTRY:
+            continue
+        kind, codec, width, height = 0, "", 0, 0
+        for inner, first, last in _elements(handle, start, stop):
+            if inner == _TRACK_TYPE:
+                kind = _uint(handle, first, last)
+            elif inner == _CODEC_ID:
+                handle.seek(first)
+                codec = handle.read(min(last - first, 64)).rstrip(b"\0").decode("latin-1")
+            elif inner == _VIDEO:
+                for field, at, to in _elements(handle, first, last):
+                    if field == _PIXEL_WIDTH:
+                        width = _uint(handle, at, to)
+                    elif field == _PIXEL_HEIGHT:
+                        height = _uint(handle, at, to)
+        if kind == _TRACK_TYPE_VIDEO:
+            return {"video_codec": _WEBM_CODECS.get(codec),
+                    "width": width or None, "height": height or None}
+    return {}
 
 
 # --- MP3 ---------------------------------------------------------------------------

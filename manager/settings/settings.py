@@ -40,7 +40,7 @@ from common.host import (
     key_simulator,
     tools,
 )
-from common.i18n import size, t
+from common.i18n import t
 from common.media.media_specs import media_label_map
 from common.online import theme_source_checks as online_checks
 from common.settings import feature_checks
@@ -946,30 +946,10 @@ def _get_tool(library: Library, refill: Callable[[], None], row: dict[str, Any],
     """A missing Tool VPinFE can get itself, and Get, asking first what and from where."""
     @on_page
     async def get() -> None:
-        if not await confirm.ask(
-                t("manager.settings.get_ffmpeg_ask"),
-                detail=t("manager.settings.get_ffmpeg_detail",
-                         version=str(offered.get("version")),
-                         source=str(offered.get("source")),
-                         size=size(int(offered.get("size") or 0))),
-                confirm=t("manager.settings.get_ffmpeg"), icon=verbs.FETCH, danger=False):
-            return
-        try:
-            job = await offload.io(library.get_tool, str(row.get("id")))
-        except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
-            ui.notify(t("manager.settings.ffmpeg_failed"), caption=why(exc),
-                      type="negative")
-            return
-        from manager.library import record
+        from manager.library import get_tool
 
-        ended = await record.ended_job(library, str(job.get("id") or ""))
-        if not ended or ended.get("error"):
-            ui.notify(t("manager.settings.ffmpeg_failed"),
-                      caption=str(ended.get("error") or ""), type="negative")
-        else:
-            ui.notify(t("manager.settings.got_ffmpeg", version=str(ended.get("version"))),
-                      type="positive")
-        refill()
+        if await get_tool.ask_and_get(library, str(row.get("id")), offered):
+            refill()
 
     with ui.element("div").classes("manager-attention w-full mb-2"):
         ui.icon("error_outline").classes("manager-attention-icon")
@@ -1926,6 +1906,7 @@ async def build_device_page(source: Any, context: dict[str, Any], schema: list[d
                             waiting: Waiting | None = None,
                             stands_in: dict[str, list[tuple[Any, Any]]] | None = None,
                                        linked: attract.Attract | None = None,
+                            below: dict[str, dict[str, list[tuple[Any, Any]]]] | None = None,
                             ) -> None:
     """One page of a device's settings, drawn exactly as this install's are.
 
@@ -1990,11 +1971,13 @@ async def build_device_page(source: Any, context: dict[str, Any], schema: list[d
         preview = chrome_options.Preview(values) \
             if name == chrome_options.SECTION and source is context.get("library") else None
         beneath = UNDER_SETTINGS.get(name)
+        placed = {**(await beneath(values) if beneath is not None
+                     and source is context.get("library") else {}),
+                  **(below or {}).get(name, {})}
         rows = section_rows(source, name, block["options"], values,
                             bool(block.get("writable")), refill, checks,
                             suggestions,
-                            under=await beneath(values) if beneath is not None
-                            and source is context.get("library") else None,
+                            under=placed or None,
                             resolved=resolves(offered) if resolves else None,
                             browse=browse, waiting=waiting,
                             from_elsewhere=from_elsewhere, previewed=preview,
@@ -2280,8 +2263,34 @@ async def _draw_schema_page(library: Library, key: str, sections: tuple[str, ...
                             suggestions=offered, blocks=blocks, browse=library.folders,
                             drawn_elsewhere=key == displays.KEY,
                             waiting=Waiting(library, await _waiting(library)),
-                            stands_in=stands_in, linked=linked)
+                            stands_in=stands_in, linked=linked,
+                            below=_preferred_formats(library, key, schema, values, refill,
+                                                     saved))
     return (checks, trouble, found, browser)
+
+
+def _preferred_formats(library: Library, key: str, schema: list[dict], values: dict,
+                       refill: Callable[[], None],
+                       saved: Callable[[], Awaitable[None]]) -> dict[str, dict[str, list]]:
+    """Recording's Video Format and Quality, drawn on the Media page too, between Sounds and
+    Keep Originals: Convert reads the same two settings, so there is one value to set and
+    either page changes it."""
+    if key != "library.media":
+        return {}
+    block = next((one for one in schema if one.get("name") == recording.SECTION), {})
+    shared = {one["key"]: one for one in block.get("options") or []}
+    rows: list[tuple[Any, Any]] = []
+    for name in ("video_codec", "quality"):
+        option = shared.get(name)
+        if option is None:
+            continue
+        drawn = {**option, "group": "", "group_label": ""}
+        if name == "video_codec":
+            drawn["label"] = t("manager.settings.preferred_videos.label")
+            drawn["description"] = t("manager.settings.preferred_videos.description")
+        rows += section_rows(library, recording.SECTION, [drawn], values,
+                             bool(block.get("writable")), refill, saved=saved)
+    return {"media": {"preferred_sound": rows}}
 
 
 def _options_of(schema: list[dict], section: str) -> list[dict]:

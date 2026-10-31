@@ -38,6 +38,7 @@ KEPT: dict[tuple[str, str], str] = {
     ("manager/library/import_dialog.py", "open_for"):
         "what became of each file, one fact per file, not a failure",
     ("manager/library/media_fill.py", "get"): _POLLING,
+    ("manager/library/media_convert.py", "run"): _POLLING,
     ("manager/library/media_rotate.py", "run"): _POLLING,
     ("manager/library/uploads.py", "confirmed_import"):
         "each distinct reason once, then the act ends",

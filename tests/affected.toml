@@ -65,6 +65,9 @@ tests = [
   "tests/theming/test_a_failed_script_load_drive.py",
   "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
   "tests/theming/test_dialogs_back_drive.py",
+  "tests/theming/test_drop_pictures_drive.py",
+  "tests/theming/test_drop_sheet_drive.py",
+  "tests/theming/test_drop_targets_drive.py",
   "tests/theming/test_escape_in_dialogs_drive.py",
   "tests/theming/test_folder_picker_drive.py",
   "tests/theming/test_identifier_ink.py",
@@ -72,9 +75,12 @@ tests = [
   "tests/theming/test_manager_pages_drive.py",
   "tests/theming/test_nav_rail_width_drive.py",
   "tests/theming/test_panel_pages_stack_drive.py",
+  "tests/theming/test_primary_nav_drive.py",
   "tests/theming/test_pseudo_locale.py",
   "tests/theming/test_remote_stars_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
   "tests/theming/test_support_dialog_drive.py",
+  "tests/theming/test_which_game_drive.py",
 ]
 
 # Library: the grids, panels, collections and their rows.
@@ -85,6 +91,9 @@ tests = [
   "tests/theming/test_collection_adds_drive.py",
   "tests/theming/test_collection_panel_drive.py",
   "tests/theming/test_discovery_shelves_drive.py",
+  "tests/theming/test_drop_pictures_drive.py",
+  "tests/theming/test_drop_sheet_drive.py",
+  "tests/theming/test_drop_targets_drive.py",
   "tests/theming/test_grid_layout_drive.py",
   "tests/theming/test_grid_selection_drive.py",
   "tests/theming/test_list_columns_drive.py",
@@ -95,7 +104,9 @@ tests = [
   "tests/theming/test_private_drive.py",
   "tests/theming/test_record_lines_drive.py",
   "tests/theming/test_row_drag_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
   "tests/theming/test_vpx_settings_in_place_drive.py",
+  "tests/theming/test_which_game_drive.py",
 ]
 
 # The Visual Pinball settings catalog and the scripts that generate and check it.
@@ -124,6 +135,7 @@ tests = [
   "tests/theming/test_setup_controls_drive.py",
   "tests/theming/test_setup_first_run_drive.py",
   "tests/theming/test_setup_tables_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
   "tests/theming/test_wizard_frame_drive.py",
   "tests/theming/test_wizard_wait_drive.py",
 ]

@@ -17,7 +17,7 @@ from common.extensions.contract import ContractError
 from . import finding
 
 FOLDER = "Company Logos"
-IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
+IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".apng")
 # "(1971-1980)" and "(1971-)" and "(1971)" at the end of a name.
 ERA = re.compile(r"\s*\(\s*(\d{4})\s*(-)?\s*(\d{4})?\s*\)\s*$")
 

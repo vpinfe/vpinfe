@@ -569,8 +569,8 @@ def use_a_file(context: dict[str, Any], game_id: str, holder: Any, *, ours: tupl
         async def done() -> None:
             await settle(state, context["discovery"]["id"])
 
-        await uploads.confirmed_import(
-            library, drop.upload_id, analysis, source=drop.name, file_count=drop.count,
+        await uploads.arrived(
+            library, drop.upload_id, analysis=analysis, source=drop.name, file_count=drop.count,
             on_done=done, game_id=made, game_dir=folder,
             asset_kind=single if held_in == vps_kinds.ASSET else "",
             media_kind=single if held_in == vps_kinds.MEDIA else "",

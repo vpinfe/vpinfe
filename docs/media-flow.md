@@ -38,7 +38,7 @@ origin `capture` in the `.info` ledger. Recorded videos are silent `.mp4`, H.264
 the device's browser plays no H.264, VP9; the playfield is stored with its bottom at the
 right unless Playfield Orientation says otherwise.
 
-Each kind also accepts the rest of its extension family (for images: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`), and spec-named files outrank the fixed names: `(Wheel) <table name>.png` beats `(Wheel) <folder name>.png` beats `wheel.png`. The full precedence rules live in `common/media/media_specs.py`.
+Each kind also accepts the rest of its extension family (for images: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.apng`), and spec-named files outrank the fixed names: `(Wheel) <table name>.png` beats `(Wheel) <folder name>.png` beats `wheel.png`. The full precedence rules live in `common/media/media_specs.py`.
 
 ### Media tokens
 
@@ -325,6 +325,39 @@ function updateDmdMedia(index) {
   );
 }
 ```
+
+## Files A Kind Does Not Read
+
+Everything above assumes the file is already in a format its kind reads. Each kind has a family of extensions it reads, in `common/media/media_specs.py`:
+
+| Family | Reads |
+|---|---|
+| `IMAGE_FAMILY` | `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.apng` |
+| `VIDEO_FAMILY` | `.mp4`, `.webm` |
+| `AUDIO_FAMILY` | `.mp3`, `.ogg` |
+
+A file outside its kind's family is not media to the parser, however it is named. `CONVERTIBLE_IMAGE`, `CONVERTIBLE_AUDIO` and `CONVERTIBLE_VIDEO` list what the converter tries, and `convertible_family(family)` answers the list for a kind. A file on those lists becomes a file in the family with the same stem and token and a new extension, so `wheel.tga` becomes `wheel.png` and the parser finds it as it would any other.
+
+Themes are unaffected: they see only the family's formats, and `docs/theme.md` is unchanged.
+
+### The converter
+
+`common/games/media_encode.py` holds the encoders (Pillow for pictures, FFmpeg for sound and video, found through `common/host/tools.py`) and the quality presets. `common/games/media_convert.py` turns a list of files and a set of choices into a plan, and runs it as the job `media.convert`. Every choice has one recommended option and a sentence per option, and these come from the server so the Manager and an API client say the same thing. The plan never promises a duration or an output size.
+
+A file that is already in a format the chosen devices play is repackaged into the new container without re-encoding. Pictures keep their color profile and resolution, and become 8-bit RGB or RGBA. A JPG has no see-through areas, so they are filled with black and the plan says so.
+
+### Converting on drop
+
+A file dropped on the Manager is converted before it is placed, in the same import. The pieces:
+
+1. The arrival engine (`common/uploads/arrival.py`) claims a convertible file for a slot the drop declares, the name gives, or the sheet suggests, and carries a `Conversion` on the detected asset (`common/uploads/conversion.py`). A file whose slot takes another kind of file is left out with the reason, and a file nothing claims is offered as an unchecked asset, saved in the game folder as it is.
+2. The plan puts a `convert` description on each such item, with the source format, the options and their recommendations, and the settings behind the row. `POST /uploads/{id}/plan` answers it, and the choices go back in the plan and import requests as `convert`.
+3. `POST /uploads/{id}/import/start` runs the import as a job. `common/uploads/drop_convert.py` converts every staged file first, one at a time and reporting each in the job's `parts`, and only then places any of them. A stop (`POST /uploads/import/stop`) or a failure before placement adds nothing and leaves the session as it was.
+4. `GET /uploads/{id}/picture` renders a PNG for a convertible picture the browser cannot draw, so the sheet can show a thumbnail of a TGA.
+
+The choice that converts nothing, `asis`, writes the file untouched under its slot's name. The library then holds a file its kind does not read, which shows as unsupported until it is converted.
+
+Routes and payloads are in [http-api.md](http-api.md).
 
 ## Events And Refresh Behavior
 

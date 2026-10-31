@@ -17,7 +17,7 @@ from typing import Any
 from nicegui import ui
 
 from common.i18n import number, t
-from manager.kit import deeplink, offload, panel, report_groups, when, wizard
+from manager.kit import deeplink, media_ownership, offload, panel, report_groups, when, wizard
 from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.settings import library_folders
@@ -81,6 +81,15 @@ async def check(job: dict[str, Any]) -> None:
         except Exception:  # noqa: BLE001
             pass
     job["checked"] = {**(job.get("checked") or {}), **fixed}
+    games = set(report_groups.made_games(job))
+    if games:
+        try:
+            job["unsupported"] = sum(
+                1 for row in await offload.io(client.all_media)
+                if str(row.get("game_id")) in games and row.get("present") is not False
+                and row.get("via") == media_ownership.UNSUPPORTED)
+        except Exception:  # noqa: BLE001 - a count that cannot be read is no line
+            pass
 
 
 def _to(game_id: str = "", *, view: str = "tables", table: str = "", section: str = "",
@@ -249,9 +258,10 @@ def _unsettled(job: dict[str, Any], result: dict[str, Any]) -> None:
 def _known(job: dict[str, Any], result: dict[str, Any]) -> None:
     held = list(result.get("already_here") or [])
     dmd = _items(result, DMD_ALONE)
-    if not held and not dmd:
+    unsupported = int(job.get("unsupported") or 0)
+    if not held and not dmd and not unsupported:
         return
-    with _section(KNOWING, "manager.report.know", len(held) + len(dmd)):
+    with _section(KNOWING, "manager.report.know", len(held) + len(dmd) + bool(unsupported)):
         with _card():
             _group(job, report_groups.ALREADY_HERE, "manager.report.already", held,
                    lambda one, _fixed: _row(
@@ -267,6 +277,19 @@ def _known(job: dict[str, Any], result: dict[str, Any]) -> None:
                                     _to(str(one["game_id"]),
                                         table=str(one.get("table_id") or ""),
                                         section="table_settings")),)))
+            if unsupported:
+                _unsupported(unsupported)
+
+
+def _unsupported(count: int) -> None:
+    """The files the import brought that VPinFE cannot use, and where Convert is."""
+    with ui.element("div").classes("manager-report-group"):
+        with ui.row().classes("manager-report-group-head"):
+            ui.label(t("manager.report.unsupported")).classes("manager-report-group-title")
+            ui.label(number(count)).classes("manager-help")
+        _row(t("manager.report.unsupported.note", count=count), links=(
+            _link(t("manager.media_convert.convert"),
+                  report_groups.media_address(report_groups.UNSUPPORTED)),))
 
 
 def _left(result: dict[str, Any]) -> None:
@@ -347,14 +370,15 @@ def _summary(job: dict[str, Any], result: dict[str, Any], failed: list[dict[str,
     that is drawn."""
     held = list(result.get("already_here") or [])
     dmd = _items(result, DMD_ALONE)
+    unsupported = bool(job.get("unsupported"))
     behind = list(result.get("left_behind") or [])
     games = _games(job, result)
     with ui.element("div").classes("manager-card manager-report-strip w-full"):
         if _lists(result, failed):
             left = waiting(job)
             _jump(LOOKING, left, t("manager.report.jump.look"), warm=bool(left))
-        if held or dmd:
-            _jump(KNOWING, len(held) + len(dmd), t("manager.report.know"))
+        if held or dmd or unsupported:
+            _jump(KNOWING, len(held) + len(dmd) + unsupported, t("manager.report.know"))
         if behind:
             _jump(LEAVING, len(behind), t("manager.report.left_behind"))
         _jump(IMPORTING, games, t("manager.report.jump.imported"))
