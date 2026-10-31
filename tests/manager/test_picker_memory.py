@@ -16,7 +16,7 @@ class _Store:
         self.kept: dict[str, Any] = {}
 
     def __enter__(self) -> _Store:
-        self._patches = [
+        self._patches: list[Any] = [
             patch.object(picker_memory.remembered, "get",
                          lambda key, default=None: self.kept.get(key, default)),
             patch.object(picker_memory.remembered, "put",

@@ -38,6 +38,8 @@ https://www.youtube.com/playlist?list=PLMRebAANedgX9YDbl0gte_ZgoYU9VQF8j
 
 Visual Pinball **10.8.0**, or a recent **10.8.1** prerelease.  Builds called 10.8.1 are nightlies, so take a current one.
 
+VPinFE starts the Visual Pinball you already have, and does not install it.  Get Visual Pinball to start a table on its own first, because a table that will not start from Visual Pinball will not start from VPinFE either.
+
 ## Download
 
 Download the release for your platform from [Releases](https://github.com/vpinfe/vpinfe/releases).  There are two builds for each:
@@ -58,7 +60,9 @@ cd vpinfe
 ```
 
 ### Mac
-This is an unsigned app bundle, so a few steps are needed before VPinFE will run.  @MajorFrenchy has put together an excellent [video](https://www.youtube.com/watch?v=YD4eZIqHypw) on setting this up for the Mac, and a written tutorial: [Major Frenchy's VPinFE on MacOS](https://www.majorfrenchy.com/blog/2026/03/05/vpinfe-macos/).  If you are a Mac user this is the best route.
+Apple has not notarized the app, so the first start takes a few steps.  Until you allow it, macOS holds it for about a minute and then stops it, which can look like it never finishes.  Open System Settings > Privacy & Security, press **Open Anyway** beside VPinFE, then sign in.  After that it starts in about a second.  If another VPinFE is already running, close it first: macOS opens the app again once you approve it, and a second copy quietly exits.
+
+@MajorFrenchy has put together an excellent [video](https://www.youtube.com/watch?v=YD4eZIqHypw) on setting this up for the Mac, and a written tutorial: [Major Frenchy's VPinFE on MacOS](https://www.majorfrenchy.com/blog/2026/03/05/vpinfe-macos/).  If you are a Mac user this is the best route.
 
 ### Windows
 The Windows package has a `vpinfe.bat` file for launching it.  Unless you are in a terminal, always use the batch file or you will end up with window focus issues.  Double click it to launch, or from a terminal:
@@ -67,6 +71,9 @@ The Windows package has a `vpinfe.bat` file for launching it.  Unless you are in
 cd vpinfe
 vpinfe.bat
 ```
+
+### Without the frontend windows
+Start VPinFE with `--headless` on a device that only looks after the library, or that you reach from another device.  It runs the Manager and its services and opens no frontend windows.  The Manager's power menu offers **Open the Frontend** while the windows are closed, and **Close the Frontend** and **Restart the Frontend** while they are open, so the windows can still be brought up when you want them.
 
 # First run
 

@@ -82,15 +82,35 @@ rewrites, so read the next section first.
   spreadsheet picks it too. A game that is not matched yet can be matched from the same tab.
   ROMs, PUP Packs, AltSound, Alt Colors, tables, backglasses and the media kinds all work the
   same way, and Save It As shows whether a file goes to the game or to one table.
+- **Manager** - A file picker opens in the folder the last file of its kind came from. Places
+  lists it first as Last Used, then Downloads. On the device VPinFE runs on, upload and that
+  device's own files are one This Device tab; from another device the tab is On and the
+  device's name, so it is clear whose files they are. A drive that is
+  unplugged opens at the game's folder and says why.
 - **Manager** - Discovery sets your library against every game and release on the Virtual
   Pinball Spreadsheet, and keeps the comparison current on its own. It opens on Home, a set
   of shelves that each answer a question, such as which of your games have a newer version,
   what is new on VPS, what a game of yours still lacks and which games you don't have. Each
   shelf can be switched off and put in order under Settings > Library > Discovery.
 - **Manager** - All Games and Releases show the same comparison as grids, each kind of file
-  reading Matched, Unmatched or Missing, with search by author, maker or theme. Ignore a game,
+  reading Matched, Unmatched or Missing, with search by author, maker or theme. A game in the
+  search suggestions shows its maker and year, so two games of one name can be told apart, and a
+  mod sits straight after the release it is based on in Available. Ignore a game,
   a release or a missing kind to leave it off Home, mark a game or a release Wanted to put it
   on a shelf, and find both in Marks, each with an Undo.
+- **Manager** - A column that answers one question about each row, such as whether a game is
+  matched or a ROM is installed, reads the same way on every page. A green tick is in place,
+  a question mark is not known yet, amber is something VPinFE needs you to fix, red stops
+  play, and grey is a choice you made or a gap that costs nothing. Rows sort from most in
+  place to least, and a filter lists each state with how many rows hold it. VPS Match now
+  tells Matched from Cleared, a match you took off, from Unmatched, and VPS Entry reads
+  Shared where two games are matched to one entry.
+- **Manager** - Assets lists every ROM file a game holds, with Add, Replace and Remove, so a
+  game keeps more than one ROM file, and a ROM that matches a table says so.
+- **Manager** - A video slot marked Won't play names the codec and the device, such as
+  Won't play on Den (H.264), and counts only the devices that play this library. A device
+  that is only paired, or that plays another library, is left out, and the hover says when
+  each device last reported.
 - **Manager** - Collections are smart (filled by rules on letter, theme, type, manufacturer,
   year, rating, tags, favorite and played) or hand-picked, ordered and capped as you choose.
   Tags are your own words on games and tables, with rename, merge, color and a clear-out for
@@ -116,11 +136,22 @@ rewrites, so read the next section first.
   table copies and restores them.
 - **Core** - `.dif` patches apply directly, with no external tool. The base file stays on
   disk because the patched table cannot be rebuilt without it, and VPinFE records which base
-  and which patch produced the result.
+  and which patch produced the result, so a patched table ends Matched to its release. The
+  base is chosen from what was recorded for the folder first, and size only decides where
+  nothing was recorded.
 - **Manager, Core** - Players: a list of the people who play, each with a name, initials and
   a picture. Say who is up and the next game counts for them. A high score finds its player
   by the initials entered at the machine, a visitor can join as a guest, and each player has
   plays, time and best scores game by game.
+- **Manager** - Back and Forward walk the Manager's places. A click in the left menu, a
+  Settings page, a Logs view or a Discovery tab is a step; moving between rows or a panel's
+  sections is not, so Back goes to the page before and not through every game you arrowed
+  past. Discovery's tab is in the address, so a reload keeps it.
+- **Manager** - A game's tab says each problem once. A ROM missing from several sets, a
+  folder that is away, a table that cannot be played or a base file gone from several patches
+  is one notice with the tables named under it, not one per table. A bulk action that fails
+  on several items says so once, with the count and the reasons, rather than a message for
+  each.
 - **Manager** - Launchers run beside each other, each with its own program and settings, and
   can be chosen for a table. Launcher settings can be given to all tables, to one game or
   to one table, and the Manager shows which layer a value comes from.
@@ -131,7 +162,9 @@ rewrites, so read the next section first.
   to where it reads them now, such as a renamed plugin setting or a DMD box that now lives in
   the backglass file, with an Undo and a Settings Left Behind row in Overview. On build 6267
   and later, Full DMD draws Nixie over B2S for a table whose art carries its own DMD, and
-  VPinFE keeps each table's draw order in step with the launcher's.
+  VPinFE keeps each table's draw order in step with the launcher's. A program that has not
+  written its settings file yet offers Create Settings File, which runs it once to make one,
+  and says so plainly when that version cannot.
 - **Manager, Core** - Devices: installs find each other on your network and show their
   version, what they can do and what their log says. A device can be updated, restarted,
   powered off, or told to close the table it is playing from another device. Several
@@ -160,6 +193,21 @@ rewrites, so read the next section first.
   records media, and the collection menu narrows the wheel and can save the narrowing as a
   smart collection. A library on a drive or share that is not connected yet is waited for,
   and the wheel fills when it is.
+- **Frontend** - The Menu (M, or Button 9 on a controller) shows where the Manager is, as an
+  address and a QR code to scan from a mobile device, beside Remote and Join. The codes carry
+  the device's IP address where one is usable, which a mobile device can open without help, and the address list shows
+  `<name>.local` in place of the plain name where this device answers to it. The codes sit
+  further apart so a scan cannot catch its neighbour. A screen never waits for the name: it
+  opens on the IP address and swaps the name in when this device answers to it.
+- **Frontend** - On Sway, Show Numbers puts each number window on its own screen and opens
+  again any window the browser drops while it starts.
+- **Manager** - On a cabinet, Displays asks "Is the Screen Rotated Correctly?" in place of
+  four arrow buttons. Show Test Card opens a card on the playfield screen with TOP at one edge,
+  and Turn Left, Turn Around and Turn Right turn it until TOP is toward the backglass. Looks
+  Right ends the check, and a chip beside the question says how the screen is turned. It sets
+  Rotation and Mounting for you. Visual Pinball's launcher page now shows the same card without
+  changing anything from it, and a launcher turned differently lists Playfield under Different
+  from VPinFE.
 - **Frontend** - VPinFE can ask before it quits or powers off the device. It is off by
   default, which is how it has always behaved; turn on Confirm Before Exit. The
   question appears on whatever you used to ask, and every other screen is told what is about
@@ -177,6 +225,14 @@ rewrites, so read the next section first.
 - **Core** - What a theme or an overlay throws now reaches `vpinfe.log`, tagged with the
   window it came from. A browser log is not shown anywhere anyone reads on a cabinet, so a theme
   that broke looked like a frontend that had stopped answering the buttons.
+- **Manager, Core** - Create Support Package, on About and in the Logs menu, makes a zip to
+  attach when you ask for help, in three steps. What Goes In picks the current log, the previous
+  log and your settings. Privacy shows what was replaced by kind, such as your user name and the
+  device's name, and Hide Table Names and Also Hide add your own words. Inspect Everything lists
+  every line to read, with Remove Line, Keep Line and Leave File Out. Share downloads the zip,
+  copies a summary for Discord, opens Discord or a new GitHub issue, and copies the summary as
+  Markdown. The zip is made on this device and sent nowhere, and `vpinfe --support-package`
+  makes the same one from the command line. About also gains a Displays and Layout section.
 - **Core** - An HTTP API at `/api/v1` with a written contract: games and tables, launch,
   media, assets, collections, uploads, VPS search and export, one error format and a
   permission scope on every endpoint. A live event stream at `/api/v1/events` replaces
@@ -188,6 +244,11 @@ rewrites, so read the next section first.
 
 ### Changes you may notice
 These are deliberate. `docs/compatibility-3.0.md` has the full list with the reasoning.
+
+- **Manager** - On a beta release, the last page of Setup and of What's New offers Tell Me
+  About New Beta Releases, switched on. An install already on a beta that chose Stable is
+  switched to Beta the first time the page is drawn, because a stored Stable cannot be told
+  from the default. Turn it off there, or under Settings > VPinFE > This Device.
 
 - **Frontend** - A folder with several `.vpx` files may launch a different one than before.
   VPinFE now picks the file the game's metadata describes; it used to take whatever the
@@ -228,6 +289,12 @@ These are deliberate. `docs/compatibility-3.0.md` has the full list with the rea
   unchanged; what they mean is. If you prefer the old feel, swap the two bindings.
 
 ### Fixes
+- **Core** - A fresh or headless install no longer ends on a dead end. The folder picker opens
+  at the top of the disk where the account has no Home folder, and a missing browser is one
+  warning in the log, not a traceback for every window.
+- **Manager** - The source picker reads a Windows device's file paths, with backslashes, drive
+  letters and network shares, so the current file is recognized and a table already in the
+  game's folder is not offered again.
 - **Frontend** - Tables no longer start paused on Windows. VPX pauses whenever its window
   loses focus, and Windows will not let one program hand the foreground to another it
   started, so a table came up paused until you alt-tabbed. The frontend windows now get out
@@ -285,3 +352,9 @@ These are deliberate. `docs/compatibility-3.0.md` has the full list with the rea
 
 ### Notes
 Back up your library before you upgrade and keep a copy of the earlier version's latest release to hand.
+
+**On a Mac**, Apple has not checked the app yet, so macOS holds the first start for about a
+minute and then stops it, which can look like it never finishes. Open System Settings >
+Privacy & Security, press Open Anyway beside VPinFE, then sign in. After that it starts in
+about a second. If another VPinFE is already running, close it first: macOS opens the app
+again once you approve it, and a second copy quietly exits.
