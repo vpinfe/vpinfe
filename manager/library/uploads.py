@@ -204,11 +204,11 @@ if (!window.__managerDnd) {
   // happens next is heard by that dialog and not by the page behind it.
   window.__managerDrop = (transfer, say) => send(collect(transfer), say, {});
 
-  window.__managerChoose = (folder, say) => {
+  window.__managerChoose = (folder, say, one) => {
     const input = document.createElement('input');
     input.type = 'file';
     if (folder) input.webkitdirectory = true;
-    else input.multiple = true;
+    else input.multiple = !one;
     input.onchange = () => send(Promise.resolve(Array.from(input.files || []).map(
       file => ({relpath: file.webkitRelativePath || file.name, file}))), say, {});
     input.click();

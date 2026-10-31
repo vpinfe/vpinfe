@@ -38,9 +38,10 @@ BUDGET = {
     "collection.py": (5, "a collection's rule rows and order bar, which are rows of several "
                          "controls rather than a label and a value, with the find box over "
                          "its members"),
-    "game_table.py": (2, "a field with bespoke wiring - chips, debounce - and a tick per "
-                         "detail a re-match would change: a multi-select would hide the old "
-                         "and new values, which are the whole of what is being decided"),
+    "game_table.py": (1, "a field with bespoke wiring - chips, debounce"),
+    "match_group.py": (1, "a tick per detail a re-match would change: a multi-select would "
+                          "hide the old and new values, which are the whole of what is "
+                          "being decided"),
     "all_settings.py": (1, "the changed-only tick in All Settings' filter bar, which asks "
                            "what to show rather than holds a value"),
     "logs.py": (1, "the find box in the control bar above the viewport"),
@@ -50,7 +51,6 @@ BUDGET = {
     "games.py": (1, "a tick per column in the column picker, a menu rather than a fact "
                     "row. The view picker is `panel.DescribedSelect`, which is where a "
                     "picker whose options explain themselves lives"),
-    "mediasource.py": (1, "a search, toolbar"),
     "move_picker.py": (1, "the tick per table in Choose Tables, which can be neither on "
                           "nor off while a table is to have only some of the files: a "
                           "choice over a list, not a fact row"),

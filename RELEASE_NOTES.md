@@ -75,6 +75,13 @@ rewrites, so read the next section first.
   type your own over any of them, and revert a field with a click. See which tables have a
   newer version on the spreadsheet. VPinFE matches a table to its VPS release by itself when the
   spreadsheet names it exactly, and an unbind you make is kept.
+- **Manager** - Add a file to a game by finding it on the Virtual Pinball Spreadsheet. Every
+  asset picker has an Online tab that lists what the game has and the other files listed for
+  it, with VPinMediaDB's own files first. Pick the file, drop yours, and it is saved as that
+  file, so Discovery can tell when a newer one is out. Opening a file's page on the
+  spreadsheet picks it too. A game that is not matched yet can be matched from the same tab.
+  ROMs, PUP Packs, AltSound, Alt Colors, tables, backglasses and the media kinds all work the
+  same way, and Save It As shows whether a file goes to the game or to one table.
 - **Manager** - Discovery sets your library against every game and release on the Virtual
   Pinball Spreadsheet, and keeps the comparison current on its own. It opens on Home, a set
   of shelves that each answer a question, such as which of your games have a newer version,

@@ -30,6 +30,7 @@ from manager.kit import (
     candidates,
     deeplink,
     game_tables,
+    kind_words,
     media_ownership,
     panel,
     verbs,
@@ -37,7 +38,6 @@ from manager.kit import (
 )
 from manager.kit.on_page import on_page
 from manager.library import (
-    discovery,
     discovery_ext,
     discovery_get,
     discovery_marks,
@@ -49,6 +49,7 @@ from manager.library import (
     mediasource,
     mediaview,
     release_match,
+    vps_records,
 )
 from manager.library.discovery_get import Offered, Pick
 from manager.library.discovery_kinds import LONG_KIND, Kind, Scene, short_name
@@ -74,13 +75,13 @@ def _when(record: dict[str, Any]) -> str:
 
 
 def _head(record: dict[str, Any]) -> str:
-    return discovery.told(record) or t("manager.discovery.unnamed_file")
+    return vps_records.told(record) or t("manager.discovery.unnamed_file")
 
 
 def _detail(record: dict[str, Any], *, features: bool) -> str:
     return game_tables.JOIN.join(part for part in (
-        _when(record), discovery.site_of(record)[0],
-        discovery.what_it_is(record, features=features)) if part)
+        _when(record), vps_records.site_of(record)[0],
+        vps_records.what_it_is(record, features=features)) if part)
 
 
 def _record_of(kind: Kind, vps_file_id: str) -> dict[str, Any] | None:
@@ -197,6 +198,17 @@ def _ours(kind: Kind) -> tuple[tuple[str, ...], str]:
     return discovery_get.of_listing(kind.listed_as)
 
 
+def _match_of(context: dict[str, Any], scene: Scene, kind: Kind, *, vps_file_id: str = "",
+              label: str = "") -> import_dialog.ReleaseMatch:
+    """What the import dialog is told of a file taken as this kind, by the VPS file it is
+    taken as where one is named."""
+    ours, held_in = _ours(kind)
+    return import_dialog.ReleaseMatch(
+        _chooser(context, kind, scene), kind.label,
+        kind_words.vps_name(ours[0], held_in == vps_kinds.MEDIA), vps_file_id=vps_file_id,
+        label=label, picture_of=_picture_of(context, scene, kind))
+
+
 def _use_file(context: dict[str, Any], scene: Scene, kind: Kind,
               holder: ui.element) -> Callable[[], None]:
     """Make the section take a dropped file, and return Import a File…."""
@@ -204,9 +216,7 @@ def _use_file(context: dict[str, Any], scene: Scene, kind: Kind,
     return discovery_get.use_a_file(
         context, scene.game_id, holder, ours=ours, held_in=held_in,
         add_table=kind.listed_as == "tableFiles",
-        match=import_dialog.ReleaseMatch(
-            _chooser(context, kind, scene), picture_of=_picture_of(context, scene, kind))
-        if kind.records else None,
+        match=_match_of(context, scene, kind) if kind.records else None,
         opened=lambda: _last_opened(kind, scene))
 
 
@@ -341,13 +351,13 @@ def _match_line(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held,
         ui.icon(verbs.MATCH).classes("manager-have")
         ui.label(t("manager.discovery.matched_to", release=_head(record))
                  if record else t("manager.workbench.delisted_file")).classes("truncate")
-        if record:
-            site, page = discovery.site_of(record)
-            if page:
-                _way_out(scene, kind, held.vps_file_id, site, page,
-                         discovery.page_is_broken(record), lambda: None)
         if later := _newer(context, scene, held.vps_file_id):
             ui.label(t("manager.discovery.update.row", version=later)).classes("manager-label")
+        if record:
+            site, page = vps_records.site_of(record)
+            if page:
+                _way_out(scene, kind, held.vps_file_id, site, page,
+                         vps_records.page_is_broken(record), lambda: None)
 
 
 # ---------------------------------------------------------------------------------------
@@ -358,7 +368,7 @@ def _unheld(kind: Kind) -> list[dict[str, Any]]:
     """The releases the game is not matched to: those whose page was opened first, then the
     rest, each newest first."""
     tied = _tied(kind)
-    rows = [one for one in discovery.newest_first(kind.records)
+    rows = [one for one in vps_records.newest_first(kind.records)
             if str(one.get("vps_file_id") or "") not in tied]
     return sorted(rows, key=lambda one: str(one.get("vps_file_id") or "") not in kind.opened)
 
@@ -580,23 +590,20 @@ def _release(context: dict[str, Any], scene: Scene, kind: Kind, record: dict[str
                 discovery_get.use_a_file(
                     context, scene.game_id, shell, ours=ours, held_in=held_in,
                     add_table=kind.listed_as == "tableFiles",
-                    match=import_dialog.ReleaseMatch(
-                        _chooser(context, kind, scene), vps_file_id=file_id,
-                        label=_head(record), picture_of=_picture_of(context, scene, kind)))
+                    match=_match_of(context, scene, kind, vps_file_id=file_id,
+                                    label=_head(record)))
 
         opened()
 
 
 def _end(context: dict[str, Any], scene: Scene, kind: Kind, record: dict[str, Any],
          opened: Callable[[], None]) -> None:
-    """A release's end: the way to its page, then its download glyph, or what its download is
-    doing."""
+    """A release's end: what it can be used for, its download glyph or what its download is
+    doing, and last the way to its page."""
     file_id = str(record.get("vps_file_id") or "")
     offered: Offered | None = context.get("hosted", {}).get(file_id)
-    site, page = discovery.site_of(record)
+    site, page = vps_records.site_of(record)
     with ui.row().classes("items-center gap-1 no-wrap shrink-0"):
-        if page:
-            _way_out(scene, kind, file_id, site, page, discovery.page_is_broken(record), opened)
         if kind.listed_as == "tableFiles" and kind.mine and scene.game_id:
             panel.icon_action(
                 t("manager.discovery.use_instead"),
@@ -604,6 +611,8 @@ def _end(context: dict[str, Any], scene: Scene, kind: Kind, record: dict[str, An
                 icon=verbs.REPLACE, hint=t("manager.discovery.use_instead.help"))()
         if offered is not None:
             _download(context, scene, offered)
+        if page:
+            _way_out(scene, kind, file_id, site, page, vps_records.page_is_broken(record), opened)
 
 
 @on_page
@@ -625,12 +634,13 @@ async def _get_table(context: dict[str, Any], scene: Scene, kind: Kind, record: 
         return
     game: dict[str, Any] = next(
         (one for one in library.games if str(one.get("id")) == scene.game_id), {})
-    site, page = discovery.site_of(record)
+    site, page = vps_records.site_of(record)
     file_id = str(record.get("vps_file_id") or "")
     getting_file.open_for(
         library, game_id=scene.game_id, game_dir=str(game.get("folder") or ""),
         table_id=str(table["id"]), page=page, site=site,
-        title=t("manager.getting_file.get_version", version=_head(record)),
+        title=t("manager.getting_file.use_instead" if instead
+                else "manager.getting_file.update_to", version=_head(record)),
         release=getting_file.release_of(file_id, _head(record)), instead=instead,
         on_done=partial(discovery_get.settle, context["state"], scene.vps_id))
 

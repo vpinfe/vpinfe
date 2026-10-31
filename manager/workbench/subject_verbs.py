@@ -16,8 +16,9 @@ from manager.kit import deeplink, game_tables, panel
 from manager.kit.on_page import on_page
 from manager.library import collection_adds, discovery_pane, file_acts, game_acts, tageditor
 from manager.library import discovery as discovery_page
+from manager.library.match_group import pick_a_match
 from manager.workbench.collection import _collection, _written
-from manager.workbench.game_table import _game_redrawn, _pick_a_match, _table_gone
+from manager.workbench.game_table import _game_redrawn, _table_gone
 from manager.workbench.tag import _tag_changed
 
 
@@ -129,7 +130,7 @@ def _game_verbs(context: dict[str, Any]) -> list[panel.Verb]:
         return bool(landed)
 
     async def match(_games: list[dict[str, Any]]) -> None:
-        await _pick_a_match(context)
+        await pick_a_match(context)
 
     return game_acts.game_acts(
         library, [context["game"]], state, refresh,

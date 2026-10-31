@@ -36,14 +36,17 @@ STOP_ASKING = {"updates": {"ask_where_new_games_go": False}}
 
 @dataclass
 class ReleaseMatch:
-    """The VPS release an import is offered as, read by whoever ties the file when it is done.
+    """The VPS file an import is offered as, read by whoever matches the file when it is done.
 
-    `choose` opens the picker and answers the id and the words for it, `("", "")` to clear
-    the match, or None where the person left. `picture_of` answers the address of a
-    release's picture, and `reason` is why the release was matched without being asked.
+    `kind` is the kind of file in a heading and `vps` the same as a sentence names it ("VPS
+    ROM"). `choose` opens the picker and answers the id and the words for it, `("", "")` to
+    clear the match, or None where the person left. `picture_of` answers the address of a
+    VPS file's picture, and `reason` is why one was matched without being asked.
     """
 
     choose: Callable[[str], Awaitable[tuple[str, str] | None]]
+    kind: str
+    vps: str
     vps_file_id: str = ""
     label: str = ""
     picture_of: Callable[[str], str] | None = None
@@ -457,16 +460,18 @@ def _folder_row(library: Any, named: dict[str, Any], plan: dict[str, Any]) -> No
 
 
 def _release_row(release: ReleaseMatch) -> None:
-    """The release this file is, under its own heading with the match on a row below it, and
+    """The VPS file this file is, under its own heading with the match on a row below it, and
     why it was matched where nobody chose it."""
     @ui.refreshable
     def draw() -> None:
         with ui.row().classes("items-center gap-3 w-full no-wrap manager-source-row "
                               "manager-import-match"):
             if not release.vps_file_id:
-                ui.label(t("manager.import_dialog.not_matched")).classes("manager-help grow")
+                ui.label(t("manager.import_dialog.not_matched", vps=release.vps)) \
+                    .classes("manager-help grow")
                 panel.action(t("manager.import_dialog.match"), choose, icon=verbs.MATCH,
-                             inline=True, hint=t("manager.import_dialog.vps_match_hint"))()
+                             inline=True,
+                             hint=t("manager.import_dialog.vps_match_hint", vps=release.vps))()
                 return
             candidates.thumb(release.picture_of(release.vps_file_id) if release.picture_of
                              else "", "")
@@ -475,7 +480,7 @@ def _release_row(release: ReleaseMatch) -> None:
                 if release.reason:
                     ui.label(release.reason).classes("manager-help")
             panel.action(t("word.change"), choose, icon=verbs.MATCH, inline=True,
-                         hint=t("manager.import_dialog.vps_match_hint"))()
+                         hint=t("manager.import_dialog.vps_match_hint", vps=release.vps))()
 
     @on_page
     async def choose() -> None:
@@ -486,7 +491,7 @@ def _release_row(release: ReleaseMatch) -> None:
         release.reason = ""
         draw.refresh()
 
-    panel.facts(ui, [(panel.HEADING, t("manager.import_dialog.vps_match")),
+    panel.facts(ui, [(panel.HEADING, t("manager.import_dialog.vps_match", kind=release.kind)),
                      (panel.FULL, draw)])
 
 

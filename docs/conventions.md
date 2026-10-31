@@ -1451,6 +1451,11 @@ treatments differ because the jobs do.
 **The glyph carries the kind.** `open_in_new` says it leaves without being told to; the
 tooltip says the rest, and it is not optional on a control with no words.
 
+**The link out is last.** A row that has a way out to a page, with a verb or a download or
+a mark before it, puts the way out at the right edge in every list, so the eye finds it in
+one place whichever row it lands on. The verbs come first, in the order of how often they are
+pressed.
+
 **Every icon size is named, and a check reads the whole sheet.** Not one size for all of
 them - a nav glyph, a state mark and the art standing in for a missing picture are
 different jobs, so each job has a token and the token is where its value is decided:

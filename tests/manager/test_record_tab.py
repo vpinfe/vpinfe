@@ -19,7 +19,8 @@ NOT_SHOWN = {"key": placing.NOT_SHOWN, "fix": "none", "remedy": None,
 
 def _library(capabilities: list[dict[str, Any]]) -> Any:
     return SimpleNamespace(discovery=lambda: {"capabilities": capabilities},
-                           placements=None, displaced_by=None, place_media=None)
+                           placements=None, displaced_by=None, place_media=None,
+                           offers_online=lambda _kind: False)
 
 
 class WhichSlotsRecordTests(unittest.TestCase):

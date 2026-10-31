@@ -1920,6 +1920,22 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
   min-height: var(--target-inline);
   line-height: 1;
 }
+/* A button and the caret beside it read as one control. */
+.manager-split {
+  display: inline-flex;
+  align-items: center;
+}
+.manager-split > .manager-action.q-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.manager-split-caret.q-btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
 .manager-action--inline .q-btn__content {
   font-size: var(--fs-caption) !important;
   /* A verb never wraps. The value column is 177px, and "Choose this one" broke across
@@ -3872,7 +3888,8 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
    than the thing it belongs to. */
 .manager-placement { padding: 4px 2px; cursor: pointer; border-radius: 4px; }
 .manager-placement:hover { background: var(--wash-hover); }
-.manager-placement-mark { font-size: var(--icon-mark); color: var(--ink-3); margin-top: 1px; }
+.manager-placement-mark { font-size: var(--icon-mark); color: var(--ink-3); }
+.manager-placement-note { padding-left: calc(var(--icon-mark) + 8px); }
 /* Accent, because this is the one chosen - which is what accent is for. */
 .manager-placement-mark--on { color: var(--accent); }
 /* These are filenames and they run long. Wrapped rather than trimmed: what tells two
@@ -3896,9 +3913,13 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-sources-card .q-tab--active { color: var(--accent); }
 .manager-sources-card .q-tab__indicator { background: var(--accent); }
 .manager-source-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* The online tab shows the files or the search, one at a time. */
-.manager-source-found { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .manager-source-offers { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The Online tab pins the game's match above the list and the drop strip below it, so
+   neither scrolls away with the rows. */
+.manager-online-band { flex: 0 0 auto; }
+.manager-online-band .manager-facts { padding: 0; }
+.manager-online-base { flex: 0 0 auto; padding-top: 8px; }
+.manager-pick-strip { padding-top: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
 /* A folder is a line, not a picture: it has no thumbnail, so it should not reserve
    the height of one. Nor should a file in a list where nothing has one. */
 .manager-source-row--line { padding: 5px 8px; }

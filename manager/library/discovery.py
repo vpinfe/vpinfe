@@ -25,7 +25,6 @@ from common.failures import why
 from common.games import launchers
 from common.i18n import t
 from common.online import (
-    sites,
     vps_find,
     vps_formats,
     vps_home,
@@ -61,6 +60,7 @@ from manager.library import (
     discovery_shelves,
     import_dialog,
     vps_match,
+    vps_records,
 )
 
 logger = logging.getLogger("vpinfe.manager.library.discovery")
@@ -1078,19 +1078,6 @@ async def _read_owner(library: Library,
         return "", None
 
 
-def _kind_state(held: dict[str, Any], listed_as: str) -> dict[str, Any]:
-    return next((one for one in held.get("kinds") or [] if one.get("kind") == listed_as), {})
-
-
-def held_of(held: dict[str, Any] | None, listed_as: str) -> list[dict[str, str]]:
-    """The files the owning game holds of one VPS kind, each with the record it is tied to."""
-    if held is None:
-        return []
-    if listed_as == "tableFiles":
-        return list(held.get("tables") or [])
-    return list(_kind_state(held, listed_as).get("files") or [])
-
-
 def standing(library: Library, row: dict[str, Any],
              held: dict[str, Any] | None) -> dict[str, str]:
     """Have or Missing for each kept kind VPS lists. Empty where the library says nothing:
@@ -1104,43 +1091,12 @@ def standing(library: Library, row: dict[str, Any],
         if held is None:
             answer = HAVE if row[field] in (MATCHED, UNMATCHED) else row[field]
         else:
-            has = held_of(held, listed_as) or _kind_state(held, listed_as).get("held")
+            has = (vps_records.held_of(held, listed_as)
+                   or vps_records.kind_state(held, listed_as).get("held"))
             answer = HAVE if has else MISSING
         if answer:
             said[listed_as] = answer
     return said
-
-
-def newest_first(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(records, key=lambda one: str(one.get("updated_at") or ""), reverse=True)
-
-
-def what_it_is(record: dict[str, Any], *, features: bool) -> str:
-    """That the file is a mod and of what, its features, and a format other than VPX."""
-    facts = game_tables.release_facts(record, features=features)
-    kept = str(record.get("format") or "").strip().upper()
-    if kept and kept != "VPX":
-        facts.append(vps_formats.name(kept))
-    return game_tables.JOIN.join(facts)
-
-
-def site_of(record: dict[str, Any]) -> tuple[str, str]:
-    """The site the file's page is on, and the page: the first link VPS has not marked
-    broken, or the first it has where all are. `("", "")` for a file with no link."""
-    page = str(record.get("url") or "")
-    return (sites.site_name(page), page) if page else ("", "")
-
-
-def page_is_broken(record: dict[str, Any]) -> bool:
-    """Whether VPS marks the page `site_of` gives as no longer working."""
-    page = str(record.get("url") or "")
-    return any(one.get("broken") for one in (record.get("urls") or []) if one.get("url") == page)
-
-
-def told(record: dict[str, Any]) -> str:
-    return " · ".join(part for part in (
-        str(record.get("version") or ""),
-        ", ".join(str(name) for name in (record.get("authors") or [])[:2])) if part)
 
 
 # The VPS kinds that are art rather than files: they sit among the media, with the files
@@ -1177,4 +1133,5 @@ def holds(held: dict[str, Any] | None, listed_as: str) -> bool:
     """Whether the owning game holds anything of one VPS kind."""
     if held is None:
         return False
-    return bool(held_of(held, listed_as) or _kind_state(held, listed_as).get("held"))
+    return bool(vps_records.held_of(held, listed_as)
+                or vps_records.kind_state(held, listed_as).get("held"))

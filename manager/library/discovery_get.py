@@ -556,11 +556,11 @@ def use_a_file(context: dict[str, Any], game_id: str, holder: Any, *, ours: tupl
 
         release = replace(match) if match else None
         if release is not None and release.vps_file_id:
-            release.reason = t("manager.import_dialog.reason_from_release")
+            release.reason = t("manager.import_dialog.reason_from_release", vps=release.vps)
         elif release is not None and opened is not None:
             release.vps_file_id, release.label = opened()
             if release.vps_file_id:
-                release.reason = t("manager.import_dialog.reason_opened")
+                release.reason = t("manager.import_dialog.reason_opened", vps=release.vps)
 
         async def tie(report: dict[str, Any], plan: dict[str, Any]) -> None:
             await _tie(library, made, context["discovery"]["id"], folder,
@@ -582,7 +582,7 @@ def use_a_file(context: dict[str, Any], game_id: str, holder: Any, *, ours: tupl
         heard = uploads.listener(arrived)
         panel.action(t("manager.discovery.use_file"), heard, icon=verbs.FROM_FILE,
                      hint=t("manager.discovery.use_file.help"),
-                     js="() => window.__managerChoose(false, emit)")()
+                     js="() => window.__managerChoose(false, emit, true)")()
 
     return draw
 

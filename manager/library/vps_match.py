@@ -193,8 +193,8 @@ def entry_row(row: dict[str, Any], *, pick: Callable[[], None] | None = None,
                trailing: Callable[[], None] | None = None) -> None:
     """One VPS entry, in the shape the games grid draws a game in.
 
-    `pick` absent draws it without making it a target. `trailing` puts one control at
-    the end, after the way out to the catalog.
+    `pick` absent draws it without making it a target. `trailing` puts one control before
+    the way out to the catalog, which is always last.
     """
     said = game_tables.made(row)
     url = str(row.get("url") or "")
@@ -203,13 +203,13 @@ def entry_row(row: dict[str, Any], *, pick: Callable[[], None] | None = None,
         with ui.row().classes("items-center gap-2 no-wrap shrink-0"):
             if bound:
                 panel.state(t("word.current"), "on")()
+            if trailing is not None:
+                with ui.element("div").on("click.stop", lambda: None):
+                    trailing()
             if url:
                 # Or reading the entry would also pick it.
                 with ui.element("div").on("click.stop", lambda: None):
                     panel.out(to=url, hint=t("manager.vps_match.open_in_vps"))()
-            if trailing is not None:
-                with ui.element("div").on("click.stop", lambda: None):
-                    trailing()
 
     candidates.choice(str(row.get("img_url") or ""), str(row.get("name") or ""),
                       said, pick, glyph=icons.GAMES, chosen=chosen,

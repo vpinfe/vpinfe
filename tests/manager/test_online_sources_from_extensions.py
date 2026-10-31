@@ -11,7 +11,7 @@ from nicegui import background_tasks, events, ui
 
 from common.i18n import t
 from manager.kit.data import Library
-from manager.library import mediasource
+from manager.library import mediasource, picker_online
 from tests.support.game_offers import answer_from
 
 _PAGE = ui.element()
@@ -48,12 +48,21 @@ def _library(*known: dict, answer: Any = ROWS, offers: list[dict] | None = None)
                 lambda _vps_id, _kind: library.media_offers.return_value)
     library.offers_online.return_value = True
     library.extensions.return_value = [{"name": "ext"}]
+    library.vps_entry.return_value = {"name": "Own Game"}
+    library.vps_releases.return_value = []
+    library.vps_held.return_value = None
+    library.media_for.return_value = {}
+    library.picture_changes.return_value = []
+    library.config_values.return_value = {}
+    library.tables_for.return_value = []
+    library.games = []
     return library
 
 
 def _context(library: Mock) -> dict[str, Any]:
     return {"library": library, "game_id": "g-1", "lens": None,
-            "game": {"name": "Own Game", "vps_id": "own", "folder": "/games/Own"}}
+            "game": {"id": "g-1", "name": "Own Game", "vps_id": "own",
+                     "folder": "/games/Own"}}
 
 
 def _slot(library: Mock, built_in: bool = True, kind: str = "wheel",
@@ -107,7 +116,7 @@ class _Drawn(unittest.IsolatedAsyncioTestCase):
         with _PAGE:
             body = ui.column()
         await probe.online_tab(body)
-        return probe.online_body
+        return body
 
 
 class Rows(_Drawn):
@@ -189,9 +198,9 @@ class Rows(_Drawn):
         self.assertIn("wheel.png", _seen(shown))
 
     async def test_nothing_that_offers_the_kind_makes_no_call_at_all(self) -> None:
-        library = _library(ELSEWHERE)
+        library = _library(FILES)
 
-        await self.drawn(_slot(library, built_in=False, kind="wheel"))
+        await self.drawn(_slot(library, built_in=False, kind="topper"))
 
         library.game_offers.assert_not_called()
 
@@ -234,7 +243,7 @@ class Rows(_Drawn):
         shown = await self.drawn(_slot(library))
 
         self.assertIn(t("manager.mediasource.sources_failed"), _seen(shown))
-        self.assertNotIn(t("manager.mediasource.nothing", where="VPinMediaDB"), _seen(shown))
+        self.assertFalse([one for one in _seen(shown) if "for this game" in one])
 
     async def test_a_source_switched_off_is_not_asked(self) -> None:
         library = _library(BUILT_IN, dict(FILES, enabled=False))
@@ -250,50 +259,42 @@ class Rows(_Drawn):
 
         library.source_offers.assert_not_called()
 
-    async def test_another_games_entry_is_asked_with_that_games_id_and_this_games_slot(
-            self) -> None:
-        library = _library(BUILT_IN, FILES)
-        probe = _slot(library)
-        shown = await self.drawn(probe)
-
-        await probe._show_offers(shown, "other", "Other Game")
-
-        self.assertEqual(("ext", "files", "wheel", "g-1", "other", "Other Game"),
-                         _offered(library)[-1])
-
 
 class Words(_Drawn):
-    async def test_nothing_found_names_only_the_sources_that_offer_this_slots_kind(
-            self) -> None:
+    async def test_nothing_found_says_so_for_the_catalog_the_kind_is_in(self) -> None:
         library = _library(BUILT_IN, FILES, ELSEWHERE, answer={"rows": []})
 
         shown = await self.drawn(_slot(library))
 
-        self.assertEqual([t("manager.mediasource.nothing",
-                            where="VPinMediaDB, Example Files")], _seen(shown))
+        self.assertIn(t("manager.picker.none_other", kinds="wheels"), _seen(shown))
 
-    async def test_a_media_slot_still_names_the_catalog_when_it_lists_no_kind_for_it(
-            self) -> None:
+    async def test_a_media_slot_vps_lists_says_vps_has_none(self) -> None:
         library = _library(BUILT_IN, answer={"rows": []})
 
         shown = await self.drawn(_slot(library, kind="topper"))
 
-        self.assertEqual([t("manager.mediasource.nothing", where="VPinMediaDB")], _seen(shown))
+        self.assertIn(t("manager.picker.none_vps", kinds="toppers"), _seen(shown))
 
-    async def test_a_slot_no_catalog_has_names_only_the_extension(self) -> None:
-        library = _library(dict(BUILT_IN, kinds=["topper"]), FILES, answer={"rows": []})
+    async def test_a_media_slot_only_vpinmediadb_has_says_it_has_none(self) -> None:
+        library = _library(dict(BUILT_IN, kinds=["flyer"]), answer={"rows": []})
 
-        shown = await self.drawn(_slot(library, built_in=False))
+        shown = await self.drawn(_slot(library, kind="flyer"))
 
-        self.assertEqual([t("manager.mediasource.nothing", where="Example Files")],
-                         _seen(shown))
+        self.assertIn(t("manager.picker.none_media", kinds="flyers"), _seen(shown))
 
-    async def test_every_source_switched_off_says_so(self) -> None:
-        library = _library(dict(FILES, enabled=False))
+    async def test_a_slot_no_catalog_has_says_none_online(self) -> None:
+        library = _library(dict(FILES, kinds=["logo"]), answer={"rows": []})
 
-        shown = await self.drawn(_slot(library, built_in=False))
+        shown = await self.drawn(_slot(library, built_in=False, kind="logo"))
 
-        self.assertEqual([t("manager.mediasource.sources_off")], _seen(shown))
+        self.assertIn(t("manager.picker.none_other", kinds="logos"), _seen(shown))
+
+    async def test_every_source_switched_off_says_none_online(self) -> None:
+        library = _library(dict(FILES, kinds=["logo"], enabled=False))
+
+        shown = await self.drawn(_slot(library, built_in=False, kind="logo"))
+
+        self.assertIn(t("manager.picker.none_other", kinds="logos"), _seen(shown))
 
 
 class Slots(_Drawn):
@@ -301,7 +302,7 @@ class Slots(_Drawn):
         library = _library(BUILT_IN)
         library.offers_online.return_value = False
 
-        self.assertFalse(_slot(library, built_in=False).online)
+        self.assertFalse(_slot(library, built_in=False, kind="logo").online)
 
     def test_a_slot_a_catalog_has_keeps_its_tab_with_no_extension_at_all(self) -> None:
         library = _library(BUILT_IN)
@@ -318,7 +319,9 @@ class Slots(_Drawn):
 
         self.assertTrue(mediasource._Folder(context, "pup_pack", "PUP pack", Mock()).online)
         library.offers_online.return_value = False
-        self.assertFalse(mediasource._Folder(context, "pup_pack", "PUP pack", Mock()).online)
+        self.assertFalse(mediasource._Folder(context, "music", "Music", Mock()).online)
+        library.offers_online.return_value = True
+        self.assertTrue(mediasource._Folder(context, "music", "Music", Mock()).online)
 
 
 class TheBackglass(_Drawn):
@@ -349,11 +352,11 @@ class TheBackglass(_Drawn):
     def test_the_tab_is_decided_by_the_slots_own_name(self) -> None:
         library = _library(FILES)
 
-        _slot(library, built_in=False, kind="backglass", asset=True)
-        _slot(library, built_in=False, kind="backglass")
+        file = _slot(library, built_in=False, kind="backglass", asset=True)
+        picture = _slot(library, built_in=False, kind="backglass")
 
-        self.assertEqual([("backglass_file",), ("backglass",)],
-                         [call.args for call in library.offers_online.call_args_list])
+        self.assertEqual(["backglass_file", "backglass"],
+                         [file.source_kind, picture.source_kind])
 
 
 class Taking(_Drawn):
@@ -386,7 +389,7 @@ class Taking(_Drawn):
     async def test_the_table_it_was_chosen_for_goes_on_to_a_dialog_it_opens(self) -> None:
         self.probe.placed_at = {"table": "t-2"}
 
-        with patch.object(mediasource.ext_lists, "open_over", new=AsyncMock()) as opened:
+        with patch.object(picker_online.ext_lists, "open_over", new=AsyncMock()) as opened:
             await self.pick({"action": "get"})
 
         self.assertEqual("t-2", opened.await_args_list[0].kwargs["who"]["table_id"])
@@ -413,7 +416,7 @@ class Taking(_Drawn):
             [call.args[1:] for call in finish.call_args_list])
 
     async def test_a_dialog_opens_over_this_one_for_the_row_picked(self) -> None:
-        with patch.object(mediasource.ext_lists, "open_over", new=AsyncMock()) as opened:
+        with patch.object(picker_online.ext_lists, "open_over", new=AsyncMock()) as opened:
             await self.pick({"action": "get"})
 
         opened.assert_awaited_once_with({"name": "ext"}, "get", ["a"], who={

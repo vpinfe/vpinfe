@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 
 from common.i18n import t
 from manager.kit import panel
+from manager.library.match_group import game_match_gap
 from manager.workbench import core, game_table
-from manager.workbench.game_table import game_match_gap, release_match_gap
-from tests.support.workbench_patch import patch_workbench
+from manager.workbench.game_table import release_match_gap
 
 
 class AGame(unittest.TestCase):
@@ -68,10 +68,10 @@ class ATableWhoseReleasesCouldNotBeRead(unittest.IsolatedAsyncioTestCase):
                 context = {"library": library, "game": {"vps_id": "entry"}}
 
                 with patch("manager.kit.offload.run.io_bound", new=_now), \
-                        patch_workbench("_state",
+                        patch.object(panel, "state",
                                      new=lambda text, level, hint="": (text, level, hint)), \
                         patch.object(panel, "intro", new=lambda text: ("intro", text)), \
-                        patch_workbench("_change_match", return_value="change"), \
+                        patch.object(game_table, "change_match", return_value="change"), \
                         self.assertLogs("vpinfe.manager.workbench", level="WARNING"):
                     rows = await game_table._release_match(
                         context, {"id": "t1", "source": {"vps_file_id": "gone"}})

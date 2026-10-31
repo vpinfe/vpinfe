@@ -13,7 +13,7 @@ from nicegui import run, ui
 
 from common.i18n import t
 from manager.kit import dialog as frame
-from manager.kit import panel, verbs
+from manager.kit import kind_words, panel, verbs
 from manager.kit.on_page import on_page
 from manager.library import import_dialog, mediasource, uploads
 
@@ -24,7 +24,9 @@ async def _stay(_current: str) -> tuple[str, str] | None:
 
 
 def release_of(vps_file_id: str, label: str) -> import_dialog.ReleaseMatch:
-    return import_dialog.ReleaseMatch(_stay, vps_file_id=vps_file_id, label=label)
+    return import_dialog.ReleaseMatch(
+        _stay, kind_words.label("table"), kind_words.vps_name("table"),
+        vps_file_id=vps_file_id, label=label)
 
 
 def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
@@ -37,7 +39,6 @@ def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
     with frame.opened(title or t("manager.getting_file.title"), wide=True) as dialog:
         card = ui.column().classes("gap-2 w-full px-3")
         with card:
-            ui.label(t("manager.getting_file.head")).classes("manager-member-name")
             if page:
                 with ui.row().classes("items-center gap-2"):
                     ui.label(t("manager.getting_file.download"))
@@ -59,10 +60,12 @@ def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
 
             heard = uploads.listener(arrived)
             with ui.column().classes("items-center gap-1 w-full manager-dropbox"):
-                ui.label(t("manager.mediasource.drop_file")).classes("manager-help")
+                ui.label(t("manager.getting_file.drop_for", version=release.label)
+                         if release is not None and release.label
+                         else t("manager.mediasource.drop_file")).classes("manager-help")
                 panel.action(t("manager.mediasource.choose_file"), heard, icon=verbs.FROM_FILE,
-                             hint=t("manager.mediasource.choose_files.help"),
-                             js="() => window.__managerChoose(false, emit)")()
+                             hint=t("manager.mediasource.choose_file.help"),
+                             js="() => window.__managerChoose(false, emit, true)")()
         mediasource.take_drops(card, arrived)
         with frame.footer():
             frame.cancel(dialog.close)

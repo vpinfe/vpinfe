@@ -14,7 +14,14 @@ from common.runtime.jobs import KIND_VPS_ROLLUP
 from manager import page
 from manager.kit import deeplink, grid
 from manager.kit.data import Library
-from manager.library import discovery, discovery_ask, discovery_get, discovery_list, import_dialog
+from manager.library import (
+    discovery,
+    discovery_ask,
+    discovery_get,
+    discovery_list,
+    import_dialog,
+    vps_records,
+)
 
 # Made at import, outside any task, where NiceGUI still hands out the script's own page.
 _PAGE = ui.element()
@@ -283,7 +290,7 @@ class Records(unittest.TestCase):
                 for index in range(count)]
 
     def test_the_newest_come_first(self) -> None:
-        ordered = discovery.newest_first(self._records(3))
+        ordered = vps_records.newest_first(self._records(3))
 
         self.assertEqual(["r2", "r1", "r0"], [one["vps_file_id"] for one in ordered])
 
@@ -294,32 +301,32 @@ class ChoosingBy(unittest.TestCase):
                                                           "authors": ["Larouillas"]}}
 
         self.assertEqual("Mod of 1.0 · Larouillas · VR",
-                         discovery.what_it_is(record, features=True))
+                         vps_records.what_it_is(record, features=True))
 
     def test_a_list_that_hides_features_still_says_a_file_is_a_mod(self) -> None:
         record = {"features": ["MOD", "VR"]}
 
-        self.assertEqual("Mod", discovery.what_it_is(record, features=False))
+        self.assertEqual("Mod", vps_records.what_it_is(record, features=False))
 
     def test_a_vpx_file_does_not_name_its_format_and_another_does(self) -> None:
-        self.assertEqual("", discovery.what_it_is({"format": "VPX"}, features=True))
+        self.assertEqual("", vps_records.what_it_is({"format": "VPX"}, features=True))
         self.assertEqual("Future Pinball",
-                         discovery.what_it_is({"format": "FP"}, features=True))
+                         vps_records.what_it_is({"format": "FP"}, features=True))
 
     def test_a_file_is_linked_by_the_site_it_is_on(self) -> None:
         record = {"url": "https://www.vpforums.org/file"}
 
-        self.assertEqual(("VPForums", "https://www.vpforums.org/file"), discovery.site_of(record))
+        self.assertEqual(("VPForums", "https://www.vpforums.org/file"), vps_records.site_of(record))
 
     def test_a_page_is_broken_only_where_vps_marks_that_address(self) -> None:
         links = [{"url": "https://a.example/1", "broken": True}, {"url": "https://b.example/2"}]
 
-        self.assertFalse(discovery.page_is_broken({"url": "https://b.example/2", "urls": links}))
-        self.assertTrue(discovery.page_is_broken({"url": "https://a.example/1", "urls": links}))
-        self.assertFalse(discovery.page_is_broken({"url": "", "urls": []}))
+        self.assertFalse(vps_records.page_is_broken({"url": "https://b.example/2", "urls": links}))
+        self.assertTrue(vps_records.page_is_broken({"url": "https://a.example/1", "urls": links}))
+        self.assertFalse(vps_records.page_is_broken({"url": "", "urls": []}))
 
     def test_a_file_with_no_link_names_no_site(self) -> None:
-        self.assertEqual(("", ""), discovery.site_of({"url": ""}))
+        self.assertEqual(("", ""), vps_records.site_of({"url": ""}))
 
 
 class TypeWords(unittest.TestCase):
@@ -861,34 +868,35 @@ class Getting(unittest.IsolatedAsyncioTestCase):
                 read.assert_not_awaited()
                 self.assertEqual(slot, imported.await_args.kwargs["media_kind"])
 
-    async def test_a_drop_off_the_row_is_offered_as_the_release_whose_page_was_opened(
+    async def test_a_drop_off_the_row_is_offered_as_the_file_whose_page_was_opened(
             self) -> None:
-        match = import_dialog.ReleaseMatch(mock.AsyncMock())
+        match = import_dialog.ReleaseMatch(mock.AsyncMock(), "Rule Sheet", "VPS Rule Sheet")
         _read, imported = await self._drop(("rule_sheet",), vps_kinds.MEDIA, match=match,
                                            opened=lambda: ("f1", "1.0.0"))
 
         release = imported.await_args.kwargs["release"]
         self.assertEqual(("f1", "1.0.0"), (release.vps_file_id, release.label))
-        self.assertEqual("Because you opened this release's page first",
+        self.assertEqual("Because you opened this VPS Rule Sheet's page first",
                          release.reason)
         self.assertEqual("", match.vps_file_id)
 
     async def test_a_drop_with_no_page_opened_has_no_match_and_no_reason(self) -> None:
-        match = import_dialog.ReleaseMatch(mock.AsyncMock())
+        match = import_dialog.ReleaseMatch(mock.AsyncMock(), "Rule Sheet", "VPS Rule Sheet")
         _read, imported = await self._drop(("rule_sheet",), vps_kinds.MEDIA, match=match,
                                            opened=lambda: ("", ""))
 
         release = imported.await_args.kwargs["release"]
         self.assertEqual(("", ""), (release.vps_file_id, release.reason))
 
-    async def test_a_release_the_drop_names_is_not_replaced_by_the_opened_one(self) -> None:
-        match = import_dialog.ReleaseMatch(mock.AsyncMock(), vps_file_id="f2", label="2.0")
+    async def test_a_file_the_drop_names_is_not_replaced_by_the_opened_one(self) -> None:
+        match = import_dialog.ReleaseMatch(mock.AsyncMock(), "Rule Sheet", "VPS Rule Sheet",
+                                           vps_file_id="f2", label="2.0")
         _read, imported = await self._drop(("rule_sheet",), vps_kinds.MEDIA, match=match,
                                            opened=lambda: ("f1", "1.0.0"))
 
         release = imported.await_args.kwargs["release"]
         self.assertEqual("f2", release.vps_file_id)
-        self.assertEqual("Because you dropped the file on this release",
+        self.assertEqual("Because you dropped the file on this VPS Rule Sheet",
                          release.reason)
 
     async def test_a_picture_or_document_import_is_tied_to_its_release_by_path(self) -> None:

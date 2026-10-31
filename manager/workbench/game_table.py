@@ -30,17 +30,22 @@ from manager.kit import (
     verbs,
     when,
 )
-from manager.kit import dialog as frame
 from manager.kit.data import Library, tag_source
 from manager.kit.on_page import on_page
 from manager.library import (
     collection_adds,
-    discovery,
     file_acts,
     getting_file,
     mediamap,
     mediasource,
-    vps_match,
+    vps_records,
+)
+from manager.library.match_group import (
+    DETAIL_WORDS,
+    change_match,
+    match_rows,
+    pick_a_match,
+    unmatched,
 )
 from manager.settings import dof
 from manager.workbench.core import (
@@ -171,16 +176,16 @@ async def _release_match(context: dict[str, Any],
     entry = str(context["game"].get("vps_id") or "")
     source = table.get("source") or {}
     bound = str(source.get("vps_file_id") or "")
-    rows: list[tuple[Any, Any]] = [(HEADING, t("manager.workbench.matched_to"))]
+    rows: list[tuple[Any, Any]] = [(HEADING, t("manager.workbench.vps_release"))]
     if not entry:
-        return rows + _unmatched(release_match_gap(entry, bound, True))
+        return rows + unmatched(release_match_gap(entry, bound, True))
 
     async def pick() -> None:
         await _pick_a_release(context, table)
 
     if not bound:
-        return rows + _unmatched(release_match_gap(entry, bound, True)) \
-            + [(FULL, _change_match(pick, matched=False))]
+        return rows + unmatched(release_match_gap(entry, bound, True)) \
+            + [(FULL, change_match(pick, matched=False, release=True))]
     releases, unread = await _read_releases(context, entry)
     release = next((one for one in releases
                     if str(one.get("vps_file_id") or "") == bound), None)
@@ -197,9 +202,9 @@ async def _release_match(context: dict[str, Any],
         except Exception as exc:
             logger.warning("manager: could not read VPS for %s", entry, exc_info=True)
             held, unread = False, why(exc)
-        rows += _unmatched(release_match_gap(entry, bound, held, read=not unread),
-                           hint=unread)
-    return rows + [(FULL, _change_match(pick, matched=True))]
+        rows += unmatched(release_match_gap(entry, bound, held, read=not unread),
+                          hint=unread)
+    return rows + [(FULL, change_match(pick, matched=True, release=True))]
 
 
 def _override(effective: str, found: str | None, source: str,
@@ -300,18 +305,6 @@ def _override(effective: str, found: str | None, source: str,
     return draw
 
 
-def game_match_gap(vps_id: str, declared: bool, held: bool) -> tuple[str, str, str]:
-    """What a game's Match group says when there is no entry to draw: the state's key,
-    what its absence costs, and the key of the line under it."""
-    if declared:
-        return ("manager.workbench.no_match", "off", "manager.workbench.cleared_match")
-    if not vps_id:
-        return ("manager.workbench.not_matched", "warn", "")
-    if not held:
-        return ("word.unknown", "unknown", "manager.workbench.no_vps_data")
-    return ("manager.workbench.not_listed", "warn",
-            "manager.workbench.game_unlisted")
-
 
 def release_match_gap(entry: str, bound: str, held: bool,
                       read: bool = True) -> tuple[str, str, str]:
@@ -329,27 +322,6 @@ def release_match_gap(entry: str, bound: str, held: bool,
     return ("manager.workbench.not_listed", "warn",
             "manager.workbench.release_unlisted")
 
-
-def _match(found: dict[str, Any], vps_id: str, declared: bool,
-           held: bool, how: str = "") -> list[tuple[Any, Any]]:
-    """The machine this game is matched to, drawn the way the picker drew it, and how
-    the match was made."""
-    if found.get("name"):
-        return [(FULL, lambda: vps_match.entry_row(found, trailing=_how_matched(how)))]
-    return _unmatched(game_match_gap(vps_id, declared, held))
-
-
-def _how_matched(how: str) -> Callable[[], None] | None:
-    if how not in game_tables.HOW_MATCHED:
-        return None
-    hint = t("manager.game_tables.auto_matched.help") if how == "auto" else ""
-    return _state(game_tables.HOW_MATCHED[how], "on", hint=hint)
-
-
-def _unmatched(gap: tuple[str, str, str], hint: str = "") -> list[tuple[Any, Any]]:
-    said, level, under = gap
-    rows: list[tuple[Any, Any]] = [(FULL, _state(t(said), level, hint=hint))]
-    return rows + [panel.intro(t(under))] if under else rows
 
 
 def _game_entries(context: dict[str, Any], entry: dict[str, Any],
@@ -395,10 +367,10 @@ def _game_entries(context: dict[str, Any], entry: dict[str, Any],
 
     vps_id = str(game.get("vps_id") or "")
     declared = (game.get("overrides") or {}).get("alt_vps_id", "") is None
-    entries: list[tuple[Any, ...]] = [(HEADING, t("manager.workbench.matched_to"))]
-    entries += _match(entry, vps_id, declared, held, game_tables.how_matched(game))
-    entries.append((FULL, _change_match(lambda: _pick_a_match(context),
-                                        matched=bool(vps_id) or declared)))
+    entries: list[tuple[Any, ...]] = [(HEADING, t("manager.workbench.vps_game"))]
+    entries += match_rows(entry, vps_id, declared, held, game_tables.how_matched(game))
+    entries.append((FULL, change_match(lambda: pick_a_match(context),
+                                       matched=bool(vps_id) or declared)))
     entries.append((FULL, differing))
 
     ipdb = str(game.get("ipdb_id") or "")
@@ -834,15 +806,6 @@ def _derived_chips(tags: Sequence[str], looks: dict[str, dict[str, Any]]) -> Non
 IPDB_URL = "https://www.ipdb.org/machine.cgi?id={id}"
 
 
-# What the catalog calls these against what a person does. Only where the two differ:
-# `Manufacturer` needs no translating and a map that repeats it is a map nobody trusts.
-DETAIL_WORDS = {
-    "Title": t("word.name"),
-    "IPDBId": "IPDB",
-    "guides": t("manager.workbench.guides"),
-    "Themes": t("manager.workbench.theme"),
-}
-
 
 def _details_differ(context: dict[str, Any],
                     differs: list[dict[str, Any]]) -> Callable[[], None]:
@@ -876,91 +839,6 @@ def _details_differ(context: dict[str, Any],
 
     return draw
 
-
-def _change_match(pick: Callable[[], Any], *, matched: bool) -> Callable[[], None]:
-    """The one act a Match group offers, named for whether there is a match to change."""
-    said = t("manager.workbench.change_match") if matched \
-        else t("manager.workbench.match_vps")
-    hint = t("manager.workbench.change_match.help") if matched \
-        else t("manager.workbench.match_vps.help")
-
-    def draw() -> None:
-        with ui.element("div").classes("manager-slot-actions"):
-            panel.action(said, pick, icon=verbs.MATCH, hint=hint)()
-
-    return draw
-
-
-@on_page
-async def _pick_a_match(context: dict[str, Any]) -> None:
-    """Ask which catalog entry this game is, and write the answer.
-
-    The picker itself is `manager.library.vps_match`, because the grid offers the same act over
-    a selection and two copies of it would drift. What stays here is the write: this
-    section owns the game in front of it and knows how to redraw itself afterwards.
-    """
-    picked = await vps_match.ask(context["library"], context["game"])
-    if picked is vps_match.CANCELLED:
-        return
-    library = context["library"]
-    try:
-        if picked == vps_match.CLEARED:
-            await run.io_bound(library.declare_no_match, context["game_id"])
-            await context["rebuild"]()
-            return
-        await run.io_bound(library.set_game_overrides, context["game_id"],
-                           {"alt_vps_id": str(picked)})
-        differs = await run.io_bound(library.vps_details, context["game_id"])
-        if differs:
-            wanted = await _confirm_details(differs)
-            if wanted:
-                await run.io_bound(library.adopt_vps_details, context["game_id"], wanted)
-    except Exception as exc:
-        ui.notify(t("manager.workbench.save_failed"), caption=why(exc), type="negative")
-    await context["rebuild"]()
-
-
-async def _confirm_details(differs: list[dict[str, Any]]) -> list[str]:
-    """Ask which of the new entry's details to take, and answer with their names.
-
-    Everything is ticked to start, so confirming without reading takes the whole entry -
-    which is what somebody who has just said "this is that machine" means.
-    """
-    chosen = {str(item.get("field") or ""): True for item in differs}
-
-    with frame.opened(t("manager.workbench.new_entry_question"), wide=True,
-                      ignore_outside_click=True) as box:
-        for new in (False, True):
-            rows = [one for one in differs if bool(one.get("new")) is new]
-            if not rows:
-                continue
-            panel.facts(ui, [(panel.HEADING, t("manager.workbench.details_new") if new
-                              else t("manager.workbench.details_changed"))])
-            with ui.column().classes("w-full gap-0 px-3"):
-                for item in rows:
-                    _detail_choice(item, chosen)
-        with frame.footer():
-            frame.cancel(lambda: box.submit(False))
-            frame.answer(t("manager.workbench.use_selected"), lambda: box.submit(True),
-                         icon=verbs.ACCEPT)
-
-    if not await box:
-        return []
-    return [field for field, take in chosen.items() if take]
-
-
-def _detail_choice(item: dict[str, Any], chosen: dict[str, bool]) -> None:
-    """One field, with what it would become - and what it is now, where there is one."""
-    field = str(item.get("field") or "")
-    with ui.row().classes("items-baseline gap-2 w-full no-wrap"):
-        box = ui.checkbox(value=True).props("dense")
-        box.on_value_change(lambda _, key=field, b=box: chosen.__setitem__(key,
-                                                                          bool(b.value)))
-        ui.label(DETAIL_WORDS.get(field, field)).classes("manager-diff-field")
-        if not item.get("new"):
-            ui.label(str(item.get("ours") or "-")).classes("manager-diff-was")
-            ui.icon("arrow_forward").classes("manager-diff-arrow")
-        ui.label(str(item.get("theirs") or "-")).classes("manager-help truncate")
 
 
 def _rom_state(pinmame: dict[str, Any], rom: str,
@@ -1112,12 +990,12 @@ def _update_table(context: dict[str, Any], table: dict[str, Any], page: str, ver
                   release: dict[str, Any]) -> None:
     """Open the newer version's page and take the file for it, to replace this table."""
     vps_file_id = str((table.get("source") or {}).get("vps_file_id") or "")
-    told = discovery.told(release) or version
+    told = vps_records.told(release) or version
     getting_file.open_for(
         context["library"], game_id=context["game_id"],
         game_dir=str(context["game"].get("folder") or ""), table_id=str(table.get("id") or ""),
-        page=page, site=sites.site_name(page), title=t("manager.getting_file.get_version",
-                                                       version=version),
+        page=page, site=sites.site_name(page),
+        title=t("manager.getting_file.update_to", version=version),
         release=getting_file.release_of(vps_file_id, told),
         on_done=partial(_table_list_changed, context))
 

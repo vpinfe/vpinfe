@@ -1741,6 +1741,27 @@ def action(label: str,
     return draw
 
 
+def split_action(label: str, on_click: Callable[[Any], Any] | None, *, icon: str,
+                 js: str, hint: str, also: str, also_js: str, also_hint: str) -> Callable[[], None]:
+    """One `action` with a second way of doing the same thing behind a caret.
+
+    Both halves take `js`, as `action` does: the menu item is the click the browser's
+    folder picker needs to see.
+    """
+    def draw() -> None:
+        with ui.element("div").classes("manager-split"):
+            action(label, on_click, icon=icon, hint=hint, js=js)()
+            caret = ui.button(icon=verbs.PLACES).props("flat dense no-caps size=sm") \
+                .classes("manager-action manager-split-caret")
+            caret.tooltip(also_hint)
+            caret.props["aria-label"] = also_hint
+            with caret, ui.menu().props('anchor="bottom right" self="top right"'):
+                ui.menu_item(also, auto_close=True).classes("manager-menu-item") \
+                    .on("click", on_click, js_handler=also_js)
+
+    return draw
+
+
 def draft_button(label: str, on_click: Callable[[], Any], *, icon: str, hint: str = "",
                  primary: bool = False) -> ui.button:
     """Cancel or Save at the foot of a draft. Returned, for the caller to dim until the

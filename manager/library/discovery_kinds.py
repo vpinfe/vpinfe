@@ -18,7 +18,7 @@ from common.games import asset_registry, opened_pages
 from common.i18n import t
 from common.media.media_specs import MEDIA_SPECS, media_family
 from manager.kit import candidates, offload
-from manager.library import discovery, discovery_ext, discovery_get
+from manager.library import discovery, discovery_ext, discovery_get, vps_records
 from manager.library.discovery_get import Pick, Tray
 
 logger = logging.getLogger("vpinfe.manager.library.discovery_kinds")
@@ -209,7 +209,7 @@ def _newest(context: dict[str, Any], kind: Kind) -> Pick | None:
     does not hold."""
     hosted = context.get("hosted", {})
     tied = {one["vps_file_id"] for one in kind.mine if one.get("vps_file_id")}
-    for record in discovery.newest_first(kind.records):
+    for record in vps_records.newest_first(kind.records):
         file_id = str(record.get("vps_file_id") or "")
         if file_id in hosted and file_id not in tied and not hosted[file_id].level:
             return hosted[file_id].pick
@@ -268,7 +268,7 @@ async def read(context: dict[str, Any]) -> Scene:
         if listing in discovery.MEDIA_LISTINGS or not discovery.kept(library, listing):
             continue
         records, unread = answers.get(listing, ([], ""))
-        mine = discovery.held_of(held, listing) if compare else []
+        mine = vps_records.held_of(held, listing) if compare else []
         holds = compare and discovery.holds(held, listing)
         if not records and not unread and not holds:
             continue
