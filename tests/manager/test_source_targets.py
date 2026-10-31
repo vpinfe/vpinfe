@@ -182,6 +182,65 @@ class TheHostTab(unittest.TestCase):
         self.assertEqual((named, client.discovery.call_count), ("Garage", 1))
 
 
+class AHostPathKeepsItsOwnSeparators(unittest.TestCase):
+    def _on_host(self, folder: str, path: str) -> str:
+        return mediasource._on_host({"game": {"folder": folder}}, path)
+
+    def _table_fits(self, folder: str, path: str) -> bool:
+        table = mediasource._Table({"library": LIBRARY, "game_id": "game",
+                                    "game": {"folder": folder}}, _nothing)
+        return table.fits({"name": "Taxi.vpx", "path": path})
+
+    def test_a_file_in_a_windows_folder_is_joined_with_backslashes(self) -> None:
+        for folder, expected in (
+                ("C:\\Tables\\Taxi", "C:\\Tables\\Taxi\\Taxi.vpx"),
+                ("C:/Tables\\Taxi/", "C:\\Tables\\Taxi\\Taxi.vpx"),
+                ("\\\\nas\\share\\Taxi", "\\\\nas\\share\\Taxi\\Taxi.vpx"),
+                ("D:\\", "D:\\Taxi.vpx"),
+                ("C:\\Tables\\Taxi 1.2", "C:\\Tables\\Taxi 1.2\\Taxi.vpx")):
+            with self.subTest(folder=folder):
+                self.assertEqual(expected, self._on_host(folder, "Taxi.vpx"))
+
+    def test_a_stored_path_with_forward_slashes_joins_into_a_windows_folder(self) -> None:
+        self.assertEqual("C:\\Tables\\Taxi\\medias\\wheel.png",
+                         self._on_host("C:\\Tables\\Taxi", "medias/wheel.png"))
+
+    def test_a_posix_folder_is_joined_as_it_was(self) -> None:
+        self.assertEqual("/tables/Taxi/Taxi.vpx", self._on_host("/tables/Taxi", "Taxi.vpx"))
+
+    def test_nothing_is_joined_without_a_folder_or_a_file(self) -> None:
+        self.assertEqual(["", ""], [self._on_host("", "Taxi.vpx"), self._on_host("/t", "")])
+
+    def test_a_table_inside_the_games_own_folder_is_not_offered_again(self) -> None:
+        for folder, path in (("C:\\Tables\\Taxi", "C:\\Tables\\Taxi\\Taxi.vpx"),
+                             ("C:/Tables\\Taxi", "C:\\Tables\\Taxi\\sub\\Taxi.vpx"),
+                             ("c:\\tables\\taxi", "C:\\Tables\\Taxi\\Taxi.vpx"),
+                             ("\\\\nas\\share\\Taxi", "\\\\nas\\share\\Taxi\\Taxi.vpx"),
+                             ("C:\\Tables\\Taxi", "C:/Tables/Taxi/Taxi.vpx"),
+                             ("/tables/Taxi", "/tables/Taxi/Taxi.vpx")):
+            with self.subTest(path=path):
+                self.assertFalse(self._table_fits(folder, path))
+
+    def test_the_games_own_folder_is_not_inside_itself(self) -> None:
+        self.assertTrue(self._table_fits("C:\\Tables\\Taxi", "C:\\Tables\\Taxi"))
+
+    def test_a_table_elsewhere_is_offered(self) -> None:
+        for folder, path in (("C:\\Tables\\Taxi", "C:\\Tables\\Taxi 2\\Taxi.vpx"),
+                             ("C:\\Tables\\Taxi", "D:\\Tables\\Taxi\\Taxi.vpx"),
+                             ("D:\\", "C:\\Taxi.vpx"),
+                             ("/tables/Taxi", "/tables/Taxi 2/Taxi.vpx"),
+                             ("", "C:\\Tables\\Taxi\\Taxi.vpx")):
+            with self.subTest(path=path):
+                self.assertTrue(self._table_fits(folder, path))
+
+    def test_a_file_s_name_and_suffix_are_its_last_part_by_either_separator(self) -> None:
+        self.assertEqual(["Taxi.vpx", "Taxi.vpx", "Taxi 1.2"],
+                         [mediasource._file_name(path) for path in
+                          ("C:\\Tables\\Taxi.vpx", "C:/Tables\\Taxi.vpx", "C:\\Tables\\Taxi 1.2")])
+        self.assertEqual([".vpx", ""], [mediasource._suffix({"name": name}) for name in
+                                        ("C:\\Tables.d\\Taxi.VPX", "C:\\Tables.d\\Taxi")])
+
+
 def _library() -> mock.Mock:
     library = mock.Mock()
     library.displaced_by.return_value = []

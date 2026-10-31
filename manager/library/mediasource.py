@@ -19,7 +19,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from pathlib import PurePath, PurePosixPath
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import Any
 from urllib.parse import quote
 
@@ -104,7 +104,7 @@ def _size(count: int | None) -> str:
 
 
 def _suffix(item: dict[str, Any]) -> str:
-    return PurePosixPath(str(item.get("name") or "")).suffix.lower()
+    return PurePosixPath(_file_name(str(item.get("name") or ""))).suffix.lower()
 
 
 @dataclass(frozen=True)
@@ -1347,7 +1347,7 @@ class _Folder(_OnlineTab):
         except Exception as exc:  # noqa: BLE001
             ui.notify(t("manager.uploads.read_failed"), caption=why(exc), type="negative")
             return
-        await self._import(upload_id, PurePosixPath(path).name)
+        await self._import(upload_id, _file_name(path))
 
     @on_page
     async def _import(self, upload_id: str, source: str, file_count: int = 0) -> None:
@@ -1425,8 +1425,7 @@ class _Table(_Folder):
         await self._chosen(path)
 
     def fits(self, item: dict[str, Any]) -> bool:
-        inside = self.game_dir and str(item.get("path") or "").startswith(
-            self.game_dir.rstrip("/") + "/")
+        inside = _under(self.game_dir, str(item.get("path") or ""))
         return _suffix(item) in self.extensions and not inside
 
     def folder_use(self, path: str) -> Callable | None:
@@ -1749,10 +1748,25 @@ def _attention(said: str) -> None:
         ui.label(said).classes("manager-attention-line")
 
 
+def _flavor(path: str) -> type[PurePath]:
+    """The rules a host's path follows. A path is kept as the host wrote it, so how it
+    looks decides, not the platform this runs on."""
+    windows = re.match(r"[A-Za-z]:|\\\\", path) or ("\\" in path and "/" not in path)
+    return PureWindowsPath if windows else PurePosixPath
+
+
+def _under(folder: str, path: str) -> bool:
+    """Whether `path` is somewhere below `folder`, by the folder's own separators."""
+    if not folder:
+        return False
+    kind = _flavor(folder)
+    return kind(path) != kind(folder) and kind(path).is_relative_to(kind(folder))
+
+
 def _on_host(context: dict[str, Any], path: str) -> str:
     """A path in the game's folder, as the host tab lists it."""
     folder = str(context["game"].get("folder") or "")
-    return str(PurePosixPath(folder) / path) if folder and path else ""
+    return str(_flavor(folder)(folder) / path) if folder and path else ""
 
 
 def _named_for(name: str, served: str) -> str:
