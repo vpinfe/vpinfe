@@ -4877,6 +4877,8 @@
   "signin.page.use_screen": "Request a Code From {device}",
   "signin.page.app_line": "Enter the six digits from your authenticator app.",
   "signin.page.title": "Sign In to {device}",
+  "signin.page.remote_only": "Signed in for the Remote only.",
+  "signin.page.remote_back": "Back to the Remote",
   "signin.remote.title": "Remote for {device}",
   "signin.remote.line": "Scan the Remote Code on Game Room's main menu to open the Remote.",
   "signin.remote.use_code": "Sign In with a Code",

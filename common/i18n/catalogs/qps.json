@@ -4877,6 +4877,8 @@
   "signin.page.use_screen": "Řèǫûèšţ à Çöđè Ƒřöɱ {device}",
   "signin.page.app_line": "Èñţèř ţĥè šîẋ đîĝîţš ƒřöɱ ýöûř àûţĥèñţîçàţöř àþþ.",
   "signin.page.title": "Šîĝñ Îñ ţö {device}",
+  "signin.page.remote_only": "Šîĝñèđ îñ ƒöř ţĥè Řèɱöţè öñŀý.",
+  "signin.page.remote_back": "Ɓàçķ ţö ţĥè Řèɱöţè",
   "signin.remote.title": "Řèɱöţè ƒöř {device}",
   "signin.remote.line": "Šçàñ ţĥè Řèɱöţè Çöđè öñ Ĝàɱè Řööɱ'š ɱàîñ ɱèñû ţö öþèñ ţĥè Řèɱöţè.",
   "signin.remote.use_code": "Šîĝñ Îñ ŵîţĥ à Çöđè",

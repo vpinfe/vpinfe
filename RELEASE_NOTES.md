@@ -243,6 +243,9 @@ These are deliberate. `docs/compatibility-3.0.md` has the full list with the rea
   across from `collections.ini` selecting every game.
 - **Core** - Remote launch failures are logged instead of failing silently, and a remote
   launch no longer raises on Linux.
+- **Manager** - A browser that opened the Remote's QR code no longer lands on the Remote
+  every time. Opening the Manager there asks for a code like any other device, and signing in
+  makes that browser an Owner.
 
 ### For theme and API authors
 - **Themes** - The selection surface keeps the names earlier versions published: `get_tables`,

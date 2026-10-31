@@ -150,12 +150,12 @@ class _Closed:
 
 
 def _out_of_reach(scope: Scope) -> Any:
-    """What a Remote pass is told when it asks past the Remote: back to the Remote for a
-    page, and nothing for anything else."""
+    """What a Remote pass is told when it asks past the Remote: the code sign-in for a page,
+    which is the only way past, and nothing for anything else."""
     if scope["type"] == "websocket":
         return _Closed()
     if _wants_page(scope):
-        return RedirectResponse(REMOTE_PAGE, status_code=303)
+        return _refusal(scope)
     return PlainTextResponse("", status_code=403)
 
 
@@ -210,7 +210,9 @@ def _owner_card() -> tuple[str, str]:
 
 
 def sign_in_page(request: Request) -> Response:
-    if auth.caller_is_local(request) or auth.session_for(request) is not None:
+    session = auth.session_for(request)
+    remote_only = session is not None and session.kind == sign_in.REMOTE
+    if auth.caller_is_local(request) or (session is not None and not remote_only):
         return RedirectResponse(next_page(request.query_params.get("next", "/")),
                                 status_code=303)
     device = display_name(paths.get_ini_config())
@@ -227,9 +229,13 @@ def sign_in_page(request: Request) -> Response:
         owner += f'<img class="owner" src="{html.escape(picture)}" alt="">'
     if name:
         owner += f'<p class="name">{html.escape(name)}</p>'
+    remote = ""
+    if remote_only:
+        remote = (f'<p id="remote">{html.escape(t("signin.page.remote_only"))} '
+                  f'<a href="{REMOTE_PAGE}">{html.escape(t("signin.page.remote_back"))}</a></p>')
     body = _PAGE.format(
         lang=html.escape(_language()), style=_STYLE, heading=html.escape(heading), owner=owner,
-        line=html.escape(t("signin.page.line", device=device)),
+        remote=remote, line=html.escape(t("signin.page.line", device=device)),
         get_code=html.escape(words["get_code"]), code=html.escape(words["code"]),
         submit=html.escape(words["submit"]), cant_see=html.escape(words["cant_see"]),
         cant_see_body=html.escape(words["cant_see_body"]), nonce=nonce,
@@ -298,6 +304,7 @@ _PAGE = """<!doctype html>
 </style></head><body><main>
 <h1>{heading}</h1>
 {owner}
+{remote}
 <p id="line">{line}</p>
 <button id="ask" type="button">{get_code}</button>
 <form id="enter" hidden>

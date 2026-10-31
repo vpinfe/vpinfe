@@ -12,10 +12,11 @@ from unittest import mock
 
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
-from starlette.routing import Route, WebSocketRoute
+from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+import httpapi
 from common.config import paths
 from common.security import accepted, authenticator, sign_in
 from httpapi import auth
@@ -39,10 +40,13 @@ async def _socket(websocket):
 
 def _app() -> Starlette:
     app = Starlette(routes=[
-        Route("/", _page), Route("/manager", _page), Route("/api/v1/health", _page),
+        Route("/", _page), Route("/manager", _page), Route("/remote", _page),
+        Route("/favicon.ico", _page), Route("/_nicegui/x.js", _page),
+        Route("/manager-static/x.css", _page), Route("/api/v1/health", _page),
         Route("/api/v1", _page), Route(sign_in_gate.PAGE, sign_in_gate.sign_in_page),
         Route("/media_games/x.png", _page, methods=["GET", "POST"]),
-        WebSocketRoute("/_nicegui_ws/ws", _socket)])
+        WebSocketRoute("/_nicegui_ws/ws", _socket),
+        Mount(sign_in_gate.API_PREFIX, httpapi.create_api_app())])
     app.add_middleware(sign_in_gate.SignInGate)
     return app
 
@@ -54,12 +58,20 @@ class Gate(unittest.TestCase):
         self.signer = sign_in.SignIn(Path(holder.name) / "sessions.json")
         self.addCleanup(sign_in.use, sign_in.instance())
         sign_in.use(self.signer)
+        auth.set_policy(auth.SignInPolicy())
+        self.addCleanup(auth.set_policy, auth.SignInPolicy())
         patcher = mock.patch.object(sign_in_gate, "_owner_card", return_value=("", ""))
         patcher.start()
         self.addCleanup(patcher.stop)
         self.app = _app()
         self.machine = TestClient(self.app)
         self.computer = TestClient(self.app, client=(OTHER, 50000), follow_redirects=False)
+
+    def remote(self) -> TestClient:
+        token, _ = self.signer.open(kind=sign_in.REMOTE, address=OTHER)
+        client = TestClient(self.app, client=(OTHER, 50000), follow_redirects=False)
+        client.cookies.set(auth.COOKIE, token)
+        return client
 
     def signed_in(self) -> TestClient:
         request = self.signer.reveal_now(OTHER)
@@ -119,6 +131,106 @@ class WhoIsKeptOut(Gate):
     def test_the_live_connection_opens_for_this_machine(self) -> None:
         with self.machine.websocket_connect("/_nicegui_ws/ws") as socket:
             self.assertEqual(socket.receive_text(), "hello")
+
+
+class ARemoteSignIn(Gate):
+    """A browser that opened the Remote's QR holds a Play sign-in, and the Manager is not
+    behind it: asking for a page past the Remote is asking for the code."""
+
+    def test_a_page_past_the_remote_is_sent_to_the_code_and_remembers_where(self) -> None:
+        client = self.remote()
+
+        for path, next_ in (("/", "%2F"), ("/manager", "%2Fmanager")):
+            with self.subTest(path=path):
+                answer = client.get(path, headers=HTML)
+
+                self.assertEqual(answer.status_code, 303)
+                self.assertEqual(answer.headers["location"], f"/signin?next={next_}")
+
+    def test_the_sign_in_page_offers_the_code_and_a_way_back(self) -> None:
+        answer = self.remote().get("/signin?next=%2Fmanager")
+
+        self.assertEqual(answer.status_code, 200)
+        self.assertIn('id="ask"', answer.text)
+        self.assertIn('id="code"', answer.text)
+        self.assertIn("Signed in for the Remote only.", answer.text)
+        self.assertIn('href="/remote"', answer.text)
+
+    def test_the_way_back_is_for_a_remote_sign_in_alone(self) -> None:
+        self.assertNotIn("Signed in for the Remote only.", self.computer.get("/signin").text)
+
+    def test_an_owner_is_still_sent_on_from_the_sign_in_page(self) -> None:
+        answer = self.signed_in().get("/signin?next=%2Fmanager")
+
+        self.assertEqual(answer.status_code, 303)
+        self.assertEqual(answer.headers["location"], "/manager")
+
+    def test_what_is_not_a_page_stays_refused(self) -> None:
+        client = self.remote()
+
+        self.assertEqual(client.get("/media_games/x.png").status_code, 403)
+        self.assertEqual(client.post("/media_games/x.png", headers=HTML).status_code, 403)
+        with self.assertRaises(WebSocketDisconnect) as caught:
+            with client.websocket_connect("/manager/ws"):
+                pass
+        self.assertEqual(caught.exception.code, 1008)
+
+    def test_the_remote_and_what_it_loads_are_unchanged(self) -> None:
+        client = self.remote()
+
+        for path in ("/remote", "/favicon.ico", "/_nicegui/x.js", "/manager-static/x.css"):
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path, headers=HTML).status_code, 200)
+
+    def test_the_api_still_answers_for_itself(self) -> None:
+        self.assertEqual(self.remote().get("/api/v1/health").status_code, 200)
+
+    def test_a_hostile_destination_still_goes_home_from_a_remote_sign_in(self) -> None:
+        answer = self.remote().get("/signin?next=//evil.example")
+
+        self.assertIn("const hasApp", answer.text)
+        self.assertIn('after = "/"', answer.text)
+
+    def test_a_wrong_code_leaves_the_remote_sign_in_as_it_was(self) -> None:
+        client = self.remote()
+        asked = client.post("/api/v1/auth/code").json()
+
+        done = client.post("/api/v1/auth/session",
+                           json={"request_id": asked["request_id"], "code": "000000"})
+
+        self.assertNotEqual(done.status_code, 200)
+        self.assertEqual([s.kind for s in self.signer.sessions()], [sign_in.REMOTE])
+        self.assertEqual(client.get("/remote", headers=HTML).status_code, 200)
+
+    def test_an_owner_who_signs_in_again_keeps_the_row_it_had(self) -> None:
+        token, _ = self.signer.open(kind=sign_in.OWNER, address=OTHER)
+        client = TestClient(self.app, client=(OTHER, 50000), follow_redirects=False)
+        client.cookies.set(auth.COOKIE, token)
+        request = self.signer.reveal_now(OTHER)
+
+        done = client.post("/api/v1/auth/session",
+                           json={"request_id": request.id, "code": request.code})
+
+        self.assertEqual(done.status_code, 200, done.text)
+        self.assertEqual([s.kind for s in self.signer.sessions()], [sign_in.OWNER] * 2)
+
+    def test_a_code_from_a_remote_browser_signs_it_in_as_owner_and_ends_the_remote(self) -> None:
+        client = self.remote()
+        remote_id = self.signer.sessions()[0].id
+        self.assertEqual(client.get("/manager", headers=HTML).status_code, 303)
+
+        asked = client.post("/api/v1/auth/code")
+        self.assertEqual(asked.status_code, 200, asked.text)
+        request = self.signer.reveal(asked.json()["request_id"])
+        assert request is not None
+        done = client.post("/api/v1/auth/session",
+                           json={"request_id": request.id, "code": request.code})
+        self.assertEqual(done.status_code, 200, done.text)
+
+        sessions = self.signer.sessions()
+        self.assertEqual([s.kind for s in sessions], [sign_in.OWNER])
+        self.assertNotEqual(sessions[0].id, remote_id)
+        self.assertEqual(client.get("/", headers=HTML).text, "manager")
 
 
 class WhereToGoNext(unittest.TestCase):
@@ -255,6 +367,24 @@ class TheAuthenticatorWay(Gate):
 
         self.assertIn("const hasApp = true, screen = false;", self.page())
 
+    def test_the_app_signs_a_remote_browser_in_as_owner_and_ends_the_remote(self) -> None:
+        self.held.activate(self._first_code())
+        client = self.remote()
+        remote_id = self.signer.sessions()[0].id
+        self.held.set_screen_codes(False)
+
+        done = client.post("/api/v1/auth/authenticator/session",
+                           json={"code": self._next_code()})
+
+        self.assertEqual(done.status_code, 200, done.text)
+        sessions = self.signer.sessions()
+        self.assertEqual([s.kind for s in sessions], [sign_in.OWNER])
+        self.assertNotEqual(sessions[0].id, remote_id)
+
+    def _next_code(self) -> str:
+        return authenticator._code(base64.b32decode(self.secret), int(time.time() // 30) + 1)
+
     def _first_code(self) -> str:
         made = self.held.begin("Game Room")
+        self.secret = made.secret
         return authenticator._code(base64.b32decode(made.secret), int(time.time() // 30))

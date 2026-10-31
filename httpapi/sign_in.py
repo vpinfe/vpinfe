@@ -143,6 +143,10 @@ def ask(request: Request, response: Response) -> SignInAsk:
 
 
 def _signed_in(token: str, request: Request, response: Response) -> SignedIn:
+    """Sets the cookie. A Remote sign-in the browser held is ended: this one replaces it."""
+    held = session_for(request)
+    if held is not None and held.kind == sign_in.REMOTE:
+        sign_in.instance().sign_out(held.id)
     response.set_cookie(COOKIE, token, max_age=sign_in.SESSION_SECONDS, httponly=True,
                         samesite="lax", secure=request_is_https(request), path="/")
     return SignedIn()
