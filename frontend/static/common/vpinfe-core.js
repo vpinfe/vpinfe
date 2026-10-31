@@ -478,6 +478,7 @@ const INTERNAL_METHODS = new Set([
   "keep_filter_collection",
   "library_waiting",
   "report_browser",
+  "report_window",
   "take_picture",
   "resume_play",
   "stop_recording",
@@ -512,6 +513,12 @@ const PLAYBACK_TYPES = [
   ["opus", 'audio/ogg; codecs="opus"'],
 ];
 
+// 1080p at 60 frames a second, which is what a table's video has to hold.
+const DECODE_TYPES = [
+  ["h264", 'video/mp4; codecs="avc1.64002a"'],
+  ["vp9", 'video/webm; codecs="vp09.00.41.08"'],
+];
+
 // Whether a real file shows a picture: true, false, or null when it neither loaded nor
 // failed in time. The width is the answer, not the load event.
 function decodesPicture(url, timeoutMs = 5000) {
@@ -532,6 +539,73 @@ function decodesPicture(url, timeoutMs = 5000) {
     setTimeout(() => finish(null), timeoutMs);
     video.src = url;
   });
+}
+
+// What this browser can draw and decode with, for a support summary. Every answer is true,
+// false, or null where it was not tested; nothing here names a unit (a gamepad is counted,
+// not named).
+async function probeFeatures() {
+  const started = performance.now();
+  const context = (kind) => {
+    try {
+      return document.createElement("canvas").getContext(kind);
+    } catch (e) {
+      return null;
+    }
+  };
+  const gl2 = context("webgl2");
+  const gl = gl2 || context("webgl");
+  // Only the unmasked name is a graphics chip; without the extension the browser says
+  // "WebKit WebGL", which names nothing.
+  let renderer = "";
+  if (gl) {
+    try {
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      if (info) renderer = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || "");
+    } catch (e) {
+      renderer = "";
+    }
+  }
+  // An adapter that never came back in time is not tested, which is not the same as none.
+  let webgpu = false;
+  if (navigator.gpu) {
+    const timedOut = Symbol("timed out");
+    try {
+      const adapter = await Promise.race([
+        navigator.gpu.requestAdapter(),
+        new Promise((resolve) => setTimeout(() => resolve(timedOut), 2000)),
+      ]);
+      webgpu = adapter === timedOut ? null : adapter !== null;
+    } catch (e) {
+      webgpu = null;
+    }
+  }
+  const decodes = {};
+  for (const [id, contentType] of DECODE_TYPES) {
+    try {
+      const info = await navigator.mediaCapabilities.decodingInfo({
+        type: "file",
+        video: { contentType, width: 1920, height: 1080, bitrate: 8000000, framerate: 60 },
+      });
+      decodes[id] = { supported: info.supported, smooth: info.smooth, power_efficient: info.powerEfficient };
+    } catch (e) {
+      decodes[id] = null;
+    }
+  }
+  // Chromium lists no pad until a button has been pressed on it, so none seen is not none
+  // connected.
+  const seen = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean).length : 0;
+  const pads = seen > 0 ? seen : null;
+  return {
+    webgl: gl !== null, webgl2: gl2 !== null, renderer, webgpu,
+    offscreen_canvas: typeof OffscreenCanvas === "function",
+    decodes, gamepads: pads,
+    screen: {
+      scale: window.devicePixelRatio, width: window.screen.width, height: window.screen.height,
+      extended: typeof window.screen.isExtended === "boolean" ? window.screen.isExtended : null,
+    },
+    took_ms: Math.round(performance.now() - started),
+  };
 }
 
 // Same once-per-name reporting as announceLegacy, and for the same reason: without it the
@@ -2502,6 +2576,7 @@ class VPinFECore {
     // and nothing ever asked this window to paint.
     this.#renderWindowMedia();
     if (!this.isController()) this.#askForSelection();
+    this.#reportWindow();
    //this.#overrideConsole(); //disabled for now...
 
     // only run on the table window.. Its the master controller for all screens/windows
@@ -2513,6 +2588,24 @@ class VPinFECore {
       this.#watchPlayState();           // Subscribe to remote launch events
       this.#pullSignIn();
       this.#probePlayback();
+    }
+  }
+
+  // Where this window is, for a support summary. Once per page load, a moment after the
+  // window has been placed. A native Wayland window reports 0,0 for its position, because the
+  // compositor does not tell a window where it is.
+  async #reportWindow() {
+    if (this._windowReported) return;
+    this._windowReported = true;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      await this.callInternal("report_window", {
+        window: this._windowName, x: window.screenX, y: window.screenY,
+        width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio,
+      });
+    } catch (e) {
+      this._windowReported = false;
+      console.warn("[VPinFE] Could not report where this window opened", e);
     }
   }
 
@@ -2533,9 +2626,15 @@ class VPinFECore {
     } catch (e) {
       brands = [];
     }
+    let features = {};
+    try {
+      features = await probeFeatures();
+    } catch (e) {
+      features = {};
+    }
     try {
       await this.callInternal("report_browser", {
-        user_agent: navigator.userAgent, brands, can_play: canPlay, decoded,
+        user_agent: navigator.userAgent, brands, can_play: canPlay, decoded, features,
       });
     } catch (e) {
       console.warn("[VPinFE] Could not report what this browser plays", e);

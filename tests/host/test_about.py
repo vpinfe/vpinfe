@@ -125,5 +125,16 @@ class AboutTests(unittest.TestCase):
         self.assertEqual([said for said in browser if _plain(said)], [])
 
 
+class WindowsFileVersionTests(unittest.TestCase):
+    def test_the_path_goes_in_the_environment_and_not_in_the_script(self) -> None:
+        path = "C:/Games\u2019; Start-Process calc; \u2018.exe"
+        with mock.patch.object(about.subprocess, "run") as run:
+            run.return_value = mock.Mock(stdout="10.8.1\n", stderr="")
+            self.assertEqual(about._windows_file_version(path), "10.8.1")
+        command = run.call_args.args[0]
+        self.assertNotIn("calc", " ".join(command))
+        self.assertEqual(run.call_args.kwargs["env"]["VPINFE_FILE"], path)
+
+
 if __name__ == "__main__":
     unittest.main()

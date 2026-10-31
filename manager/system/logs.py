@@ -36,6 +36,7 @@ from manager.devices import devices as devices_page
 from manager.kit import busy, clipboard, deeplink, dropdown, offload, panel, verbs
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
+from manager.system import support as support_dialog
 
 logger = logging.getLogger("vpinfe.manager.system.logs")
 
@@ -213,6 +214,8 @@ def _file_menu(library: Library, held: dict[str, Any],
                      else t("manager.logs.wrap"),
                      lambda: remember("wrap", not held["wrap"])) \
             .classes("manager-menu-item")
+        ui.menu_item(t("manager.about.support_package"),
+                     support_dialog.open_support_package).classes("manager-menu-item")
         if held["path"]:
             # In the browser at the click, which is the only moment it will copy.
             ui.menu_item(t("word.copy_path")) \

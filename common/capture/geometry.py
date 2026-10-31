@@ -62,6 +62,51 @@ def hyprland_transform(said: object) -> Turn:
         return NONE
 
 
+def wayland_transform(said: object) -> Turn:
+    """A `wl_output` transform by number, 0 to 7, as Mutter and Hyprland both give it."""
+    return hyprland_transform(said)
+
+
+# X11's and KDE's own words for a quarter turn. Which way each one turns is the desktop's
+# word taken as printed, until a really turned screen has been read against it.
+_QUARTER = {"normal": NONE, "left": Turn(ccw=90), "inverted": Turn(ccw=180),
+            "right": Turn(ccw=270)}
+_KSCREEN = {1: "normal", 2: "left", 4: "inverted", 8: "right"}
+
+
+def xrandr_turn(word: str, axes: str = "") -> Turn:
+    """An output's `normal`, `left`, `inverted` or `right`, with the axes xrandr says it is
+    reflected on: `X axis` mirrors, `Y axis` mirrors and turns half way, and both together
+    are a half turn."""
+    turn = _QUARTER.get(word, NONE)
+    both = "X and Y axis" in axes
+    flip = ("X axis" in axes or "Y axis" in axes) and not both
+    half = both or ("Y axis" in axes and not both)
+    return Turn(turn.flip != flip, (turn.ccw + (180 if half else 0)) % 360)
+
+
+def degrees_turn(degrees: object) -> Turn:
+    """A rotation an operating system states in degrees (Windows' `dmDisplayOrientation` as
+    0 to 270, macOS's `CGDisplayRotation`), taken as counter-clockwise. One that is not a
+    quarter turn is taken as none."""
+    try:
+        value = int(str(degrees))
+    except ValueError:
+        return NONE
+    return Turn(ccw=value) if value in (90, 180, 270) else NONE
+
+
+def kscreen_word(value: object) -> str:
+    """KScreen's rotation, number or name, as the word X11 uses for it, or "" for one it
+    does not know."""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return _KSCREEN.get(value, "")
+    said = str(value or "").strip().lower()
+    return said if said in _QUARTER else ""
+
+
 def playfield(transform: Turn, rotation: int, orientation: str) -> Turn:
     """`rotation` is the clockwise turn VPinFE's UI makes to face the player, so the
     same number counter-clockwise undoes it."""

@@ -42,6 +42,14 @@ def _query_monitors() -> list[Any]:
     return get_monitors()
 
 
+def _log_screens(monitors: list[Any]) -> None:
+    """Size and position of each screen, in order, so a log read alone says what the run
+    drew on. Never a model name, which can be a person's own label."""
+    found = "; ".join(f"{number}: {one.width}x{one.height} at {one.x},{one.y}"
+                      for number, one in enumerate(monitors))
+    logger.info("Screens: %s", found or "none found")
+
+
 def get_display_monitors(refresh: bool = False) -> list[Any]:
     """Every display this machine has, or none when it cannot say.
 
@@ -62,6 +70,7 @@ def get_display_monitors(refresh: bool = False) -> list[Any]:
                                exc_info=True)
                 _monitors_cache = []
             _names_cache = None
+            _log_screens(_monitors_cache)
         return _monitors_cache
 
 

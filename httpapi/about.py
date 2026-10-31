@@ -23,7 +23,7 @@ router = APIRouter(prefix="/about", tags=["about"])
 @router.get("", summary="What this install and this device are",
             dependencies=[requires(scopes.SYSTEM_READ)])
 def read(refresh: bool = False) -> dict[str, Any]:
-    """Read once per process and kept.
+    """Read once per process and kept, except the displays, which are held for 30 seconds.
 
     Every field costs a subprocess, a config read or a walk of the install, and none of
     them changes while VPinFE runs - so `refresh` is there for the case somebody has

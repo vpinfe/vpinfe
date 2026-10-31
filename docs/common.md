@@ -28,7 +28,7 @@ Inside the shared layer the units are ranked, and a unit imports its own rank or
 | 2 | security, media, runtime | keys and trust; media specs; jobs and the process's lifecycle |
 | 3 | devices | other installs: the client, the registry, pairing |
 | 4 | players, release, settings | the roster; release notes and upgrade needs; the settings service |
-| 5 | `games/`, `online/`, `host/`, `uploads/`, `capture/`, `backups/`, `extensions/` | the domains, which may import each other |
+| 5 | `games/`, `online/`, `host/`, `uploads/`, `capture/`, `backups/`, `extensions/`, `support/` | the domains, which may import each other |
 
 `tests/invariants/test_layering.py` holds the table and names each import that runs
 against the ranks. That list only shrinks. A module that needs something above it is handed
@@ -149,6 +149,21 @@ something. `docs/extensions/reference.md` indexes the contract an author reads.
 
 Depends on `common/games/`, `common/online/` and `common/host/`.
 
+**`common/support/`** - what a person attaches to a report: a system summary and the logs, with private details replaced.
+
+- `redact.py`: the only place text is cleaned. A `Redactor` is made from one `Identity` and cleans literals first, longest first, then patterns, with a stable numbered placeholder for each distinct value (`[[user-1]]`), so a value reads the same in every file. Originals live in its ledger in memory, for the person's own screen, and are never written into a package. Cleaning twice changes nothing. A string it cannot name but that looks random is hidden as a precaution and listed.
+- `identity.py`: `build_identity()` reads who and what is private from the install's own stores (account, host, devices, players and their accounts, install id, library folders, table names). Each reader fails to nothing, never to an error.
+- `sections.py`, `collect/`: the summary is a registry of `Section`s, one module and one line each. A collector reads through readers that already exist, never raises and never redacts; a failure is `not_reported` with its reason.
+- `collect/displays/`: the Displays And Layout section. `desktop.py` names the session (system, display server, desktop, container, virtual machine, distribution). `probes/` holds one probe per source (`xrandr`, the sway and Hyprland sockets, `kscreen-doctor`, Mutter over D-Bus, `wlr-randr`, `wayland-info`, `os-release`), each `probe(env, run) -> Reading`, which never raises and parses by allow-list. `gather.py` runs the chosen probes in parallel with a time limit per program and in total. `compare.py` holds the rules that set VPinFE's screens, the desktop's and Visual Pinball's settings against each other. A rule with a missing fact says nothing. Fixtures for the parsers are under `tests/fixtures/displays/`, each listed in its `PROVENANCE.md` as captured or synthetic.
+- `session.py`: the desktop session, from an allow-list of environment variables and never the whole environment.
+- `package.py`: `build_package()` is `collect()` then `assemble()`. `collect()` reads the device once into a `Raw`. `assemble()` cleans every byte through one `Redactor` and zips it once with fixed entry names and times, in English whatever language is set (`i18n.in_source_language()`). Toggles, hidden words, left-out log files and removed lines only reassemble. A removed line is replaced by `REMOVED_LINE` so the numbers of the lines after it do not move, and the README and summary cannot be left out. `hold()` keeps a built package in memory for 15 minutes, two at most, under a random id.
+- `draft.py`: a `Draft` is one person's work on a package: what `collect()` read, the choices made since, and the `Package` they produce. The Create Support Package dialog (`manager/system/support.py`) runs in the Manager's process and holds one for as long as it is open; `drop()` lets go of everything read. `Package.originals` maps a stand-in to the value it replaced and is for that person's own screen only: it is not in the zip and the API never serves it.
+- `pieces.py`: a line cut where a stand-in sits, for Inspect Everything, and a search over every file of a package.
+- `destinations.py`: the Discord summary (under 1,500 characters, read from the summary's own Markdown labels) and the prefilled GitHub issue link, built from an allow-list of non-identifying facts. Both are plain addresses a browser opens. Nothing is uploaded from here.
+- `banner.py`: the block written at the start of every run, free of host and user names.
+
+Depends on `common/host/`, `common/games/`, `common/extensions/` and `common/devices/`. `httpapi/support.py` and `vpinfe --support-package` are its front doors.
+
 **`common/uploads/`** - getting files into the library.
 
 - `upload_session_service.py`: an upload in progress. Files arrive in chunks into a session directory and every path is checked against it, so an upload naming `../` is refused rather than resolved.
@@ -187,6 +202,7 @@ to 2.x still finds them.
 - `real_dmd.py`: which video and picture a game shows on a real DMD panel (preferred video, the other video, preferred picture, the other picture), sent on a worker thread.
 - `launch.py`, `launch_state.py`: starting a game - resolving what to launch it with, building the command, running it and recording the play - and whether a launch was requested from outside the frontend.
 - `frontend_state.py`: what the frontend is showing, as it last reported, and the door a request to switch its collection or move its wheel goes through. The frontend registers what answers it.
+- `frontend_browser.py`, `frontend_windows.py`: what the frontend's browser and each of its windows reported about themselves (`report_browser`, `report_window`): the formats it plays, what it can draw and decode, and where each window opened. A report is what was last said, not a promise the frontend is still up, so a reader checks `frontend_state` first. Everything a page sends is untrusted and bounded before it is kept.
 - `tools.py`: the Tools registry - each program VPinFE runs on this device but does not ship, found through its setting, `PATH` and the places a short `PATH` misses, probed for what it can do, and the hint a person follows when it is missing. A new Tool comes with its `tools.*` setting, and a check holds the two lists equal.
 - `vpinos.py`: whether this device runs VPinOS, for what is VPinOS's alone.
 - `placement.py`: window rules for Sway and Hyprland - VPinFE's own rules file (each window to its screen by output name, no border, the playfield focused, VPX's backglass, score view and topper never), the one `include` or `source` line the person's config needs, and whether it is already there. Nothing here writes the person's config except `add`, and a Sway config is never created, since one of the person's own replaces the system's. The Hyprland syntax follows the documentation and has not been run against a Hyprland session.

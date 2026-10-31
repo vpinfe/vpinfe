@@ -72,6 +72,7 @@ KNOWN_ABSENT_FILES = {
     "theme.js",                 # a theme author writes this one; we only document it
     "ledcontrol_pull.py",       # ships inside the third_party DOF package
     "libdmdutil_wrapper.py",    # ships inside the bundled libdmdutil package
+    "summary.md",               # a file inside a support package's zip
 }
 
 
@@ -517,8 +518,9 @@ class CitedMarkdownTests(unittest.TestCase):
     MARKDOWN_REF = re.compile(r"(?<![*\\])\b([A-Za-z0-9_-][A-Za-z0-9_.-]*\.md)\b")
     SCANNED = {".py", ".js", ".md", ".html", ".css", ".yml", ".yaml"}
     # Real files, just not ours to hold: Visual Pinball publishes the first, and the
-    # second is a name inside a fixture archive, picked because nothing claims it.
-    KNOWN_ABSENT = {"FileLayout.md", "notes.md"}
+    # second is a name inside a fixture archive, picked because nothing claims it, and
+    # the third is a file inside a support package's zip.
+    KNOWN_ABSENT = {"FileLayout.md", "notes.md", "summary.md"}
 
     @unittest.skipIf(not (REPO_ROOT / ".git").exists(), "not a git checkout")
     def test_every_markdown_file_a_tracked_file_names_is_in_the_tree(self) -> None:

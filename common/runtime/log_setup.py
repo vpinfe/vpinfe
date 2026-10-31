@@ -19,6 +19,7 @@ LOG_MAX_BYTES = 2 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
 _CONFIGURED = False
 _FILE_LOG_INITIALIZED = False
+_LOCATED: Path | None = None
 _INCLUDE_THIRD_PARTY = False
 _INCLUDE_WINDOWS = False
 _THIRD_PARTY_LOGGERS = (
@@ -272,7 +273,14 @@ def log_file() -> Path | None:
         written = getattr(handler, "baseFilename", "")
         if written:
             return Path(written)
-    return None
+    return _LOCATED
+
+
+def locate_for_reading(log_dir: Path) -> None:
+    """Name the log without opening it. A run that only reports on the logs uses this
+    instead of `configure_logging`, which rolls the file over at the first write."""
+    global _LOCATED
+    _LOCATED = Path(log_dir) / DEFAULT_LOG_FILE_NAME
 
 
 # `%(asctime)s %(levelname)s [%(name)s] %(message)s`, which is what a record starts with.

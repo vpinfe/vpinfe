@@ -363,6 +363,53 @@ class LogRecords(ApiModel):
     # it writes. Empty when none does.
     visual_pinball: str = ""
 
+
+class SupportOptions(ApiModel):
+    """What goes into a support package. Every part is in unless it is switched off."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    logs: bool = True
+    previous_log: bool = True
+    settings: bool = True
+    hide_tables: bool = False
+    # Words to hide as well, for somebody who sees one the cleanup did not know.
+    hide: list[str] = Field(default_factory=list, max_length=50)
+    # Log files to leave out, by name. The README and the summary always stay.
+    left_out: list[str] = Field(default_factory=list, max_length=10)
+    # Lines to blank in a file, as (file name, 0-based line number).
+    removed: list[tuple[str, int]] = Field(default_factory=list, max_length=500)
+
+
+class SupportFile(ApiModel):
+    name: str
+    bytes: int
+    lines: int
+    # Log lines the size cap left out of this file; 0 when it is whole.
+    omitted: int = 0
+
+
+class SupportPrecaution(ApiModel):
+    """Text hidden because cleanup was unsure it was private. `line` is already cleaned."""
+
+    why: str
+    line: str
+
+
+class SupportPackage(ApiModel):
+    """A built package as the person reviews it. What was replaced is named by kind and
+    count, never by value."""
+
+    id: str
+    filename: str
+    checksum: str
+    bytes: int
+    expires_in: int
+    files: list[SupportFile]
+    counts: dict[str, int]
+    precautions: list[SupportPrecaution]
+    summary: str
+
 class DiscoveredInstall(ApiModel):
     """One install heard announcing itself on this network.
 

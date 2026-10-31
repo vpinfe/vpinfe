@@ -33,6 +33,7 @@ BORROWED = {
     # Python's own.
     "guess_type",        # mimetypes.guess_type
     "media_type",        # Starlette's keyword on a Response
+    "compress_type",     # zipfile.ZipInfo's attribute
     # Holds a class and calls it, which is Python's own sense of the word.
     "field_type",
     # A key already on disk, kept end to end so nobody converts in their head. `Info.Type`

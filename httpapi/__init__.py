@@ -50,6 +50,7 @@ from . import (
     preferences,
     scopes,
     sign_in,
+    support,
     tables,
     themes,
     tokens,
@@ -142,6 +143,7 @@ def create_api_app() -> FastAPI:
     api.include_router(metrics.router)
     api.include_router(themes.router)
     api.include_router(about.router)
+    api.include_router(support.router)
     api.include_router(manufacturers.router)
     api.include_router(play.router)
     api.include_router(frontend.router)

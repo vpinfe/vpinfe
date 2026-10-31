@@ -37,7 +37,7 @@ RANK = {
     "devices": 3,
     "players": 4, "release": 4, "settings": 4,
     "games": 5, "online": 5, "host": 5, "uploads": 5, "capture": 5, "backups": 5,
-    "extensions": 5,
+    "extensions": 5, "support": 5,
 }
 
 # The imports that run against the ranks, each with the file that makes it. This list only

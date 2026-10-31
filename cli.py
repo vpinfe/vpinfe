@@ -145,6 +145,40 @@ def check_extension(folder: str) -> int:
     return 0 if passed else 1
 
 
+def support_package(folder: str) -> int:
+    """Build the support package, print what is in it, and write the zip with every file
+    unzipped beside it. 1 where it could not be built or written."""
+    from pathlib import Path
+
+    from common import i18n
+    from common.failures import why
+    from common.support import package
+
+    try:
+        made = package.build_package()
+    except package.PackageTooLargeError:
+        print(i18n.t("support.cli.too_large"))
+        return 1
+    target = Path(folder)
+    unzipped = target / made.filename.removesuffix(".zip")
+    try:
+        unzipped.mkdir(parents=True, exist_ok=True)
+        (target / made.filename).write_bytes(made.data)
+        for part in made.parts:
+            (unzipped / part.name).write_bytes(part.text.encode("utf-8"))
+    except OSError as failure:
+        print(i18n.t("support.cli.not_written", folder=str(target)))
+        print(why(failure, target))
+        return 1
+    print(made.summary)
+    readme = made.part(package.README)
+    print(readme.text if readme else "")
+    print(i18n.t("support.cli.zip", path=str(target / made.filename),
+                 size=i18n.size(len(made.data))))
+    print(i18n.t("support.cli.folder", path=str(unzipped)))
+    return 0
+
+
 def parse_args():
     """Parse and dispatch command-line arguments."""
     parser = argparse.ArgumentParser(allow_abbrev=False)
@@ -157,6 +191,11 @@ def parse_args():
                              "load it, and report what it declares, what it reads and any "
                              "on-screen word it has no entry for. Nothing is sent, saved "
                              "or run")
+    parser.add_argument("--support-package", nargs="?", const=".", metavar="DIR",
+                        help="Gather your system report and logs into a zip in the folder "
+                             "DIR, or here, with private details replaced and every file "
+                             "unzipped beside it so you can read it before you send it. "
+                             "Nothing is sent anywhere")
     parser.add_argument("--listmissing", action="store_true",
                         help="List the games the Virtual Pinball Spreadsheet has that "
                              "your library does not")
@@ -257,6 +296,9 @@ def parse_args():
 
     if args.check_extension:
         sys.exit(check_extension(args.check_extension))
+
+    if args.support_package is not None:
+        sys.exit(support_package(args.support_package))
 
     if args.listmissing:
         list_missing_games()

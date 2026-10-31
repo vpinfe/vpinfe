@@ -37,6 +37,10 @@
 # it from the schema would delete the assertion along with the alias it guards.
 !tests/fixtures/config_legacy_names.json
 
+# What each desktop prints about its screens, one file per case, read by the display probes'
+# parsers.
+!tests/fixtures/displays/**/*.json
+
 # The labels VPX writes into its ini, the settings a person picks from in a check that
 # no two read the same.
 !tests/fixtures/vpx_labels.json

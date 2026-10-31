@@ -93,6 +93,7 @@ from common.runtime.log_setup import configure_logging, get_logger
 from common.security import sign_in
 from common.security.http_client import unreachable
 from common.settings import theme_options
+from common.support import banner as support_banner
 from common.vpinfe_version import get_version
 
 # Get the base path
@@ -100,6 +101,15 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # Load config BEFORE importing cli/manager (they create ConfigStore at import time)
 config_dir = ensure_config_dir()
+if "--support-package" in sys.argv[1:]:
+    # Ahead of the log setup, which rolls vpinfe.log: that file is what the package reports
+    # on, and it must be the failing run's, not this one's. Ahead of the roms.json fetch too,
+    # because the package makes no network request.
+    from cli import parse_args as _support_args
+    from common.runtime import log_setup
+
+    log_setup.locate_for_reading(LOG_DIR)
+    _support_args()
 nicegui_storage_path = configure_nicegui_storage()
 log_path = configure_logging(LOG_DIR, enable_file=False)
 config_store = ConfigStore(str(VPINFE_INI_PATH))
@@ -114,6 +124,7 @@ logger.info("Logging to %s", log_path)
 logger.info("Language: %s (%s)", spoken, " -> ".join(i18n.chain()))
 logger.info("Using NiceGUI storage path: %s", nicegui_storage_path)
 logger.info("Version: %s", get_version())
+support_banner.write()
 whats_new.note_start(config_store, get_version())
 
 # Startup downloads themes, walks the library and rewrites .info files, and it can take

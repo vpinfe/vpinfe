@@ -1,0 +1,14 @@
+interface: 'wl_compositor',                                version: 6, name: 1
+interface: 'xdg_wm_base',                                  version: 5, name: 2
+interface: 'zwlr_layer_shell_v1',                          version: 4, name: 3
+interface: 'zxdg_output_manager_v1',                       version: 3, name: 4
+interface: 'wl_output',                                    version: 4, name: 5
+	x: 0, y: 0, scale: 1,
+	physical_width: 527 mm, physical_height: 296 mm,
+	make: 'Dell Inc.', model: 'DELL P2419H',
+	subpixel_orientation: unknown, output_transform: 90,
+	mode:
+		width: 1920 px, height: 1080 px, refresh: 60.000 Hz,
+		flags: current preferred
+interface: 'wl_seat',                                      version: 8, name: 6
+	name: seat0

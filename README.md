@@ -23,6 +23,8 @@
 ### Support/Feedback
 Join us on VPC discord channel @ [vpinfe](https://discord.gg/SFBfA6Te2A)
 
+Something not working? **About** in the Manager has **Create Support Package**, which gathers your version, system and logs into a zip with private details replaced, ready to attach to a Discord message or a GitHub issue.
+
 ## See it in action
 
 <img width="1296" height="546" alt="themes" src="https://github.com/user-attachments/assets/57f3ee83-d45f-4bb0-be12-bbbcb69317da" />

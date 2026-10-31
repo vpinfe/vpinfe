@@ -103,6 +103,69 @@ def _browser_name(brands: Any, user_agent: str) -> str:
     return f"{name} {found.group(2)}"
 
 
+RENDERER_CHARS = 120
+# What a graphics chip's name is made of. The summary is Markdown, so the characters that
+# make a link, emphasis or a table cell are not kept.
+_RENDERER_DROPPED = re.compile(r"[^A-Za-z0-9 .,()/:+-]")
+# A ceiling on every number the page sends, so a page that lies cannot fill the report.
+PIXELS = 100_000
+GAMEPADS = 32
+FEATURE_FLAGS = ("webgl", "webgl2", "webgpu", "offscreen_canvas")
+# Renderer names that mean the picture is drawn on the processor.
+SOFTWARE_RENDERERS = ("swiftshader", "llvmpipe", "softpipe", "software", "basic render",
+                      "microsoft basic")
+
+
+def _bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _whole(value: Any, ceiling: int) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value) if 0 <= value <= ceiling else None
+
+
+def _decode(raw: Any) -> dict[str, bool | None] | None:
+    if not isinstance(raw, dict):
+        return None
+    return {"supported": _bool(raw.get("supported")), "smooth": _bool(raw.get("smooth")),
+            "power_efficient": _bool(raw.get("power_efficient"))}
+
+
+def _screen(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    scale = raw.get("scale")
+    return {"scale": round(float(scale), 2)
+            if isinstance(scale, int | float) and not isinstance(scale, bool)
+            and 0 < scale <= 16 else None,
+            "width": _whole(raw.get("width"), PIXELS), "height": _whole(raw.get("height"), PIXELS),
+            "extended": _bool(raw.get("extended"))}
+
+
+def _features(raw: Any) -> dict[str, Any] | None:
+    """What the page said it can draw with and decode with, read as plain values. None
+    where it sent nothing, so a section can tell not tested from not available."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    renderer = _RENDERER_DROPPED.sub("", str(raw.get("renderer") or ""))
+    said = raw.get("decodes")
+    decodes: dict[str, Any] = said if isinstance(said, dict) else {}
+    return {**{name: _bool(raw.get(name)) for name in FEATURE_FLAGS},
+            "renderer": renderer[:RENDERER_CHARS].strip(),
+            "decodes": {one: _decode(decodes.get(one)) for one in ("h264", "vp9")},
+            "gamepads": _whole(raw.get("gamepads"), GAMEPADS),
+            "screen": _screen(raw.get("screen")),
+            "took_ms": _whole(raw.get("took_ms"), 600_000)}
+
+
+def software_renderer(renderer: str) -> bool:
+    """Whether a renderer name is the processor drawing in place of a graphics chip."""
+    name = renderer.lower()
+    return any(word in name for word in SOFTWARE_RENDERERS)
+
+
 def _in_use() -> tuple[str, bool]:
     from common.devices import device_client
 
@@ -195,7 +258,7 @@ def record(raw: Any) -> dict[str, Any]:
     path, bundled = _in_use()
     browser = _browser_name(raw.get("brands"), str(raw.get("user_agent") or ""))[:80]
     held = {"browser": browser, "path": path, "bundled": bundled, "formats": formats,
-            "reported_at": utc_now_iso()}
+            "features": _features(raw.get("features")), "reported_at": utc_now_iso()}
     try:
         paths.FRONTEND_BROWSER_PATH.parent.mkdir(parents=True, exist_ok=True)
         write_atomic(paths.FRONTEND_BROWSER_PATH,
@@ -249,6 +312,7 @@ def current(held: dict[str, Any] | None = None) -> dict[str, Any]:
         "formats": formats,
         "plays": [one.name for one in FORMATS if formats[one.id]],
         "does_not_play": [one.name for one in FORMATS if formats[one.id] is False],
+        "features": (held or {}).get("features"),
         "reported_at": (held or {}).get("reported_at"),
         "finding": t(_FINDINGS[state]) if state in _FINDINGS else "",
         "fix": ({"key": fix.key, "action": fix.action, "chrome_path": fix.chrome_path}

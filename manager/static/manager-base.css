@@ -2181,6 +2181,32 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
 .manager-wizard-card .manager-dialog-footer {
   border-top: 1px solid var(--line-soft); margin-top: 8px;
 }
+/* Inspect Everything is a page of log lines, which needs the room. `:has` widens the
+   card only while that view is drawn. */
+.manager-dialog.manager-wizard-card.q-card:has(.support-inspect) {
+  width: min(960px, 96vw);
+}
+.support-lines { max-width: 100%; overflow-x: hidden; }
+/* Wrapped, because a line held to one row hides what a long path replaced. */
+.support-line {
+  display: flex; gap: 8px; white-space: pre-wrap; word-break: break-all; min-height: 1.5em;
+  color: var(--ink-2); cursor: default;
+}
+.support-line[data-line] { cursor: pointer; }
+.support-line[data-line]:hover { background: var(--line-soft); }
+.support-no {
+  flex: none; min-width: 5ch; text-align: right; color: var(--ink-3); user-select: none;
+}
+.support-text { flex: 1; min-width: 0; }
+/* The stand-in a private value was replaced with, kept in the ink and lifted by a ground
+   so it reads as what was changed. */
+.support-mark {
+  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink);
+  border-radius: 3px; cursor: help;
+}
+.support-line--picked { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.support-line--removed { color: var(--ink-3); font-style: italic; }
+.support-picked { border-top: 1px solid var(--line-soft); padding-top: 6px; }
 /* What a slow step is doing, between the scroll and the buttons, so it is on screen
    wherever the step is scrolled to. Empty, it takes no room. */
 .manager-wizard-wait:empty { display: none; }

@@ -1578,6 +1578,18 @@ resolves it to itself.
 likely to have its address, and a QR carries it to a mobile device.
 Covered by `tests/host/test_addresses.py` and `tests/invariants/test_parity.py`.
 
+**PAR-111 - Each window says where it opened.** One WebSocket method, `report_window`,
+carries the window's name, the position and size it measured and its scale, and is kept in
+`cache/frontend_windows.json` for the support package's Displays And Layout section.
+Refused to themes, like `report_browser`: its caller is core's own page, and a theme calling
+it would rewrite what the summary says about the cabinet's windows. Nothing a theme reads
+changes. `report_browser` also carries what the browser can draw and decode (PAR-97),
+which reaches `/api/v1` as `features` on the browser report.
+*Why:* a window set to a screen that does not exist is not opened, and a window the OS
+moved is not where its setting says; only the window knows. Covered by
+`tests/host/test_frontend_windows.py`, `tests/js/internal-methods.test.js` and
+`tests/invariants/test_parity.py`.
+
 ## Explicitly *not* exceptions
 
 The theme-facing payload (`tables_json` keys, media path fields, stable values) and

@@ -36,7 +36,7 @@ from common.games.collection_store import (
 from common.games.game_metadata import game_rating, normalize_meta, set_game_rating
 from common.games.game_repository import all_games
 from common.games.player_records import get_records
-from common.host import frontend_browser, frontend_state, launch, launch_state
+from common.host import frontend_browser, frontend_state, frontend_windows, launch, launch_state
 from common.host.display_service import monitors_as_dicts
 from common.i18n import t
 from common.players.players import get_roster
@@ -167,6 +167,9 @@ API_INTERNAL_METHODS = {
     # Core's own probe of the browser it runs in. A theme reporting here would be
     # rewriting what the Manager says the cabinet can play.
     'report_browser',
+    # Each window's own report of where it opened, kept for a support summary. A theme
+    # reporting here would be rewriting what the summary says about the cabinet's windows.
+    'report_window',
     # Take Picture and Back while a table runs. A theme calling them would pause a game
     # nobody asked to pause.
     'take_picture',
@@ -720,6 +723,10 @@ class API:
     def report_browser(self, report: Any) -> dict[str, Any]:
         """What this browser plays, as the controller window probed it."""
         return frontend_browser.record(report)
+
+    def report_window(self, report: Any) -> dict[str, Any]:
+        """Where one window opened, as that window measured it."""
+        return frontend_windows.record(report)
 
     def take_picture(self) -> dict[str, Any]:
         """Take Picture pressed while a table runs: freezes it, or takes the picture."""

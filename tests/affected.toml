@@ -29,6 +29,16 @@ tests = [
   "tests/extensions/test_tiers.py",
 ]
 
+# What each desktop prints about its screens, which the display probes' tests read, and the
+# script that records it.
+[[area]]
+paths = ["tests/fixtures/displays/*", "scripts/capture-display-fixtures.sh"]
+tests = [
+  "tests/supportpackage/test_display_compare.py",
+  "tests/supportpackage/test_display_probes.py",
+  "tests/supportpackage/test_display_section.py",
+]
+
 # The Node tests and the files they load.
 [[area]]
 paths = ["tests/js/*"]
@@ -144,6 +154,15 @@ tests = ["tests/theming/test_needs_folder_list_drive.py"]
 paths = ["manager/system/*"]
 tests = ["tests/theming/test_a_value_change_keeps_the_panel_drive.py"]
 
+# The support package: what it gathers and cleans, and the dialog that makes it.
+[[area]]
+paths = ["common/support/*", "manager/system/support*.py", "httpapi/support.py",
+         "common/host/frontend_browser.py", "common/host/frontend_windows.py"]
+tests = [
+  "tests/theming/test_frontend_reports_drive.py",
+  "tests/theming/test_support_dialog_drive.py",
+]
+
 # Sign-in and the asks a program makes of a signed-in person.
 [[area]]
 paths = ["manager/security/*", "common/security/*"]
@@ -211,6 +230,7 @@ tests = [
   "tests/theming/test_core_defaults_drive.py",
   "tests/theming/test_core_playfield_media_drive.py",
   "tests/theming/test_core_topper_drive.py",
+  "tests/theming/test_frontend_reports_drive.py",
   "tests/theming/test_late_window_drive.py",
   "tests/theming/test_picker_index_drive.py",
   "tests/theming/test_render_smoke.py",

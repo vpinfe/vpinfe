@@ -45,6 +45,7 @@ describe("vpin.call refuses core's own methods", () => {
       "record_media",
       "recording_offer",
       "report_browser",
+      "report_window",
       "resume_play",
       "set_player_rating",
       "set_player_up",

@@ -38,6 +38,15 @@ EXEMPT = frozenset({
 BASELINE: dict[str, int] = {
     "common/apps/__init__.py": 1,
     "common/config/config_schema.py": 2,
+    # The Displays section compares the launcher's Visual Pinball ini with the screens
+    # found, so the imports of its screen keys and its ini reader are the comparison, and
+    # the compositor probe names a window by the part Visual Pinball's title says it is.
+    # The contract has no hook for it yet.
+    "common/support/collect/displays/section.py": 2,
+    "common/support/collect/displays/compare.py": 1,
+    "common/support/collect/displays/probes/wlr.py": 1,
+    # Two imports of the settings-file reader, the PinMAME catalog import and its label.
+    "common/support/collect/launchers.py": 4,
     "common/games/archive_service.py": 4,
     "common/games/asset_lens.py": 6,
     "common/games/asset_registry.py": 4,

@@ -153,6 +153,16 @@ NOT_READ = {
     "common/capture/pipeline.py": "hands FFmpeg its command lines",
     "common/online/update_scripts.py": "writes the scripts an update runs",
     "common/host/dof_service_worker.py": "answers the DOF service, which logs what it says",
+    **{f"common/support/{name}.py": "writes the support package, a file the people helping "
+                                    "read, so it is in English"
+       for name in ("package", "sections", "session", "banner", "destinations", "draft",
+                    "pieces", "collect/device",
+                    "collect/settings", "collect/extensions", "collect/health",
+                    "collect/locations", "collect/browser", "collect/launchers")},
+    **{path.relative_to(ROOT).as_posix(): "writes the display report in the support package, "
+                                          "so it is in English"
+       for path in sorted((ROOT / "common/support/collect/displays").rglob("*.py"))
+       if "__pycache__" not in path.parts},
     "common/host/display_service.py": "a monitor's name is the frontend API's, which themes "
                                       "read, and stays as it is until display detection "
                                       "is settled",

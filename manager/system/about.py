@@ -28,6 +28,7 @@ from common.failures import why
 from common.i18n import t
 from manager.kit import busy, clipboard, offload, panel, verbs
 from manager.kit.data import Library
+from manager.system import support as support_dialog
 from manager.system import whats_new as whats_new_page
 
 logger = logging.getLogger("vpinfe.manager.system.about")
@@ -67,6 +68,9 @@ def _draw(body: Any, groups: list[dict[str, Any]], held: dict[str, Any],
                          icon="content_copy",
                          hint=t("manager.about.copy_hint"),
                          js=clipboard.COPY_JS % json.dumps(held["text"]))()
+            panel.action(t("manager.about.support_package"),
+                         support_dialog.open_support_package,
+                         icon=verbs.GET_HELP, hint=t("manager.about.support_package_hint"))()
             panel.action(t("manager.about.whats_new"),
                          lambda: whats_new_page.open_whats_new(again=True),
                          icon=verbs.REVIEW, hint=t("manager.about.whats_new_hint"))()
@@ -78,8 +82,15 @@ def _draw(body: Any, groups: list[dict[str, Any]], held: dict[str, Any],
         entries: list[tuple[Any, Any]] = []
         for group in groups:
             entries.append((panel.HEADING, str(group.get("heading") or "")))
-            entries += [(str(fact.get("label") or ""),
-                         panel.path_value(str(fact["value"])) if fact.get("path")
-                         and fact.get("value") else str(fact.get("value") or ""))
-                        for fact in group.get("facts") or []]
+            entries += [_row(fact) for fact in group.get("facts") or []]
         panel.facts(ui, entries)
+
+
+def _row(fact: dict[str, Any]) -> tuple[Any, Any]:
+    """A line with no label is a sentence the group says about itself, and a `sub` fact
+    belongs to the one above it."""
+    label, value = str(fact.get("label") or ""), str(fact.get("value") or "")
+    if not label:
+        return (panel.FULL, lambda: ui.label(value).classes("manager-help"))
+    shown: Any = panel.path_value(value) if fact.get("path") and value else value
+    return (panel.SUB, (label, shown)) if fact.get("sub") else (label, shown)

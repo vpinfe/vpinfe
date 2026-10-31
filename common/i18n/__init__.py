@@ -15,6 +15,8 @@ itself, because a missing translation is a blemish and a traceback is an outage.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime as dt
 import functools
 import json
@@ -24,6 +26,7 @@ import string
 import subprocess
 import sys
 import threading
+from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, get_args
@@ -46,6 +49,7 @@ _catalogs: dict[str, dict[str, Any]] = {}
 _owners: dict[str, tuple[Path, str]] = {}
 _lock = threading.Lock()
 _language = SOURCE
+_forced: contextvars.ContextVar[str] = contextvars.ContextVar("vpinfe_i18n_forced", default="")
 
 
 def own(prefix: str, directory: Path, *, section: str = "") -> None:
@@ -95,13 +99,24 @@ def _load(name: str) -> dict[str, Any]:
 
 def chain(language: str = "") -> tuple[str, ...]:
     """The catalogs to try, most specific first. `de-AT` asks `de` before `en`."""
-    said = (language or _language or SOURCE).replace("_", "-")
+    said = (language or _forced.get() or _language or SOURCE).replace("_", "-")
     out = [said]
     if "-" in said:
         out.append(said.split("-", 1)[0])
     if SOURCE not in out:
         out.append(SOURCE)
     return tuple(out)
+
+
+@contextlib.contextmanager
+def in_source_language() -> Iterator[None]:
+    """Answer in English inside the block, for the calling thread or task only: a page
+    rendering at the same moment keeps the language that is set."""
+    token = _forced.set(SOURCE)
+    try:
+        yield
+    finally:
+        _forced.reset(token)
 
 
 def set_language(language: str) -> str:

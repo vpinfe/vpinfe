@@ -20,6 +20,7 @@ import os
 import platform
 import socket
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,25 @@ class PathValue(str):
     a client knows which values to draw as paths."""
 
 
+class SubLabel(str):
+    """A fact's label that belongs to the fact above it, drawn indented behind it."""
+
+
+# Unlike the other groups the displays are re-read after this long, or on `refresh`.
+DISPLAYS_HELD_SECONDS = 30.0
+_displays: tuple[float, list[dict[str, Any]]] | None = None
+
+
+def _display_groups(refresh: bool) -> list[dict[str, Any]]:
+    global _displays
+    now = time.monotonic()
+    if _displays is None or refresh or now - _displays[0] > DISPLAYS_HELD_SECONDS:
+        from common.support.collect.displays import about_groups
+
+        _displays = (now, about_groups.groups())
+    return _displays[1]
+
+
 def details(refresh: bool = False) -> list[dict[str, Any]]:
     """Every group, in the order they are read and copied."""
     global _held
@@ -46,14 +66,14 @@ def details(refresh: bool = False) -> list[dict[str, Any]]:
         _held = [
             {"heading": "VPinFE", "facts": [
                 (t("word.version"), _version()),
-                (t("about.fact.build"), _build_flavor()),
-                (t("about.fact.release_target"), _release_target()),
+                (t("about.fact.build"), build_flavor()),
+                (t("about.fact.release_target"), release_target()),
                 (t("about.fact.features"), _features()),
                 (t("about.fact.frontend_theme"), _active_theme()),
             ]},
             {"heading": t("about.heading.device"), "facts": [
                 (t("about.fact.host"), _hostname()),
-                (t("about.fact.operating_system"), _os()),
+                (t("about.fact.operating_system"), operating_system()),
                 (t("about.fact.architecture"), platform.machine() or t("word.unknown")),
                 (t("about.fact.windowing_system"), windowing_system()),
                 ("Python", platform.python_version()),
@@ -69,24 +89,34 @@ def details(refresh: bool = False) -> list[dict[str, Any]]:
     return _held
 
 
+def shown(refresh: bool = False) -> list[dict[str, Any]]:
+    """What About draws and copies: `details` and then the displays, which the support
+    package reads for itself and so are not in `details`."""
+    return [*details(refresh), *_display_groups(refresh)]
+
+
 def described(refresh: bool = False) -> list[dict[str, Any]]:
-    """`details` as the wire carries it: each fact a `label` and `value`, and `path` where
-    the value is a path on disk."""
+    """`details` as the wire carries it: each fact a `label` and `value`, `path` where
+    the value is a path on disk, and `sub` where the label belongs to the fact above."""
     return [{"heading": one["heading"],
              "facts": [{"label": label, "value": str(value),
-                        "path": isinstance(value, PathValue)}
+                        "path": isinstance(value, PathValue),
+                        "sub": isinstance(label, SubLabel)}
                        for label, value in one["facts"]]}
-            for one in details(refresh)]
+            for one in shown(refresh)]
 
 
 def as_text() -> str:
     """The same answer as something to paste. Plain text with no markup: it goes into a
     forum post, a chat message and an issue, and only one of those renders a table."""
     lines: list[str] = []
-    for group in details():
+    for group in shown():
         lines.append(f"{group['heading']}:")
         width = max((len(label) for label, _ in group["facts"]), default=0)
-        lines += [f"  {label.ljust(width)}  {value}" for label, value in group["facts"]]
+        for label, value in group["facts"]:
+            indent = "    " if isinstance(label, SubLabel) else "  "
+            lines.append(f"{indent}{label.ljust(width)}  {value}".rstrip() if label
+                         else f"  {value}")
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 
@@ -97,7 +127,7 @@ def _version() -> str:
     return str(get_version() or t("word.unknown"))
 
 
-def _os() -> str:
+def operating_system() -> str:
     system = platform.system() or t("word.unknown")
     if system == "Darwin":
         return f"macOS {platform.mac_ver()[0] or platform.release()}"
@@ -123,7 +153,7 @@ def _install_context() -> dict[str, Any]:
         return {}
 
 
-def _build_flavor() -> str:
+def build_flavor() -> str:
     """Source, slim, fat or a non-release build. The first thing anybody reading a
     report needs, because it decides what else is even installed."""
     found = _install_context()
@@ -139,7 +169,7 @@ def _build_flavor() -> str:
     return t("word.unknown")
 
 
-def _release_target() -> str:
+def release_target() -> str:
     return str(_install_context().get("triplet") or t("word.unknown"))
 
 
@@ -231,11 +261,13 @@ def _browser_version(path: str) -> str:
 def _windows_file_version(path: str) -> str:
     """`--version` writes to a terminal Chrome does not have on Windows, so the file's
     own version resource is the only thing that answers."""
-    command = ("(Get-Item -LiteralPath '" + path.replace("'", "''") +
-               "').VersionInfo.ProductVersion")
+    # The path travels in the environment, never in the script text: PowerShell reads curly
+    # quotes as quotes, so no escaping of the path inside the text is enough.
+    command = "(Get-Item -LiteralPath $env:VPINFE_FILE).VersionInfo.ProductVersion"
     try:
         done = subprocess.run(["powershell", "-NoProfile", "-Command", command],
-                              capture_output=True, text=True, timeout=5, check=False)
+                              capture_output=True, text=True, timeout=5, check=False,
+                              env={**os.environ, "VPINFE_FILE": path})
     except Exception:  # noqa: BLE001
         logger.debug("Could not read the version of %s", path, exc_info=True)
         return ""
@@ -269,5 +301,6 @@ def _library_folders() -> list[str]:
 
 
 def reset_for_tests() -> None:
-    global _held
+    global _held, _displays
     _held = None
+    _displays = None
