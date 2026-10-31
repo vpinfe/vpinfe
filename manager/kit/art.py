@@ -13,7 +13,8 @@ PANEL = 1024
 
 
 def media(game_id: str, kind: str, table_id: str = "", *,
-          version: str | None = None, size: int | None = None, page: int = 1) -> str:
+          version: str | None = None, size: int | None = None, page: int = 1,
+          file: str = "") -> str:
     """A game's shared file for `kind`, or one table's. A size on a kind that is not a
     picture is dropped, because the API refuses it. Page 1 is the address without a
     page, so a kind with none reads the same as before. A later page carries no version:
@@ -21,7 +22,8 @@ def media(game_id: str, kind: str, table_id: str = "", *,
     picture."""
     table = f"/tables/{quote(table_id, safe='')}" if table_id else ""
     base = f"/api/v1/games/{quote(game_id, safe='')}{table}/media/{kind}"
-    return _with(base, version if page <= 1 else None,
+    return _with(base + (f"?file={quote(file, safe='')}" if file else ""),
+                 version if page <= 1 else None,
                  size if media_family(kind) == "image" else None,
                  page if page > 1 else None)
 

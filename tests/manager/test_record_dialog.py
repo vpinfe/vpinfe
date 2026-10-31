@@ -200,7 +200,7 @@ class OutcomeTests(unittest.TestCase):
 
         self.assertEqual(record.failures(failed),
                          "DMD, DMD Video: Visual Pinball X doesn't show the DMD on a screen "
-                         "of its own; Audio: Nothing to hear during attract")
+                         "of its own; Table Audio: Nothing to hear during attract")
 
     def test_a_table_that_did_not_start_says_why(self) -> None:
         table = {"state": "failed", "placed": [], "failed": [], "proposed": [],

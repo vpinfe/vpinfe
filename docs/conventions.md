@@ -971,6 +971,11 @@ answers.
   verb fit no rule and cost the width the description needs. The empty state keeps the
   full text button: that is where somebody meets the page for the first time, and an icon
   there is a guess.
+- **The Edit row is a third place that is an icon and a tooltip.** Under a file's viewer, one
+  icon button for each tool that changes the file's content (rotate, later crop and trim),
+  named by its tooltip. A press changes the view only, and the row then shows Not saved,
+  Cancel and Save, which is where the file is written once. A tool that cannot run is dimmed,
+  and its tooltip says why.
 
 ### An action sits with what it acts on
 

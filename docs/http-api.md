@@ -216,13 +216,13 @@ the documented entry point is a plain 200. Both spellings work.
 | GET | `/api/v1/assets` | Every asset file in the library, the same way. A file named for no table gets a row too, and says so. Each file in a game's `pinmame/roms` is a row of kind `rom` with `serves` the number of the game's tables that read it and `users` their ids: a table reads the zip named for its effective ROM and the parent set a clone names, and a file no table reads has `serves` 0 |
 | GET | `/api/v1/games/{id}/links` | Where the game is elsewhere, as extensions have contributed. `?table=` for one table, `?path=` for one of its files |
 | GET | `/api/v1/games/{id}/media` | Every media kind, present or not. `?codecs=true` reads each video's header for its `video_codec`, which is null otherwise |
-| GET | `/api/v1/games/{id}/media/{kind}` | Stream one media file. `?size=` sends a picture smaller; `?v=` lets it be kept. `?page=n` streams page *n* of a flyer or an instruction card; page 1 is the kind itself and a page past the last is a 404 |
-| GET | `/api/v1/games/{id}/media/{kind}/detail` | What that file is. `format` is what the file's header says it is, `width`/`height` are an image's or a video's, `duration_s` is a video's or a sound's running time, and `video_codec` is a video's codec as `GET /frontend/browser` names the format - `h264`, `hevc`, `vp9` or `av1`, null for any other or where the header does not say. A `backglass` slot's detail also carries `backglass_file`, the `.directb2s` the table reads when it has a readable one: its `path` and `file`, whether the renderer in effect cuts the `grill`, and the `version` its picture is addressed by. Null otherwise |
+| GET | `/api/v1/games/{id}/media/{kind}` | Stream one media file. `?size=` sends a picture smaller; `?v=` lets it be kept. `?page=n` streams page *n* of a flyer or an instruction card; page 1 is the kind itself and a page past the last is a 404. `?file=name` streams a file the slot holds but does not show, by the `file` its `tiers` list (see `detail`); a name the slot does not hold is a 404 |
+| GET | `/api/v1/games/{id}/media/{kind}/detail` | What that file is. `format` is what the file's header says it is, `width`/`height` are an image's or a video's, `duration_s` is a video's or a sound's running time, and `video_codec` is a video's codec as `GET /frontend/browser` names the format - `h264`, `hevc`, `vp9` or `av1`, null for any other or where the header does not say. `tiers` lists every file the slot holds, the one in use first or not, each as `{tier, file, path, wins, serves}` with that file's own `size_bytes`, `modified`, `width`, `height`, `format`, `duration_s` and `video_codec`, so one that is not in use can be told apart, or streamed with `?file=` on the media route. A `backglass` slot's detail also carries `backglass_file`, the `.directb2s` the table reads when it has a readable one: its `path` and `file`, whether the renderer in effect cuts the `grill`, and the `version` its picture is addressed by. Null otherwise |
 | GET | `/api/v1/games/{id}/media/overrides` | The kinds where a table has media of its own |
 | GET | `/api/v1/games/{id}/media/{kind}/placements` | Where a file of that kind could go, and what each place would replace |
 | GET | `/api/v1/games/{id}/media/{kind}/displaced?filename=` | What placing that file under the folder's name would replace, asked before the bytes are sent |
 | PUT | `/api/v1/games/{id}/media/{kind}` | Place a file every table shares, named for the folder (multipart: `file`). `?page=n` replaces page *n* of a flyer or an instruction card, or adds it when *n* is one past the last; it is named at the tier of page 1. A gap, or a page on a kind that does not page, is refused. A file it replaces is copied to Backups first (reason `replace`), and the write is refused with `409` when the backups folder cannot be written to |
-| DELETE | `/api/v1/games/{id}/media/{kind}` | Remove the file every table shares. A table's own file stays, and so does the default while the game has a file of its own; with none, the default-named file (`wheel.png`) is the one that goes. With `?page=n`, that page alone goes, if it is at this tier, and the pages after it move down a number; with none, the kind goes with all its pages |
+| DELETE | `/api/v1/games/{id}/media/{kind}` | Remove the file every table shares. A table's own file stays, and so does the default while the game has a file of its own; with none, the default-named file (`wheel.png`) is the one that goes. With `?page=n`, that page alone goes, if it is at this tier, and the pages after it move down a number; with none, the kind goes with all its pages. |
 | POST | `/api/v1/games/{id}/media/backglass/from-file` | Draw the game's backglass file as its backglass picture, `{"table"}`: lit at start and cut as the renderer in effect cuts it. It is recorded as drawn from the file, and drawn again when the file or the grill setting changes, for as long as nobody has replaced it |
 | POST | `/api/v1/games/{id}/media/{kind}/import` | Place a file from this device, `{"path", "table"}` with an optional `"page"`, under a browsable root. A file it replaces is kept as `PUT` keeps it |
 | POST | `/api/v1/games/{id}/media/{kind}/fetch` | Place a file from an online catalog, `{"source", "vps_id"}` with optional `size` and `table` |
@@ -232,7 +232,7 @@ the documented entry point is a plain 200. Both spellings work.
 | POST | `/api/v1/games/{id}/moves/undo` | Put a move back, `{"undo"}`, once and only until the server restarts. Both files are as they were, and so is the ledger of where each came from; a backglass move settles the game's tables again |
 | POST | `/api/v1/games/{id}/media/{kind}/move` | Swap two pages of a flyer or instruction card. `{"table", "page", "to"}`: page `page` takes number `to` and the page there takes `page`; `table` is empty for the game's shared slot |
 | GET | `/api/v1/games/{id}/tables/{table_id}/media` | One table's media. `?codecs=true` as for the game's |
-| GET | `/api/v1/games/{id}/tables/{table_id}/media/{kind}` | Stream one table's media file. `?size=` and `?v=` as for the game's |
+| GET | `/api/v1/games/{id}/tables/{table_id}/media/{kind}` | Stream one table's media file. `?size=`, `?v=`, `?page=` and `?file=` as for the game's |
 | GET | `/api/v1/games/{id}/tables/{table_id}/media/{kind}/detail` | What that file is, as for the game's |
 | GET | `/api/v1/games/{id}/tables/{table_id}/media/{kind}/displaced?filename=` | What placing that file for one table would replace |
 | PUT | `/api/v1/games/{id}/tables/{table_id}/media/{kind}` | Place a file for one table, named for its `.vpx` (multipart: `file`) |
@@ -252,6 +252,13 @@ the documented entry point is a plain 200. Both spellings work.
 | PUT | `/api/v1/games/{id}/tables/{table_id}/assets/{kind}` | Place a file under one table's name |
 | POST | `/api/v1/games/{id}/assets/{kind}/import` | The same, from `{"path", "table"}` on this device, under a browsable root |
 | DELETE | `/api/v1/games/{id}/assets?path=` | Remove one of those five kinds of file, a kind's folder, or a file directly in `pinmame/roms`, by its path in the game's folder. Removing a `.directb2s`, like placing one, settles the game's tables for the draw order their backglass files call for |
+| GET | `/api/v1/games/{id}/files/impacts?path=&name=&to=&remove=` | What changing a file would do, changing nothing: the same `name` and `to` as the change below, or `remove=true`. Answers `path`, `becomes` (where the file would be, empty for a removal) and `impacts`, each with a `code` and the `answers` that settle it - see [Changing files and folders](#changing-files-and-folders). `games:read` |
+| PATCH | `/api/v1/games/{id}/files?path=` | Rename a file of the game's folder, move it into another folder of the game, or both: `{"name", "to", "resolve", "keep_copy"}`, with `path` its path in the folder (`extras/notes.txt`), `name` its new name and `to` the folder it goes to (`""` is the game's own folder). Leaving one out keeps it. Any file may be changed except the game's `.info`; the extension may change. A table is renamed here too, with the files named for it (see [Changing files and folders](#changing-files-and-folders)). The file keeps its bytes and what the game's `.info` records about it (where it came from, which VPS release it is). A name that is not one name is `400`: empty, a path, `.` or `..`, not in its composed Unicode form, ending in a space or a dot, with a space at either end, longer than 255 bytes, or holding one of `< > : " / \ \| ? *` or a control character. Also `400`, with nothing changed, for the game's `.info`, a link, a table moved out of the game's folder or renamed to another kind of file (`table_stays`, `table_kind`), a name that would make the file a table (one a program plays), a request that changes nothing, and a `resolve` value that is not one of `break`, `replace`, `keep`, `fix`; `404` for a path that is not a file of the game or a `to` that is not a folder of it; `409` while a table of the game is playing, for a folder already holding a folder or link of that name, and with `error.details.impacts` where the change has effects that `resolve` does not answer. A change of case alone is a rename. Changing a `.directb2s` settles the game's tables for the draw order their backglass files call for. Answers `path` (the new one), `was` and `name`; there is no Undo token, so a client puts it back by changing it back. A file a change replaces goes to Backups first, unless `keep_copy` is `false` (default `true`). `games:write`, and `protected:write` to list `break` in `resolve` |
+| DELETE | `/api/v1/games/{id}/files?path=&resolve=&keep_copy=` | Remove a file of the game's folder that is not a table or the game's `.info`; a table is removed by its own route. A copy goes to Backups first, as removing an asset does, unless `keep_copy=false` (default `true`), and the `.info` drops what it recorded about the file. Refused as the change above is, and with `impacts` where the file's removal stops a table finding a companion or empties a folder VPX reads by its place. Answers `removed`. `games:write`, and `protected:write` to list `break` in `resolve` |
+| GET | `/api/v1/games/{id}/folders/impacts?path=&name=&to=&remove=` | The same for a folder of the game, renamed, moved into another folder or removed |
+| POST | `/api/v1/games/{id}/folders` | Make a folder, `{"path"}` in the game's folder, with the folders above it that are not there. `409` for a name something there already has, matched without case. `201` with `path`. `games:write` |
+| PATCH | `/api/v1/games/{id}/folders?path=` | Rename or move a folder with everything in it, `{"name", "to", "resolve"}` as for a file. Each file in it keeps its record in the `.info`. `400` for the game's own folder and for a folder moved into itself; `409` for a name another entry has. `games:write`, and `protected:write` to list `break` in `resolve` |
+| DELETE | `/api/v1/games/{id}/folders?path=&resolve=` | Remove a folder. An empty one goes at once. One with files asks first (`holds`): `keep` moves the files up into the folder it was in, and a name clash there is `409` with nothing moved (a file that would become a table or the game's record there is `400`, and at the top of the game's folder `keep` is checked for `companion` effects as a move there is); `break` removes the folder and what is in it, with no copy in Backups. `games:write`, and `protected:write` to list `break` in `resolve` |
 | GET | `/api/v1/games/{id}/archive` | Download a game as `.vpxz` — one table by default; `?file=` picks which table. `?full=true` (whole folder) carries its own scope, `games:export_full` |
 | POST | `/api/v1/games/{id}/launch` | Launch a game here. Optional `{"file": "..."}` picks which table |
 | PUT | `/api/v1/games/{id}/rating` | Rate a game, `{"rating": 0-5}`. `0` is unrated |
@@ -1843,6 +1850,40 @@ rather than being queued — queueing would mean a double-click costs two full s
 A job that can be stopped part way says so: `stoppable` is true, and while it runs
 `links.stop` is where to `POST` to stop it, with the permission of the work itself. A
 recording run is the one today.
+
+## Changing files and folders
+
+Renaming, moving and removing the files and folders of a game's folder, and making folders,
+are under `/games/{id}/files` and `/games/{id}/folders`. A change that stops something
+working, or loses something, is never made unasked. It is refused with `409` and the whole
+list of what it would do in `error.details.impacts`, and nothing is touched until the request
+answers every one in `resolve` (a list on a body, repeated `resolve=` on a `DELETE`). The two
+`.../impacts` routes give the same list without changing anything, so a client can show it
+before it asks.
+
+| `code` | Meaning | Fields | `answers` |
+|--------|---------|--------|-----------|
+| `companion` | A table would stop using, or use another file for, a file beside it that VPX reads by name | `kind`, `table` (empty where every table shares the file), `was`, `becomes` (empty where it is lost) | `break` |
+| `fixed_place` | The change is in, is, or holds a folder VPX or VPinFE reads by its place in the game (`medias`, `pinmame/roms`, `pinmame/nvram`, a kind's folder) | `folder` | `break` |
+| `name_taken` | A file already has the new name; it would be replaced, after a copy goes to Backups | `path` | `replace` |
+| `holds` | A folder being removed has files in it | `path`, `files` (a count) | `keep`, `break` |
+| `named_file` | A table being renamed has a file named for it (its `.ini`, `.directb2s`, `.vbs`, a media piece), which keeps the old name and stops belonging to the table unless it is renamed too | `kind`, `path`, `becomes` | `fix`, or `replace` where the new name is taken, and `break` |
+
+- `fix` carries each file named for a renamed table to the new name, the table's record in the
+  `.info` and its id, plays, rating, tags and release tie with it. A carried file whose new
+  name is taken needs `replace` (the file it replaces goes to Backups unless `keep_copy` is
+  off). `break` leaves them where they are, named for a table that is no longer there.
+- `break` goes ahead with an effect that loses something no copy holds, so it is not for a
+  token: a request that lists it in `resolve` needs `protected:write`, which only this device
+  or a confirmed Owner has. Every other answer needs only `games:write`.
+- `replace` puts the replaced file in Backups. `keep` moves a removed folder's files up into the
+  folder it was in.
+- A `resolve` value that answers nothing the change has is ignored. One that is not `break`,
+  `replace`, `keep` or `fix` is `400`.
+- A table is renamed in place, with its record, and stays in the game's folder as the kind of
+  file it is; a table that would be moved, or given another extension, is `400`. A table is not
+  removed here. Where the new name is a table's or the game's own, it is `409`.
+- The game's `.info`, a link and the game's own folder are never changed here.
 
 ## Game identity
 

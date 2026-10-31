@@ -28,7 +28,7 @@ from typing import Any
 from common import service_errors
 from common.backups import folder as backup_folder
 from common.backups import media as backups_media
-from common.backups.copies import REASON_MOVE
+from common.backups.copies import REASON_DELETE, REASON_MOVE, REASON_REPLACE
 from common.failures import why
 from common.games import game_lens, media_ops, media_placement, table_lens
 from common.games.asset_registry import spec_for
@@ -50,6 +50,7 @@ TABLE_ONLY = frozenset({"script", "pov"})
 
 _ASSET_KINDS = {kind.key: kind for kind in VPX_ASSET_KINDS}
 _MEDIA_KINDS = {spec.kind for spec in MEDIA_SPECS if spec.token}
+MEDIA_KINDS = tuple(sorted(_MEDIA_KINDS))
 _KEPT = 32
 
 # Journals of moves that can still be undone, newest last.
@@ -182,7 +183,7 @@ def plan_to_tables(family: str, kind: str, folder: str, tables: list[str],
 
 @dataclass
 class _Op:
-    kind: str          # "rename", "copy" or "delete"
+    kind: str          # "rename", "copy", "delete" or "rmdir"
     path: Path         # where it is now (rename, copy) or was (delete)
     source: Path | None = None   # where it came from (rename) or the kept copy (delete)
 
@@ -239,10 +240,10 @@ class _Run:
     def _relative(self, path: Path) -> str:
         return path.relative_to(self.game_dir).as_posix()
 
-    def delete(self, path: Path) -> Path:
+    def delete(self, path: Path, reason: str = REASON_MOVE) -> Path:
         """Take a file out, kept in Backups first. Answers the kept copy."""
         kept = backups_media.keep(
-            backup_folder.current(), self.game_id, path, self._relative(path), REASON_MOVE,
+            backup_folder.current(), self.game_id, path, self._relative(path), reason,
             area=backups_media.MEDIA if self.family == MEDIA else backups_media.ASSETS)
         path.unlink()
         self.ops.append(_Op("delete", path, kept))
@@ -253,6 +254,19 @@ class _Run:
         _rename(source, target)
         self.ops.append(_Op("rename", target, source))
         self.ledger_moves.append((self._relative(source), self._relative(target), False))
+
+    def rename_tree(self, source: Path, target: Path) -> None:
+        """Rename a file or a folder. Each file under a folder takes its ledger entry along."""
+        under = [one.relative_to(source).as_posix()
+                 for one in source.rglob("*") if one.is_file()] if source.is_dir() else []
+        self.rename(source, target)
+        for name in under:
+            self.ledger_moves.append((f"{self._relative(source)}/{name}",
+                                      f"{self._relative(target)}/{name}", False))
+
+    def remove_empty(self, folder: Path) -> None:
+        folder.rmdir()
+        self.ops.append(_Op("rmdir", folder))
 
     def copy(self, source: Path, target: Path) -> None:
         _copy(source, target)
@@ -279,6 +293,8 @@ def _reverse(op: _Op) -> None:
         _rename(op.path, op.source)
     elif op.kind == "copy":
         op.path.unlink(missing_ok=True)
+    elif op.kind == "rmdir":
+        op.path.mkdir()
     elif op.kind == "delete" and op.source is not None:
         shutil.copy2(op.source, op.path)
         op.source.unlink(missing_ok=True)
@@ -327,7 +343,7 @@ def _restore_ledger(game_dir: Path, before: dict[str, dict | None]) -> None:
 # --- the game and its tables ------------------------------------------------------
 
 
-def _tables(game: Game) -> list[Table]:
+def tables_of(game: Game) -> list[Table]:
     found = []
     for row in table_lens.table_rows(game, game_to_row(game)):
         filename = str(row.get("filename") or "")
@@ -380,8 +396,7 @@ def _reread(game_id: str, game_dir: Path, family: str, kind: str) -> None:
     if family == ASSET and kind == "backglass":
         from common.games import asset_ops
 
-        asset_ops._redraw_picture(game_id)
-        asset_ops._settle_order(game_id)
+        asset_ops.refresh_backglass(game_id)
 
 
 def _blocked(run: _Run, exc: Exception) -> service_errors.ServiceError:
@@ -393,6 +408,101 @@ def _blocked(run: _Run, exc: Exception) -> service_errors.ServiceError:
     return service_errors.BlockedError(why(exc))
 
 
+def _forget_copy(kept: Path) -> None:
+    kept.unlink(missing_ok=True)
+    backups_media.prune(kept)
+
+
+def change_in_place(game_id: str, game_dir: Path, source: Path, target: Path,
+                    replacing: Path | None = None, *, keep_copy: bool = True) -> None:
+    """Rename or move a file or a folder, and carry the ledger entries with it. `replacing`
+    is a file at `target` that goes to Backups first, and stays there unless `keep_copy` is
+    off. A failure puts everything back. Keeps no undo: the caller says what the entry was
+    called."""
+    run = _Run(game_id, game_dir, ASSET)
+    kept = None
+    try:
+        if replacing is not None:
+            kept = run.delete(replacing, REASON_REPLACE)
+        run.rename_tree(source, target)
+        _ledger(game_dir, run)
+    except Exception as exc:  # noqa: BLE001 - said, and put back
+        raise _blocked(run, exc) from exc
+    if kept is not None and not keep_copy:
+        _forget_copy(kept)
+    media_ops.reread(game_dir)
+
+
+def rename_table_in_place(game_id: str, game_dir: Path, source: Path, target: Path,
+                          followers: list[tuple[Path, Path]], entry: Callable[[], bool],
+                          *, keep_copy: bool = True) -> None:
+    """Rename a table's file, and each of `followers` (files named for it, as (from, to)), then
+    call `entry` to record the new name. A file already at a follower's target goes to Backups
+    first. Any failure, `entry` answering False included, puts everything back."""
+    run = _Run(game_id, game_dir, ASSET)
+    before: dict[str, dict | None] = {}
+    kept: list[Path] = []
+    try:
+        run.rename(source, target)
+        for file, to in followers:
+            if os.path.lexists(to) and not _same(str(file), str(to)):
+                kept.append(run.delete(to, REASON_REPLACE))
+            run.rename(file, to)
+        before = _ledger(game_dir, run)
+        if not entry():
+            raise service_errors.RefusedError(t("error.files.protected", path=source.name))
+    except Exception as exc:  # noqa: BLE001 - said, and put back
+        _restore_ledger(game_dir, before)
+        raise _blocked(run, exc) from exc
+    if not keep_copy:
+        for copy_of in kept:
+            _forget_copy(copy_of)
+    media_ops.reread(game_dir)
+
+
+def remove_in_place(game_id: str, game_dir: Path, path: Path, *, keep_copy: bool = True) -> str:
+    """Take a file out after a copy goes to Backups, and drop its ledger entry. Without
+    `keep_copy` the copy is dropped once the file is out. Answers the kept copy's path, empty
+    where there is none."""
+    run = _Run(game_id, game_dir, ASSET)
+    try:
+        kept = run.delete(path, REASON_DELETE)
+        _ledger(game_dir, run)
+    except Exception as exc:  # noqa: BLE001 - said, and put back
+        raise _blocked(run, exc) from exc
+    media_ops.reread(game_dir)
+    if keep_copy:
+        return str(kept)
+    _forget_copy(kept)
+    return ""
+
+
+def remove_folder_in_place(game_id: str, game_dir: Path, folder: Path, *, keep: bool) -> None:
+    """Remove a folder. With `keep` its contents move up to the folder it was in first; a
+    name they would take there puts everything back. Without it everything in it goes, with
+    no copy and no way back."""
+    run = _Run(game_id, game_dir, ASSET)
+    before: dict[str, dict | None] = {}
+    try:
+        if keep:
+            for child in sorted(folder.iterdir()):
+                run.rename_tree(child, folder.parent / child.name)
+            run.remove_empty(folder)
+            before = _ledger(game_dir, run)
+        else:
+            run.ledger_moves.extend(
+                (run._relative(one), None, False) for one in folder.rglob("*") if one.is_file())
+            before = _ledger(game_dir, run)
+            shutil.rmtree(folder)
+    except Exception as exc:  # noqa: BLE001 - said, and put back where it can be
+        error = _blocked(run, exc)
+        # Without `keep` the files that are already gone stay out of the ledger.
+        _restore_ledger(game_dir, before if keep else {
+            path: entry for path, entry in before.items() if (game_dir / path).exists()})
+        raise error from exc
+    media_ops.reread(game_dir)
+
+
 def to_tables(game_id: str, family: str, kind: str, table_ids: list[str]) -> dict[str, Any]:
     """Give a game's file to these tables, as their own or by leaving it on the game.
 
@@ -400,7 +510,7 @@ def to_tables(game_id: str, family: str, kind: str, table_ids: list[str]) -> dic
     """
     kind = _slot_kind_or_refuse(family, kind)
     game, game_dir = _writable(game_id)
-    tables = _tables(game)
+    tables = tables_of(game)
     folder = game_dir.name
     chosen = [_by_id(tables, one).stem for one in table_ids]
     source = pieces(game_dir, family, kind, folder)
@@ -443,7 +553,7 @@ def to_game(game_id: str, family: str, kind: str, table_id: str) -> dict[str, An
         raise service_errors.RefusedError(t("error.file_move.table_only", label=label),
                                           details={"kind": kind})
     game, game_dir = _writable(game_id)
-    tables = _tables(game)
+    tables = tables_of(game)
     folder = game_dir.name
     table = _by_id(tables, table_id)
     if _same(table.stem, folder):
@@ -528,7 +638,7 @@ def state(game_id: str, family: str, kind: str) -> dict[str, Any]:
     folder = game_dir.name
     names = {entry.name.lower() for entry in _listing(game_dir)}
     rows = []
-    for table in _tables(game):
+    for table in tables_of(game):
         named = _same(table.stem, folder)
         rows.append({
             "id": table.id, "stem": table.stem, "filename": table.filename,

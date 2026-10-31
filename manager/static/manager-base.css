@@ -2074,13 +2074,14 @@ body.manager-menu-open .q-tooltip.manager-menu-tip { display: block !important; 
    rather than the brand color NiceGUI gives every button by default. The glyph is what
    has to be repainted: Quasar's own .text-primary lands on the <button>, and it sits in
    a cascade layer, which beats an unlayered !important whatever its specificity. The
-   label and the icon are inside it and nothing there competes. */
+   label and the icon are inside it and nothing there competes. A button drawn as an
+   anchor, to go somewhere, is repainted the same way. */
 .q-btn--flat, .q-btn--flat .q-icon,
-button.q-btn--flat.text-primary .q-btn__content {
+:is(button, a).q-btn--flat.text-primary .q-btn__content {
   color: var(--ink-2) !important;
 }
 .q-btn--flat:hover, .q-btn--flat:hover .q-icon,
-button.q-btn--flat.text-primary:hover .q-btn__content {
+:is(button, a).q-btn--flat.text-primary:hover .q-btn__content {
   color: var(--ink) !important;
 }
 .q-btn--flat.text-negative, .q-btn--flat.text-negative .q-icon { color: var(--danger); }
@@ -2376,7 +2377,7 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
 .manager-mediatile-art {
   width: 100%;
   /* A backstop, not the layout. The ratio decides the shape; this stops a portrait
-     tile in a wide map from growing taller than the rows around it are worth. */
+     tile from growing taller than the tiles around it are worth. */
   max-height: 240px;
   display: flex;
   align-items: center;
@@ -2475,6 +2476,28 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   width: 100%;
+}
+/* The media list: two columns to a row, side by side and centered in the panel, each tile
+   centered in its column in its own shape. A last tile on its own takes the left column.
+   The column width is `TILE_MAX_WIDTH` in `manager/library/mediamap.py`. */
+.manager-mediarow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 240px));
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.manager-mediaslot { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.manager-mediaslot > .manager-mediatile { flex: none; }
+/* Download Missing Media... and Record Media..., kept above the tiles while they scroll. */
+.manager-mediastrip {
+  position: sticky; top: -8px; z-index: 1;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  align-self: stretch; box-sizing: border-box;
+  margin: 0 calc(-1 * var(--panel-gutter));
+  padding: 6px calc(2 * var(--panel-gutter));
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
 }
 
 /* --- section chrome -------------------------------------------------------------- */
@@ -2929,6 +2952,15 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
      The grip row is what you drag. */
   grid-template-rows: minmax(0, 1fr) auto var(--dock-h, 300px);
   min-height: 0;
+}
+/* The file's own panel, narrow: the viewer on top, then the grip, then the details. */
+@container (max-width: 899.98px) {
+  .manager-has-dock[data-viewer-first] {
+    grid-template-rows: var(--dock-h, 300px) auto minmax(0, 1fr);
+  }
+  .manager-has-dock[data-viewer-first] > .manager-dock { grid-row: 1; }
+  .manager-has-dock[data-viewer-first] > .manager-dock-grip { grid-row: 2; }
+  .manager-has-dock[data-viewer-first] > .manager-workbench-body { grid-row: 3; }
 }
 @container (min-width: 900px) {
   .manager-has-dock {
@@ -3495,6 +3527,13 @@ input.manager-path-input { padding-right: 0.6ch; }
   align-items: center; justify-content: center;
   padding: 4px 0 8px; position: relative;
 }
+/* In the dock the card keeps the height its content needs and the dock scrolls. Left to
+   shrink, a card taller than the dock gave the picture up first and then ran its rows past
+   the card's own background. The picture keeps a floor and a ceiling of its own. */
+.manager-dock > .manager-slot { flex: 0 0 auto; }
+:where(.manager-dock > .manager-slot) .manager-slot-art { flex: 0 0 auto; min-height: 120px; }
+.manager-dock > .manager-slot .manager-slot-art img,
+.manager-dock > .manager-slot .manager-slot-art video { max-height: min(52vh, 520px); }
 /* On the art, the way the map's tiles do it - so the same gesture works in both
    places and the title row is a title again. */
 .manager-slot-zoom {
@@ -3603,7 +3642,14 @@ a.manager-tag:hover { background: var(--wash-hover); }
    in its width, and a container here would answer the other stages' `@container` rules
    for the panel's width. */
 .manager-stage:has(.manager-bgview) { container-type: inline-size; }
-.manager-stage .manager-slot-art { flex: 1 1 0; min-height: 0; width: 100%; padding: 0; }
+/* The picture sits at the top left under its toolbar, as large as the stage allows. */
+.manager-stage .manager-slot-art {
+  flex: 1 1 0; min-height: 0; width: 100%; padding: 0;
+  align-items: flex-start; justify-content: flex-start;
+}
+.manager-edit-bar { flex: 0 0 auto; }
+.manager-stage > .manager-edit-bar { padding-bottom: 6px; }
+.manager-slot > .manager-edit-bar { padding-top: 2px; }
 .manager-stage .manager-slot-art img, .manager-stage .manager-slot-art video {
   max-height: 100%;
 }
@@ -3790,6 +3836,12 @@ a.manager-tag:hover { background: var(--wash-hover); }
 /* Where it opens the file's own panel it is a link, so it takes the link's color. */
 a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 
+/* A file card's header, drawn apart from the facts under it. */
+.manager-slot-head {
+  padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.manager-slot--file .manager-facts { padding-inline: 0; }
+
 /* The losers. Set apart by a rule rather than a heading weight, because the point is
    that they are the same slot - not a new section. */
 .manager-slot-others {
@@ -3806,6 +3858,11 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   font-size: var(--fs-caption); color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
   flex: 0 1 auto;
+}
+.manager-slot-other-facts { font-size: var(--fs-caption); color: var(--ink-3); }
+/* Big enough to tell one picture from another, small enough for a list of them. */
+.manager-slot-other-thumb {
+  width: 56px; height: 56px; flex: none; object-fit: contain; border-radius: 4px;
 }
 
 /* Who is not using the file above. Set off the same way the outranked files are,

@@ -95,6 +95,13 @@ class RomFilesInTheAssetLens(TempTree):
     def test_rom_is_a_kind_the_lens_lists(self) -> None:
         self.assertIn("rom", asset_lens.KINDS)
 
+    def test_each_pup_pack_folder_is_a_row_of_its_own(self) -> None:
+        rows = self._rows({"pupvideos/tom_13/a.mp4": b"x", "pupvideos/afm_113/b.mp4": b"x"})
+
+        packs = {row["file"]: row["path"] for row in rows if row["kind"] == "pup_pack"}
+
+        self.assertEqual({"afm_113": "pupvideos/afm_113", "tom_13": "pupvideos/tom_13"}, packs)
+
 
 if __name__ == "__main__":
     unittest.main()

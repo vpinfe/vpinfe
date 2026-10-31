@@ -66,7 +66,7 @@ class HaveAvailableTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(t("manager.discovery.have"), labels)
         self.assertIn(t("manager.discovery.none"), labels)
         self.assertIn(t("manager.discovery.drop_here"), labels)
-        self.assertIn(t("manager.discovery.available"), labels)
+        self.assertIn(t("manager.discovery.online"), labels)
         self.assertIn("manager-dropbox", self._classes(holder))
 
     async def test_a_held_file_replaces_the_empty_box(self) -> None:
@@ -86,7 +86,7 @@ class HaveAvailableTests(unittest.IsolatedAsyncioTestCase):
                      mine=[{"name": "rules.pdf", "vps_file_id": "r1"}])
         labels = self._labels(self._body(kind))
 
-        self.assertNotIn(t("manager.discovery.available"), labels)
+        self.assertNotIn(t("manager.discovery.online"), labels)
 
     async def test_a_mod_is_listed_under_the_release_it_is_based_on(self) -> None:
         mod = {"vps_file_id": "m1", "version": "2.1", "authors": ["Cy"], "name": "A Mod",

@@ -675,6 +675,21 @@ class MetaConfig:
         self.write_config()
         return True
 
+    def rename_table(self, table_id: str, filename: str) -> bool:
+        """The same file under another name: the entry keeps its id, what a person recorded
+        on it, what it says about itself and the release it is tied to."""
+        entry = self._entries_by_id().get(table_id)
+        if not isinstance(entry, dict) or entry_form(entry) != FORM_CONTAINED:
+            return False
+        was = entry_filename(entry)
+        entry[TABLE_FILENAME_KEY] = filename
+        entry.pop(ABSENT_SINCE_KEY, None)
+        vpinfe = self.data.get(VPINFE_SECTION)
+        if isinstance(vpinfe, dict) and vpinfe.get(DEFAULT_TABLE_KEY) == was:
+            vpinfe[DEFAULT_TABLE_KEY] = table_id
+        self.write_config()
+        return True
+
     def drop_table(self, table_id: str) -> bool:
         """Take a table's record out because its file has been deleted on purpose.
 

@@ -40,8 +40,8 @@ Placement = int | str | None
 _TURNS = ((270, "manager.screens.turn_left", verbs.ROTATE_LEFT),
           (180, "manager.screens.turn_around", verbs.ROTATE_RIGHT),
           (90, "manager.screens.turn_right", verbs.ROTATE_RIGHT))
-_WAYS = {270: "manager.media_rotate.way_left", 180: "manager.media_rotate.way_around",
-         90: "manager.media_rotate.way_right"}
+_WAYS = {270: "manager.screens.way_left", 180: "manager.screens.way_around",
+         90: "manager.screens.way_right"}
 # The chip a turned answer wears, and what it says on hover.
 _TURNED = {90: ("manager.screens.turned_right", "manager.screens.turned_right.help"),
            180: ("manager.screens.turned_around", "manager.screens.turned_around.help"),

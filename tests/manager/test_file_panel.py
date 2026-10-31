@@ -85,15 +85,14 @@ class TheLineUnderIt(unittest.TestCase):
              "served": [{"id": f"t{number}"} for number in range(serves)]},
             file_acts.tier_of(row))
 
-    def test_a_file_every_table_loads_says_so(self) -> None:
-        self.assertEqual(t("manager.media_ownership.via_game"), self._said("ini", 2, 2))
+    def test_a_file_every_table_loads_adds_nothing_to_its_chip(self) -> None:
+        self.assertEqual("", self._said("ini", 2, 2))
 
     def test_a_file_some_tables_have_their_own_beside_says_who_is_left(self) -> None:
         self.assertEqual(t("manager.workbench.shared_by_some"), self._said("ini", 1, 2))
 
-    def test_a_table_looking_at_the_shared_file_is_told_what_it_gets(self) -> None:
-        self.assertEqual(t("manager.media_ownership.via_shared"),
-                         self._said("ini", 1, 2, lens="t1"))
+    def test_a_table_looking_at_the_shared_file_adds_nothing_to_its_chip(self) -> None:
+        self.assertEqual("", self._said("ini", 1, 2, lens="t1"))
 
     def test_a_file_every_table_has_its_own_beside_is_covered_not_inert(self) -> None:
         self.assertEqual(t(media_ownership.tier_for(media_ownership.UNUSED).why),
@@ -101,6 +100,9 @@ class TheLineUnderIt(unittest.TestCase):
 
     def test_a_kind_the_folder_name_never_reaches_is_inert(self) -> None:
         self.assertEqual(t("manager.workbench.inert_asset"), self._said("pov", 0, 2))
+
+    def test_a_rom_file_adds_nothing_to_its_chip(self) -> None:
+        self.assertEqual("", self._said("rom", 0, 2))
 
     def test_a_folder_counts_its_files(self) -> None:
         said = file_facts.asset_spec({"folder": True, "files": 12, "size_bytes": 2048})

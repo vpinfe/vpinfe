@@ -31,7 +31,7 @@ class TurnableTests(unittest.TestCase):
 class OutcomeTests(unittest.TestCase):
     def test_a_clean_turn_is_said_plainly(self) -> None:
         self.assertEqual(page.outcome({"turned": 3, "skipped": []}),
-                         (t("manager.media_rotate.turned", count=3), "positive"))
+                         (t("manager.media_rotate.rotated", count=3), "positive"))
 
     def test_skipped_files_make_it_a_warning_with_the_count(self) -> None:
         said, level = page.outcome({"turned": 1, "skipped": [{"reason": "x"}, {"reason": "y"}]})

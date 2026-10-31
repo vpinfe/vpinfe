@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable, Sequence
 from functools import partial
@@ -18,6 +19,7 @@ from common.games import asset_registry
 from common.games import file_move as moved_files
 from common.games.asset_resolver import VPX_ASSET_KINDS
 from common.i18n import t
+from common.online import vps_kinds
 from manager.kit import (
     art,
     confirm,
@@ -34,7 +36,6 @@ from manager.kit.on_page import on_page
 from manager.library import (
     backglass_view,
     file_acts,
-    file_facts,
     file_move,
     mediasource,
     mediaview,
@@ -57,7 +58,7 @@ from manager.workbench.all_settings import (
     switches,
 )
 from manager.workbench.core import _asset_name, _outside_lines, _table_line
-from manager.workbench.game_match import _match_line
+from manager.workbench.game_match import _match_button, _match_line
 from manager.workbench.game_media import _file_line, _on_disk, _slot, _slot_art
 from manager.workbench.game_table import _alert, _drop_script, _state
 from manager.workbench.launcher import _launchers_for_panel
@@ -66,12 +67,16 @@ logger = logging.getLogger("vpinfe.manager.workbench.file")
 
 
 def _same_file(rows: list[dict[str, Any]], wanted: dict[str, Any]) -> dict[str, Any] | None:
-    """The row `wanted` was, read again: by id; else by table and kind, which is all an
-    address names; else the kind's shared row, which is what a table's own file that
-    was just removed leaves behind; else, when it names no table, the kind's row on any
-    table."""
+    """The row `wanted` was, read again: by id; else, for a file nothing reads, by its
+    path; else by table and kind, which is all an address names; else the kind's shared
+    row, which is what a table's own file that was just removed leaves behind; else, when
+    it names no table, the kind's row on any table."""
     exact = next((one for one in rows if wanted.get("id") and one.get("id") == wanted["id"]),
                  None)
+    if exact is None and wanted.get("path") and file_acts.is_loose(wanted):
+        exact = next((one for one in rows if file_acts.is_loose(one)
+                      and one.get("path") == wanted["path"]
+                      and one.get("kind") == wanted.get("kind")), None)
     if exact is not None or wanted.get("kind") in file_acts.ROM_FILES:
         return exact
     kind = [one for one in rows if one.get("kind") == wanted.get("kind")]
@@ -179,12 +184,16 @@ async def _media_file_block(context: dict[str, Any]) -> None:
     entry = entries.get(kind) or {}
     matched = await _match_line(context, kind, (detail or {}).get("matched_to")
                                 or entry.get("matched_to"))
+    async def rotated() -> None:
+        library.forget_media(game_id)
+        await context["rebuild"]()
+
     if context["dock"] is not None:
         with _stage(context):
-            _slot_art(context, kind, entry, page)
+            _slot_art(context, kind, entry, page, detail=detail, then=rotated)
     _file_heading()
     _slot(context, kind, entry, detail, context["rebuild"],
-          (overrides or {}).get(kind) or [], titled=False, in_place=False, scope_chip=False,
+          (overrides or {}).get(kind) or [], titled=False, in_place=False,
           links=links, matched=matched, draw_art=False, page=page,
           waiting=await recorder.waiting_on(library, game_id, table_id or "", kind))
 
@@ -203,7 +212,7 @@ def _loose_media(context: dict[str, Any]) -> None:
                 str(row.get("label") or kind))
     with ui.column().classes("w-full gap-1 manager-slot p-2"):
         with ui.column().classes("w-full gap-0 manager-slot-facts"):
-            with ui.row().classes("items-start gap-2 w-full no-wrap"):
+            with ui.row().classes("items-center gap-2 w-full no-wrap"):
                 where = _on_disk(context, path)
                 named = ui.label(path or str(row.get("file") or "")) \
                     .classes("manager-slot-file grow min-w-0")
@@ -215,16 +224,11 @@ def _loose_media(context: dict[str, Any]) -> None:
 
 
 def _asset_said(context: dict[str, Any], tier: str) -> str:
-    """Who uses the file in the panel, from what it serves.
-
-    Unused is two things: a kind no table loads by the folder's name, and a shared file
-    every table has its own beside.
-    """
-    if context["kind"] in file_acts.ROM_FILES:
-        names = rom_acts.users_of(context["row"], context["tables"])
-        return t("manager.workbench.rom_used_by", tables=", ".join(names)) if names \
-            else t("manager.workbench.rom_unused")
+    """What the chip beside the name does not say: why a file is unused, or that some of
+    the game's tables read another file."""
     lens = context["lens"]
+    if context["kind"] in file_acts.ROM_FILES:
+        return ""
     if tier == media_ownership.UNUSED:
         if any(one.key == context["kind"] and one.folder_fallback
                for one in VPX_ASSET_KINDS):
@@ -233,7 +237,43 @@ def _asset_said(context: dict[str, Any], tier: str) -> str:
     if (tier == media_ownership.GAME and not lens
             and len(context["served"]) < len(context["tables"])):
         return t("manager.workbench.shared_by_some")
-    return media_ownership.sentence(tier, viewing_a_table=bool(lens))
+    return ""
+
+
+def _match_row(said: str) -> None:
+    """Which VPS record the file is, or that none has been said."""
+    with ui.row().classes("items-center gap-1 no-wrap w-full"):
+        if said:
+            ui.icon(verbs.MATCH).classes("manager-have")
+            ui.label(said).classes("truncate")
+        else:
+            ui.icon("link_off").classes("manager-help")
+            ui.label(t("manager.workbench.not_matched")).classes("manager-help truncate")
+
+
+def _asset_details(context: dict[str, Any], detail: dict[str, Any],
+                   glass: dict[str, Any] | None) -> list[tuple[Any, Any]]:
+    """The Details heading and its facts: size and who made it, and for a ROM the tables
+    that read it. Empty where none of them is known."""
+    facts: list[tuple[Any, Any]] = []
+    if detail.get("folder"):
+        facts.append((t("word.size"), t("manager.workbench.files_in_folder",
+                                         count=int(detail.get("files") or 0))))
+    elif size := mediasource._size(detail.get("size_bytes")):
+        facts.append((t("word.size"), size))
+    if glass and not glass["damaged"]:
+        facts += _backglass_facts(context, glass)
+    if context["kind"] == "script":
+        owner: dict[str, Any] = next((one for one in context["tables"]
+                      if one.get("id") == context["row"].get("table")), {})
+        if digest := str(owner.get("vbs_hash") or ""):
+            facts.append((t("manager.workbench.script_hash"), digest))
+    if context["kind"] in file_acts.ROM_FILES:
+        names = rom_acts.users_of(context["row"], context["tables"])
+        if names:
+            facts.append((t("word.used_by"), ", ".join(names)))
+    return [(panel.HEADING, t("manager.workbench.details")),
+            *((panel.READ, one) for one in facts)] if facts else []
 
 
 async def _asset_file_block(context: dict[str, Any]) -> None:
@@ -245,43 +285,42 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
     links = (await offload.io(library.outside_links, game_id, "", path)
              if present and path else [])
     glass = detail.get("backglass") if kind == "backglass" else None
-    spoken: dict[str, ui.label] = {}
+    listed = present and bool(path) and file_acts.listed_as(kind, vps_kinds.ASSET) is not None
+    matched = (await _match_line(context, kind, row.get("matched_to"), vps_kinds.ASSET)
+               if listed else "")
+    redraws: list[Callable[[], Any]] = []
 
     async def after_save() -> None:
-        """The size and date under the name, as the file is now."""
+        """The size under the name, as the file is now."""
         try:
             fresh = await offload.io(library.asset_detail, game_id, path)
         except Exception:  # noqa: BLE001 - the line stays as it was
             return
         detail.update({one: fresh[one] for one in fresh if one != "text"})
-        if "spec" in spoken and not spoken["spec"].is_deleted:
-            spoken["spec"].text = file_facts.asset_spec(detail)
+        for redraw in redraws:
+            await redraw()
 
     context["after_save"] = after_save
     if context["dock"] is not None:
         with _stage(context):
             await _asset_stage(context, path, glass, str(detail.get("head") or ""), label)
 
-    def identity(*, facts: bool) -> None:
+    def identity() -> None:
         if not present:
             ui.label(t("manager.workbench.missing_table", kind=label)
                      if context["lens"]
                      else t("manager.workbench.missing_game", kind=label)) \
                 .classes("manager-help")
             return
-        with ui.row().classes("items-start gap-2 w-full no-wrap"):
-            _file_line(context, kind, path, str(context.get("link_view") or ""), path)
-            if tier not in media_ownership.SCOPES:
-                media_ownership.badge(tier)
+        with ui.row().classes("items-center gap-2 w-full no-wrap"):
+            _file_line(context, kind, path, str(context.get("link_view") or ""), path,
+                       chip=lambda: media_ownership.badge(tier))
             if glass and not glass["damaged"]:
                 _backglass_chips(glass)
-        spec = file_facts.asset_spec(detail)
-        if spec:
-            spoken["spec"] = ui.label(spec).classes("manager-help")
+        if listed:
+            _match_row(matched)
         if glass and glass["damaged"]:
             _alert(t("manager.backglass.damaged"), None)()
-        elif glass and facts:
-            panel.facts(ui, _backglass_facts(context, glass))
         said = _asset_said(context, tier)
         if said:
             ui.label(said).classes("manager-help")
@@ -296,20 +335,30 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
         _asset_actions(context, kind, label, present, path, tier, detail)
 
     if context.get("link_view"):
-        with ui.column().classes("w-full gap-1 manager-slot p-2"):
-            with ui.column().classes("w-full gap-0 manager-slot-facts"):
-                identity(facts=True)
+        with ui.column().classes("w-full gap-1 manager-slot manager-slot--file p-2"):
+            with ui.column().classes(
+                    "w-full gap-0 manager-slot-facts" + (" manager-slot-head" if present else "")):
+                identity()
+            details = ui.column().classes("w-full gap-0 manager-form")
+
+            async def redraw_details() -> None:
+                details.clear()
+                with details:
+                    panel.facts(ui, _asset_details(context, detail, glass) if present else [])
+
+            await redraw_details()
+            redraws.append(redraw_details)
             acts()
         return
+
     async def form_entries() -> list[tuple[Any, Any]]:
         entries: list[tuple[Any, Any]] = [
             (panel.HEADING, t("word.file")),
-            (panel.FULL, lambda: identity(facts=False))]
+            (panel.FULL, identity)]
         if kind in (*file_acts.WHOLE_FOLDER, *file_acts.PLACEABLE, *file_acts.ROM_FILES):
             entries.append((panel.FULL, acts))
-        if glass and not glass["damaged"] and (about := _backglass_facts(context, glass)):
-            entries += [(panel.HEADING, t("manager.workbench.details")),
-                        *((panel.READ, entry) for entry in about)]
+        if present:
+            entries += _asset_details(context, detail, glass)
         if "file_settings" in context:
             entries += await _file_settings_entries(context)
             entries += await _dmd_file_entries(context, glass, path)
@@ -324,6 +373,7 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
         form.clear()
         with form:
             panel.facts(ui, entries)
+    redraws.append(redraw_form)
     if "file_settings" in context:
         context["file_settings"]["redraw_form"] = redraw_form
 
@@ -729,6 +779,14 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
     table = next((one for one in context["tables"]
                   if one.get("id") == context["lens"]), None)
     with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
+        if (table is not None and kind == "script" and tier == media_ownership.TABLE
+                and present and path):
+            _edit_button(context, kind, path)
+            ui.button(t("word.delete"), icon=verbs.DELETE,
+                      on_click=lambda: _drop_script(context, table)) \
+                .props("flat dense no-caps size=sm") \
+                .classes("manager-action manager-action--danger")
+            return
         if not loose:
             ui.button(t("word.replace") if present else t("word.add"),
                       icon=verbs.REPLACE if present else verbs.ADD,
@@ -737,17 +795,30 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
                 .props("flat dense no-caps size=sm").classes("manager-action")
         if not (present and path):
             return
+        _match_button(context, kind, label, context["row"], _nothing, vps_kinds.ASSET)
         _move_actions(context)
-        if kind == "script" and table is not None and tier == media_ownership.TABLE:
-            ui.button(t("word.delete"), icon=verbs.DELETE,
-                      on_click=lambda: _drop_script(context, table)) \
-                .props("flat dense no-caps size=sm") \
-                .classes("manager-action manager-action--danger")
-        else:
-            ui.button(t("word.remove"), icon=verbs.REMOVE,
-                      on_click=lambda: _remove_asset(context, kind, path, tier)) \
-                .props("flat dense no-caps size=sm") \
-                .classes("manager-action manager-action--danger")
+        ui.button(t("word.remove"), icon=verbs.REMOVE,
+                  on_click=lambda: _remove_asset(context, kind, path, tier)) \
+            .props("flat dense no-caps size=sm") \
+            .classes("manager-action manager-action--danger")
+
+
+def _nothing() -> None:
+    """The redraw a match button is handed where the write already rebuilds the page."""
+
+
+def _edit_button(context: dict[str, Any], kind: str, path: str) -> None:
+    """Edit in a window of its own - the popup is opened by the click itself, which the
+    browser allows only from the gesture."""
+    if not text_editor.edits(kind):
+        return
+    game_id = context["game_id"]
+    ui.button(t("word.edit"), icon=verbs.EDIT, on_click=lambda: None) \
+        .props("flat dense no-caps size=sm").classes("manager-action") \
+        .on("click", js_handler=(
+            f"() => window.open({json.dumps(text_editor.window_address(game_id, kind, path))}, "
+            f"{json.dumps(text_editor.window_name(game_id, path))}, "
+            f"{json.dumps(text_editor.WINDOW_FEATURES)})"))
 
 
 def _rom_actions(context: dict[str, Any]) -> None:
@@ -761,6 +832,8 @@ def _rom_actions(context: dict[str, Any]) -> None:
         panel.action(t("word.replace"),
                      lambda: rom_acts.replace(context, row, context["rebuild"]),
                      icon=verbs.REPLACE, hint=t("manager.rom.replace.help"))()
+        _match_button(context, row.get("kind") or rom_acts.KIND, str(row.get("label") or ""),
+                      row, _nothing, vps_kinds.ASSET)
         panel.action(t("word.remove"), lambda: _remove_rom(context, row),
                      icon=verbs.REMOVE, danger=True, hint=t("manager.rom.remove.help"))()
 
@@ -796,13 +869,16 @@ def _move_actions(context: dict[str, Any]) -> None:
 
 def _folder_actions(context: dict[str, Any], kind: str, label: str, present: bool,
                     path: str, files: int) -> None:
+    a_pack = kind == "pup_pack" and "/" in path
     with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
-        panel.action(t("word.replace") if present else t("word.add"),
-                     lambda: mediasource.open_folder_sources(context, kind, label,
-                                                             context["rebuild"], path),
-                     icon=verbs.REPLACE if present else verbs.ADD,
-                     hint=t("manager.workbench.folder_source.help"))()
+        if not a_pack:
+            panel.action(t("word.replace") if present else t("word.add"),
+                         lambda: mediasource.open_folder_sources(context, kind, label,
+                                                                 context["rebuild"], path),
+                         icon=verbs.REPLACE if present else verbs.ADD,
+                         hint=t("manager.workbench.folder_source.help"))()
         if present and path:
+            _match_button(context, kind, label, context["row"], _nothing, vps_kinds.ASSET)
             ui.button(t("word.remove"), icon=verbs.REMOVE,
                       on_click=lambda: _remove_asset(context, kind, path, "", files=files)) \
                 .props("flat dense no-caps size=sm") \

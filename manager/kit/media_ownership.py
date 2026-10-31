@@ -49,6 +49,13 @@ def source_name(origin: str) -> str:
     return {source.id: source.name for source in sources.catalogs()}.get(origin, origin)
 
 
+def checked_for_updates(origin: str) -> bool:
+    """Whether a file placed by `origin` is one a catalog keeps current, so that changing
+    the bytes makes it the person's own."""
+    from common.online import sources
+    return bool(origin) and origin in {source.id for source in sources.catalogs()}
+
+
 def source_names() -> list[str]:
     """Every source a file could report, for a filter that offers them all."""
     from common.online import sources
@@ -221,6 +228,13 @@ def _chip(tier: Tier, extra: str) -> ui.element:
 def badge(via: str | None, *, extra: str = "") -> ui.element:
     """The one visual mark for who owns a file, wherever a file is shown."""
     return _chip(of(via), extra)
+
+
+def default_badge(*, extra: str = "") -> ui.element:
+    """The mark for a file the library supplies, which `key_of` counts as the game's but a
+    surface naming where a file comes from must not call This game."""
+    return ui.label(t("manager.media_ownership.from_default")) \
+        .classes(f"manager-tier {_TIERS[GAME].css} {extra}".strip())
 
 
 def badge_for(key: str, *, extra: str = "") -> ui.element:

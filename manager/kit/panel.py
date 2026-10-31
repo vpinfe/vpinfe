@@ -1850,6 +1850,22 @@ def action(label: str,
     return draw
 
 
+def link_action(label: str, *, to: str, icon: str = "", hint: str = "") -> Callable[[], None]:
+    """An `action` that goes somewhere else in the Manager.
+
+    Drawn as an anchor, so "open in a new tab", middle-click and copy-link-address keep
+    working as they do on `link`, in the button's look.
+    """
+    def draw() -> None:
+        control = ui.button(label, icon=icon or None) \
+            .props("flat dense no-caps size=sm").classes("manager-action")
+        control.props["href"] = to
+        if hint:
+            control.tooltip(hint)
+
+    return draw
+
+
 def split_action(label: str, on_click: Callable[[Any], Any] | None, *, icon: str,
                  js: str, hint: str, also: str, also_js: str, also_hint: str) -> Callable[[], None]:
     """One `action` with a second way of doing the same thing behind a caret.

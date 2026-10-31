@@ -510,6 +510,15 @@ class Library:
         self.forget_media(game_id)
         return result
 
+    def file_impacts(self, game_id: str, path: str) -> list[dict]:
+        return self._client.file_impacts(game_id, path)
+
+    def remove_game_file(self, game_id: str, path: str, resolve: list[str]) -> dict:
+        result = self._client.remove_game_file(game_id, path, resolve)
+        self.forget_media(game_id)
+        self._forget_tables(game_id)
+        return result
+
     def asset_placements(self, game_id: str, kind: str) -> dict:
         return self._client.asset_placements(game_id, kind)
 

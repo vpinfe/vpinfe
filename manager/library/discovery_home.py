@@ -352,7 +352,11 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
             candidates.thumb(release["img_url"], icons.TABLES, t("manager.discovery.no_picture"))
             with ui.column().classes("gap-0 min-w-0"):
                 ui.label(_kind_words(release["listing"])[0]).classes("text-xs manager-label")
-                ui.label(release["game"]).classes("manager-shelf-name")
+                with ui.row().classes("items-center gap-2 no-wrap min-w-0"):
+                    ui.label(release["game"]).classes("manager-shelf-name truncate")
+                    if release["held"]:
+                        ui.label(t("manager.discovery.have")).classes(
+                            "manager-tier manager-tier--on")
                 ui.label(" · ".join(one for one in (
                     ", ".join(release["authors"][:2]), when.ago(release["added"])) if one)) \
                     .classes("text-xs manager-help truncate")
@@ -360,8 +364,6 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
                     ui.label(version_line(release)).classes("text-xs manager-help truncate")
                 if release["mod"]:
                     ui.label(t("manager.discovery.mod")).classes("text-xs manager-help")
-                if release["held"]:
-                    ui.label(t("manager.discovery.have")).classes("text-xs manager-label")
             if marking.wanted_release(release["id"]):
                 ui.icon(verbs.WANTED, size="18px").classes("manager-cell-mark").tooltip(
                     t("manager.discovery.mark.wanted.help"))

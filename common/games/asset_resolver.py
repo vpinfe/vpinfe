@@ -260,6 +260,8 @@ def read_alias_map(game_dir: str) -> dict[str, str]:
 
 
 ROMS_FOLDER = "pinmame/roms"
+# The two folders the emulator reads by their place in a game.
+FIXED_PLACES = (ROMS_FOLDER, "pinmame/nvram")
 
 
 def list_rom_files(game_dir: str) -> list[str]:

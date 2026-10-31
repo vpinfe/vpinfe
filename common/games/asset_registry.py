@@ -58,11 +58,11 @@ def is_readme(name: str) -> bool:
 
 ASSET_SPECS = (
     # The file itself. Nothing launches without it.
-    AssetSpec("table", icons.TABLES, apps.table_suffixes(), False, False, False,
+    AssetSpec("table", icons.TABLES, apps.table_suffixes(), False, False, True,
               required_to_launch=True),
-    AssetSpec("game_info", "description", (), True, False, False),
-    AssetSpec("backglass", "wallpaper", (".directb2s",), True, False, False),
-    AssetSpec("ini", "tune", (".ini",), True, False, False),
+    AssetSpec("game_info", "description", (), True, False, True),
+    AssetSpec("backglass", "wallpaper", (".directb2s",), True, False, True),
+    AssetSpec("ini", "tune", (".ini",), True, False, True),
     # A patch is a delta against one exact base table, not an installable artifact.
     # requires_game is doing real work here: applying it without the right base
     # produces a corrupt file rather than an error.
@@ -71,10 +71,10 @@ ASSET_SPECS = (
     # in asset_resolver: a kind known to the launch path and not to this one leaves an
     # uploaded .vbs classified as nothing at all. None is required to launch - a table
     # whose script is inside the .vpx runs, and the sidecar is an override.
-    AssetSpec("script", "code", (".vbs",), True, False, False),
-    AssetSpec("pov", "3d_rotation", (".pov",), True, False, False),
-    AssetSpec("scv", "scoreboard", (".scv",), True, False, False),
-    AssetSpec("nix", "scoreboard", (".nix",), True, False, False),
+    AssetSpec("script", "code", (".vbs",), True, False, True),
+    AssetSpec("pov", "3d_rotation", (".pov",), True, False, True),
+    AssetSpec("scv", "scoreboard", (".scv",), True, False, True),
+    AssetSpec("nix", "scoreboard", (".nix",), True, False, True),
     # Required only where the table declares one - an EM table needs none, and
     # calling it missing there would call every EM table broken. The flag says
     # the kind can block a launch; whether it does is per table.
@@ -83,9 +83,9 @@ ASSET_SPECS = (
     AssetSpec("altcolor_serum", "palette", (".crz", ".cromc"), True, True, True),
     AssetSpec("altcolor_vni", "palette",
               (".vni", ".pal", ".pac"), True, True, True),
-    AssetSpec("altsound", "volume_up", (), True, True, False),
-    AssetSpec("pup_pack", "video_library", (), True, False, False),
-    AssetSpec("music", "music_note", (), True, False, False),
+    AssetSpec("altsound", "volume_up", (), True, True, True),
+    AssetSpec("pup_pack", "video_library", (), True, False, True),
+    AssetSpec("music", "music_note", (), True, False, True),
     AssetSpec("media", "image", tuple(sorted(MEDIA_EXTENSIONS)), True, False, True),
     AssetSpec("readme", "description", (), True, False, True),
 )

@@ -1,11 +1,11 @@
-"""The media map: one tile per kind, laid out like the cabinet it describes.
+"""The media map: one tile per kind, two to a row.
 
-A coverage report, a navigator and a picture of the machine, in one control. The tile's
-shape carries the meaning - a playfield is tall, a score display is a strip, a wheel is
-square - so the map is readable before any label is.
+A coverage report and a navigator in one control. The tile's shape carries the meaning -
+a playfield is wide, a score display is a strip, a flyer is tall - so the map is readable
+before any label is.
 
-Kinds that are not a screen (audio, a rule sheet) cannot be placed on the cabinet and are
-grouped after it rather than pretended into the stack.
+Layout is computed from the kinds that are switched on: they fill two equal slots per
+row in order, and nothing is held back for a kind that is off.
 """
 
 from __future__ import annotations
@@ -21,28 +21,23 @@ from common.media.media_specs import media_family, media_label_map
 from manager.kit import art, media_ownership, verbs
 from manager.library import mediapages, mediaview, uploads
 
-# Top of the cabinet down to the floor. Kinds on the same row are the same screen shown
-# two ways - a still and its video - and share a row so the pair reads as one slot.
-CAB_STACK: tuple[tuple[str, ...], ...] = (
-    ("topper", "topper_video"),
-    ("backglass", "backglass_video"),
-    ("scoreview", "scoreview_video"),
-    ("real_dmd", "real_dmd_video"),
-    ("real_dmd_color", "real_dmd_color_video"),
-    ("playfield", "playfield_video"),
-    # Paired, because a row splits its width between its tiles and a lone one takes
-    # the whole of it.
-    ("playfield_fss", "cab"),
-)
-
-# Everything that is not a surface on the machine.
-EXTRAS = ("wheel", "logo", "flyer", "instruction_card", "rule_sheet",
+# Screens first, then everything else, with a rule between.
+SCREENS = ("topper", "topper_video", "backglass", "backglass_video",
+           "scoreview", "scoreview_video", "real_dmd", "real_dmd_video",
+           "real_dmd_color", "real_dmd_color_video", "playfield", "playfield_video",
+           "playfield_fss")
+EXTRAS = ("wheel", "logo", "flyer", "cab", "instruction_card", "rule_sheet",
           "loading", "audio", "audio_launch")
 
+# A tile fits in this box, in its own shape: a strip stops at the width and a portrait tile
+# at the height, so no kind outweighs the others on a line. Keep the width in step with the
+# column width in `.manager-mediarow`.
+TILE_MAX_WIDTH = 240
+TILE_MAX_HEIGHT = 120
+
 # Tile shape as an aspect ratio, width over height. A ratio rather than a height,
-# because the pane is resizable: a fixed height with a fluid width stretches the box as
-# the pane grows, which is the opposite of what widening it is for. With a ratio the
-# silhouette holds and the art gets bigger.
+# because the pane is resizable: a fixed height with a fluid width stretches the box when
+# a narrow pane squeezes the column. With a ratio the silhouette holds as the tile shrinks.
 #
 # Measured from the files, not reasoned from the machine: the two disagree, and the file
 # is what the tile has to hold. A playfield is portrait in the cabinet and 1920x1080 on
@@ -62,7 +57,8 @@ TILE_AR = {
     "flyer": 0.75,
     "instruction_card": 1.4, "rule_sheet": 1.4,
     "loading": 1.78,
-    "audio": 4.0, "audio_launch": 4.0,
+    # No picture to take a shape from, so audio fills the whole box like the screens beside it.
+    "audio": 2.0, "audio_launch": 2.0,
 }
 
 # Kinds with no frame to show, which take a glyph instead - a present file drawn as a
@@ -136,7 +132,8 @@ def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
     ratio = TILE_AR.get(kind, 1.6)
     tile = ui.element("div").classes(
         f"manager-mediatile manager-mediatile--{state}"
-        f"{' manager-mediatile--on' if kind == selected else ''}")
+        f"{' manager-mediatile--on' if kind == selected else ''}") \
+        .style(f"width: min(100%, {round(min(TILE_MAX_WIDTH, TILE_MAX_HEIGHT * ratio))}px)")
     uploads.declare(tile, game=game_id, table=table_id, slot=kind)
     if on_pick is not None:
         tile.classes("cursor-pointer").on("click", lambda: on_pick(kind))
@@ -208,6 +205,11 @@ def _tooltip(kind: str, entry: dict[str, Any], wont_play: Sequence[str] = ()) ->
     return "  ·  ".join(part for part in parts if part)
 
 
+def rows(kinds: Sequence[str]) -> list[list[str]]:
+    """`kinds` two to a row, in order. A last one on its own is a row of one."""
+    return [list(kinds[i:i + 2]) for i in range(0, len(kinds), 2)]
+
+
 def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
           on_pick: Callable[[str], None] | None = None,
           selected: str | None = None,
@@ -232,32 +234,28 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
     """
     if kept is not None:
         entries = {kind: entry for kind, entry in entries.items() if kind in kept}
-    # Roughly the width browse gets once work takes its half, so the map fills it and
-    # any surplus falls to the right.
+
+    def draw(kinds: Sequence[str]) -> None:
+        for row in rows(kinds):
+            with ui.element("div").classes("manager-mediarow"):
+                for kind in row:
+                    with ui.element("div").classes("manager-mediaslot"):
+                        _tile(game_id, table_id, kind, entries[kind], on_pick, selected,
+                              len((overrides or {}).get(kind) or []),
+                              (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()))
+
+    # Roughly the width browse gets once work takes its half. The rows inside are two
+    # tile columns wide and centered, so a wider pane leaves the surplus either side.
     with ui.column().classes("w-full gap-1 pb-2").style(
             "max-width: 760px; padding-left: var(--panel-gutter);"
             " padding-right: var(--panel-gutter)"):
-        for row in CAB_STACK:
-            kinds = [kind for kind in row if kind in entries]
-            if not kinds:
-                continue
-            # Stretch, so each tile fills the row and puts its caption at the foot of
-            # it - captions on one line whatever shapes sit above them.
-            with ui.row().classes("w-full gap-1 no-wrap items-stretch"):
-                for kind in kinds:
-                    _tile(game_id, table_id, kind, entries[kind], on_pick, selected,
-                          len((overrides or {}).get(kind) or []),
-                          (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()))
+        draw([kind for kind in SCREENS if kind in entries])
         extras = [kind for kind in EXTRAS if kind in entries]
         if extras:
-            # A rule, not a heading: the cabinet stack and everything else are
-            # different shapes already, and naming them said nothing the tiles did not.
+            # A rule, not a heading: the screens and everything else are different
+            # shapes already, and naming them said nothing the tiles did not.
             ui.element("div").classes("manager-mediatile-rule")
-            with ui.element("div").classes("manager-mediatile-grid"):
-                for kind in extras:
-                    _tile(game_id, table_id, kind, entries[kind], on_pick, selected,
-                          len((overrides or {}).get(kind) or []),
-                          (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()))
+            draw(extras)
     ui.run_javascript(_HOVER)
 
 

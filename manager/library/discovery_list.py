@@ -21,7 +21,7 @@ from nicegui import run, ui
 
 from common import timestamps
 from common.failures import why
-from common.games import opened_pages
+from common.games import asset_resolver, opened_pages
 from common.i18n import t
 from common.media.media_specs import IMAGE_FAMILY
 from common.online import vps_find, vps_kinds
@@ -377,7 +377,7 @@ def _unheld(kind: Kind) -> list[dict[str, Any]]:
 def _available(context: dict[str, Any], scene: Scene, kind: Kind, rows: list[dict[str, Any]],
                view: _View, card: ui.element) -> None:
     features = kind.listed_as == "tableFiles"
-    _heading(t("manager.discovery.available"), len(rows) + len(kind.offers))
+    _heading(t("manager.discovery.online"), len(rows) + len(kind.offers))
     if len(rows) > LONG_KIND:
         box = panel.search(t("manager.folder_picker.filter")).classes("w-full")
         box.value = view.text
@@ -528,6 +528,16 @@ def _chooser(context: dict[str, Any], kind: Kind, scene: Scene,
     return choose
 
 
+def _source_key(kind: Kind, held: _Held) -> str:
+    """Where a held file's match is recorded: readers look a ROM zip up under its path in
+    the ROMs folder, not its bare name."""
+    if kind.media:
+        return str((held.row or {}).get("path") or held.name)
+    if kind.listed_as == "romFiles":
+        return f"{asset_resolver.ROMS_FOLDER}/{held.name}"
+    return held.name
+
+
 @on_page
 async def _match_held(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held) -> None:
     """Tie a file the game holds to the release the person says it is."""
@@ -543,9 +553,8 @@ async def _match_held(context: dict[str, Any], scene: Scene, kind: Kind, held: _
                     await run.io_bound(library.set_table_source, scene.game_id, str(one["id"]),
                                        chosen[0])
         else:
-            # A media file is keyed by its path under the game, an asset by its name.
-            key = str((held.row or {}).get("path") or name) if kind.media else name
-            await run.io_bound(library.set_asset_source, scene.game_id, key, chosen[0])
+            await run.io_bound(library.set_asset_source, scene.game_id, _source_key(kind, held),
+                               chosen[0])
     except Exception as exc:  # noqa: BLE001 - the file stays; only the tie failed
         logger.warning("manager: could not tie %s to %s", name, chosen[0], exc_info=True)
         ui.notify(t("manager.discovery.tie_failed"), caption=why(exc), type="warning")

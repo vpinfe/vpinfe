@@ -3,8 +3,8 @@
 Its own module because both the map and the slot open it, and the map cannot import the
 workbench - the workbench imports the map.
 
-Rotation turns the view, never the file: a playfield render ships landscape while the
-thing it photographs is portrait.
+Rotating here turns the view, never the file: a playfield render ships landscape while
+the thing it photographs is portrait. Changing the file is the Edit row's.
 """
 
 from __future__ import annotations
@@ -282,25 +282,27 @@ if (window.__hubPageKeys) {
 """
 
 
-def preview(src: str, kind: str, label: str) -> None:
+def preview(src: str, kind: str, label: str, element_id: str = "") -> None:
     """Present the file with an element that can actually play it.
 
     An <img> pointing at a .mp4 downloads the whole file and paints nothing - the slot
     reads as empty for a video that is there, and on a library that is not local the
     fetch is long enough to read as the page having stopped. `preload="metadata"` is
     what keeps the poster frame cheap: enough to show it, not the whole video.
+    `element_id` names the picture or video, for a script that has to find it.
     """
     family = media_family(kind)
+    named = f' id="{element_id}"' if element_id else ""
     if family == "video":
         # `#t=0.1` for the same reason the map tiles use it: metadata alone can leave
         # the frame blank, and an empty box behind a play button says nothing about
         # what is in the file.
-        ui.html(f'<video src="{src}#t=0.1" preload="metadata" controls '
+        ui.html(f'<video{named} src="{src}#t=0.1" preload="metadata" controls '
                 f'playsinline></video>')
     elif family == "audio":
         ui.html(f'<audio src="{src}" preload="metadata" controls></audio>')
     elif family == "image":
-        ui.html(f'<img src="{src}">')
+        ui.html(f'<img{named} src="{src}">')
     else:
         # A rule sheet is a document; there is no element that previews one usefully
         # in a panel this size, and a broken <img> would say it is missing.
@@ -334,6 +336,11 @@ def _open(src: str, family: str, label: str, acts: Sequence[Act] = (), *,
         ui.notify(t("manager.mediaview.nothing_enlarge", label=(label)), type="info")
         return
 
+    # The angle lives with the zoom and the pan, in the script - they compose into one
+    # transform, and a round trip per turn would fight the pointer.
+    def turn() -> None:
+        ui.run_javascript("window.__hubView && window.__hubView.turn(90);")
+
     # A panel over a dimmed page rather than a takeover: the card is sized by what is
     # in it, so the media being the content is what centers it.
     with frame.made() as dialog, ui.card().classes("manager-viewer-card"):
@@ -348,12 +355,9 @@ def _open(src: str, family: str, label: str, acts: Sequence[Act] = (), *,
                 ui.space()
             for icon, said, act in acts:
                 _act(dialog, icon, said, act)
-            turn_left = ui.button(icon=verbs.ROTATE_LEFT).props("flat dense round")
-            turn_right = ui.button(icon=verbs.ROTATE_RIGHT).props("flat dense round")
+            panel.icon_only(verbs.ROTATE_VIEW, turn, hint=t("manager.mediaview.rotate_view"))
             ui.button(icon="close", on_click=dialog.close).props("flat dense round") \
                 .tooltip(t("word.close"))
-        turn_left.tooltip(t("manager.mediaview.turn_left"))
-        turn_right.tooltip(t("manager.mediaview.turn_right"))
 
         with ui.element("div").classes("manager-viewer-stage"):
             # Sized by the script once it is on screen, which is also what has to
@@ -364,13 +368,6 @@ def _open(src: str, family: str, label: str, acts: Sequence[Act] = (), *,
             else:
                 ui.html(f'<img id="{_MEDIA_ID}" src="{src}" style="{_UPRIGHT}">')
 
-    # The angle lives with the zoom and the pan, in the script - they compose into one
-    # transform, and a round trip per turn would fight the pointer.
-    def turn(step: int) -> None:
-        ui.run_javascript(f"window.__hubView && window.__hubView.turn({step});")
-
-    turn_left.on("click", lambda: turn(-90))
-    turn_right.on("click", lambda: turn(90))
     dialog.open()
     ui.run_javascript(_VIEW)
     if family == "video":

@@ -68,6 +68,10 @@ from manager.workbench.tag import _tag_details, _tag_games
 # The subjects whose panel is a place a picture can be dropped, and the field naming whose.
 PICTURE_OWNERS = {"collection": "name", "player": "id"}
 
+# The panels whose subject is the file itself: narrow, they open on the file as it looks
+# and the details come after. The game's panel keeps the map first.
+VIEWER_FIRST = frozenset({"media_file", "asset_file"})
+
 
 def sections_for(subject: str) -> tuple[Section, ...]:
     """The rail for this subject, in order."""
@@ -165,6 +169,8 @@ async def _rail(context: dict[str, Any], subject: str,
                 work.classes(add="manager-has-dock")
                 work.style(f"--dock-h: {dock_height(state, section)}px")
                 work._props["data-dock-section"] = section
+                if subject in VIEWER_FIRST:
+                    work._props["data-viewer-first"] = "1"
             with work:
                 body = ui.column().classes("min-w-0 overflow-auto gap-0 "
                                            "manager-workbench-body")

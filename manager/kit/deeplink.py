@@ -29,6 +29,9 @@ _FIELDS = (
     # and leaving it out of the address would reopen one on the next reload.
     ("section", lambda state: _section(state)),
     ("slot", lambda state: _slot_kind(state)),
+    # One of the files a slot holds that is not the one in use, by its path in the game's
+    # folder.
+    ("file", lambda state: _slot_file(state)),
     # Which page of a section is open. Named for that rather than for Settings, which
     # is now one of System's three and not the only one with pages inside it.
     ("page", lambda state: state.get("settings_page") or ""),
@@ -68,6 +71,7 @@ _FIELDS = (
 # is one game's slot - so leaving it out would drop the whole selection in silence.
 _PANEL = ("games", "tables", "media", "assets")
 _ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": _PANEL, "slot": _PANEL,
+            "file": ("media", "assets"),
             "page": ("settings",), "log": ("logs",), "tab": ("discovery",),
             "collection": ("collections", "games"),
             "launcher": ("launchers", "tables"), "sets": ("tables",),
@@ -128,6 +132,12 @@ def _slot_kind(state: dict[str, Any]) -> str:
     must never be the thing that takes the page down."""
     slot = state.get("slot")
     return str(slot.get("kind") or "") if isinstance(slot, dict) else ""
+
+
+def _slot_file(state: dict[str, Any]) -> str:
+    """The path of the held file the panel is on, or "": a slot with none is on its own file."""
+    slot = state.get("slot")
+    return str(slot.get("file") or "") if isinstance(slot, dict) else ""
 
 
 def _meant_for(name: str, view: str) -> bool:
@@ -299,6 +309,8 @@ def apply(state: dict[str, Any], params: dict[str, str], *,
     if clean("slot"):
         state.setdefault("slot", {"kind": None})
         state["slot"]["kind"] = clean("slot")
+        # A path keeps its case, so it is read as given rather than through `clean`.
+        state["slot"]["file"] = str(params.get("file") or "").strip() or None
     if clean("page"):
         state["settings_page"] = clean("page")
     if clean("log") in LOG_VIEWS:

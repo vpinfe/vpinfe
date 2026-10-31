@@ -1,4 +1,4 @@
-"""Turn the selected pictures and videos: ask first, then the turn as a job.
+"""Rotate the selected pictures and videos: ask first, then the rotation as a job.
 
 The files are replaced where they sit, so the ask names what is about to happen and the
 copy taken first is the default answer.
@@ -28,7 +28,7 @@ _POLLS = 7200
 _WAYS = {media_rotate.LEFT: "manager.media_rotate.way_left",
          media_rotate.RIGHT: "manager.media_rotate.way_right",
          media_rotate.AROUND: "manager.media_rotate.way_around"}
-# What the Turn submenu offers, in order.
+# What the Rotate submenu offers, in order.
 MENU = ((media_rotate.LEFT, "manager.media_rotate.left"),
         (media_rotate.RIGHT, "manager.media_rotate.right"),
         (media_rotate.AROUND, "manager.media_rotate.around"))
@@ -50,7 +50,7 @@ def turnable(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
 def outcome(result: dict[str, Any]) -> tuple[str, Literal["positive", "warning", "info"]]:
     """What the turn says when it ends, and the notice type to say it with."""
     turned, skipped = int(result.get("turned") or 0), len(result.get("skipped") or ())
-    said = t("manager.media_rotate.turned", count=turned)
+    said = t("manager.media_rotate.rotated", count=turned)
     if skipped:
         return t("manager.media_rotate.turned_skipped", turned=said,
                  skipped=skipped), "warning"
@@ -68,7 +68,8 @@ async def ask(picked: list[dict[str, Any]], way: str, state: dict[str, Any],
     left_out = sum(1 for row in picked if not turnable([row]))
     answer = await confirm.ask(
         t("manager.media_rotate.ask", count=len(files)),
-        detail=[t(_WAYS[way]), t("manager.media_rotate.detail")],
+        detail=[t(_WAYS[way]), t("manager.media_rotate.detail"),
+                t("manager.media_rotate.own_file")],
         lines=([t("manager.media_rotate.also_skipped", count=left_out)]
                if left_out > 0 else []),
         confirm=t("manager.media_rotate.keep"), icon=_ICONS[way], danger=False,

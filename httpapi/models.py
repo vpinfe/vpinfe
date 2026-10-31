@@ -2381,6 +2381,56 @@ class AssetRemoved(ApiModel):
     removed: list[str]
 
 
+class EntryChange(ApiModel):
+    """A file or folder of a game, renamed, moved, or both. `name` is one name, not a path;
+    `to` is the folder it goes into, with "" for the game's own folder. `resolve` answers
+    the effects the change was refused for, by the values each effect lists."""
+
+    name: str | None = None
+    to: str | None = None
+    resolve: list[str] = []
+    keep_copy: bool = True
+
+
+class EntryChanged(ApiModel):
+    path: str
+    was: str
+    name: str
+
+
+class FileImpact(ApiModel):
+    """One thing a change would do. `answers` are the `resolve` values that settle it, and
+    the rest says what: `fixed_place` names a folder VPX or VPinFE reads by its place,
+    `companion` a file a table would stop using or swap for another, `name_taken` a file the
+    change would replace, and `holds` how many files are in a folder that goes."""
+
+    code: str
+    answers: list[str]
+    path: str = ""
+    folder: str = ""
+    kind: str = ""
+    table: str = ""
+    was: str = ""
+    becomes: str = ""
+    files: int = 0
+
+
+class FileImpacts(ApiModel):
+    """`becomes` is where the entry ends up, empty for a removal."""
+
+    path: str
+    becomes: str
+    impacts: list[FileImpact]
+
+
+class FolderMake(ApiModel):
+    path: str
+
+
+class FolderMade(ApiModel):
+    path: str
+
+
 class GameFolderDeleted(ApiModel):
     deleted: bool
     folder: str
@@ -2770,9 +2820,19 @@ class MediaTier(ApiModel):
 
     tier: str
     file: str
+    # Where the file is in the game's folder, and what it is: the same facts `MediaDetail`
+    # gives the one in use, so a file that is not in use can be told apart without opening it.
+    path: str | None = None
     wins: bool
     # How many of the game's tables are shown this file, whichever lens asked.
     serves: int = 0
+    size_bytes: int | None = None
+    modified: str | None = None
+    width: int | None = None
+    height: int | None = None
+    format: str | None = None
+    duration_s: float | None = None
+    video_codec: str | None = None
 
 
 class BackglassFileOffer(ApiModel):

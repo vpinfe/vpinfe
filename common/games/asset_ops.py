@@ -112,11 +112,22 @@ def _settle_order(game_id: str) -> None:
     backglass_order.settle(game_id)
 
 
+def refresh_backglass(game_id: str) -> None:
+    """The game's backglass files changed under it: draw their picture again and settle
+    the tables for the order the files now call for."""
+    _redraw_picture(game_id)
+    _settle_order(game_id)
+
+
+def is_backglass(path: Path) -> bool:
+    return any(kind.key == "backglass" and kind.extension == path.suffix.lower()
+               for kind in VPX_ASSET_KINDS)
+
+
 def settle_if_backglass(game_id: str, path: Path) -> None:
     """`_settle_order`, where `path` is a backglass file that has just been written or
     removed."""
-    if any(kind.key == "backglass" and kind.extension == path.suffix.lower()
-           for kind in VPX_ASSET_KINDS):
+    if is_backglass(path):
         _settle_order(game_id)
 
 
@@ -143,8 +154,7 @@ def place_file(game_id: str, kind: str, table_id: str, source: Path,
                 (game_dir / other).unlink()
     media_placement.record_origin(game_dir, target)
     if found_kind.key == "backglass":
-        _redraw_picture(game_id)
-        _settle_order(game_id)
+        refresh_backglass(game_id)
     return {"written": target.name, "displaced": going}
 
 
@@ -154,7 +164,8 @@ def remove(game_id: str, path: str) -> dict:
     game = game_lens.game_for_writing(game_id)
     root = _folder(game).resolve()
     found = asset_lens.inside(root, path)
-    folders = {name.lower() for name in asset_lens.whole_folders(root)}
+    folders = {name.lower() for name in asset_lens.whole_folders(root)} \
+        | asset_lens.pup_pack_folders(root)
     if found.is_dir() and found.relative_to(root).as_posix().lower() in folders:
         shutil.rmtree(found)
     elif found.suffix.lower() in _EXTENSIONS and found.is_file():
@@ -168,5 +179,5 @@ def remove(game_id: str, path: str) -> dict:
     return {"removed": [path]}
 
 
-__all__ = ["displaced", "kind_or_refuse", "place_file", "placements", "remove",
-           "settle_if_backglass"]
+__all__ = ["displaced", "is_backglass", "kind_or_refuse", "place_file", "placements",
+           "refresh_backglass", "remove", "settle_if_backglass"]

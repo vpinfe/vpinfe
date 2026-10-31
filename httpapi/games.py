@@ -33,6 +33,7 @@ from common.games import (
     backglass_order,
     collection_ops,
     file_move,
+    file_ops,
     game_lens,
     game_ops,
     high_score_reads,
@@ -57,6 +58,8 @@ logger = logging.getLogger("vpinfe.httpapi.games")
 router = APIRouter(prefix="/games", tags=["games"])
 
 PAGE = Query(1, ge=1, description="Which page of a paged kind; page 1 is the kind itself")
+HELD_FILE = Query("", description="A file the slot holds, by the `file` name its `tiers` give, "
+                                  "instead of the one it shows")
 REMOVE_PAGE = Query(None, ge=1, description="Remove this page alone; none removes the kind")
 
 
@@ -281,6 +284,85 @@ def delete_asset(game_id: str, path: str = Query(...)) -> models.AssetRemoved:
     return models.AssetRemoved.model_validate(asset_ops.remove(game_id, path))
 
 
+def _break_is_protected(request: Request, resolve: list[str]) -> None:
+    """A change that goes ahead with an effect it was refused for loses something no copy
+    holds, so it is not for a token."""
+    if file_ops.RESOLVE_BREAK in resolve:
+        require(request, scopes.PROTECTED)
+
+
+RESOLVE = Query([], description="How to go on where the change was refused for its effects: "
+                                "`break`, `replace`, `keep` or `fix`, as each effect lists")
+
+
+@router.get("/{game_id}/files/impacts", summary="What changing a file of a game would do",
+            dependencies=[requires(scopes.GAMES_READ)])
+def get_file_impacts(game_id: str, path: str = Query(...), name: str | None = Query(None),
+                     to: str | None = Query(None), remove: bool = Query(False),
+                     ) -> models.FileImpacts:
+    return models.FileImpacts.model_validate(file_ops.impacts(
+        game_id, path, folder=False, name=name, to=to, remove=remove))
+
+
+@router.patch("/{game_id}/files", summary="Rename or move a file of a game",
+              dependencies=[requires(scopes.GAMES_WRITE)])
+def change_game_file(game_id: str, body: models.EntryChange, request: Request,
+                     path: str = Query(...)) -> models.EntryChanged:
+    """Any file in the game's folder, by its path there. Never overwrites unless `replace`
+    is answered, and what it replaces goes to Backups unless `keep_copy` is off."""
+    _break_is_protected(request, body.resolve)
+    return models.EntryChanged.model_validate(file_ops.change(
+        game_id, path, folder=False, name=body.name, to=body.to, resolve=body.resolve,
+        keep_copy=body.keep_copy))
+
+
+@router.delete("/{game_id}/files", summary="Remove a file of a game",
+               dependencies=[requires(scopes.GAMES_WRITE)])
+def delete_game_file(game_id: str, request: Request, path: str = Query(...),
+                     resolve: list[str] = RESOLVE, keep_copy: bool = Query(True),
+                     ) -> models.AssetRemoved:
+    """A copy goes to Backups first, unless `keep_copy` is off."""
+    _break_is_protected(request, resolve)
+    return models.AssetRemoved.model_validate(
+        file_ops.remove(game_id, path, folder=False, resolve=resolve, keep_copy=keep_copy))
+
+
+@router.get("/{game_id}/folders/impacts", summary="What changing a folder of a game would do",
+            dependencies=[requires(scopes.GAMES_READ)])
+def get_folder_impacts(game_id: str, path: str = Query(...), name: str | None = Query(None),
+                       to: str | None = Query(None), remove: bool = Query(False),
+                       ) -> models.FileImpacts:
+    return models.FileImpacts.model_validate(file_ops.impacts(
+        game_id, path, folder=True, name=name, to=to, remove=remove))
+
+
+@router.post("/{game_id}/folders", summary="Make a folder in a game",
+             status_code=201, dependencies=[requires(scopes.GAMES_WRITE)])
+def make_game_folder(game_id: str, body: models.FolderMake) -> models.FolderMade:
+    return models.FolderMade.model_validate(file_ops.make_folder(game_id, body.path))
+
+
+@router.patch("/{game_id}/folders", summary="Rename or move a folder of a game",
+              dependencies=[requires(scopes.GAMES_WRITE)])
+def change_game_folder(game_id: str, body: models.EntryChange, request: Request,
+                       path: str = Query(...)) -> models.EntryChanged:
+    """The files in it keep where they came from. It cannot go into itself."""
+    _break_is_protected(request, body.resolve)
+    return models.EntryChanged.model_validate(file_ops.change(
+        game_id, path, folder=True, name=body.name, to=body.to, resolve=body.resolve))
+
+
+@router.delete("/{game_id}/folders", summary="Remove a folder of a game",
+               dependencies=[requires(scopes.GAMES_WRITE)])
+def delete_game_folder_inside(game_id: str, request: Request, path: str = Query(...),
+                              resolve: list[str] = RESOLVE) -> models.AssetRemoved:
+    """One with files in it is refused until `keep` moves them up a folder, or `break`
+    removes them with it and no copy."""
+    _break_is_protected(request, resolve)
+    return models.AssetRemoved.model_validate(
+        file_ops.remove(game_id, path, folder=True, resolve=resolve))
+
+
 @router.get("/{game_id}/links", summary="Where a game, a table or a file is elsewhere",
             dependencies=[requires(scopes.GAMES_READ)])
 def get_outside_links(game_id: str, table: str = Query(""),
@@ -315,9 +397,10 @@ def get_media_overrides(game_id: str) -> models.MediaOverrideList:
             dependencies=[requires(scopes.GAMES_READ)])
 def get_game_media_file(game_id: str, kind: str, request: Request,
                         size: int | None = responses.MEDIA_SIZE,
-                        v: str = responses.MEDIA_VERSION, page: int = PAGE) -> Response:
+                        v: str = responses.MEDIA_VERSION, page: int = PAGE,
+                        file: str = HELD_FILE) -> Response:
     return responses.media_file(
-        media_ops.media_file(game_id, kind, "", size, page), request, v)
+        media_ops.media_file(game_id, kind, "", size, page, file), request, v)
 
 
 @router.get("/{game_id}/tables/{table_id}/media", summary="One table's media",
@@ -331,9 +414,10 @@ def get_table_media(game_id: str, table_id: str,
             dependencies=[requires(scopes.GAMES_READ)])
 def get_table_media_file(game_id: str, table_id: str, kind: str, request: Request,
                          size: int | None = responses.MEDIA_SIZE,
-                         v: str = responses.MEDIA_VERSION, page: int = PAGE) -> Response:
+                         v: str = responses.MEDIA_VERSION, page: int = PAGE,
+                         file: str = HELD_FILE) -> Response:
     return responses.media_file(
-        media_ops.media_file(game_id, kind, table_id, size, page), request, v)
+        media_ops.media_file(game_id, kind, table_id, size, page, file), request, v)
 
 
 @router.get("/{game_id}/media/{kind}/placements",

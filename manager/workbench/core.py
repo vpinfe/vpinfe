@@ -15,7 +15,7 @@ from common.config.labels import field_label, humanize
 from common.failures import why
 from common.games import asset_registry
 from common.i18n import t
-from manager.kit import busy, deeplink, game_tables, grid, media_ownership, panel
+from manager.kit import busy, deeplink, game_tables, grid, panel
 from manager.kit.on_page import on_page
 
 # Which group a section belongs to, in the order they are shown.
@@ -40,7 +40,8 @@ if (!window.__hubDockGrip) {
     const dock = main && main.querySelector('.manager-dock');
     if (!dock) return;
     e.preventDefault();
-    drag = { y: e.clientY, from: dock.getBoundingClientRect().height, main };
+    drag = { y: e.clientY, from: dock.getBoundingClientRect().height, main,
+             sign: main.dataset.viewerFirst ? 1 : -1 };
     grip.setPointerCapture(e.pointerId);
   });
   document.addEventListener('pointermove', (e) => {
@@ -48,7 +49,7 @@ if (!window.__hubDockGrip) {
     e.preventDefault();
     const room = drag.main.getBoundingClientRect().height;
     // Both regions keep a floor, so a drag cannot leave either as a sliver.
-    const next = Math.min(room - 160, Math.max(140, drag.from - (e.clientY - drag.y)));
+    const next = Math.min(room - 160, Math.max(140, drag.from + drag.sign * (e.clientY - drag.y)));
     drag.main.style.setProperty('--dock-h', Math.round(next) + 'px');
   });
   const done = () => {
@@ -395,22 +396,6 @@ def _table_address(context: dict[str, Any], table_id: str) -> str:
     return "/manager?" + deeplink.query({"view": "tables",
                                          "game": context.get("game_id") or "",
                                          "table": table_id})
-
-
-def _provenance(context: dict[str, Any], via: str | None, borrowed: bool) -> None:
-    """Whose file the slot shows, in a line. A borrowed one names where it comes from,
-    and the game's file links to the game's view."""
-    key = media_ownership.key_of(via)
-    if not borrowed or key != media_ownership.GAME:
-        ui.label(media_ownership.sentence(via, viewing_a_table=bool(context["lens"]))) \
-            .classes("manager-help")
-    elif str(via) == "default":
-        ui.label(t("manager.media_ownership.from_default")).classes("manager-help")
-    else:
-        game_id = str(context["game_id"])
-        panel.link(t("manager.media_ownership.from_game"),
-                   to="/manager?" + deeplink.query({"view": "games", "game": game_id}),
-                   hint=t("manager.media_ownership.via_game"))()
 
 
 def _said_line(made: str, table: dict[str, Any] | None = None) -> None:

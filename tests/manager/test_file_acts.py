@@ -49,13 +49,13 @@ class MediaFiles(unittest.TestCase):
 
         labels = [one.label for one in made]
         self.assertEqual(labels[0], t("manager.files.replace"))
-        self.assertIn(t("manager.media_rotate.turn"), labels)
+        self.assertNotIn(t("manager.media_rotate.rotate"), labels)
         self.assertEqual(labels[-1], t("word.remove"))
         self.assertTrue(made[-1].danger)
 
-    def test_turn_is_a_submenu_of_the_three_ways(self) -> None:
-        (turn,) = [one for one in _media_acts(_media("a"))
-                   if one.label == t("manager.media_rotate.turn")]
+    def test_rotate_is_a_submenu_of_the_three_ways_for_several_files(self) -> None:
+        (turn,) = [one for one in _media_acts(_media("a"), _media("b"))
+                   if one.label == t("manager.media_rotate.rotate")]
 
         self.assertEqual([label for label, _run in turn.choices],
                          [t("manager.media_rotate.left"), t("manager.media_rotate.right"),
@@ -151,7 +151,7 @@ class HeldFiles(unittest.TestCase):
     def test_the_menu_acts_that_are_not_replace_or_remove_are_left_out(self) -> None:
         made = self._held(vps_kinds.MEDIA, _media("a"))
 
-        self.assertNotIn(t("manager.media_rotate.turn"), [one.label for one in made.values()])
+        self.assertNotIn(t("manager.media_rotate.rotate"), [one.label for one in made.values()])
 
     def test_a_file_the_pane_offers_nothing_for_has_neither(self) -> None:
         self.assertEqual(self._held(vps_kinds.MEDIA, _media("a", via="orphan")), {})

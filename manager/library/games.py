@@ -548,7 +548,9 @@ def build(rows: list[dict[str, Any]], kinds: list[str], library: Any,
         column = grid.focused_column(event)
         if row and column.startswith("media_"):
             state["section"] = "media"
-            state.setdefault("slot", {"kind": None})["kind"] = column[len("media_"):]
+            picked = state.setdefault("slot", {"kind": None})
+            picked["kind"] = column[len("media_"):]
+            picked.pop("file", None)
         elif row and state.get("section") != deeplink.COLLAPSED:
             section = (COLUMN_SECTIONS.get(column)
                        or VIEW_SECTIONS.get(str(view_picker.value or "")))

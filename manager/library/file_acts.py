@@ -373,8 +373,8 @@ def media_acts(library: Any, files: list[File], state: dict[str, Any],
         offered.append(panel.Verb(t("manager.games.match_vps"), None if waiting else matched,
                                   hint=t("manager.workbench.files_unmatched") if waiting
                                   else ""))
-    if media_rotate.turnable(rows):
-        offered.append(panel.Verb(t("manager.media_rotate.turn"), choices=tuple(
+    if len(files) > 1 and media_rotate.turnable(rows):
+        offered.append(panel.Verb(t("manager.media_rotate.rotate"), choices=tuple(
             (t(word), partial(turn, way)) for way, word in media_rotate.MENU)))
     offered.extend(convert)
     offered.extend(file_move.verbs_for(library, files, core.MEDIA, after))

@@ -4,28 +4,29 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import replace
 from functools import partial
+from pathlib import PurePosixPath
 from typing import Any
 
 from nicegui import ui
 
 from common import i18n
+from common.games import asset_resolver, collation
 from common.games.asset_registry import ALWAYS_KEPT as _ALWAYS_KEPT
 from common.i18n import t
-from manager.kit import game_tables, media_ownership, offload, panel, states, verbs
-from manager.library import file_acts, file_states, uploads
-from manager.workbench.core import HEADING, _asset_name, _rows
-from manager.workbench.file import _asset_detail_of, _asset_file_block, _same_file, _served
-from manager.workbench.game_media import _kept_kinds, _pick_slot
-from manager.workbench.game_table import (
-    _add_action,
-    _drop_script,
-    _extract_script,
-    _rom_row,
-    _state,
-    _with_add,
+from manager.kit import game_tables, offload, panel, verbs
+from manager.library import file_states, uploads
+from manager.library.assets import _reason
+from manager.workbench.core import _asset_name
+from manager.workbench.file import (
+    _asset_detail_of,
+    _asset_file_block,
+    _asset_icon,
+    _same_file,
+    _served,
 )
+from manager.workbench.game_media import _kept_kinds, _pick_slot
+from manager.workbench.game_table import _add_action, _extract_script, _rom_state, _state
 
 
 def _assets_label(context: dict[str, Any]) -> str:
@@ -48,14 +49,9 @@ def _assets_label(context: dict[str, Any]) -> str:
 
 
 async def _assets_block(context: dict[str, Any]) -> None:
-    """Every asset this game holds, and whose each one is.
-
-    Two levels in one list, because somebody asking what a table has does not care
-    which of them the filesystem answers at. The five VPX resolves by naming rule are
-    the table's and carry a tier; the rest belong to the folder and carry presence.
-    The tiers are `media_ownership`'s - the question is the same one, which file wins.
-    """
-    holder = ui.column().classes("gap-0 manager-form")
+    """Every type of asset this library collects, a section each, and the files the game
+    holds of it under its name."""
+    holder = ui.column().classes("gap-3 w-full")
 
     turn = [0]
     one_at_a_time = asyncio.Lock()
@@ -68,29 +64,27 @@ async def _assets_block(context: dict[str, Any]) -> None:
         async with one_at_a_time:
             if mine != turn[0]:
                 return
-            picked = context["slot"]["kind"]
+            library, game_id = context["library"], context["game_id"]
+            files = await offload.io(library.files_of, "asset", game_id)
+            found = _picked(files, str(context["slot"]["kind"] or ""), context["lens"])
             holder.clear()
             with holder:
-                _rows(ui, _asset_entries(
-                    context, lambda kind: panel.Pick(partial(_pick_slot, context, kind, draw),
-                                                     kind == picked)))
-            await _asset_dock(context, picked)
+                for _kind, section in _asset_sections(
+                        context, files, found,
+                        lambda key: partial(_pick_slot, context, key, draw)):
+                    section()
+            await _asset_dock(context, found, files)
 
     await draw()
 
 
-async def _asset_dock(context: dict[str, Any], picked: str) -> None:
+async def _asset_dock(context: dict[str, Any], found: dict[str, Any] | None,
+                      files: list[dict[str, Any]]) -> None:
     """The picked asset's card, the file panel's own, without the file's settings."""
     dock = context.get("dock")
     if dock is None:
         return
-    kind = str(picked or "")
     library, game_id = context["library"], context["game_id"]
-    files = await offload.io(library.files_of, "asset", game_id)
-    if kind.startswith(ROM_PICK):
-        found = _rom_picked(files, kind)
-    else:
-        found = _same_file(files, {"kind": kind, "table": context["lens"]}) if kind else None
     dock.clear()
     with dock:
         if found is None:
@@ -100,97 +94,143 @@ async def _asset_dock(context: dict[str, Any], picked: str) -> None:
             return
         detail = await _asset_detail_of(library, game_id, found)
         await _asset_file_block({**context, "row": found, "kind": found["kind"], "detail": detail,
+                                 "lens": str(found.get("table") or context["lens"]),
                                  "served": _served(found, files, context["tables"]),
                                  "link_view": "assets"})
 
 
-def _asset_entries(context: dict[str, Any],
-                   pick: Callable[[str], panel.Pick] | None = None) -> list[tuple[Any, ...]]:
-    """The Assets block's rows, as `_assets_block` draws them.
-
-    Kinds the library does not collect are left out entirely. A row saying an EM table
-    has no ROM is not a fact about that table, it is the list answering a question this
-    library never asked. `pick` makes a kind's row pickable.
-    """
+def _asset_sections(context: dict[str, Any], files: list[dict[str, Any]],
+                    found: dict[str, Any] | None = None,
+                    pick: Callable[[str], Callable[[], Any]] | None = None
+                    ) -> list[tuple[str, Callable[[], None]]]:
+    """One section for every type the library collects, in the order of the word each
+    shows, whether or not the game holds a file of it. A type the library does not
+    collect is left out entirely: a section saying an EM table has no ROM is not a fact
+    about that table, it is the list answering a question this library never asked."""
     game = context["game"]
+    kept = _kept_kinds(context, "asset")
+    kinds = {*asset_resolver.PER_TABLE_KINDS, *(game.get("assets") or {}), "rom"}
     chosen = next((item for item in context["tables"]
                    if item.get("id") == context["lens"]), None)
-    kept = _kept_kinds(context, "asset")
-    resolved = _only_kept((chosen or {}).get("assets") or {}, kept)
-    folder = _only_kept(game.get("assets") or {}, kept)
-
-    entries: list[tuple[Any, ...]] = []
-
-    def row(kind: str, value: Any, table: str = "") -> None:
-        dropping = replace(pick(kind), drop=uploads.declaration(
-            game=context["game_id"], table=table, asset=kind)) if pick else None
-        entries.append((_asset_name(kind), value, *((dropping,) if dropping else ())))
-
-    if chosen is not None:
-        entries += [(HEADING, t("manager.workbench.table_4"))]
-        for kind, state in sorted(resolved.items()):
-            row(kind, _resolved_row(context, chosen, kind, state), str(chosen["id"]))
-            if kind == "script" and state.get("resolution") != "none":
-                digest = str(chosen.get("vbs_hash") or "")
-                # The hash travels with the asset rather than sitting in a group of
-                # identifiers. Only where there is a sidecar to have one.
-                if digest:
-                    entries.append((t("manager.workbench.script_hash"), digest))
-        pinmame = (chosen.get("dependencies") or {}).get("pinmame") or {}
-        if _collects("rom", kept) and (pinmame.get("effective") or pinmame.get("declared")):
-            # A declared dependency, not a file: no file panel to open, so no pick.
-            entries.append((_asset_name("rom"), _rom_row(context, pinmame)))
-
-    entries += [(HEADING, t("manager.workbench.game_folder"))]
-    for kind, state in sorted(folder.items()):
-        # Already answered above, and more precisely: the table's own lookup says
-        # which file wins, where the folder can only say one is somewhere in it.
-        if kind in resolved:
-            continue
-        present = bool(state.get("present"))
-        chip = _present_row(present)
-        row(kind, chip if present else _with_add(context, kind, chip))
-    if _collects("rom", kept):
-        for one in context.get("rom_files") or []:
-            entries.append((_asset_name("rom"), _rom_file_row(context, one),
-                            *((pick(ROM_PICK + str(one["file"]).lower()),) if pick else ())))
-    return entries
+    return [(kind, _section(context, kind, files, chosen, found, pick))
+            for kind in sorted((one for one in kinds if _collects(one, kept)),
+                               key=lambda one: collation.sort_key(_asset_name(one)))]
 
 
-ROM_PICK = "rom:"
-
-
-def _rom_picked(files: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
-    """The ROM file a pick names, by the lowercase file name a deep link carries."""
-    name = key.removeprefix(ROM_PICK)
-    return next((one for one in files if one.get("kind") in file_acts.ROM_FILES
-                 and str(one.get("file") or "").lower() == name), None)
-
-
-def _rom_file_row(context: dict[str, Any], one: dict[str, Any]) -> Any:
-    """A ROM file in the game's folder: its name and size, and whether a table reads it.
-    A table asked for, which the folder lacks, is the This Table row's."""
-    name, size = str(one.get("file") or ""), one.get("size_bytes")
-    users = [str(user) for user in one.get("users") or []]
-    if users:
-        mine = context["lens"] and context["lens"] in users
-        meaning = t("manager.workbench.rom_used_this") if mine \
-            else t("manager.workbench.rom_used_n", count=len(users))
-        chip = _state(t("word.in_use"), "on", glyph="check",
-                      hint=states.line(t("word.in_use"), meaning))
-    else:
-        unused = file_states.table("manager.assets.unused_meaning").state(file_states.UNUSED)
-        chip = _state(t("manager.media_ownership.unused"), "off",
-                      hint=unused.line() if unused else "")
+def _section(context: dict[str, Any], kind: str, files: list[dict[str, Any]],
+             chosen: dict[str, Any] | None, found: dict[str, Any] | None,
+             pick: Callable[[str], Callable[[], Any]] | None) -> Callable[[], None]:
+    here = [one for one in files if one.get("kind") == kind and one.get("present")]
+    table = chosen if chosen is not None else {}
+    scripted = kind == "script" and chosen is not None \
+        and ((table.get("assets") or {}).get("script") or {}).get("resolution") == "none"
+    table_id = str(table.get("id") or "") if kind in asset_resolver.PER_TABLE_KINDS else ""
 
     def draw() -> None:
-        with ui.element("div").classes("manager-fact-edit"):
-            ui.label(name).classes("manager-slot-file truncate").tooltip(name)
-            if size:
-                ui.label(i18n.size(size)).classes("manager-help")
-            chip()
+        with ui.column().classes("w-full gap-1") as section:
+            uploads.declare(section, game=context["game_id"], table=table_id, asset=kind)
+            with ui.row().classes("items-center gap-2 w-full no-wrap manager-heading-row"):
+                ui.label(_asset_name(kind)) \
+                    .classes("manager-card-title manager-fact-heading grow")
+                if scripted:
+                    _extract_action(context, table)
+                elif kind != "script":
+                    _add_action(context, kind)
+            for one in here:
+                key = f"{kind}:{str(one.get('file') or '').lower()}"
+                _file_row(kind, one, found is not None and one["id"] == found["id"],
+                          pick(key) if pick else None)
+            told = kind == "rom" and _table_rom(chosen, here)
+            if not here and not told:
+                _nothing_here(context, kind, scripted)
 
     return draw
+
+
+def _extract_action(context: dict[str, Any], table: dict[str, Any]) -> None:
+    """Take the script out of the .vpx, so it can be edited."""
+    ui.button(t("manager.workbench.extract"), icon=verbs.EXTRACT,
+              on_click=lambda: _extract_script(context, table)) \
+        .props("flat dense no-caps size=sm").classes("manager-action manager-action--inline")
+
+
+def _table_rom(chosen: dict[str, Any] | None, here: list[dict[str, Any]]) -> bool:
+    """The ROM the viewed table names and whether it is installed, drawn when no file
+    held under that name says so already."""
+    pinmame = (chosen or {}).get("dependencies", {}).get("pinmame") or {}
+    rom = str(pinmame.get("effective") or pinmame.get("declared") or "")
+    if not rom or any(PurePosixPath(str(one.get("file") or "")).stem.lower() == rom.lower()
+                      for one in here):
+        return False
+    with ui.row().classes("items-center gap-2 w-full no-wrap"):
+        said = _rom_state(pinmame, rom)
+        if callable(said):
+            said()
+        else:
+            ui.label(rom).classes("manager-slot-file truncate").tooltip(rom)
+    return True
+
+
+def _nothing_here(context: dict[str, Any], kind: str, scripted: bool) -> None:
+    if scripted:
+        panel.line(game_tables.word_for(game_tables.SCRIPT_WORDS, False),
+                   hint=t("manager.workbench.script_embedded"))
+        return
+    if kind == "readme" and ((context["game"].get("assets") or {}).get(kind) or {}).get("present"):
+        _state(t("word.present"), "on")()
+        return
+    ui.label(t("word.none")).classes("manager-help")
+
+
+def _file_row(kind: str, row: dict[str, Any], chosen: bool,
+              pick: Callable[[], Any] | None) -> None:
+    """A file: its name, the one chip that is an exception, its size, and the way into
+    its card. Who owns it and which VPS record it is are on the card."""
+    name, size = str(row.get("file") or ""), row.get("size_bytes")
+    classes = ("items-center gap-3 w-full no-wrap manager-source-row "
+               "manager-source-row--pick manager-source-row--entry")
+    if chosen:
+        classes += " manager-source-row--chosen"
+    element = ui.row().classes(classes).props("tabindex=0 role=button")
+    if pick is not None:
+        element.on("click", lambda: pick())
+        element.on("keydown.enter", lambda: pick())
+    with element:
+        ui.icon(_asset_icon(kind)).classes("opacity-70 shrink-0")
+        with ui.column().classes("gap-0 min-w-0 grow"):
+            with ui.row().classes("items-center gap-2 no-wrap min-w-0 w-full"):
+                ui.label(name).classes("manager-source-name").tooltip(name)
+                _chip_of(kind, row)
+            if size:
+                ui.label(i18n.size(size)).classes("manager-help w-full")
+        ui.icon(verbs.DRILL).classes("manager-summary-go")
+
+
+def _chip_of(kind: str, row: dict[str, Any]) -> None:
+    """External for a script beside the table; Unused and Orphaned for a file nothing
+    reads. In Use draws nothing: it is the ordinary case."""
+    reason = _reason(row)
+    if reason not in (file_states.UNUSED, file_states.ORPHAN):
+        if kind == "script":
+            _state(game_tables.word_for(game_tables.SCRIPT_WORDS, True), "off",
+                   hint=t("manager.workbench.script_sidecar"))()
+        return
+    found = file_states.table("manager.assets.unused_meaning").state(reason)
+    if found is not None:
+        _state(found.word, "off" if reason == file_states.UNUSED else "warn",
+               hint=found.line())()
+
+
+def _picked(files: list[dict[str, Any]], key: str, lens: str) -> dict[str, Any] | None:
+    """The file a pick names: `kind:file`, with the file in lowercase as an address
+    carries it, or a bare kind, which is the kind's file on the table shown."""
+    kind, colon, name = key.partition(":")
+    if not kind:
+        return None
+    if not colon:
+        return _same_file(files, {"kind": kind, "table": lens})
+    return next((one for one in files if one.get("kind") == kind and one.get("present")
+                 and str(one.get("file") or "").lower() == name), None)
 
 
 def _only_kept(states: dict[str, Any], kept: set[str] | None) -> dict[str, Any]:
@@ -201,57 +241,3 @@ def _only_kept(states: dict[str, Any], kept: set[str] | None) -> dict[str, Any]:
 
 def _collects(kind: str, kept: set[str] | None) -> bool:
     return kept is None or kind in kept or kind in _ALWAYS_KEPT
-
-
-def _resolved_row(context: dict[str, Any], table: dict[str, Any], kind: str,
-                  state: dict[str, Any]) -> Any:
-    """Whose file this is, the file itself, and the one act that changes it."""
-    external = state.get("resolution") != "none"
-    name = str(state.get("file") or "")
-
-    def draw() -> None:
-        with ui.element("div").classes("manager-fact-edit"):
-            # The script takes no tier. Its absence is not a gap - a table running the
-            # script inside its own .vpx is the ordinary table - and "Missing" here
-            # would call every one of them broken. `SCRIPT_WORDS` asks the question
-            # that has no wrong answer: which script runs.
-            if kind == "script":
-                word = game_tables.word_for(game_tables.SCRIPT_WORDS, external)
-                why = (t("manager.workbench.script_sidecar") if external
-                       else t("manager.workbench.script_embedded"))
-                ui.label(word).classes("manager-tier manager-tier--off").tooltip(why)
-            else:
-                tier = media_ownership.for_resolution(state.get("resolution"))
-                ui.label(t(tier.noun)).classes(f"manager-tier {tier.css}") \
-                    .tooltip(t(tier.why))
-            if name:
-                ui.label(name).classes("manager-slot-file truncate").tooltip(name)
-            if kind == "script":
-                _script_actions(context, table, external)
-            elif not external:
-                _add_action(context, kind)
-
-    return draw
-
-
-def _present_row(present: bool) -> Any:
-    """A folder-level kind, which is either there or not. No tier: nothing resolves it
-    per table, and a tier would imply it could."""
-    return _state(t("word.present") if present else t("manager.workbench.missing"),
-            "on" if present else "off")
-
-
-def _script_actions(context: dict[str, Any], table: dict[str, Any],
-                    external: bool) -> None:
-    """Extract a sidecar, or drop one. The script is managed here and Launch only
-    reports it."""
-    if external and game_tables.runs_its_own_script(table):
-        ui.button(t("word.delete"),
-            icon=verbs.DELETE, on_click=lambda: _drop_script(context, table)) \
-            .props("flat dense no-caps size=sm") \
-            .classes("manager-action manager-action--inline manager-action--danger")
-    else:
-        ui.button(t("manager.workbench.extract"), icon=verbs.EXTRACT,
-                on_click=lambda: _extract_script(context, table)) \
-            .props("flat dense no-caps size=sm") \
-            .classes("manager-action manager-action--inline")

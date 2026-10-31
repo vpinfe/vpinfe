@@ -39,30 +39,19 @@ class TheAssetsCount(unittest.TestCase):
         self.assertEqual("Assets", game_assets._assets_label(_context([])))
 
 
-class TheGameFolderRows(unittest.TestCase):
-    def _picks(self, roms: list[dict[str, Any]]) -> list[str]:
-        picked: list[str] = []
-        game_assets._asset_entries(_context(roms),
-                                   lambda key: picked.append(key) or Mock())  # type: ignore[func-returns-value]
-        return picked
-
-    def test_every_file_is_a_row_that_can_be_picked(self) -> None:
-        picks = self._picks([_rom("tom_13.zip", ["t1"]), _rom("TOM_10.zip", [])])
-
-        self.assertEqual(["rom:tom_13.zip", "rom:tom_10.zip"], picks)
-
-    def test_a_game_with_none_has_no_rom_row(self) -> None:
-        self.assertEqual([], self._picks([]))
-
+class ThePickOfAFile(unittest.TestCase):
     def test_a_pick_finds_its_file_whatever_the_case_of_the_name(self) -> None:
         files = [_rom("tom_13.zip", ["t1"]), _rom("TOM_10.zip", [])]
 
-        found = game_assets._rom_picked(files, "rom:tom_10.zip")
+        found = game_assets._picked(files, "rom:tom_10.zip", "")
 
         self.assertEqual("TOM_10.zip", found["file"] if found else None)
 
     def test_a_pick_of_a_file_that_is_gone_finds_nothing(self) -> None:
-        self.assertIsNone(game_assets._rom_picked([_rom("tom_13.zip", [])], "rom:gone.zip"))
+        self.assertIsNone(game_assets._picked([_rom("tom_13.zip", [])], "rom:gone.zip", ""))
+
+    def test_a_pick_of_no_kind_finds_nothing(self) -> None:
+        self.assertIsNone(game_assets._picked([_rom("tom_13.zip", [])], "", ""))
 
 
 class AFileThatIsGoneDoesNotFallBackToAnotherRom(unittest.TestCase):

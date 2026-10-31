@@ -82,8 +82,9 @@ def _asset_kinds_in_the_tables_grid(library: Library) -> set[str]:
 
 def _asset_kinds_in_the_table_panel(library: Library) -> set[str]:
     labels = {core._asset_name(kind): kind for kind in (*HIDDEN_ASSETS, *KEPT_ASSETS)}
-    return {labels[name] for name, _row in game_assets._asset_entries(_panel_context(library))
-            if name in labels}
+    named = (core._asset_name(kind)
+             for kind, _draw in game_assets._asset_sections(_panel_context(library), []))
+    return {labels[name] for name in named if name in labels}
 
 
 def _kinds_in_the_discovery_pane(library: Library) -> set[str]:

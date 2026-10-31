@@ -99,17 +99,32 @@ def table_media(game_id: str, table_id: str, codecs: bool = False) -> dict:
 
 
 def media_file(game_id: str, kind: str, table_id: str = "",
-               size: int | None = None, page: int = 1) -> sized_media.Served:
+               size: int | None = None, page: int = 1, file: str = "") -> sized_media.Served:
     """The file a slot currently resolves to, at `size` if one is asked for, or a
-    refusal. The caller sends it. `page` is the page of a kind that has them."""
+    refusal. The caller sends it. `page` is the page of a kind that has them.
+
+    `file` names one of the files the slot holds instead, as `detail` lists them. Only a
+    name from that list is served: it is looked up, never joined onto a path.
+    """
     game = game_lens.game_or_refuse(game_id)
     kind = kind_or_refuse(kind)
     size = sized_media.size_or_refuse(size, media_family(kind))
     stem = stem_or_refuse(game, table_id) if table_id else None
-    path = media_service.page_file(_folder(game), kind, page, stem)
+    path = (_held_file(game, kind, stem, file) if file
+            else media_service.page_file(_folder(game), kind, page, stem))
     if path is None or not path.is_file():
         raise service_errors.NotFoundError(t("error.games.no_media", kind=(kind)))
     return sized_media.served(path, size)
+
+
+def _held_file(game: Game, kind: str, stem: str | None, name: str) -> Path | None:
+    """The file of this name among those the slot holds, or None."""
+    game_dir = _folder(game)
+    files, medias = media_service.media_contents(game_dir)
+    variant, active_sets = media_service.media_settings()
+    return next((item.path for item in media_candidates(
+        game_dir, files, medias, kind, variant, stem, active_sets)
+        if item.path.name == name), None)
 
 
 def overrides(game_id: str) -> dict:
@@ -262,7 +277,9 @@ def detail(game_id: str, kind: str, table_id: str = "", page: int = 1) -> dict:
         "page": page,
         "pages": max(len(pages), 1 if path is not None else 0),
         "tiers": [{"tier": item.tier, "file": item.path.name,
-                   "wins": item.path == path, "serves": serves.get(item.path, 0)}
+                   "path": asset_origin.path_of(game_dir, item.path) or None,
+                   "wins": item.path == path, "serves": serves.get(item.path, 0),
+                   **_file_facts(item.path)}
                   for item in candidates.values()] if page == 1 or path is None else [
             {"tier": hit.tier if hit is not None else "", "file": path.name, "wins": True,
              "serves": serves.get(hit.path, 0) if hit is not None else 0}],

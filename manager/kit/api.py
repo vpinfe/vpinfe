@@ -1155,6 +1155,26 @@ class ApiClient:
         self._answered(response)
         return response.json()
 
+    def file_impacts(self, game_id: str, path: str) -> list[dict]:
+        """What removing this file of the game's folder would do, removing nothing."""
+        route = f"/games/{game_id}/files/impacts"
+        _refuse_the_event_loop(route)
+        response = self._session.get(f"{self._base}{route}",
+                                     params={"path": path, "remove": "true"}, timeout=_TIMEOUT)
+        self._answered(response)
+        return list(response.json().get("impacts") or [])
+
+    def remove_game_file(self, game_id: str, path: str, resolve: list[str]) -> dict:
+        """Remove one file of the game's folder by its path there. A copy goes to Backups
+        first; `resolve` answers the effects `file_impacts` listed."""
+        route = f"/games/{game_id}/files"
+        _refuse_the_event_loop(route)
+        response = self._session.delete(f"{self._base}{route}",
+                                        params={"path": path, "resolve": resolve},
+                                        timeout=_TIMEOUT)
+        self._answered(response)
+        return response.json()
+
     def set_table_hidden(self, game_id: str, table_id: str, hidden: bool) -> dict:
         """Offer this table in the frontend, or stop. The file is not touched."""
         path = f"/games/{game_id}/tables/{table_id}/hidden"

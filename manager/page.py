@@ -43,6 +43,7 @@ from manager.kit import (
     confirm,
     deeplink,
     grid,
+    media_ownership,
     offload,
     order_notice,
     remembered,
@@ -63,6 +64,7 @@ from manager.library import discovery as discovery_page
 from manager.library import (
     discovery_kinds,
     drop_target,
+    file_acts,
     games,
     row_drag,
     tageditor,
@@ -680,7 +682,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                    player: str = "", setup: str = "", log: str = "", find: str = "",
                    backup: str = "", report: str = "", group: str = "",
                    entry: str = "", row: str = "", author: str = "", maker: str = "",
-                   theme: str = "", tab: str = "", pane: str = "") -> None:
+                   theme: str = "", tab: str = "", pane: str = "",
+                   file: str = "") -> None:
     """The Manager. Query parameters say where in it, so a place can be linked to."""
     # 2.x's own page keys, still sitting in bookmarks and manager-ui-state.json.
     if page.strip().lower() in ("vpinplay_account", "vpinplay_player"):
@@ -794,7 +797,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                            "player": player, "log": log, "find": find, "backup": backup,
                            "report": report, "group": group, "entry": entry,
                            "row": row, "author": author, "maker": maker, "theme": theme,
-                           "tab": tab, "pane": pane},
+                           "tab": tab, "pane": pane, "file": file},
                    views=[key for key, _label, _icon, _feature in nav_items],
                    sections=[*(item.key for item in rail.SECTIONS), *discovery_kinds.vocabulary()])
 
@@ -1703,7 +1706,10 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         state["game"] = (row or {}).get("game_id") or ""
         state["table"] = (row or {}).get("table") or ""
         if row:
-            state.setdefault("slot", {"kind": None})["kind"] = row.get("kind")
+            picked = state.setdefault("slot", {"kind": None})
+            picked["kind"] = row.get("kind")
+            picked["file"] = (row.get("path") if file_acts.is_loose(row)
+                              or state["view"] == "assets" else None) or None
         await builds.build_file(panel, workbench_title, library, row, state,
                                 state["view"])
         deeplink.sync(state)
@@ -2156,7 +2162,10 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
             # standing in for it - a shared file has none, and the address says so too.
             if state["view"] in ("media", "assets"):
                 arrival = show_slot({"game_id": landing, "table": state.get("table") or "",
-                                     "kind": (state.get("slot") or {}).get("kind") or ""})
+                                     "kind": (state.get("slot") or {}).get("kind") or "",
+                                     "path": (state.get("slot") or {}).get("file") or "",
+                                     "via": (media_ownership.UNUSED
+                                             if (state.get("slot") or {}).get("file") else "")})
             else:
                 arrival = show_game({"game_id": landing, "id": state.get("table") or landing}
                                     if state["view"] == "tables" else {"id": landing})
@@ -2354,12 +2363,15 @@ def _land(state: dict[str, Any]) -> None:
     view = state["view"]
     game, table = str(state.get("game") or ""), str(state.get("table") or "")
     kind = str((state.get("slot") or {}).get("kind") or "")
+    held = str((state.get("slot") or {}).get("file") or "")
     if view == "games" and game:
         grid.land_on(games.SCOPE, {"id": game})
     elif view == "tables" and game:
         grid.land_on(f"{games.SCOPE}.tables", {"id": table} if table else {"game_id": game})
     elif view in ("media", "assets") and game and kind:
         grid.land_on(media_page.SCOPE if view == "media" else assets_page.SCOPE,
+                     *([{"game_id": game, "kind": kind, "path": held, "table": table}]
+                       if held else []),
                      {"game_id": game, "kind": kind, "table": table},
                      {"game_id": game, "kind": kind, "table": ""})
     elif view == "launchers" and state.get("launcher"):

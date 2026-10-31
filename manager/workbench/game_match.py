@@ -52,11 +52,12 @@ def _based_on(mod: dict[str, Any] | None, classes: str = "") -> None:
             panel.out(to=str(mod["url"]), hint=t("manager.vps_match.open_in_vps"))()
 
 
-async def _match_line(context: dict[str, Any], kind: str, matched_to: Any) -> str:
+async def _match_line(context: dict[str, Any], kind: str, matched_to: Any,
+                      inventory: str = vps_kinds.MEDIA) -> str:
     """What the bound record is called. Resolved here because the catalog is already
     open on this side and an id is not something to put on screen."""
     said = str(matched_to or "")
-    listed = file_acts.listed_as(kind, vps_kinds.MEDIA)
+    listed = file_acts.listed_as(kind, inventory)
     if not said or listed is None:
         return ""
     library = context["library"]
@@ -83,18 +84,18 @@ async def _match_line(context: dict[str, Any], kind: str, matched_to: Any) -> st
 
 
 def _match_button(context: dict[str, Any], kind: str, label: str,
-                  entry: dict[str, Any], redraw: Callable[[], None]) -> None:
-    """The way to say which VPS record one file is. Only for media kinds VPSdb lists -
-    a picker over a kind nothing publishes opens empty every time."""
-    listed = file_acts.listed_as(kind, vps_kinds.MEDIA)
+                  entry: dict[str, Any], redraw: Callable[[], None],
+                  inventory: str = vps_kinds.MEDIA) -> None:
+    """The way to say which VPS record one file is. Only for kinds VPSdb lists in this
+    inventory - a picker over a kind nothing publishes opens empty every time."""
+    listed = file_acts.listed_as(kind, inventory)
     if listed is None:
         return
     path = str(entry.get("path") or "")
     if not path:
         return
     bound = str(entry.get("matched_to") or "")
-    button = ui.button(t("manager.workbench.change_match_2") if bound
-            else t("manager.workbench.match"), icon=verbs.MATCH,
+    button = ui.button(t("manager.games.match_vps"), icon=verbs.MATCH,
                        on_click=lambda: _pick_a_record(context, listed.listed_as,
                                                        label, path, bound, redraw)) \
         .props("flat dense no-caps size=sm").classes("manager-action")

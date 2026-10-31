@@ -103,6 +103,36 @@ def _folder_state(kind: str, game_dir: Path, subdirs: list[str]) -> str:
     return ""
 
 
+def _pup_packs(game_dir: Path, folder: str) -> list[str]:
+    """The packs inside the PUP folder, each by its folder-relative path. A pack is a
+    folder of its own, named for the ROM or table it plays for."""
+    if not folder:
+        return []
+    try:
+        names = sorted((one.name for one in (game_dir / folder).iterdir() if one.is_dir()),
+                       key=str.lower)
+    except OSError:
+        return []
+    return [f"{folder}/{name}" for name in names]
+
+
+def pup_pack_folders(game_dir: Path) -> set[str]:
+    """The pack folders here, named as their rows name them, lowercased."""
+    _, subdirs = asset_resolver.folder_listing(game_dir)
+    folder = _folder_state("pup_pack", game_dir, subdirs)
+    return {pack.lower() for pack in _pup_packs(game_dir, folder)}
+
+
+def _pack_row(game_id: str, row: dict, kind: str, game_dir: Path, pack: str, tables: int,
+              recorded: dict, hosts: dict) -> dict:
+    path = game_dir / pack
+    return {**_row(game_id, row, kind), **_ABSENT, "id": f"{game_id}:{kind}:{pack}",
+            "binding": "game", "present": True, "file": Path(pack).name, "path": pack,
+            "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
+            "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+            "serves": tables}
+
+
 def whole_folders(game_dir: Path) -> set[str]:
     """The folders here that hold a kind whole, named as their rows name them."""
     _, subdirs = asset_resolver.folder_listing(game_dir)
@@ -251,6 +281,10 @@ def listing(limit: int = 0, offset: int = 0, game: str = "",
 
         for name in folder_kinds:
             here = _folder_state(name, game_dir, subdirs)
+            if name == "pup_pack" and (packs := _pup_packs(game_dir, here)):
+                found.extend(_pack_row(game_id, row, name, game_dir, pack, len(tables),
+                                       recorded, hosts) for pack in packs)
+                continue
             found.append({**_row(game_id, row, name), **_ABSENT,
                           "id": f"{game_id}:{name}:",
                           "binding": "game" if here else "none", "present": bool(here),
