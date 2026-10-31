@@ -2,7 +2,7 @@ name: Lint
 
 on:
   push:
-    branches: [ master, vpinfe-3.0 ]
+    branches: [ master, vpinfe-3.0, publish ]
   pull_request:
     branches: [ master, vpinfe-3.0 ]
 
