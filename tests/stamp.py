@@ -8,6 +8,7 @@ Any other tree has no stamp and is checked as before.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -33,13 +34,15 @@ def git_dir(repo: Path) -> Path:
 def tree_hash(repo: Path) -> str:
     """The tree `git add -A` would commit: tracked, untracked and not ignored.
 
-    Built in a copy of the index, so the real one is not touched.
+    Built in a copy of the index, so the real one is not touched.  The copy keeps the index's
+    mtime: git re-reads a file whose mtime is not older than the index's, so a newer copy hides
+    a same-size edit made in the same clock tick as the staging.
     """
     with tempfile.TemporaryDirectory() as scratch:
         index = Path(scratch) / "index"
         real = git_dir(repo) / "index"
         if real.exists():
-            index.write_bytes(real.read_bytes())
+            shutil.copy2(real, index)
         _git(repo, "add", "-A", index=index)
         return _git(repo, "write-tree", index=index)
 
