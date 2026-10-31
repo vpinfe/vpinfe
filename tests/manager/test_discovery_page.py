@@ -909,6 +909,16 @@ class Getting(unittest.IsolatedAsyncioTestCase):
 
         self.library.set_asset_source.assert_called_once_with("g1", "medias/rules.png", "f1")
 
+    async def test_a_table_a_patch_made_is_tied_to_its_release(self) -> None:
+        plan = {"items": [{"kind": "patch", "action": "apply_patch",
+                           "destination": "/games/Attack from Mars/Attack from Mars VPW.vpx"}]}
+        with _PAGE, mock.patch.object(discovery_get.opened_pages, "forget"):
+            await discovery_get._tie(self.library, "g1", "e1", "/games/Attack from Mars", "f1",
+                                     ("table",), {"imported": ["patch"],
+                                                  "patched_tables": ["t7"]}, plan)
+
+        self.library.set_table_source.assert_called_once_with("g1", "t7", "f1")
+
     async def test_a_file_dropped_on_a_kind_without_a_slot_is_read_first(self) -> None:
         read, imported = await self._drop(("rom",), vps_kinds.ASSET)
 

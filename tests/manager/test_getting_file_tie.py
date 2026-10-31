@@ -38,6 +38,11 @@ class TieTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(tied, [("G1", "t9", "rel1")])
 
+    async def test_a_table_a_patch_made_is_tied_too(self) -> None:
+        tied = await self.tie({"patched_tables": ["t5"]})
+
+        self.assertEqual(tied, [("G1", "t5", "rel1")])
+
     async def test_no_release_ties_nothing(self) -> None:
         library = _Library()
 

@@ -62,6 +62,18 @@ class Naming(unittest.TestCase):
         self.assertEqual("AFM (Bally 1995)",
                          discovery_kinds.short_name("AFM (Bally 1995)", "Attack from Mars"))
 
+    def test_a_name_that_would_keep_only_a_year_or_a_bracket_is_left_whole(self) -> None:
+        for name in ("Star Trek (Williams 1993).vpx", "Star Trek [patched].vpx",
+                     "Star Trek 1993.vpx", "Star Trek.vpx", "Star Trek.directb2s",
+                     "Star Trek - 1993.directb2s"):
+            with self.subTest(name=name):
+                self.assertEqual(name, discovery_kinds.short_name(name, "Star Trek"))
+
+    def test_a_name_with_words_after_the_title_still_loses_it(self) -> None:
+        self.assertEqual("VPW 1.2 (Williams 1993).vpx",
+                         discovery_kinds.short_name("Star Trek - VPW 1.2 (Williams 1993).vpx",
+                                                    "Star Trek"))
+
     def test_no_title_leaves_the_name_whole(self) -> None:
         self.assertEqual("a.vpx", discovery_kinds.short_name("a.vpx", ""))
 

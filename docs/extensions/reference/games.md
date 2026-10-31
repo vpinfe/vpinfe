@@ -459,7 +459,7 @@ is not there, a source nothing can be made of, nowhere to put a new game.
 
 Imports the source into the library.  It answers `imported` (the kind of each thing that was
 imported), `skipped` (the kinds left out), `game_dir`, `new_game`, `media_kinds`, `added_tables`,
-`renamed`, `blocked`, `declared` and, where they apply, `vps_associated`, `vps_matched` and
+`patched_tables`, `renamed`, `blocked`, `declared` and, where they apply, `vps_associated`, `vps_matched` and
 `vps_error`.  The last three are the catalog step that follows an import, which may fail without
 failing it: the files are already in the library by then.  This is the call that changes
 anything, and it can take as long as copying the files does, so it belongs in a

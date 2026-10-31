@@ -79,6 +79,7 @@ def tie(library: Any, game_id: str, release: import_dialog.ReleaseMatch | None
         if release is None or not release.vps_file_id:
             return
         made = [*(str(one) for one in report.get("added_tables") or ()),
+                *(str(one) for one in report.get("patched_tables") or ()),
                 *(str(one["table"]["id"]) for one in report.get("replaced_tables") or ())]
         for table_id in made:
             await run.io_bound(library.set_table_source, game_id, table_id,

@@ -4063,6 +4063,7 @@ class ImportReport(ApiModel):
     vps_matched: bool | None = None
     vps_error: str | None = None
     added_tables: list[str] = []
+    patched_tables: list[str] = []
     replaced_tables: list[dict] = []
 
 

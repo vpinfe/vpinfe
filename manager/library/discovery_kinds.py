@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,9 @@ LONG_KIND = 10
 GAME = "discovery_game"
 TABLE_LISTING = "tableFiles"
 _FAMILY_GLYPHS = {"image": "image", "video": "movie", "audio": "graphic_eq"}
+# What a file name has left once its title is gone, where that is no name at all: only
+# separators, bracketed groups, a bare year and the extension.
+_NO_NAME_LEFT = re.compile(r"(?:[\s.\-_]|[(\[][^)\]]*[)\]]|\d{4})*(?:\.\w+)?")
 
 
 def section_key(kind: str) -> str:
@@ -129,12 +133,12 @@ class Scene:
 
 
 def short_name(name: str, title: str) -> str:
-    """A file's name without the game's title, which every file of a game starts with."""
+    """A file's name without the game's title, which every file of a game starts with. The
+    whole name stays where dropping the title would leave only a year or a bracket."""
     start = name.lower().find(title.lower()) if title else -1
-    if start != 0:
+    if start != 0 or _NO_NAME_LEFT.fullmatch(name[len(title):]):
         return name
-    rest = name[len(title):].lstrip(" -_.")
-    return rest or name
+    return name[len(title):].lstrip(" -_.")
 
 
 def _standing(compared: bool, holds: bool, listed: bool) -> str:

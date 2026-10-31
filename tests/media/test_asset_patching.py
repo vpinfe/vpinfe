@@ -247,6 +247,109 @@ class PatchAssetTests(unittest.TestCase):
 
             self.assertTrue((game_dir / "Mod.vpx").exists())
 
+    def test_the_report_names_the_table_the_patch_made(self):
+        import json
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        from common.uploads.jdiff_patch import EQL, ESC
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = Path(tmp) / "Foo (Bar 1999)"
+            game_dir.mkdir()
+            (game_dir / "Table.vpx").write_bytes(b"ABCDEF")
+            zip_path = Path(tmp) / "mod.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("Mod.dif", bytes([ESC, EQL, 5]))
+
+            plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
+            report = execute_import_plan(plan, zip_path)
+
+            saved = json.loads((game_dir / "Foo (Bar 1999).info").read_text())
+            table_id = entry_for_filename(saved["tables"], "Mod.vpx")[0]
+            self.assertEqual(report["patched_tables"], [table_id])
+
+
+class PatchBaseTests(unittest.TestCase):
+    """A .dif names nothing about the table it applies to, so the folder decides."""
+
+    def _folder(self, tmp: str, tables: dict[str, bytes], entries: dict | None = None) -> Path:
+        import json
+        game_dir = Path(tmp) / "Foo (Bar 1999)"
+        game_dir.mkdir()
+        for name, data in tables.items():
+            (game_dir / name).write_bytes(data)
+        if entries is not None:
+            (game_dir / "Foo (Bar 1999).info").write_text(json.dumps({"tables": entries}))
+        return game_dir
+
+    def _made(self, filename: str, base: str, data: bytes) -> dict:
+        import hashlib
+        return {"id": filename, "filename": filename,
+                "source": {"base": {"file": base, "hash": hashlib.sha256(data).hexdigest()},
+                           "patch": {"format": "jojodiff"}}}
+
+    def test_the_largest_table_is_the_base_where_the_folder_records_nothing(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(tmp, {"Small.vpx": b"AB", "Large.vpx": b"ABCDEF"})
+
+            chosen = asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx")
+
+            self.assertEqual(chosen.name, "Large.vpx")
+
+    def test_a_table_an_earlier_patch_made_is_never_the_base(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(
+                tmp, {"Other.vpx": b"ABCDEF", "Patched.vpx": b"ABCDEFGHIJ"},
+                {"t1": self._made("Patched.vpx", "Gone.vpx", b"ABCDEF")})
+
+            chosen = asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx")
+
+            self.assertEqual(chosen.name, "Other.vpx")
+
+    def test_the_base_an_earlier_patch_used_beats_a_larger_table(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(
+                tmp, {"Table.vpx": b"ABCDEF", "Other.vpx": b"ABCDEFGHIJ",
+                      "Patched.vpx": b"ABCDEFG"},
+                {"t1": self._made("Patched.vpx", "Table.vpx", b"ABCDEF")})
+
+            chosen = asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx")
+
+            self.assertEqual(chosen.name, "Table.vpx")
+
+    def test_a_recorded_base_that_has_changed_since_does_not_decide(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(
+                tmp, {"Table.vpx": b"CHANGED", "Other.vpx": b"ABCDEFGHIJ",
+                      "Patched.vpx": b"ABCDEFG"},
+                {"t1": self._made("Patched.vpx", "Table.vpx", b"ABCDEF")})
+
+            chosen = asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx")
+
+            self.assertEqual(chosen.name, "Other.vpx")
+
+    def test_an_unreadable_record_leaves_size_to_decide(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(tmp, {"Small.vpx": b"AB", "Large.vpx": b"ABCDEF"})
+            (game_dir / "Foo (Bar 1999).info").write_text("{not json")
+
+            chosen = asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx")
+
+            self.assertEqual(chosen.name, "Large.vpx")
+
+    def test_a_folder_with_no_table_has_no_base(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            game_dir = self._folder(tmp, {})
+
+            self.assertIsNone(asset_import_service._patch_base(game_dir, game_dir / "Mod.vpx"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,7 @@ from common.games.game_service import (
 )
 from common.games.identity_claims import DeclaredIdentity
 from common.games.info_file import VPINFE_SECTION, MetaConfig
+from common.games.tables import entry_filename, entry_for_filename, table_entries
 from common.i18n import t
 from common.ids import new_id
 from common.kept_copies import IMPORT, copy_aside
@@ -801,9 +802,10 @@ def _import_media(source: AssetSource, asset: DetectedAsset, game_dir: Path) -> 
         scratch.unlink(missing_ok=True)
 
 
-def _record_patched_table(game_dir: Path, vpx: Path, base_file: str, base_hash: str) -> None:
+def _record_patched_table(game_dir: Path, vpx: Path, base_file: str, base_hash: str) -> str:
     """Write the new table into the game's .info: what it says about itself, and where
-    it came from. Best effort - the table is on disk and playable either way.
+    it came from. Best effort - the table is on disk and playable either way. Answers with
+    the table's id, or "" where the .info could not be written.
     """
     try:
         meta = MetaConfig(str(game_dir / f"{game_dir.name}.info"))
@@ -812,27 +814,49 @@ def _record_patched_table(game_dir: Path, vpx: Path, base_file: str, base_hash: 
             # A failed parse leaves the entry unparsed rather than filled with empties.
             meta.refresh_table(vpx.name, parsed)
         meta.record_patch_source(vpx.name, base_file, base_hash, "jojodiff")
+        return entry_for_filename(table_entries(meta.data), vpx.name)[0]
     except Exception:
         logger.warning("Patched %s, but could not record it in the .info", vpx.name,
                        exc_info=True)
+        return ""
+
+
+def _patch_base(base: Path, dest: Path) -> Path | None:
+    """The table in this folder a patch applies to. A .dif names nothing about its base,
+    so the folder's own record decides, and size only where it says nothing.
+
+    A table made here by an earlier patch is a result, never a base. Of the rest, one that
+    an earlier result was made from comes first, if the file is still the one it was
+    hashed as. Then the largest, since a folder can hold small helper .vpx files.
+    """
+    try:
+        entries = table_entries(MetaConfig(str(base / f"{base.name}.info")).data)
+    except Exception:  # noqa: BLE001 - an unreadable record leaves size to decide
+        entries = {}
+    made = {entry_filename(one): one["source"] for one in entries.values()
+            if isinstance(one.get("source"), dict) and one["source"].get("patch")}
+    used = {str(one["base"].get("file")): one["base"].get("hash")
+            for one in made.values() if isinstance(one.get("base"), dict)}
+    candidates = [one for one in base.glob("*.vpx") if one != dest and one.name not in made]
+    candidates.sort(key=lambda one: one.stat().st_size, reverse=True)
+    earlier = [one for one in candidates if one.name in used and _sha256(one) == used[one.name]]
+    return next(iter(earlier or candidates), None)
 
 
 def _apply_patch(source: AssetSource, asset: DetectedAsset, base: Path,
-                 dest: Path) -> None:
+                 dest: Path) -> str:
     """Apply a .dif to the table already in this folder, writing a new .vpx beside it.
+    Answers with the new table's id, or "" where it could not be recorded.
 
-    The base is chosen by size: a patch is built against the real table, and a folder can
-    hold small helper .vpx files. Getting this wrong produces a corrupt result rather than
-    an error, so the base is recorded by name and hash - in the log for whoever has to work
-    out what happened, and in the .info because the result cannot be rebuilt without it.
+    Getting the base wrong produces a corrupt result rather than an error, so the base is
+    recorded by name and hash - in the log for whoever has to work out what happened, and
+    in the .info because the result cannot be rebuilt without it.
     """
     from common.uploads.jdiff_patch import PatchError, apply_patch
 
-    candidates = sorted(base.glob("*.vpx"), key=lambda p: p.stat().st_size, reverse=True)
-    candidates = [c for c in candidates if c != dest]
-    if not candidates:
+    original = _patch_base(base, dest)
+    if original is None:
         raise ValueError(t("error.uploads.no_table"))
-    original = candidates[0]
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".dif") as tmp:
         patch_tmp = Path(tmp.name)
@@ -850,7 +874,7 @@ def _apply_patch(source: AssetSource, asset: DetectedAsset, base: Path,
         base_hash = _sha256(original)
         logger.info("Patched %s -> %s (base sha256 %s)", original.name, dest.name,
                     base_hash[:16])
-        _record_patched_table(base, dest, original.name, base_hash)
+        return _record_patched_table(base, dest, original.name, base_hash)
     finally:
         patch_tmp.unlink(missing_ok=True)
 
@@ -885,6 +909,7 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
     imported: list[str] = []
     media_kinds: list[str] = []
     added: list[str] = []
+    patched: list[str] = []
     replaced: list[dict] = []
     renamed: list[dict[str, str]] = []
     try:
@@ -904,7 +929,8 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
                 if item.asset.kind in _COLOR_KINDS and was != dest.name:
                     renamed.append({"was": was, "now": dest.name})
             elif item.action == "apply_patch":
-                _apply_patch(source, item.asset, base, dest)
+                if made := _apply_patch(source, item.asset, base, dest):
+                    patched.append(made)
             elif item.action == "zip_rom":
                 _build_rom_zip(source, item.asset, dest)
             elif item.action == "extract_tree":
@@ -942,6 +968,7 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
         "media_kinds": media_kinds,
         "declared": declared_written,
         "added_tables": added,
+        "patched_tables": patched,
         "replaced_tables": replaced,
         "renamed": renamed,
     }
