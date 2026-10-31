@@ -46,6 +46,8 @@ def _let_go(region: ui.element) -> None:
         held.count -= 1
         return
     _HELD.pop(region, None)
+    if region.is_deleted:
+        return
     if held is not None and not held.shown.is_deleted:
         held.shown.delete()
     region.props(remove="aria-busy")

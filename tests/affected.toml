@@ -62,6 +62,7 @@ tests = [
   "tests/manager/test_a_select_leaves_room_for_reset.py",
   "tests/manager/test_external_link_keeps_browser_menu.py",
   "tests/manager/test_open_links_in.py",
+  "tests/theming/test_a_failed_script_load_drive.py",
   "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
   "tests/theming/test_dialogs_back_drive.py",
   "tests/theming/test_escape_in_dialogs_drive.py",

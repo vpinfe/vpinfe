@@ -67,10 +67,20 @@ class Held(unittest.IsolatedAsyncioTestCase):
     async def test_a_region_deleted_while_it_waits_is_let_go_quietly(self) -> None:
         region = _region()
 
-        with busy.held(region):
+        with patch("nicegui.helpers.warn_once") as warned, busy.held(region):
             region.delete()
 
         self.assertTrue(region.is_deleted)
+        warned.assert_not_called()
+
+    async def test_overlapping_work_on_a_deleted_region_is_let_go_quietly(self) -> None:
+        region = _region()
+
+        with patch("nicegui.helpers.warn_once") as warned:
+            with busy.held(region), busy.held(region):
+                region.delete()
+
+        warned.assert_not_called()
 
     def test_the_spinner_is_not_read_out(self) -> None:
         region = _region()

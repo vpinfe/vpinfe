@@ -2956,6 +2956,20 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
   margin: auto; text-align: center; padding: 16px; max-width: 34ch;
 }
 .manager-empty-title { font-size: var(--fs-body); color: var(--ink-2); }
+/* Over the whole page, in plain elements: script.failed puts it there when the framework
+   that would draw it is what did not load (manager/kit/script_failed.py). */
+.manager-script-failed {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 16px; text-align: center; background: var(--scrim-page);
+}
+.manager-script-failed__title { font-size: var(--fs-body); color: var(--ink); }
+.manager-script-failed__detail { font-size: var(--fs-caption); color: var(--ink-3); }
+.manager-script-failed__reload {
+  min-height: 32px; padding: 0 14px; border-radius: 16px; cursor: pointer;
+  font: inherit; color: var(--accent); background: var(--accent-wash);
+  border: 1px solid var(--accent);
+}
 .manager-dock {
   /* Room on every side, or the panel's own border sits flush to the edge and loses
      its right side under the scrollbar. No border-top: the grip is the divider. */
