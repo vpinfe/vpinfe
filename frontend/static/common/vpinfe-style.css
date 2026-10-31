@@ -133,6 +133,12 @@ html[data-vpinfe-launching] body {
   opacity: 0;
 }
 
+/* A window that cannot find the controller's game in its own list shows nothing, so it
+   never shows another game than the playfield. Set by core, whatever the theme draws. */
+html[data-vpinfe-held] body {
+  visibility: hidden;
+}
+
 /* ---------------------------------------------------------------------------
    Waiting for the library's folders (core_waiting). The words are the attribute
    core sets, so this draws on any theme without a line of its own.

@@ -86,7 +86,10 @@
         const splashVideoSource = document.getElementById("splash-source");
         const splashImage = document.getElementById("splash-image");
 
+        let leaving = false;
         const fadeOutAndRedirect = () => {
+          if (leaving) return;
+          leaving = true;
           if (isController) {
             splashVideo.classList.add("fade-out");
           } else {
@@ -145,18 +148,25 @@
             applyRotation(effectiveRotationDegree),
           );
 
-          splashVideo.addEventListener(
-            "ended",
-            () => {
-              vpin.sendMessageToAllWindowsIncSelf({ type: "SplashFadeOut" });
-            },
-            { once: true },
-          );
+          const endSplash = () =>
+            vpin.sendMessageToAllWindowsIncSelf({ type: "SplashFadeOut" });
+          splashVideo.addEventListener("ended", endSplash, { once: true });
+          splashVideoSource.addEventListener("error", endSplash, { once: true });
+
+          // A file the browser cannot decode leaves play() pending, so the fallback
+          // below is armed first and nothing here waits on it.
+          setTimeout(fadeOutAndRedirect, 15000);
 
           splashVideo.muted = false;
           splashVideo.defaultMuted = false;
           splashVideo.volume = 1.0;
-          await splashVideo.play();
+          try {
+            await splashVideo.play();
+          } catch (error) {
+            console.warn("Splash video did not play", error);
+            endSplash();
+          }
+          return;
         } else {
           splashVideo.classList.add("hidden");
           splashImage.classList.remove("hidden");
@@ -166,7 +176,6 @@
           splashRoot.style.visibility = "visible";
         }
 
-        // Fallback in case video metadata/playback fails.
         setTimeout(fadeOutAndRedirect, 15000);
       });
     </script>

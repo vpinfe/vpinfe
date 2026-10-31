@@ -82,13 +82,16 @@ class CoreDefaultsDriveTests(TempTree):
 
     def _display(self, window: str) -> tuple[str, list]:
         async def run(instance: LiveInstance):
-            async with BrowserSession(chromium_path() or "") as browser:
-                await browser.navigate(
-                    instance.url(f"/core/index_{window}.html?window={window}"
-                                 f"&wsPort={instance.ports['ws']}"
-                                 f"&themeAssetsPort={instance.ports['manager']}"))
-                src = await browser.wait_for(SHOWN, timeout=90.0)
-                return src, list(browser.failed_requests)
+            async with BrowserSession(chromium_path() or "") as playfield:
+                await playfield.navigate(instance.theme_url("playfield"))
+                await playfield.wait_for("document.body.dataset.ready === 'true'", timeout=90.0)
+                async with BrowserSession(chromium_path() or "") as browser:
+                    await browser.navigate(
+                        instance.url(f"/core/index_{window}.html?window={window}"
+                                     f"&wsPort={instance.ports['ws']}"
+                                     f"&themeAssetsPort={instance.ports['manager']}"))
+                    src = await browser.wait_for(SHOWN, timeout=90.0)
+                    return src, list(browser.failed_requests)
 
         with LiveInstance(self.root, windows=("playfield", window)) as instance:
             return asyncio.run(run(instance))

@@ -152,7 +152,8 @@ class FrontendStateTests(TempTree):
         response = self.client.put("/frontend/game", json={"id": "mm"})
 
         self.assertEqual(response.status_code, 202, response.text)
-        self.assertEqual(self.channel.sent, [{"type": "TableIndexUpdate", "index": 1}])
+        self.assertEqual(self.channel.sent,
+                         [{"type": "TableIndexUpdate", "index": 1, "id": "mmt"}])
         self._windows_apply()
         self.assertEqual(self._assert_agree()["game"]["id"], "mm")
 

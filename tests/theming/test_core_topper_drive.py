@@ -37,12 +37,19 @@ class CoreTopperDriveTests(TempTree):
                             f"&wsPort={instance.ports['ws']}"
                             f"&themeAssetsPort={instance.ports['manager']}")
 
+    @staticmethod
+    async def _open_controller(playfield: BrowserSession, instance: LiveInstance) -> None:
+        await playfield.navigate(instance.theme_url("playfield"))
+        await playfield.wait_for("document.body.dataset.ready === 'true'", timeout=90.0)
+
     def test_the_selected_game_s_topper_is_drawn(self) -> None:
         async def run(instance: LiveInstance):
-            async with BrowserSession(chromium_path() or "") as browser:
-                await browser.navigate(self._url(instance))
-                src = await browser.wait_for(TOPPER, timeout=90.0)
-                return src, list(browser.failed_requests)
+            async with BrowserSession(chromium_path() or "") as playfield:
+                await self._open_controller(playfield, instance)
+                async with BrowserSession(chromium_path() or "") as browser:
+                    await browser.navigate(self._url(instance))
+                    src = await browser.wait_for(TOPPER, timeout=90.0)
+                    return src, list(browser.failed_requests)
 
         with LiveInstance(self.root, windows=("playfield", "topper")) as instance:
             src, failed = asyncio.run(run(instance))
@@ -51,10 +58,12 @@ class CoreTopperDriveTests(TempTree):
 
     def test_the_window_knows_it_is_the_topper(self) -> None:
         async def run(instance: LiveInstance):
-            async with BrowserSession(chromium_path() or "") as browser:
-                await browser.navigate(self._url(instance))
-                await browser.wait_for(TOPPER, timeout=90.0)
-                return await browser.evaluate("window.vpin.windowMediaKind")
+            async with BrowserSession(chromium_path() or "") as playfield:
+                await self._open_controller(playfield, instance)
+                async with BrowserSession(chromium_path() or "") as browser:
+                    await browser.navigate(self._url(instance))
+                    await browser.wait_for(TOPPER, timeout=90.0)
+                    return await browser.evaluate("window.vpin.windowMediaKind")
 
         with LiveInstance(self.root, windows=("playfield", "topper")) as instance:
             self.assertEqual(asyncio.run(run(instance)), "topper")

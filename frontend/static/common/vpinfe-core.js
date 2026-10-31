@@ -755,8 +755,11 @@ class ContractOneReader {
   audioURL(game)       { return game.AudioPath ? this.pathToURL(game.AudioPath) : null; }
   logo(game)           { return game.ManufacturerLogoPath || null; }
   vpsId(game)          { return String(game?.meta?.Info?.VPSId || "").trim(); }
-  // Contract 1 is one row per game and carries no id, so the folder is the name it has.
-  identity(game)       { return String(game.tableDirName || ""); }
+  // The table's id where the row has one, which is what contract 2 names it by; the folder
+  // is the name a row with no id at all has left.
+  identity(game)       {
+    return String(game.meta?.VPXFile?.id || game.meta?.VPinFE?.game_id || game.tableDirName || "");
+  }
 
   imageVideo(game, kind, priority) {
     const image = this.field(game, MEDIA_PATH_FIELDS[kind]);
@@ -984,6 +987,17 @@ class VPinFECore {
     this.mediaPriorities = Object.assign({}, DEFAULT_MEDIA_PRIORITIES);
     this._currentTableIndex = 0;
     this._initialGameRestored = false;
+    // The controller's own state, once its restore has settled; windows that asked before
+    // that are answered when it does.
+    this._restoreSettled = false;
+    this._selectionAsks = new Set();
+    // The game a window that is not the controller was told is selected, by id, and where
+    // that sits in this window's own list (-1 when it is not there). null until told. Its
+    // list can be ordered or filtered differently from the controller's, so the index the
+    // controller holds can be another game here; such a window draws nothing until it can
+    // name the game in its own list.
+    this._followedId = null;
+    this._followedAt = -1;
     this._audioMuted = false;
     this._audio = Object.assign(new Audio(), { loop: true });
     this._audioFadeId = null;
@@ -1543,11 +1557,20 @@ class VPinFECore {
   // spellings leave from here, so they cannot disagree about how: sent without _incself
   // the copy reaches bg and dmd but never the window that sent it.
   #broadcast(method, message) {
+    this.#nameGame(message);
     this.#syncLocalIndexFromOutgoingMessage(message);
     this.#syncSelectionFromMessage(message);
     this.call(method, message);
     const legacy = this.#servesLegacyNames() && MESSAGE_TYPE_ALIASES[message.type];
     if (legacy) this.call(method, { ...message, type: legacy });
+  }
+
+  // An index message from a theme names the game too, from this window's own list.
+  #nameGame(message) {
+    if (!message || message.type !== "TableIndexUpdate" || typeof message.id === "string") return;
+    if (typeof message.index !== "number" || message.kind === "collection" || !this.atRoot) return;
+    const id = this.#identityAt(Math.floor(message.index));
+    if (id) message.id = id;
   }
 
   // send a message to all windows except "self"
@@ -1571,6 +1594,66 @@ class VPinFECore {
   async #askForSelection() {
     await this.#waitForReceiveEvent();
     this.sendMessageToAllWindows({ type: "SelectionRequest", window: this._windowName });
+  }
+
+  // Ask until the controller answers. A request sent before the controller's page has
+  // loaded is dropped, so one ask is not enough, and a window never draws a game it was
+  // not told about, so it keeps asking at a slower pace after the first few seconds.
+  async #awaitSelection() {
+    this.#showHeld();
+    const quickUntil = Date.now() + VPinFECore.SELECTION_QUICK_MS;
+    while (this._followedId === null) {
+      await this.#askForSelection();
+      const pause = Date.now() < quickUntil
+        ? VPinFECore.SELECTION_ASK_MS : VPinFECore.SELECTION_SLOW_MS;
+      await new Promise(resolve => setTimeout(resolve, pause));
+    }
+  }
+
+  // A window that is not the controller draws only a game it can find in its own list.
+  #selectionHeld() {
+    return !this.isController() && this._followedAt < 0;
+  }
+
+  // The same hold, on the document, so a theme that draws its own art is covered as well
+  // as the elements core fills. Nothing to hide when the list is empty.
+  #showHeld() {
+    const root = document.documentElement;
+    if (!root) return;
+    if (this.#selectionHeld() && this.tableData?.length) root.dataset.vpinfeHeld = "";
+    else delete root.dataset.vpinfeHeld;
+  }
+
+  // Where the game with this id sits in this window's list, or -1.
+  #indexOfId(id) {
+    if (!id || !Array.isArray(this.tableData)) return -1;
+    return this.tableData.findIndex(item =>
+      item && typeof item === "object" && this._reader.identity(item) === id);
+  }
+
+  // Follow the game the controller named. Returns where it sits here, -1 if the list does
+  // not hold it (yet), in which case nothing is drawn until a reload brings it.
+  #follow(id) {
+    this._followedId = id;
+    this._followedAt = this.#indexOfId(id);
+    if (this._followedAt >= 0) this._currentTableIndex = this._followedAt;
+    return this._followedAt;
+  }
+
+  // For a message that cannot name its game: take its index, and keep the game it lands on.
+  #followIndex() {
+    this._followedId = this.#identityAt(this._currentTableIndex) || "";
+    this._followedAt = this._currentTableIndex;
+  }
+
+  #answerSelectionAsks() {
+    this._restoreSettled = true;
+    const waiting = [...this._selectionAsks];
+    this._selectionAsks.clear();
+    if (!this.atRoot) return;
+    for (const name of waiting) {
+      this.#announceIndex(this._currentTableIndex, { reason: "restore", to: name });
+    }
   }
 
   // Open the named overlay, or close it if it is the one that is open. Callable from an
@@ -1621,6 +1704,13 @@ class VPinFECore {
       } else {
         this._lastSelectedIndex = null;
       }
+      this.#answerSelectionAsks();
+    } else if (this._followedId !== null) {
+      // The list can have been reordered or filtered since the game was named, and a
+      // name that beat the list here could only be an index until now.
+      if (this._followedId) this.#follow(this._followedId);
+      else this.#followIndex();
+      this.#renderWindowMedia();
     }
   }
 
@@ -1681,7 +1771,10 @@ class VPinFECore {
     const raised = message && typeof message === "object"
       && typeof message.index !== "number"
       && canonicalMessageType(message.type) === "TableDataChange";
-    const held = raised ? this.#identityAt(this._currentTableIndex) : null;
+    // A window that follows a named game holds that game, not the one its stale index
+    // lands on, which is another game while the controller's is not in its list.
+    const held = !raised ? null
+      : (!this.isController() && this._followedId) || this.#identityAt(this._currentTableIndex);
     // Set now as well as after the refresh, so the message carries a usable index even
     // if the held game is gone. `raw` is the object the theme itself will read: the
     // alias copy below is core's, and writing only to that would leave a theme matching
@@ -1692,9 +1785,31 @@ class VPinFECore {
     if (message && MESSAGE_TYPE_CANONICAL[message.type]) {
       message = { ...message, type: canonicalMessageType(message.type) };
     }
-    // A picker's index is a place in the picker, not on the wheel.
+    // A picker's index is a place in the picker, not on the wheel. A list a theme pushes
+    // names its own id, so it is told from the wheel's by that.
+    const onWheel = message.list === undefined
+      || message.list === (this.collection || "builtin:all");
     if (typeof message.index === "number" && message.kind !== "collection") {
-      this._currentTableIndex = message.index;
+      if (message.type === "TableIndexUpdate" && typeof message.id === "string"
+          && !this.isController()) {
+        // The controller's index is into its list; this window finds the game in its own.
+        const at = this.#follow(message.id);
+        if (at < 0) {
+          this.#renderWindowMedia();
+          return;
+        }
+        raw.index = message.index = at;
+      } else if (this.isController() || onWheel) {
+        this._currentTableIndex = message.index;
+        if (!this.isController() && message.type === "TableIndexUpdate") this.#followIndex();
+      }
+    }
+    // A data change names the game it lands on in the list it is about to rebuild, and
+    // there is no game to draw from yet: hold the window until the reload has the list.
+    if (message.type === "TableDataChange" && !raised && !this.isController()
+        && typeof message.index === "number" && this._followedId !== null) {
+      this._followedId = typeof message.id === "string" ? message.id : "";
+      this._followedAt = -1;
     }
     if (message.type === "AudioMuteChanged") {
       this.setAudioMuted(!!message.muted);
@@ -1719,8 +1834,11 @@ class VPinFECore {
       return;
     }
     if (message.type === "SelectionRequest") {
-      if (this.isController() && this.atRoot && message.window) {
-        this.#announceIndex(this._currentTableIndex, { reason: "restore", to: message.window });
+      if (this.isController() && message.window) {
+        if (!this._restoreSettled) this._selectionAsks.add(message.window);
+        else if (this.atRoot) {
+          this.#announceIndex(this._currentTableIndex, { reason: "restore", to: message.window });
+        }
       }
       return;
     }
@@ -1757,10 +1875,23 @@ class VPinFECore {
       if (this.isController()) this._lastSelectedIndex = null;
       await this.#handleTableDataChange(message);
       if (raised) {
-        const index = this.#indexOfIdentity(held);
+        // A game the controller named while this reload was waiting is the one to land on,
+        // and getTableData has already found it in the rebuilt list.
+        const index = !this.isController() && this._followedId && this._followedAt >= 0
+          ? this._followedAt : this.#indexOfIdentity(held);
         this._currentTableIndex = index;
         raw.index = message.index = index;
+        // The controller's game can have left its list; the others still hold it, and
+        // would go on showing a game the playfield no longer does.
+        if (this.isController() && held && this.tableData.length && this.atRoot
+            && this.#identityAt(index) !== held) {
+          this.#announceIndex(index, { reason: "restore", others: true });
+        }
+      } else if (!this.isController() && this._followedId && this._followedAt >= 0) {
+        raw.index = message.index = this._followedAt;
       }
+      // The index the data change carried is in the list it just rebuilt.
+      if (!this.isController() && this._followedId === "") this.#followIndex();
     }
     this.#syncSelectionFromMessage(message);
     this.#applyLaunchDim(message.type);
@@ -2084,6 +2215,12 @@ class VPinFECore {
     "TableIndexUpdate", "TableDataChange", "TableLaunchComplete", "RemoteLaunchComplete",
   ]);
 
+  // How often a window that is not the controller asks which game is selected: quickly
+  // for the first few seconds, then slowly for as long as no controller answers.
+  static SELECTION_QUICK_MS = 5000;
+  static SELECTION_ASK_MS = 400;
+  static SELECTION_SLOW_MS = 5000;
+
   // How many preloaded URLs to remember. Generous enough to cover a page of the wheel
   // in both directions; small enough that forgetting all of them costs one page.
   static PRELOAD_MEMORY = 300;
@@ -2207,8 +2344,15 @@ class VPinFECore {
    * rather than picking something to draw.
    */
   #renderWindowMedia() {
+    this.#showHeld();
     if (!this.enabled("core_media_window")) return;
+    const held = this.#selectionHeld();
     for (const target of document.querySelectorAll("[data-vpin-media]")) {
+      if (held) {
+        this.#mediaShown.delete(target);
+        target.replaceChildren();
+        continue;
+      }
       const named = target.getAttribute("data-vpin-media").trim();
       const kind = named ? this.#canonicalKind(named) : this.windowMediaKind;
       if (kind && MEDIA_KINDS.includes(kind)) this.#renderMediaInto(target, kind);
@@ -2570,12 +2714,11 @@ class VPinFECore {
     await this.#loadPlayers();
     await this.getTableData();
 
-    // Draw once now the games are here. Waiting for a selection message would leave a
-    // display window blank on a fresh start: the controller only broadcasts a restore
-    // when the remembered index is past the first game, so at index 0 nothing arrives
-    // and nothing ever asked this window to paint.
-    this.#renderWindowMedia();
-    if (!this.isController()) this.#askForSelection();
+    // The controller only broadcasts a restore when the remembered index is past the
+    // first game, so a window that waited to be told would stay empty at index 0. It asks
+    // instead, and draws once the answer names the game.
+    if (this.isController()) this.#renderWindowMedia();
+    else this.#awaitSelection();
     this.#reportWindow();
    //this.#overrideConsole(); //disabled for now...
 
@@ -3115,7 +3258,9 @@ class VPinFECore {
     if (!item) return true;
     if (!item.name) {
       await this.getTableData(true);
-      this.sendMessageToAllWindowsIncSelf({ type: "TableDataChange", index: 0, collection: "None" });
+      this.sendMessageToAllWindowsIncSelf({
+        type: "TableDataChange", index: 0, collection: "None", ...this.#firstGame(),
+      });
       return true;
     }
 
@@ -3125,9 +3270,16 @@ class VPinFECore {
     await this.call("set_tables_by_collection", item.name);
     await this.getTableData();
     this.sendMessageToAllWindowsIncSelf({
-      type: "TableDataChange", index: 0, collection: item.name,
+      type: "TableDataChange", index: 0, collection: item.name, ...this.#firstGame(),
     });
     return true;
+  }
+
+  // The game a freshly loaded list opens on, named so a window with a different order
+  // lands on it and not on whatever its own first row is.
+  #firstGame() {
+    const id = this.#identityAt(0);
+    return id ? { id } : {};
   }
 
   /** Come back out. Returns false at the root, where there is nothing to pop. */
@@ -3181,13 +3333,18 @@ class VPinFECore {
 
   // One shape for every index message, whichever list moved.
   #announceIndex(at, { previous = at, direction = "", reason = "step",
-                       source = "user", to = "" } = {}) {
+                       source = "user", to = "", others = false } = {}) {
     const list = this.activeList();
     const item = this.atRoot ? (this.tableData[at] || {}) : {};
     const send = to ? (message) => this.#sendToWindow(to, message)
+                    : others ? (message) => this.sendMessageToAllWindows(message)
                     : (message) => this.sendMessageToAllWindowsIncSelf(message);
+    // Which game that is, so a window with a different list does not draw another one.
+    // Left off when the row has no identity, and then the index is all there is.
+    const id = this.atRoot ? this._reader.identity(item) : "";
     send({
       type: "TableIndexUpdate", index: at, previous, direction, reason, source,
+      ...(id ? { id } : {}),
       // Which list this index is in. A theme reads it instead of tracking a mode, so a
       // picker no longer has to guess that an index message means "a game was picked".
       list: list.id, kind: list.kind,

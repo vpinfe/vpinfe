@@ -30,8 +30,10 @@ def register(ws_bridge: DeviceChannel, library: LibraryResolver) -> None:
     def move_to(game_id: str) -> None:
         for index, entry in enumerate(library.entries):
             if entry.game is not None and game_identity.game_id(entry.game) == game_id:
-                ws_bridge.send_event_all_with_iframe({"type": "TableIndexUpdate",
-                                                      "index": index})
+                # The table's id is what a row is named by on the window, the game's
+                # only where the table has none.
+                ws_bridge.send_event_all_with_iframe({"type": "TableIndexUpdate", "index": index,
+                                                      "id": entry.table_id or game_id})
                 return
         raise NotFoundError(t("error.frontend.not_on_screen",
                               game=game_repository.called(game_id)))
