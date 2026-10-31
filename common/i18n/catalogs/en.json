@@ -993,7 +993,10 @@
   "manager.discovery.actions_selected": "Actions for the selected games",
   "manager.discovery.add": "Add to Library",
   "manager.discovery.add_detail": "Each becomes a game with no tables",
-  "manager.discovery.add_failed": "Could not add {name}",
+  "manager.discovery.add_failed": {
+    "one": "{name} could not be added",
+    "other": "{count:n} games could not be added"
+  },
   "manager.discovery.add_many": {
     "one": "Add 1 game to your library",
     "other": "Add {count:n} games to your library"
@@ -1082,6 +1085,10 @@
   "manager.discovery.try_again.help": "Download this file again",
   "manager.discovery.source_act.help": "Ask the source to do this for the file",
   "manager.discovery.act_failed": "The online source could not do that",
+  "manager.discovery.stop_failed": {
+    "one": "{name} could not be stopped",
+    "other": "{count:n} online sources could not be stopped"
+  },
   "manager.discovery.offer_gone": "The online source no longer offers this file",
   "manager.discovery.size.kb": "{count} KB",
   "manager.discovery.size.mb": "{count} MB",
@@ -1679,8 +1686,10 @@
   "manager.devices.ask_failed": "Could not ask {device_label}",
   "manager.devices.check_failed": "Could not check",
   "manager.devices.activity_failed": "Could not check what {name} is doing",
-  "manager.devices.forget_failed": "Could not forget that device",
-  "manager.devices.forget_named_failed": "Could not forget {name}",
+  "manager.devices.forget_failed": {
+    "one": "{name} could not be forgotten",
+    "other": "{count:n} devices could not be forgotten"
+  },
   "manager.devices.carrying_failed": "Could not ask what it is carrying",
   "manager.devices.carrying_away": "Not listed until it answers",
   "manager.devices.log_failed": "Could not read the log",
@@ -2367,6 +2376,10 @@
   "manager.launchers.copy_title_many": {
     "one": "Copy {count:n} launcher to which devices?",
     "other": "Copy {count:n} launchers to which devices?"
+  },
+  "manager.launchers.remove_failed": {
+    "one": "{name} could not be removed",
+    "other": "{count:n} launchers could not be removed"
   },
   "manager.launchers.remove_many": {
     "one": "Remove {count:n} launcher?",
@@ -3921,7 +3934,10 @@
   "manager.themes.both": "Cabinet or desktop",
   "manager.themes.cabinet": "Cabinet",
   "manager.themes.check_updates": "Check for updates",
-  "manager.themes.install_failed": "Could not install it",
+  "manager.themes.install_failed": {
+    "one": "{name} could not be installed",
+    "other": "{count:n} themes could not be installed"
+  },
   "manager.themes.activate_failed": "Could not make it active",
   "manager.themes.settings_failed": "Could not read its settings",
   "manager.themes.themes_failed": "Could not read the themes",
@@ -3976,6 +3992,10 @@
   "manager.themes.uninstall_many": {
     "one": "Uninstall {count:n} theme?",
     "other": "Uninstall {count:n} themes?"
+  },
+  "manager.themes.uninstall_failed": {
+    "one": "{name} could not be uninstalled",
+    "other": "{count:n} themes could not be uninstalled"
   },
   "manager.themes.uninstalled_many": {
     "one": "{count:n} theme uninstalled",
@@ -4119,6 +4139,10 @@
   "manager.vpx_displays.long_side": "Long side",
   "manager.vpx_displays.screen_size": "Screen Size",
   "manager.vpx_displays.short_side": "Short side",
+  "manager.vpx_displays.follow_failed": {
+    "one": "{name} could not be updated",
+    "other": "{count:n} launchers could not be updated"
+  },
   "manager.vpx_displays.unnamed": "Left where it was: Visual Pinball has no name for the screen of {parts} yet",
   "manager.vpx_displays.unsized": "Left where it was: the playfield needs a screen before {parts} can go in it",
   "manager.vpx_input.controller_button": "Controller button",
@@ -4471,6 +4495,8 @@
   },
   "manager.workbench.keep_none": "Keep none of its games",
   "manager.workbench.all_tables": "All Tables",
+  "manager.workbench.cause_both": "Both tables",
+  "manager.workbench.cause_all": "All {count:n} tables",
   "manager.workbench.launcher": "Launcher",
   "manager.workbench.launcher_from_game": {
     "one": "{name} · {count:n} setting from {scope}",
@@ -4487,7 +4513,10 @@
   "manager.workbench.lock_to": "Lock to {table}",
   "manager.workbench.logs": "Logs",
   "manager.workbench.made_from": "Made from",
-  "manager.workbench.source_gone": "The file it was made from is missing",
+  "manager.workbench.source_gone": {
+    "one": "The file it was made from is missing",
+    "other": "The file they were made from is missing"
+  },
   "manager.workbench.make_default": "Make this the default",
   "manager.workbench.make_own": "Make it its own",
   "manager.workbench.own_question": "Make this its own game?",
@@ -4532,7 +4561,10 @@
   "manager.workbench.not_matched": "Not matched",
   "manager.workbench.not_saved_rules": "The frontend still shows the saved rules",
   "manager.workbench.not_used": "Here but not used",
-  "manager.workbench.unplayable": "Nothing on this device can play it",
+  "manager.workbench.unplayable": {
+    "one": "Nothing on this device can play it",
+    "other": "Nothing on this device can play them"
+  },
   "manager.workbench.empty": "Nothing in it yet",
   "manager.workbench.nothing_removable": "Nothing to remove at this level",
   "manager.workbench.only_launcher": "The only launcher this device has",
@@ -4556,7 +4588,10 @@
   "manager.workbench.picture_deleted": "Picture deleted",
   "manager.workbench.pictures": "Pictures",
   "manager.workbench.pictures_unreadable": "Couldn't read the pictures",
-  "manager.workbench.place_unreachable": "The place this table lives is not reachable",
+  "manager.workbench.place_unreachable": {
+    "one": "The place this table lives is not reachable",
+    "other": "Where these tables live is not reachable"
+  },
   "manager.workbench.play_table": "Play This Table",
   "manager.workbench.play_time": "Play time",
   "manager.workbench.plugin_section": "Plugin: {name}",

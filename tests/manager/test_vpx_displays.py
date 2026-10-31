@@ -786,7 +786,8 @@ class LaunchersTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([call.args[0] for call in
                           self.library.write_launcher_config.call_args_list], ["b"])
-        self.assertEqual(self.notify.call_args.args[0], t("said.save_failed"))
+        self.assertEqual(self.notify.call_args.args[0],
+                         t("manager.vpx_displays.follow_failed", count=1, name="a"))
         self.assertIn("no such file", self.notify.call_args.kwargs["caption"])
 
     async def test_launchers_that_cannot_be_listed_leave_vpinfe_s_own_change_alone(self) -> None:

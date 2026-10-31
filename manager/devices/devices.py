@@ -30,6 +30,7 @@ from manager.kit import (
     when,
 )
 from manager.kit.api import ApiClient, ApiError
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 from manager.settings import settings as settings_page
 
@@ -541,7 +542,7 @@ async def _confirm_forget(library: Any, device: dict[str, Any],
         await run.io_bound(library.forget_device, str(device.get("device_id") or ""),
                            str(device.get("kind") or ""))
     except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
-        ui.notify(t("manager.devices.forget_failed"), caption=_why(exc),
+        ui.notify(t("manager.devices.forget_failed", name=name), caption=_why(exc),
                   type="negative")
         return
     ui.notify(t("manager.devices.forgot", name=(name)), type="positive")
@@ -576,14 +577,15 @@ async def _confirm_forget_all(library: Any, devices: list[dict[str, Any]],
             confirm=t("word.forget"), icon=verbs.FORGET):
         return
     forgot = 0
+    failed = Failures()
     for device in devices:
         try:
             await run.io_bound(library.forget_device, str(device.get("device_id") or ""),
                                str(device.get("kind") or ""))
             forgot += 1
         except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
-            ui.notify(t("manager.devices.forget_named_failed", name=device_label(device)),
-                      caption=_why(exc), type="negative")
+            failed.add(device_label(device), _why(exc))
+    failed.say("manager.devices.forget_failed")
     if forgot:
         ui.notify(t("manager.devices.forgot_count", count=forgot), type="positive")
     if rerender is not None:

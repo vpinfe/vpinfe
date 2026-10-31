@@ -7,6 +7,7 @@ import unittest
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+from common.i18n import t
 from manager.kit import confirm, game_tables, panel
 from manager.library import import_dialog
 from manager.workbench import game_table
@@ -76,7 +77,8 @@ class MadeFromRow(unittest.TestCase):
 
 class Finding(unittest.TestCase):
     def _lines(self, table: dict[str, Any]) -> list[str]:
-        return [line for line, _act in game_table._faults({"tables": []}, table, {}, "")]
+        return [t(fault.words, count=1, **fault.params)
+                for fault in game_table._faults({"tables": []}, table, {}, "")]
 
     def test_a_patched_table_whose_base_is_gone_says_so(self) -> None:
         table = _tables(_base(available=False))[0]

@@ -22,6 +22,7 @@ from common.i18n import t
 from common.online import sources as source_registry
 from manager.extensions import ext_lists
 from manager.kit import offload
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 from manager.library import discovery_get
 from manager.library.discovery_get import Offered, Pick, Tray
@@ -203,15 +204,17 @@ def stopper(context: dict[str, Any], tray: Tray, game_id: Callable[[], str],
     @on_page
     async def stop() -> None:
         library, row = context["library"], context["discovery"]
-        going = {(one.extension, one.key) for one in tray.offered.values()
+        going = {(one.extension, one.key): one.name for one in tray.offered.values()
                  if one.level == "unknown"}
+        failed = Failures()
         for extension, key in sorted(going):
             try:
                 await offload.io(library.source_act, extension, key, "", "", "stop", game_id(),
                                  row["id"], row["name"])
             except Exception as exc:  # noqa: BLE001 - the other sources still stop
                 logger.warning("manager: could not stop %s.%s", extension, key, exc_info=True)
-                ui.notify(t("manager.discovery.act_failed"), caption=why(exc), type="negative")
+                failed.add(going[(extension, key)], why(exc))
+        failed.say("manager.discovery.stop_failed")
         if not tray.running:
             tray.stopping = False
         await refresh(context, tray, game_id(), listed)

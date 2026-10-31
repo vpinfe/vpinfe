@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from nicegui import run, ui
 
@@ -929,44 +929,97 @@ async def _findings(context: dict[str, Any],
                 unread = why(exc)
             else:
                 entry_url = str((entry or {}).get("url") or "")
-    named = len(context["tables"]) > 1
-    entries: list[tuple[Any, Any]] = []
+    everyone = context["tables"]
+    causes: dict[tuple[str, ...], list[tuple[dict[str, Any], _Fault]]] = {}
     for table in tables:
-        said = game_tables.name_among(table, context["tables"]) if named else ""
-        entries += [(FULL, _alert(line, act, said))
-                    for line, act in _faults(context, table, releases, entry_url, unread)]
+        for fault in _faults(context, table, releases, entry_url, unread):
+            causes.setdefault(fault.cause, []).append((table, fault))
+    entries: list[tuple[Any, Any]] = []
+    for found in causes.values():
+        members = [table for table, _ in found]
+        first = found[0][1]
+        line = t(first.words, count=len(members), **first.params)
+        entries.append((FULL, _alert(line, first.act, *_said(members, everyone))))
     return entries
+
+
+_NAMED_AT_MOST = 3
+
+
+def _said(members: list[dict[str, Any]],
+          everyone: list[dict[str, Any]]) -> tuple[list[str], tuple[str, str] | None]:
+    """The lines under a notice: which of the game's tables it is about.
+
+    Nothing when the game has the one table, the table's name when the notice is about
+    one of several, and when it is about several of them their names, the first three
+    and the rest behind the mark, or *All 3 tables* when it is about every one.
+    """
+    if len(everyone) < 2:
+        return [], None
+    if len(members) == 1:
+        return [game_tables.name_among(members[0], everyone)], None
+    if len(members) == len(everyone):
+        return [t("manager.workbench.cause_both") if len(members) == 2
+                else t("manager.workbench.cause_all", count=len(members))], None
+    names = [game_tables.name_among(one, everyone) for one in members]
+    rest = names[_NAMED_AT_MOST:]
+    return names[:_NAMED_AT_MOST], (
+        (t("said.and_more", count=len(rest)), "\n".join(rest)) if rest else None)
+
+
+class _Fault(NamedTuple):
+    """One thing wrong with one table.
+
+    `cause` is what two tables share when their notice would say the same words and be
+    fixed by the same press: the words' key and what fills them, or the table itself where
+    the press acts on that table's file alone. `words` is asked for with the count of
+    tables the notice ends up covering, so a shared one reads in the plural.
+    """
+    cause: tuple[str, ...]
+    words: str
+    params: dict[str, str]
+    act: Callable[[], None] | None
 
 
 def _faults(context: dict[str, Any], table: dict[str, Any],
             releases: dict[str, dict[str, Any]], entry_url: str,
-            unread: str = "") -> list[tuple[str, Callable[[], None] | None]]:
+            unread: str = "") -> list[_Fault]:
     pinmame = (table.get("dependencies") or {}).get("pinmame") or {}
-    faults: list[tuple[str, Callable[[], None] | None]] = []
+    own = str(table.get("id") or "")
+    faults: list[_Fault] = []
     if not table.get("available"):
         # Three ways a thing can be unavailable and they are not the same fault. A file
         # that is gone is a deletion; a file somewhere else is a location that is away,
         # and nothing here is lost; something with no file at all has nothing to play
         # it. The same sentence for all three would send somebody to the wrong fix.
         if game_tables.is_referenced(table):
-            faults.append((t("manager.workbench.place_unreachable"), None))
+            words = "manager.workbench.place_unreachable"
+            faults.append(_Fault((words,), words, {}, None))
         elif game_tables.is_keyed(table):
-            faults.append((t("manager.workbench.unplayable"), None))
+            words = "manager.workbench.unplayable"
+            faults.append(_Fault((words,), words, {}, None))
         else:
-            faults.append((t("manager.workbench.file_absent"),
-                           panel.action(t("word.forget"),
-                                        partial(_forget_table, context, table),
-                                        icon=verbs.FORGET,
-                                        hint=t("manager.workbench.forget_table.help"))))
+            # Forget decides about this file and no other, so each file is its own cause.
+            words = "manager.workbench.file_absent"
+            faults.append(_Fault(
+                (words, own), words, {},
+                panel.action(t("word.forget"), partial(_forget_table, context, table),
+                             icon=verbs.FORGET,
+                             hint=t("manager.workbench.forget_table.help"))))
     base = (table.get("source") or {}).get("base") or {}
     if table.get("available") and base.get("file") and not base.get("available"):
-        faults.append((t("manager.workbench.source_gone"), None))
+        words = "manager.workbench.source_gone"
+        faults.append(_Fault((words, str(base["file"])), words, {}, None))
     if pinmame.get("effective") and pinmame.get("installed") is False:
+        # The audit reads the game's folder, so every table naming this set gets the one
+        # answer, and the game's one Add fixes them all.
         opens = _add_opener(context, "rom")
-        faults.append((t("manager.workbench.rom_missing", rom=pinmame["effective"]),
-                       panel.action(t("word.add"), opens, icon=verbs.ADD,
-                                    hint=t("manager.workbench.add_missing.help"))
-                       if opens else None))
+        words = "manager.workbench.rom_missing"
+        rom = str(pinmame["effective"])
+        faults.append(_Fault(
+            (words, rom), words, {"rom": rom},
+            panel.action(t("word.add"), opens, icon=verbs.ADD,
+                         hint=t("manager.workbench.add_missing.help")) if opens else None))
     if table.get("update_available"):
         source = table.get("source") or {}
         theirs = str(source.get("version") or "")
@@ -981,8 +1034,9 @@ def _faults(context: dict[str, Any], table: dict[str, Any],
             act = (panel.link_out(t("manager.workbench.get_version", version=theirs), to=to)
                    if to else _state(t("manager.workbench.vps_failed"), "unknown",
                                      hint=unread) if unread else None)
-        faults.append((t("manager.workbench.newer_on_vps", theirs=theirs,
-                         ours=str(source.get("vps_version") or "")), act))
+        words = "manager.workbench.newer_on_vps"
+        faults.append(_Fault((words, own), words, {
+            "theirs": theirs, "ours": str(source.get("vps_version") or "")}, act))
     return faults
 
 
@@ -1000,16 +1054,22 @@ def _update_table(context: dict[str, Any], table: dict[str, Any], page: str, ver
         on_done=partial(_table_list_changed, context))
 
 
-def _alert(line: str, act: Callable[[], None] | None, said: str = "") -> Callable[[], None]:
-    """One finding, and the table it is about where the panel holds more than one."""
+def _alert(line: str, act: Callable[[], None] | None, said: Sequence[str] = (),
+           more: tuple[str, str] | None = None) -> Callable[[], None]:
+    """One finding, and the tables it is about where the panel holds more than one.
+
+    `more` is the line for the names that did not fit, with them behind its mark.
+    """
     def draw() -> None:
         with ui.element("div").classes("manager-attention"):
             ui.icon("error_outline").classes("manager-attention-icon")
             with ui.column().classes("gap-0 min-w-0 grow"):
                 ui.label(line).classes("manager-attention-line")
-                if said:
-                    ui.label(said).classes("manager-member-table truncate max-w-full") \
-                        .tooltip(said)
+                for name in said:
+                    ui.label(name).classes("manager-member-table truncate max-w-full") \
+                        .tooltip(name)
+                if more is not None:
+                    panel.line(more[0], hint=more[1], classes="manager-member-table")
             if act is not None:
                 act()
 

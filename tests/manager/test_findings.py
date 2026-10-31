@@ -18,6 +18,12 @@ async def _now(callback: Any, *args: Any, **kwargs: Any) -> Any:
     return callback(*args, **kwargs)
 
 
+def _alert(line: str, act: Any, said: Any = (), more: Any = None) -> tuple[str, Any, str]:
+    """The notice as its words: the lines under it, and the mark's line as `text [hint]`."""
+    under = [*said, *([f"{more[0]} [{more[1]}]"] if more else [])]
+    return (line, act, "\n".join(under))
+
+
 def _table(table_id: str, **extra: Any) -> dict[str, Any]:
     return {"id": table_id, "filename": f"{table_id}.vpx", "version": "1.0",
             "authors": ["Someone"], "available": True, **extra}
@@ -43,8 +49,7 @@ class Findings(unittest.IsolatedAsyncioTestCase):
                              new=lambda label, *_a, **_k: ("act", label)),
                 patch.object(panel, "link_out",
                              new=lambda label, *, to, **_k: ("link", label, to)),
-                patch_workbench("_alert",
-                             new=lambda line, act, said="": (line, act, said))):
+                patch_workbench("_alert", new=_alert)):
             patched.start()
             self.addCleanup(patched.stop)
 
@@ -123,7 +128,7 @@ class Findings(unittest.IsolatedAsyncioTestCase):
 
         context["library"].vps_releases.assert_not_called()
 
-    async def test_each_says_its_table_where_the_game_has_several(self) -> None:
+    async def test_a_notice_says_its_table_where_the_game_has_several(self) -> None:
         tables = (_table("a", available=False), _table("b", version="2.0"))
         context = _context(*tables)
 
@@ -131,6 +136,117 @@ class Findings(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([said for _, (_, _, said) in entries],
                          [game_tables.name_among(tables[0], list(tables))])
+
+    def _rom(self, table_id: str, rom: str = "hustler", **extra: Any) -> dict[str, Any]:
+        return _table(table_id, dependencies={
+            "pinmame": {"effective": rom, "installed": False}}, **extra)
+
+    async def test_a_rom_two_tables_share_is_one_notice_with_one_add(self) -> None:
+        tables = (self._rom("a"), self._rom("b", version="2.0"))
+
+        found = await self._found(*tables)
+
+        self.assertEqual(found, [(t("manager.workbench.rom_missing", rom="hustler", count=2),
+                                  ("act", t("word.add")), t("manager.workbench.cause_both"))])
+
+    async def test_a_rom_every_one_of_three_tables_names_says_how_many(self) -> None:
+        found = await self._found(self._rom("a"), self._rom("b", version="2.0"),
+                                  self._rom("c", version="3.0"))
+
+        self.assertEqual([said for _, _, said in found],
+                         [t("manager.workbench.cause_all", count=3)])
+
+    async def test_two_sets_are_two_notices_each_naming_its_table(self) -> None:
+        tables = (self._rom("a", "hustler"), self._rom("b", "bighurt", version="2.0"))
+
+        found = await self._found(*tables)
+
+        self.assertEqual(
+            found,
+            [(t("manager.workbench.rom_missing", rom="hustler"), ("act", t("word.add")),
+              game_tables.name_among(tables[0], list(tables))),
+             (t("manager.workbench.rom_missing", rom="bighurt"), ("act", t("word.add")),
+              game_tables.name_among(tables[1], list(tables)))])
+
+    async def test_a_notice_about_some_of_several_names_them_one_to_a_line(self) -> None:
+        tables = (self._rom("a"), self._rom("b", version="2.0"), self._rom("c", version="3.0"),
+                  _table("d", version="4.0"))
+
+        found = await self._found(*tables)
+
+        self.assertEqual(found[0][2], "\n".join(
+            game_tables.name_among(one, list(tables)) for one in tables[:3]))
+
+    async def test_names_past_three_are_counted_and_the_rest_sit_behind_the_mark(
+            self) -> None:
+        tables = tuple(self._rom(name, version=f"{number}.0")
+                       for number, name in enumerate("abcde", start=1)) + (
+            _table("f", version="6.0"),)
+
+        found = await self._found(*tables)
+
+        names = [game_tables.name_among(one, list(tables)) for one in tables[:5]]
+        self.assertEqual(found[0][2], "\n".join(
+            [*names[:3], f"{t('said.and_more', count=2)} [{chr(10).join(names[3:])}]"]))
+
+    async def test_the_files_gone_are_forgotten_one_at_a_time(self) -> None:
+        tables = (_table("a", available=False), _table("b", available=False, version="2.0"))
+
+        found = await self._found(*tables)
+
+        self.assertEqual([(line, act) for line, act, _ in found],
+                         [(t("manager.workbench.file_absent"), ("act", t("word.forget")))] * 2)
+        self.assertEqual([said for _, _, said in found],
+                         [game_tables.name_among(one, list(tables)) for one in tables])
+
+    async def test_an_update_stays_one_notice_per_table(self) -> None:
+        source = {"vps_file_id": "r-1", "version": "1.2", "vps_version": "1.1"}
+        found = await self._found(_table("a", update_available=True, source=source),
+                                  _table("b", update_available=True, source=source,
+                                         version="2.0"))
+
+        self.assertEqual(len(found), 2)
+
+    async def test_a_fault_nothing_fixes_reads_in_the_plural_for_several_tables(
+            self) -> None:
+        for words, form in (("place_unreachable", "referenced"), ("unplayable", "keyed")):
+            with self.subTest(words=words):
+                tables = (_table("a", available=False, form=form),
+                          _table("b", available=False, version="2.0", form=form))
+
+                found = await self._found(*tables)
+
+                self.assertEqual(
+                    found, [(t(f"manager.workbench.{words}", count=2), None,
+                             t("manager.workbench.cause_both"))])
+
+    async def test_one_made_from_file_gone_is_one_notice_for_the_tables_made_from_it(
+            self) -> None:
+        base = {"base": {"file": "base.vpx", "available": False}}
+        found = await self._found(_table("a", source=base),
+                                  _table("b", source=base, version="2.0"),
+                                  _table("c", source={"base": {"file": "other.vpx",
+                                                               "available": False}},
+                                         version="3.0"))
+
+        self.assertEqual(len(found), 2)
+        self.assertEqual(found[0][0], t("manager.workbench.source_gone", count=2))
+        self.assertEqual(found[1][0], t("manager.workbench.source_gone"))
+
+    async def test_a_games_one_table_has_no_line_under_its_notice(self) -> None:
+        found = await self._found(self._rom("a"))
+
+        self.assertEqual([said for _, _, said in found], [""])
+
+    async def test_a_tables_own_tab_names_only_that_table(self) -> None:
+        tables = (self._rom("a"), self._rom("b", version="2.0"))
+        context = _context(*tables)
+
+        entries = await game_table._findings(context, [tables[1]])
+
+        self.assertEqual([said for _, (_, _, said) in entries],
+                         [game_tables.name_among(tables[1], list(tables))])
+        self.assertEqual(entries[0][1][0], t("manager.workbench.rom_missing", rom="hustler"))
 
 
 # Made at import, outside any task, where NiceGUI still hands out the script's own page.

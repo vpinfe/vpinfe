@@ -24,6 +24,7 @@ from common.host import display_service
 from common.i18n import t
 from manager.kit import offload, panel, units
 from manager.kit.data import config_groups
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 from manager.settings import displays, screens
 from manager.settings import screens_picture as picture
@@ -376,6 +377,7 @@ async def _each_launcher(library: Any, act: Callable[[str], Awaitable[None]]) ->
     except Exception:  # noqa: BLE001 - VPinFE's own change is already kept
         logger.warning("Could not list the launchers to follow VPinFE", exc_info=True)
         return
+    failed = Failures()
     for one in found.get("launchers") or []:
         if one.get("app") != VPX_APP or not one.get("enabled") or not one.get("has_config"):
             continue
@@ -384,7 +386,8 @@ async def _each_launcher(library: Any, act: Callable[[str], Awaitable[None]]) ->
         except Exception as exc:  # noqa: BLE001 - say which, and carry on with the rest
             logger.warning("Could not move %s to follow VPinFE", one.get("launcher_id"),
                            exc_info=True)
-            ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
+            failed.add(str(one.get("display_name") or one["launcher_id"]), why(exc))
+    failed.say("manager.vpx_displays.follow_failed")
 
 
 async def follow(library: Any, before: displays.Standing, after: displays.Standing,

@@ -39,6 +39,7 @@ from manager.kit import (
     when,
 )
 from manager.kit.data import Library
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 from manager.library import mediaview
 from manager.security import accept
@@ -559,6 +560,7 @@ async def _install(library: Library, themes: list[dict[str, Any]],
                    again: Callable[[], Any]) -> None:
     """Each in turn; one that fails says so and the rest go on."""
     done = 0
+    failed = Failures()
     for theme in themes:
         key = theme["key"]
         if not (theme.get("trust") or {}).get("install_accepted", True) \
@@ -569,12 +571,13 @@ async def _install(library: Library, themes: list[dict[str, Any]],
         try:
             await run.io_bound(library.install_theme, key)
         except Exception as exc:  # noqa: BLE001
-            ui.notify(t("manager.themes.install_failed"), caption=why(exc), type="negative")
+            failed.add(str(theme.get("name") or key), why(exc))
             continue
         finally:
             downloading.dismiss()
         done += 1
         ui.notify(t("manager.themes.installed", key=key), type="positive")
+    failed.say("manager.themes.install_failed")
     if done:
         await again()
 
@@ -628,13 +631,15 @@ async def _uninstall(library: Library, themes: list[dict[str, Any]],
             confirm=t("word.uninstall"), icon=verbs.UNINSTALL):
         return
     gone = []
+    failed = Failures()
     for theme in themes:
         try:
             await run.io_bound(library.remove_theme, theme["key"])
         except Exception as exc:  # noqa: BLE001
-            ui.notify(t("said.action_failed"), caption=why(exc), type="negative")
+            failed.add(theme["name"], why(exc))
             continue
         gone.append(theme)
+    failed.say("manager.themes.uninstall_failed")
     if gone:
         ui.notify(t("manager.themes.uninstalled", name=gone[0]["name"]) if len(gone) == 1
                   else t("manager.themes.uninstalled_many", count=len(gone)),

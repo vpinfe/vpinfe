@@ -993,7 +993,10 @@
   "manager.discovery.actions_selected": "Àçţîöñš ƒöř ţĥè šèŀèçţèđ ĝàɱèš",
   "manager.discovery.add": "Àđđ ţö Ŀîƀřàřý",
   "manager.discovery.add_detail": "Èàçĥ ƀèçöɱèš à ĝàɱè ŵîţĥ ñö ţàƀŀèš",
-  "manager.discovery.add_failed": "Çöûŀđ ñöţ àđđ {name}",
+  "manager.discovery.add_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè àđđèđ",
+    "other": "{count:n} ĝàɱèš çöûŀđ ñöţ ƀè àđđèđ"
+  },
   "manager.discovery.add_many": {
     "one": "Àđđ 1 ĝàɱè ţö ýöûř ŀîƀřàřý",
     "other": "Àđđ {count:n} ĝàɱèš ţö ýöûř ŀîƀřàřý"
@@ -1082,6 +1085,10 @@
   "manager.discovery.try_again.help": "Đöŵñŀöàđ ţĥîš ƒîŀè àĝàîñ",
   "manager.discovery.source_act.help": "Àšķ ţĥè šöûřçè ţö đö ţĥîš ƒöř ţĥè ƒîŀè",
   "manager.discovery.act_failed": "Ţĥè öñŀîñè šöûřçè çöûŀđ ñöţ đö ţĥàţ",
+  "manager.discovery.stop_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè šţöþþèđ",
+    "other": "{count:n} öñŀîñè šöûřçèš çöûŀđ ñöţ ƀè šţöþþèđ"
+  },
   "manager.discovery.offer_gone": "Ţĥè öñŀîñè šöûřçè ñö ŀöñĝèř öƒƒèřš ţĥîš ƒîŀè",
   "manager.discovery.size.kb": "{count} ĶƁ",
   "manager.discovery.size.mb": "{count} ḾƁ",
@@ -1679,8 +1686,10 @@
   "manager.devices.ask_failed": "Çöûŀđ ñöţ àšķ {device_label}",
   "manager.devices.check_failed": "Çöûŀđ ñöţ çĥèçķ",
   "manager.devices.activity_failed": "Çöûŀđ ñöţ çĥèçķ ŵĥàţ {name} îš đöîñĝ",
-  "manager.devices.forget_failed": "Çöûŀđ ñöţ ƒöřĝèţ ţĥàţ đèṽîçè",
-  "manager.devices.forget_named_failed": "Çöûŀđ ñöţ ƒöřĝèţ {name}",
+  "manager.devices.forget_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè ƒöřĝöţţèñ",
+    "other": "{count:n} đèṽîçèš çöûŀđ ñöţ ƀè ƒöřĝöţţèñ"
+  },
   "manager.devices.carrying_failed": "Çöûŀđ ñöţ àšķ ŵĥàţ îţ îš çàřřýîñĝ",
   "manager.devices.carrying_away": "Ñöţ ŀîšţèđ ûñţîŀ îţ àñšŵèřš",
   "manager.devices.log_failed": "Çöûŀđ ñöţ řèàđ ţĥè ŀöĝ",
@@ -2367,6 +2376,10 @@
   "manager.launchers.copy_title_many": {
     "one": "Çöþý {count:n} ŀàûñçĥèř ţö ŵĥîçĥ đèṽîçèš?",
     "other": "Çöþý {count:n} ŀàûñçĥèřš ţö ŵĥîçĥ đèṽîçèš?"
+  },
+  "manager.launchers.remove_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè řèɱöṽèđ",
+    "other": "{count:n} ŀàûñçĥèřš çöûŀđ ñöţ ƀè řèɱöṽèđ"
   },
   "manager.launchers.remove_many": {
     "one": "Řèɱöṽè {count:n} ŀàûñçĥèř?",
@@ -3921,7 +3934,10 @@
   "manager.themes.both": "Çàƀîñèţ öř đèšķţöþ",
   "manager.themes.cabinet": "Çàƀîñèţ",
   "manager.themes.check_updates": "Çĥèçķ ƒöř ûþđàţèš",
-  "manager.themes.install_failed": "Çöûŀđ ñöţ îñšţàŀŀ îţ",
+  "manager.themes.install_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè îñšţàŀŀèđ",
+    "other": "{count:n} ţĥèɱèš çöûŀđ ñöţ ƀè îñšţàŀŀèđ"
+  },
   "manager.themes.activate_failed": "Çöûŀđ ñöţ ɱàķè îţ àçţîṽè",
   "manager.themes.settings_failed": "Çöûŀđ ñöţ řèàđ îţš šèţţîñĝš",
   "manager.themes.themes_failed": "Çöûŀđ ñöţ řèàđ ţĥè ţĥèɱèš",
@@ -3976,6 +3992,10 @@
   "manager.themes.uninstall_many": {
     "one": "Ûñîñšţàŀŀ {count:n} ţĥèɱè?",
     "other": "Ûñîñšţàŀŀ {count:n} ţĥèɱèš?"
+  },
+  "manager.themes.uninstall_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè ûñîñšţàŀŀèđ",
+    "other": "{count:n} ţĥèɱèš çöûŀđ ñöţ ƀè ûñîñšţàŀŀèđ"
   },
   "manager.themes.uninstalled_many": {
     "one": "{count:n} ţĥèɱè ûñîñšţàŀŀèđ",
@@ -4119,6 +4139,10 @@
   "manager.vpx_displays.long_side": "Ŀöñĝ šîđè",
   "manager.vpx_displays.screen_size": "Šçřèèñ Šîžè",
   "manager.vpx_displays.short_side": "Šĥöřţ šîđè",
+  "manager.vpx_displays.follow_failed": {
+    "one": "{name} çöûŀđ ñöţ ƀè ûþđàţèđ",
+    "other": "{count:n} ŀàûñçĥèřš çöûŀđ ñöţ ƀè ûþđàţèđ"
+  },
   "manager.vpx_displays.unnamed": "Ŀèƒţ ŵĥèřè îţ ŵàš: Ṽîšûàŀ Þîñƀàŀŀ ĥàš ñö ñàɱè ƒöř ţĥè šçřèèñ öƒ {parts} ýèţ",
   "manager.vpx_displays.unsized": "Ŀèƒţ ŵĥèřè îţ ŵàš: ţĥè þŀàýƒîèŀđ ñèèđš à šçřèèñ ƀèƒöřè {parts} çàñ ĝö îñ îţ",
   "manager.vpx_input.controller_button": "Çöñţřöŀŀèř ƀûţţöñ",
@@ -4471,6 +4495,8 @@
   },
   "manager.workbench.keep_none": "Ķèèþ ñöñè öƒ îţš ĝàɱèš",
   "manager.workbench.all_tables": "Àŀŀ Ţàƀŀèš",
+  "manager.workbench.cause_both": "Ɓöţĥ ţàƀŀèš",
+  "manager.workbench.cause_all": "Àŀŀ {count:n} ţàƀŀèš",
   "manager.workbench.launcher": "Ŀàûñçĥèř",
   "manager.workbench.launcher_from_game": {
     "one": "{name} · {count:n} šèţţîñĝ ƒřöɱ {scope}",
@@ -4487,7 +4513,10 @@
   "manager.workbench.lock_to": "Ŀöçķ ţö {table}",
   "manager.workbench.logs": "Ŀöĝš",
   "manager.workbench.made_from": "Ḿàđè ƒřöɱ",
-  "manager.workbench.source_gone": "Ţĥè ƒîŀè îţ ŵàš ɱàđè ƒřöɱ îš ɱîššîñĝ",
+  "manager.workbench.source_gone": {
+    "one": "Ţĥè ƒîŀè îţ ŵàš ɱàđè ƒřöɱ îš ɱîššîñĝ",
+    "other": "Ţĥè ƒîŀè ţĥèý ŵèřè ɱàđè ƒřöɱ îš ɱîššîñĝ"
+  },
   "manager.workbench.make_default": "Ḿàķè ţĥîš ţĥè đèƒàûŀţ",
   "manager.workbench.make_own": "Ḿàķè îţ îţš öŵñ",
   "manager.workbench.own_question": "Ḿàķè ţĥîš îţš öŵñ ĝàɱè?",
@@ -4532,7 +4561,10 @@
   "manager.workbench.not_matched": "Ñöţ ɱàţçĥèđ",
   "manager.workbench.not_saved_rules": "Ţĥè ƒřöñţèñđ šţîŀŀ šĥöŵš ţĥè šàṽèđ řûŀèš",
   "manager.workbench.not_used": "Ĥèřè ƀûţ ñöţ ûšèđ",
-  "manager.workbench.unplayable": "Ñöţĥîñĝ öñ ţĥîš đèṽîçè çàñ þŀàý îţ",
+  "manager.workbench.unplayable": {
+    "one": "Ñöţĥîñĝ öñ ţĥîš đèṽîçè çàñ þŀàý îţ",
+    "other": "Ñöţĥîñĝ öñ ţĥîš đèṽîçè çàñ þŀàý ţĥèɱ"
+  },
   "manager.workbench.empty": "Ñöţĥîñĝ îñ îţ ýèţ",
   "manager.workbench.nothing_removable": "Ñöţĥîñĝ ţö řèɱöṽè àţ ţĥîš ŀèṽèŀ",
   "manager.workbench.only_launcher": "Ţĥè öñŀý ŀàûñçĥèř ţĥîš đèṽîçè ĥàš",
@@ -4556,7 +4588,10 @@
   "manager.workbench.picture_deleted": "Þîçţûřè đèŀèţèđ",
   "manager.workbench.pictures": "Þîçţûřèš",
   "manager.workbench.pictures_unreadable": "Çöûŀđñ'ţ řèàđ ţĥè þîçţûřèš",
-  "manager.workbench.place_unreachable": "Ţĥè þŀàçè ţĥîš ţàƀŀè ŀîṽèš îš ñöţ řèàçĥàƀŀè",
+  "manager.workbench.place_unreachable": {
+    "one": "Ţĥè þŀàçè ţĥîš ţàƀŀè ŀîṽèš îš ñöţ řèàçĥàƀŀè",
+    "other": "Ŵĥèřè ţĥèšè ţàƀŀèš ŀîṽè îš ñöţ řèàçĥàƀŀè"
+  },
   "manager.workbench.play_table": "Þŀàý Ţĥîš Ţàƀŀè",
   "manager.workbench.play_time": "Þŀàý ţîɱè",
   "manager.workbench.plugin_section": "Þŀûĝîñ: {name}",

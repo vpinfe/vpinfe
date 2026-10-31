@@ -48,6 +48,7 @@ from manager.kit import (
 )
 from manager.kit import grid as grid_module
 from manager.kit.data import Library
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 from manager.library import (
     discovery_ask,
@@ -1010,15 +1011,16 @@ async def add(library: Library, entries: list[dict[str, Any]],
     if where is None:
         return
     made = 0
+    failed = Failures()
     for entry in entries:
         try:
             await offload.io(library.add_game_from_vps, entry["id"], where)
         except Exception as exc:  # noqa: BLE001 - one refusal does not end the rest
             logger.warning("manager: could not add %s", entry["id"], exc_info=True)
-            ui.notify(t("manager.discovery.add_failed", name=entry["name"]),
-                      caption=why(exc), type="negative")
+            failed.add(entry["name"], why(exc))
             continue
         made += 1
+    failed.say("manager.discovery.add_failed")
     if made:
         ui.notify(t("manager.discovery.added", count=made), type="positive")
         await after()

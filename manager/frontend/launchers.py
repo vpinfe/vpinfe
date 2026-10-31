@@ -31,6 +31,7 @@ from manager.backups import backup_rows
 from manager.kit import busy, confirm, folder_picker, grid, offload, panel, verbs, views, walks
 from manager.kit import dialog as frame
 from manager.kit.data import Library
+from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
 
 logger = logging.getLogger("vpinfe.manager.frontend.launchers")
@@ -697,10 +698,12 @@ async def remove(library: Library, state: dict[str, Any], redraw: Callable[[], N
     if not await confirm.ask(title, detail=detail, lines=lines, confirm=t("word.remove"),
                              icon=verbs.REMOVE):
         return
+    failed = Failures()
     for launcher in launchers:
         try:
             await run.io_bound(library.delete_launcher, launcher["launcher_id"])
         except Exception as exc:  # noqa: BLE001
-            ui.notify(t("said.remove_failed"), caption=why(exc), type="negative")
+            failed.add(launcher["display_name"], why(exc))
+    failed.say("manager.launchers.remove_failed")
     state["launcher"] = ""
     redraw()

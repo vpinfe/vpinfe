@@ -238,6 +238,16 @@ error raised from one carries `why(exc)` as its message, and the Manager puts th
 own lead in turn. `tests/invariants/test_a_failure_leads_with_words.py` holds the whole tree
 to it.
 
+### A bulk act says its failures once
+
+An act over several items collects what failed and says it once, after the last item: one
+item named as it would be alone, several counted (*3 launchers could not be removed*) with
+each distinct reason once in the caption. `manager.kit.failed_together.Failures` does it: the
+loop hands each failure to `add` and carries on, and `say` is called after the loop with a
+plural entry whose `one` form takes `{name}` and whose `other` form takes `{count}`. A walk
+that asks about each item keeps its toast per step, because each answers the step just
+taken. `tests/invariants/test_a_bulk_act_says_its_failures_once.py` holds `manager/` to it.
+
 ### Help says what a control does, or what to do next
 
 A help line, hint, caption or tooltip does one of two jobs. It says what the control does
@@ -1368,9 +1378,10 @@ missing, a link to the newer release for a table with an update.
   coverage, and a block that fires on them teaches everyone to skip it.
 - **A finding nothing here can fix still shows, with no action.** A location that is away
   is fixed by bringing it back, not by a button.
-- **Once per panel.** A game's panel carries its tables' findings, each named where there
-  is more than one table; a table's panel carries its own, and the game's section above it
-  does not repeat them.
+- **Once per panel, once per cause.** A game's panel carries its tables' findings; a
+  table's panel carries its own, and the game's section above it does not repeat them.
+  A finding several tables share, fixed by one act, is one notice that says which tables
+  it is about. A finding fixed table by table stays one notice per table.
 
 ### A kind switched off is on no surface
 
