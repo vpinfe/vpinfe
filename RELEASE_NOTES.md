@@ -76,7 +76,7 @@ next section first.
 - **Manager** - Match a game to the Virtual Pinball Spreadsheet from a picker, see how the
   match was made and go back to the earlier one. Take a game's details from the spreadsheet,
   type your own over any of them, and revert a field with a click. See which tables have a
-  newer version on the spreadsheet. VPinFE ties a table to its release by itself when the
+  newer version on the spreadsheet. VPinFE matches a table to its VPS release by itself when the
   spreadsheet names it exactly, and an unbind you make is kept.
 - **Manager** - Discovery sets your library against every game and release on the Virtual
   Pinball Spreadsheet, and keeps the comparison current on its own. It opens on Home, a set

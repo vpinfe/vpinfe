@@ -76,10 +76,11 @@ class Count(unittest.TestCase):
         self.assertEqual("2 of 12", release_match._count(self.WORDS, 2, 12, True, ""))
 
     def test_a_single_format_app_names_its_format(self) -> None:
-        self.assertEqual("12 VPX releases", release_match._count(self.WORDS, 12, 12, False, "VPX"))
+        self.assertEqual("12 VPS releases for VPX",
+                         release_match._count(self.WORDS, 12, 12, False, "VPX"))
 
     def test_an_app_playing_several_formats_names_none(self) -> None:
-        self.assertEqual("12 releases", release_match._count(self.WORDS, 12, 12, False, ""))
+        self.assertEqual("12 VPS releases", release_match._count(self.WORDS, 12, 12, False, ""))
 
 
 if __name__ == "__main__":

@@ -277,8 +277,7 @@ async def _launcher_details(context: dict[str, Any]) -> None:
         launcher["enabled"], lambda e: flip(bool(e.value)), disabled=only_one,
         hint=t("manager.workbench.only_launcher") if only_one else "")))
     if goes_to := _switched_off_goes_to(launcher, context.get("launchers") or []):
-        entries.append(panel.note(
-            t("manager.workbench.off_note", default=goes_to)))
+        entries.append(panel.note(t("manager.workbench.off_note", name=goes_to)))
 
     entries.append((HEADING, t("word.program")))
     if note := _program_note(launcher):

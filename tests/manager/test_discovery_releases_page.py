@@ -250,8 +250,8 @@ class Tab(unittest.TestCase):
 
 class Summary(unittest.TestCase):
     def test_it_counts_releases(self) -> None:
-        self.assertEqual("1 release", discovery_releases.summary(1))
-        self.assertEqual("37 releases", discovery_releases.summary(37))
+        self.assertEqual("1 VPS release", discovery_releases.summary(1))
+        self.assertEqual("37 VPS releases", discovery_releases.summary(37))
 
 
 if __name__ == "__main__":

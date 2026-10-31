@@ -184,7 +184,7 @@ class Listing(unittest.TestCase):
         self.assertEqual("Bally 1990 · 2 tables", discovery_ask.tile_line(ROWS[0], tables))
         self.assertEqual("Bally 1990 · 1 backglass",
                          discovery_ask.tile_line(ROWS[0], [mixed[1]]))
-        self.assertEqual("Bally 1990 · 2 releases", discovery_ask.tile_line(ROWS[0], mixed))
+        self.assertEqual("Bally 1990 · 2 VPS releases", discovery_ask.tile_line(ROWS[0], mixed))
 
     def test_a_game_with_no_release_listed_has_no_count_at_all(self) -> None:
         self.assertEqual("Bally 1990", discovery_ask.tile_line(ROWS[0], []))
@@ -390,7 +390,7 @@ class Drawn(unittest.IsolatedAsyncioTestCase):
         await _settle()
 
         tips = [one.text for one in body.descendants() if isinstance(one, ui.tooltip)]
-        self.assertIn("Your backglass of Zeta isn't matched to a release on VPS, so VPinFE "
+        self.assertIn("Your backglass of Zeta isn't matched to a VPS release, so VPinFE "
                       "can't tell whose it is. Match it in the game's pane.", tips)
 
     async def test_the_count_follows_what_the_wall_shows_after_typing(self) -> None:

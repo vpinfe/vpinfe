@@ -197,7 +197,7 @@ class TieTheLibraryTests(TempTree):
 
         [job] = [one for one in job_registry.recent()
                  if one.kind == job_registry.KIND_LIBRARY_SCAN]
-        self.assertEqual("1 table tied to its release", job.detail)
+        self.assertEqual("1 table matched to its VPS release", job.detail)
 
     def test_a_folder_that_cannot_be_written_to_is_neither_read_nor_written(self) -> None:
         with patch("common.games.exact_ties.library_folders.blocked_games",

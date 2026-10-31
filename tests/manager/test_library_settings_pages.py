@@ -68,7 +68,7 @@ class TheChecksPage(_Offloaded):
     HEADINGS = ["Game Folders", "Matching", "Media", "Tables"]
     UNDER_EACH = [
         ["Unreadable Folders", "Games With No Tables", "Games on an Older Format"],
-        ["Unmatched Games", "Tables With No Release Picked", "Games With No Year"],
+        ["Unmatched Games", "Tables With No VPS Release Picked", "Games With No Year"],
         ["Games With No Playfield", "Games With No Backglass", "Games With No Media"],
         ["Missing ROMs"],
     ]

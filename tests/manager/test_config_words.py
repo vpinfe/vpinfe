@@ -12,6 +12,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from common.i18n import t
 from manager.kit import panel
 from manager.workbench import all_settings
 
@@ -88,6 +89,10 @@ class SwitchedOffTests(unittest.TestCase):
     def test_it_names_where_the_tables_go(self) -> None:
         self.assertEqual(all_settings._switched_off_goes_to(self.ONE, [self.ONE, self.TWO]),
                          "Narrow")
+
+    def test_the_note_calls_the_name_a_launcher_so_any_name_reads_as_one(self) -> None:
+        self.assertEqual(t("manager.workbench.off_note", name="true"),
+                         "Off, its tables play with the launcher “true” instead")
 
     def test_nothing_is_said_where_nothing_could_take_them(self) -> None:
         other_app = dict(self.TWO, app="fp")

@@ -550,7 +550,12 @@ reading both had to invert twice.
 - **Release** - anything an author publishes through VPS for a game: a table, and equally
   a backglass, wheel art, a ROM, a POV, a PuP pack or a media pack. Several authors can each
   release their own of any kind for one game, and a mod or an edition is a release of its
-  own. What VPinFE and a theme publish is a release in the same sense.
+  own. What VPinFE and a theme publish is a release in the same sense. On screen a release
+  VPS lists is a **VPS release** in a sentence or a tooltip (plural *VPS releases*), and a
+  heading outside Discovery says **VPS Release**. Discovery shows no other kind of release,
+  so it keeps **Release** in its headings, tabs and verbs. A file is **matched** to a VPS release, never
+  *tied*, and a table matched with no record of how reads **Matched**. A release of VPinFE
+  or of a theme, and the year a game was released, keep the bare word.
 - **Version** - an update to a release by the same authors. VPS keeps the release's `id`
   across versions, even a major rework, and records only the current one. A table on screen
   is your file of a table release at one version.
