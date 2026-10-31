@@ -9,9 +9,11 @@ from typing import Any
 
 from nicegui import ui
 
+from common import i18n
 from common.games.asset_registry import ALWAYS_KEPT as _ALWAYS_KEPT
 from common.i18n import t
-from manager.kit import game_tables, media_ownership, offload, panel, verbs
+from manager.kit import game_tables, media_ownership, offload, panel, states, verbs
+from manager.library import file_acts, file_states
 from manager.workbench.core import HEADING, _asset_name, _rows
 from manager.workbench.file import _asset_detail_of, _asset_file_block, _same_file, _served
 from manager.workbench.game_media import _kept_kinds, _pick_slot
@@ -40,6 +42,7 @@ def _assets_label(context: dict[str, Any]) -> str:
     # two rows were drawn - a header disagreeing with the list under it.
     have += sum(1 for kind, state in _only_kept(game.get("assets") or {}, kept).items()
                 if kind not in resolved and state.get("present"))
+    have += len(context.get("rom_files") or [])
     return t("manager.workbench.assets_2", have=(have)) if have else t("manager.workbench.assets")
 
 
@@ -83,7 +86,10 @@ async def _asset_dock(context: dict[str, Any], picked: str) -> None:
     kind = str(picked or "")
     library, game_id = context["library"], context["game_id"]
     files = await offload.io(library.files_of, "asset", game_id)
-    found = _same_file(files, {"kind": kind, "table": context["lens"]}) if kind else None
+    if kind.startswith(ROM_PICK):
+        found = _rom_picked(files, kind)
+    else:
+        found = _same_file(files, {"kind": kind, "table": context["lens"]}) if kind else None
     dock.clear()
     with dock:
         if found is None:
@@ -92,7 +98,7 @@ async def _asset_dock(context: dict[str, Any], picked: str) -> None:
                 ui.label(t("manager.workbench.file_hint")).classes("manager-help")
             return
         detail = await _asset_detail_of(library, game_id, found)
-        await _asset_file_block({**context, "row": found, "kind": kind, "detail": detail,
+        await _asset_file_block({**context, "row": found, "kind": found["kind"], "detail": detail,
                                  "served": _served(found, files, context["tables"]),
                                  "link_view": "assets"})
 
@@ -141,7 +147,47 @@ def _asset_entries(context: dict[str, Any],
         present = bool(state.get("present"))
         chip = _present_row(present)
         row(kind, chip if present else _with_add(context, kind, chip))
+    if _collects("rom", kept):
+        for one in context.get("rom_files") or []:
+            entries.append((_asset_name("rom"), _rom_file_row(context, one),
+                            *((pick(ROM_PICK + str(one["file"]).lower()),) if pick else ())))
     return entries
+
+
+ROM_PICK = "rom:"
+
+
+def _rom_picked(files: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    """The ROM file a pick names, by the lowercase file name a deep link carries."""
+    name = key.removeprefix(ROM_PICK)
+    return next((one for one in files if one.get("kind") in file_acts.ROM_FILES
+                 and str(one.get("file") or "").lower() == name), None)
+
+
+def _rom_file_row(context: dict[str, Any], one: dict[str, Any]) -> Any:
+    """A ROM file in the game's folder: its name and size, and whether a table reads it.
+    A table asked for, which the folder lacks, is the This Table row's."""
+    name, size = str(one.get("file") or ""), one.get("size_bytes")
+    users = [str(user) for user in one.get("users") or []]
+    if users:
+        mine = context["lens"] and context["lens"] in users
+        meaning = t("manager.workbench.rom_used_this") if mine \
+            else t("manager.workbench.rom_used_n", count=len(users))
+        chip = _state(t("word.in_use"), "on", glyph="check",
+                      hint=states.line(t("word.in_use"), meaning))
+    else:
+        unused = file_states.table("manager.assets.unused_meaning").state(file_states.UNUSED)
+        chip = _state(t("manager.media_ownership.unused"), "off",
+                      hint=unused.line() if unused else "")
+
+    def draw() -> None:
+        with ui.element("div").classes("manager-fact-edit"):
+            ui.label(name).classes("manager-slot-file truncate").tooltip(name)
+            if size:
+                ui.label(i18n.size(size)).classes("manager-help")
+            chip()
+
+    return draw
 
 
 def _only_kept(states: dict[str, Any], kept: set[str] | None) -> dict[str, Any]:

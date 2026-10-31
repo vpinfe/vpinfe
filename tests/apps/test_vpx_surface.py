@@ -48,7 +48,8 @@ BASELINE: dict[str, int] = {
     # Two imports of the settings-file reader, the PinMAME catalog import and its label.
     "common/support/collect/launchers.py": 4,
     "common/games/archive_service.py": 4,
-    "common/games/asset_lens.py": 6,
+    # Includes the one read of a table's ROM dependency by its key.
+    "common/games/asset_lens.py": 7,
     "common/games/asset_registry.py": 4,
     "common/games/asset_resolver.py": 11,
     # Reading and drawing a backglass file is the subject of these two, so the name is

@@ -77,6 +77,7 @@ async def _draw(container: ui.column, title: ui.column, library: Library,
     # its own process, so a blocking call here does not just cost time, it deadlocks.
     launcher_listing = await offload.io(_launchers_for_panel, library)
     await offload.io(library.media_for, game_id, None)
+    rom_files = await offload.io(library.roms_of, game_id)
     # The header menu's collections, read here for the same reason as the tables.
     collections = await collection_adds.read(library, str(state.get("collection") or ""))
     in_collections = await _collections_held(library, game_id)
@@ -111,7 +112,8 @@ async def _draw(container: ui.column, title: ui.column, library: Library,
         context = {"library": library, "game": game, "game_id": game_id,
                    "tables": tables, "launchers": launcher_listing, "state": state,
                    "collections": collections, "in_collections": in_collections,
-                   "lens": table_id, "redraws": [], "slot": state["slot"]}
+                   "lens": table_id, "redraws": [], "slot": state["slot"],
+                   "rom_files": rom_files}
 
         # The subject has to survive a rebuild. Left off, every rail click fell
         # back to the game and the table's own sections vanished under the cursor.

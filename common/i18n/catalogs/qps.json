@@ -4912,6 +4912,8 @@
   },
   "manager.workbench.remove_asset.game": "Èṽèřý ţàƀŀè ŵîţĥöûţ à ƒîŀè öƒ îţš öŵñ ŀöšèš îţ.",
   "manager.workbench.remove_asset.loose": "Ñöţĥîñĝ řèàđš îţ ñöŵ.",
+  "manager.workbench.remove_asset.rom_unused": "Ñö ţàƀŀè ûšèš ţĥîš ƒîŀè.",
+  "manager.workbench.remove_asset.rom_used": "Ţĥè ţàƀŀèš ƀèŀöŵ ûšè ţĥîš ƒîŀè àñđ ŵîŀŀ řèàđ Ñöţ Îñšţàŀŀèđ.",
   "manager.workbench.remove_asset.table": "Ţĥîš ţàƀŀè ûšèš ţĥè ƒîŀè ñàɱèđ ƒöř ţĥè ƒöŀđèř îñšţèàđ, ŵĥèřè ţĥèřè îš öñè.",
   "manager.workbench.remove_asset.table_only": "Ţĥîš ţàƀŀè ŵîŀŀ ĥàṽè ñöñè.",
   "manager.workbench.remove_asset.table_then": "Ţĥîš ţàƀŀè šĥöŵš “{name}” îñšţèàđ.",
@@ -5037,6 +5039,19 @@
   "manager.workbench.wheel": "Ŵĥèèŀ",
   "manager.workbench.wheel.help": "Šĥöŵñ ŵĥèñ þîçķîñĝ à çöŀŀèçţîöñ îñ ţĥè ƒřöñţèñđ",
   "manager.workbench.rom_tip": "Ŵĥèřè à řöɱ îš ɱàñàĝèđ",
+  "manager.workbench.rom_unused": "Ñö ţàƀŀè ûšèš ţĥîš ƒîŀè",
+  "manager.workbench.rom_used_by": "Ûšèđ ƀý {tables}",
+  "manager.workbench.rom_used_n": {
+    "one": "Ûšèđ ƀý {count:n} ţàƀŀè",
+    "other": "Ûšèđ ƀý {count:n} ţàƀŀèš"
+  },
+  "manager.workbench.rom_used_this": "Ûšèđ ƀý Ţĥîš Ţàƀŀè",
+  "manager.rom.add.help": "Àđđ ɱöřè ŘÖḾ ƒîŀèš ţö ţĥîš ĝàɱè",
+  "manager.rom.remove.help": "Řèɱöṽè ţĥîš ƒîŀè ƒřöɱ ţĥè ĝàɱè'š ƒöŀđèř",
+  "manager.rom.replace.help": "Ţĥè ñèŵ ƒîŀè ķèèþš îţš öŵñ ñàɱè àñđ ţĥîš öñè îš řèɱöṽèđ",
+  "manager.rom.replace_detail": "Ţĥè ñèŵ ƒîŀè ķèèþš îţš öŵñ ñàɱè àñđ ţĥîš öñè îš řèɱöṽèđ. Ţĥè ţàƀŀèš ƀèŀöŵ řèàđ Ñöţ Îñšţàŀŀèđ ûñŀèšš ţĥè ñèŵ ƒîŀè ĥàš ţĥè šàɱè ñàɱè.",
+  "manager.rom.replace_title": "Řèþŀàçè “{name}”?",
+  "manager.rom.replaced": "Řèþŀàçèđ {old} ŵîţĥ {new}",
   "manager.workbench.plays_heading": "Ŵĥîçĥ Ţàƀŀè Þŀàýš",
   "manager.workbench.width_by_height": "{width} × {height}",
   "manager.workbench.writes_to_tables": {

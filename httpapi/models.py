@@ -2220,6 +2220,11 @@ class AssetSlot(ApiModel):
     path: str | None = None
     origin: str | None = None
     matched_to: str | None = None
+    # The ids of the tables that read this file. Set on a ROM row, where one folder holds
+    # several files and each is wanted by some tables and not others; empty elsewhere.
+    users: list[str] = Field(default_factory=list)
+    # The file's size, set on a ROM row, which the Manager lists without opening each.
+    size_bytes: int | None = None
 
 
 class OutsideLink(ApiModel):

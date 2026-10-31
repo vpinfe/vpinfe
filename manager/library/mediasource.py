@@ -85,8 +85,6 @@ _DIM = ("(e) => { if (!e.currentTarget.contains(e.relatedTarget)) "
         "e.currentTarget.classList.remove('manager-drop-hot'); }")
 # The kinds a person usually has as one archive, so the file button takes one.
 _ONE_OR_FOLDER = frozenset({"pup_pack", "alt_sound", "altsound"})
-# The kinds that are one file, so the file button has nothing behind a caret.
-_ONE_FILE = frozenset({"rom"})
 _MANY = ("(e) => { " + _TAKE + "e.currentTarget.classList.remove('manager-drop-hot'); "
          "window.__managerDrop(e.dataTransfer, emit); }")
 
@@ -1065,8 +1063,7 @@ class _Folder(_OnlineTab):
         self.context = context
         self.kind = kind
         self.source_kind = kind
-        self.drop_key = ("manager.picker.drop_file" if kind in _ONE_FILE
-                         else "manager.picker.drop_pack" if kind in _ONE_OR_FOLDER
+        self.drop_key = ("manager.picker.drop_pack" if kind in _ONE_OR_FOLDER
                          else "manager.picker.drop_files")
         self.setup_online(False)
         self.game_id = context["game_id"]
@@ -1122,13 +1119,8 @@ class _Folder(_OnlineTab):
         card.on("drop", heard, js_handler=_MANY)
 
     def choose(self, heard: Callable[[Any], Any]) -> None:
-        """The one button this kind is taken with: one file alone, or files or one file with
-        a folder behind its caret, never two buttons."""
-        if self.kind in _ONE_FILE:
-            panel.action(t("manager.mediasource.choose_file"), heard, icon=verbs.FROM_FILE,
-                         hint=t("manager.mediasource.choose_file.help"),
-                         js="() => window.__managerChoose(false, emit, true)")()
-            return
+        """The one button this kind is taken with: files or one file with a folder behind
+        its caret, never two buttons."""
         many = self.kind not in _ONE_OR_FOLDER
         panel.split_action(
             t("manager.mediasource.choose_files" if many

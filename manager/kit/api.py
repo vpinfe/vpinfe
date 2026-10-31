@@ -362,8 +362,9 @@ class ApiClient:
     def media_of(self, game_id: str) -> list[dict]:
         return self._get("/media?" + urlencode({"game": game_id})).get("media", [])
 
-    def assets_of(self, game_id: str) -> list[dict]:
-        return self._get("/assets?" + urlencode({"game": game_id})).get("assets", [])
+    def assets_of(self, game_id: str, kind: str = "") -> list[dict]:
+        query = urlencode({"game": game_id, **({"kind": kind} if kind else {})})
+        return self._get("/assets?" + query).get("assets", [])
 
     def outside_links(self, game_id: str, table: str = "", path: str = "") -> list[dict]:
         query = urlencode({key: value for key, value in (("table", table), ("path", path))

@@ -35,6 +35,7 @@ from manager.kit.on_page import on_page
 from manager.library import (
     collection_adds,
     file_acts,
+    game_states,
     getting_file,
     mediamap,
     mediasource,
@@ -852,8 +853,12 @@ def _rom_state(pinmame: dict[str, Any], rom: str,
     Assets manages, so a finding jumps to where the act lives.
     """
     installed = pinmame.get("installed")
-    if not pinmame.get("effective") or installed is None:
+    if not pinmame.get("effective"):
         return rom
+    if installed is None:
+        unknown = next(one for one in game_states.rom().states
+                       if one.token == game_states.UNKNOWN)
+        return _state(unknown.word, "unknown", beside=rom, hint=unknown.line())
     chip = _state(t("word.installed") if installed
             else t("manager.workbench.not_installed"),
                   "on" if installed else "warn", beside=rom)

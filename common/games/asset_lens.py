@@ -47,6 +47,10 @@ logger = logging.getLogger("vpinfe.common.games.asset_lens")
 # calling it missing would call every EM table broken.
 _FOLDER_KINDS = ("pup_pack", "alt_color", "alt_sound", "music")
 
+# The one kind held as many files: a game can hold several ROM zips, each wanted by
+# whichever of its tables name it.
+ROM_KIND = "rom"
+
 # A row with no file still carries every field one with a file does, so nothing reading
 # these has to ask which shape it got.
 _ABSENT = {"binding": "none", "present": False, "table": "", "table_file": "",
@@ -58,9 +62,9 @@ _BY_BINDING = {asset_resolver.BINDING_DEDICATED: "table",
                asset_resolver.BINDING_ORPHANED: "orphaned"}
 
 
-# Every kind a row of this lens can be about: the five resolved per table, then the
-# four the folder holds whole. What a filter on the Kind column offers.
-KINDS = (*asset_resolver.PER_TABLE_KINDS, *_FOLDER_KINDS)
+# Every kind a row of this lens can be about: the five resolved per table, the four the
+# folder holds whole, then ROM files. What a filter on the Kind column offers.
+KINDS = (*asset_resolver.PER_TABLE_KINDS, *_FOLDER_KINDS, ROM_KIND)
 
 
 def label_of(kind: str) -> str:
@@ -139,6 +143,47 @@ def _held(item: dict, kind: str, base: dict, game_dir: Path, tables: list[dict],
             "matched_to": asset_origin.match_of(recorded, game_dir, path) or None}
 
 
+def rom_users(game: Any) -> dict[str, list[str]]:
+    """Each ROM file in the game's folder, mapped to the ids of the tables that read it.
+
+    A table reads the zip named for its effective ROM, and the parent set a clone names.
+    A file no table reads maps to an empty list, which is what makes it Unused. Only zips
+    are ROM files, so a stray note or system file in the folder is not a row.
+    """
+    row = game_to_row(game)
+    roms = os.path.join(str(row.get("game_dir") or ""), *asset_resolver.ROMS_FOLDER.split("/"))
+    held = {name: os.path.splitext(name)[0].lower()
+            for name in asset_resolver.list_rom_files(str(row.get("game_dir") or ""))
+            if name.lower().endswith(".zip") and os.path.isfile(os.path.join(roms, name))}
+    users: dict[str, list[str]] = {name: [] for name in held}
+    if not held:
+        return users
+    for table in table_lens.table_rows(game, row):
+        chain = (table.get("dependencies") or {}).get("pinmame") or {}
+        wanted = {str(chain.get(key) or "").lower() for key in ("effective", "clone_of")} - {""}
+        for name, stem in held.items():
+            if stem in wanted and table["id"]:
+                users[name].append(table["id"])
+    return users
+
+
+def _rom_rows(game_id: str, row: dict, game: Any, game_dir: Path, recorded: dict,
+              hosts: dict) -> list[dict]:
+    base = _row(game_id, row, ROM_KIND)
+    found = []
+    for name, users in sorted(rom_users(game).items(), key=lambda item: item[0].lower()):
+        path = game_dir / asset_resolver.ROMS_FOLDER / name
+        found.append({**base, **_ABSENT,
+                      "id": f"{game_id}:{ROM_KIND}:{name}",
+                      "binding": "game", "present": True, "file": name,
+                      "path": asset_origin.path_of(game_dir, path) or None,
+                      "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
+                      "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+                      "serves": len(users), "users": users,
+                      "size_bytes": os.path.getsize(path)})
+    return found
+
+
 def listing(limit: int = 0, offset: int = 0, game: str = "",
             kind: str = "") -> dict[str, Any]:
     """One row per asset file the library holds, plus one per file it does not.
@@ -152,6 +197,7 @@ def listing(limit: int = 0, offset: int = 0, game: str = "",
     if kind:
         kinds = [item for item in kinds if item == kind]
         folder_kinds = [item for item in folder_kinds if item == kind]
+    with_roms = not kind or kind == ROM_KIND
     fallback = {item.key: item.folder_fallback for item in asset_resolver.VPX_ASSET_KINDS}
 
     found: list[dict] = []
@@ -199,6 +245,9 @@ def listing(limit: int = 0, offset: int = 0, game: str = "",
             found.extend(_held(item, name, base, game_dir, tables, by_filename,
                                recorded, hosts, fallback[name], with_own)
                          for item in others)
+
+        if with_roms:
+            found.extend(_rom_rows(game_id, row, entry, game_dir, recorded, hosts))
 
         for name in folder_kinds:
             here = _folder_state(name, game_dir, subdirs)

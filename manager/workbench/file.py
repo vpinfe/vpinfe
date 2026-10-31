@@ -38,6 +38,7 @@ from manager.library import (
     file_move,
     mediasource,
     mediaview,
+    rom_acts,
     text_editor,
 )
 from manager.library import record as recorder
@@ -71,7 +72,7 @@ def _same_file(rows: list[dict[str, Any]], wanted: dict[str, Any]) -> dict[str, 
     table."""
     exact = next((one for one in rows if wanted.get("id") and one.get("id") == wanted["id"]),
                  None)
-    if exact is not None:
+    if exact is not None or wanted.get("kind") in file_acts.ROM_FILES:
         return exact
     kind = [one for one in rows if one.get("kind") == wanted.get("kind")]
     table = str(wanted.get("table") or "")
@@ -219,6 +220,10 @@ def _asset_said(context: dict[str, Any], tier: str) -> str:
     Unused is two things: a kind no table loads by the folder's name, and a shared file
     every table has its own beside.
     """
+    if context["kind"] in file_acts.ROM_FILES:
+        names = rom_acts.users_of(context["row"], context["tables"])
+        return t("manager.workbench.rom_used_by", tables=", ".join(names)) if names \
+            else t("manager.workbench.rom_unused")
     lens = context["lens"]
     if tier == media_ownership.UNUSED:
         if any(one.key == context["kind"] and one.folder_fallback
@@ -300,7 +305,7 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
         entries: list[tuple[Any, Any]] = [
             (panel.HEADING, t("word.file")),
             (panel.FULL, lambda: identity(facts=False))]
-        if kind in file_acts.WHOLE_FOLDER or kind in file_acts.PLACEABLE:
+        if kind in (*file_acts.WHOLE_FOLDER, *file_acts.PLACEABLE, *file_acts.ROM_FILES):
             entries.append((panel.FULL, acts))
         if glass and not glass["damaged"] and (about := _backglass_facts(context, glass)):
             entries += [(panel.HEADING, t("manager.workbench.details")),
@@ -491,6 +496,9 @@ def _served(row: dict[str, Any], files: Sequence[dict[str, Any]],
     serves that has no file of that kind of its own."""
     if not row.get("present") or row.get("binding") not in ("table", "game"):
         return []
+    if row.get("kind") in file_acts.ROM_FILES:
+        users = {str(one) for one in row.get("users") or []}
+        return [one for one in tables if str(one.get("id")) in users]
     if row.get("binding") == "table":
         return [one for one in tables if one.get("id") == row.get("table")]
     own = {one.get("table") for one in files
@@ -712,6 +720,9 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
         _folder_actions(context, kind, label, present, path,
                         int(detail.get("files") or 0))
         return
+    if kind in file_acts.ROM_FILES:
+        _rom_actions(context)
+        return
     if kind not in file_acts.PLACEABLE:
         return
     loose = tier in (media_ownership.ORPHAN, media_ownership.UNUSED)
@@ -737,6 +748,37 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
                       on_click=lambda: _remove_asset(context, kind, path, tier)) \
                 .props("flat dense no-caps size=sm") \
                 .classes("manager-action manager-action--danger")
+
+
+def _rom_actions(context: dict[str, Any]) -> None:
+    """Add more ROM files, replace this one, or remove it."""
+    row = context["row"]
+    with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
+        panel.action(t("word.add"),
+                     lambda: mediasource.open_folder_sources(
+                         context, rom_acts.KIND, str(row.get("label") or ""), context["rebuild"]),
+                     icon=verbs.ADD, hint=t("manager.rom.add.help"))()
+        panel.action(t("word.replace"),
+                     lambda: rom_acts.replace(context, row, context["rebuild"]),
+                     icon=verbs.REPLACE, hint=t("manager.rom.replace.help"))()
+        panel.action(t("word.remove"), lambda: _remove_rom(context, row),
+                     icon=verbs.REMOVE, danger=True, hint=t("manager.rom.remove.help"))()
+
+
+@on_page
+async def _remove_rom(context: dict[str, Any], row: dict[str, Any]) -> None:
+    detail, lines = rom_acts.removal(row, context["tables"])
+    path = str(row.get("path") or "")
+    if not await confirm.ask(t("manager.workbench.remove_asset", name=PurePosixPath(path).name),
+                             detail=detail, lines=lines, confirm=t("word.remove"),
+                             icon=verbs.REMOVE):
+        return
+    try:
+        await run.io_bound(context["library"].remove_asset, context["game_id"], path)
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(t("said.remove_failed"), caption=why(exc), type="negative")
+        return
+    await context["rebuild"]()
 
 
 def _move_actions(context: dict[str, Any]) -> None:

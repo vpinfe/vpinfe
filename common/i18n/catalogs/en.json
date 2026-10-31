@@ -4912,6 +4912,8 @@
   },
   "manager.workbench.remove_asset.game": "Every table without a file of its own loses it.",
   "manager.workbench.remove_asset.loose": "Nothing reads it now.",
+  "manager.workbench.remove_asset.rom_unused": "No table uses this file.",
+  "manager.workbench.remove_asset.rom_used": "The tables below use this file and will read Not Installed.",
   "manager.workbench.remove_asset.table": "This table uses the file named for the folder instead, where there is one.",
   "manager.workbench.remove_asset.table_only": "This table will have none.",
   "manager.workbench.remove_asset.table_then": "This table shows “{name}” instead.",
@@ -5037,6 +5039,19 @@
   "manager.workbench.wheel": "Wheel",
   "manager.workbench.wheel.help": "Shown when picking a collection in the frontend",
   "manager.workbench.rom_tip": "Where a rom is managed",
+  "manager.workbench.rom_unused": "No table uses this file",
+  "manager.workbench.rom_used_by": "Used by {tables}",
+  "manager.workbench.rom_used_n": {
+    "one": "Used by {count:n} table",
+    "other": "Used by {count:n} tables"
+  },
+  "manager.workbench.rom_used_this": "Used by This Table",
+  "manager.rom.add.help": "Add more ROM files to this game",
+  "manager.rom.remove.help": "Remove this file from the game's folder",
+  "manager.rom.replace.help": "The new file keeps its own name and this one is removed",
+  "manager.rom.replace_detail": "The new file keeps its own name and this one is removed. The tables below read Not Installed unless the new file has the same name.",
+  "manager.rom.replace_title": "Replace “{name}”?",
+  "manager.rom.replaced": "Replaced {old} with {new}",
   "manager.workbench.plays_heading": "Which Table Plays",
   "manager.workbench.width_by_height": "{width} × {height}",
   "manager.workbench.writes_to_tables": {

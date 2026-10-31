@@ -1931,6 +1931,12 @@ class Library:
             return self._kept_media(self._client.media_of(game_id))
         return self._kept_assets(self._client.assets_of(game_id))
 
+    def roms_of(self, game_id: str) -> list[dict[str, Any]]:
+        """One game's ROM files, read fresh; none where the library does not collect ROMs."""
+        if "rom" not in self.kept_kinds()["asset"]:
+            return []
+        return self._kept_assets(self._client.assets_of(game_id, "rom"))
+
     def outside_links(self, game_id: str, table: str = "",
                       path: str = "") -> list[dict[str, Any]]:
         """What extensions link this game, table or file to. A failed read is no links:

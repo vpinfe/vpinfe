@@ -29,7 +29,7 @@ from common.media.media_specs import PAGED_KINDS
 from common.online import vps_kinds
 from manager.kit import confirm, game_tables, media_ownership, offload, panel, verbs, walks
 from manager.kit.on_page import on_page
-from manager.library import file_move, media_fill, media_rotate, mediasource
+from manager.library import file_move, media_fill, media_rotate, mediasource, rom_acts
 from manager.library import record as recorder
 
 logger = logging.getLogger("vpinfe.manager.library.file_acts")
@@ -39,6 +39,8 @@ After = Callable[[list[str]], Awaitable[Any]]
 # The kinds VPX finds by name, which a file can be placed as and removed from.
 PLACEABLE = frozenset(one.key for one in VPX_ASSET_KINDS)
 WHOLE_FOLDER = frozenset({"pup_pack", "alt_color", "alt_sound", "music"})
+# One file among several in a folder: added to, replaced and removed one at a time.
+ROM_FILES = frozenset({rom_acts.KIND})
 # Names listed before "...and N more" in a confirmation.
 _NAMED = 8
 
@@ -117,7 +119,7 @@ def asset_has_acts(row: dict[str, Any]) -> bool:
     """Whether an asset row is of a kind VPX looks up by name, which is all a file here can
     be placed as or removed from."""
     kind = str(row.get("kind") or "")
-    return kind in PLACEABLE or kind in WHOLE_FOLDER
+    return kind in PLACEABLE or kind in WHOLE_FOLDER or kind in ROM_FILES
 
 
 def listed_as(kind: str, inventory: str) -> Any:
@@ -214,6 +216,10 @@ async def _walk_dialogs(
 
 async def _noted(touched: list[str], game_id: str) -> None:
     touched.append(game_id)
+
+
+async def _noted_after(after: After, game_id: str) -> None:
+    await after([game_id])
 
 
 # --- media ------------------------------------------------------------------------
@@ -364,7 +370,9 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
     files = [one for one in files if asset_has_acts(one.row)]
     if not files:
         return []
-    placeable = [one for one in files if not is_loose(one.row) or one.kind in WHOLE_FOLDER]
+    roms = [one for one in files if one.kind in ROM_FILES]
+    placeable = [one for one in files if one.kind not in ROM_FILES
+                 and (not is_loose(one.row) or one.kind in WHOLE_FOLDER)]
     scripts = [one for one in files if one.kind == "script" and one.present and one.path
                and one.table and one.tier == media_ownership.TABLE]
     taken = {one.id for one in scripts}
@@ -382,20 +390,28 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
         await _walk_dialogs(placeable, open_slot, after)
 
     @on_page
+    async def add_roms() -> None:
+        # One dialog per game: it takes any number of files.
+        first = list({one.game_id: one for one in roms}.values())
+        await _walk_dialogs(first, open_rom_slot, after)
+
+    async def open_rom_slot(one: File, done: Callable[[], Awaitable[Any]], place: str) -> Any:
+        context = {"library": library, "game_id": one.game_id, "lens": one.table,
+                   "game": one.game, "state": state}
+        return await mediasource.open_folder_sources(context, one.kind, one.label, done,
+                                                     place=place)
+
+    @on_page
+    async def replace_rom() -> None:
+        only = roms[0]
+        context = {"library": library, "game_id": only.game_id, "lens": only.table,
+                   "game": only.game, "state": state}
+        await rom_acts.replace(context, only.row, partial(_noted_after, after, only.game_id))
+
+    @on_page
     async def remove() -> None:
         if len(removable) == 1:
-            only = removable[0]
-            count = None
-            if only.kind in WHOLE_FOLDER:
-                try:
-                    found = await offload.io(library.asset_detail, only.game_id, only.path, 0)
-                    count = int(found.get("files") or 0)
-                except Exception:  # noqa: BLE001 - the ask is made without the count
-                    logger.debug("No detail for %s", only.path, exc_info=True)
-            ask = (t("manager.workbench.remove_asset", name=PurePosixPath(only.path).name),
-                   asset_removal_detail(only.kind, only.tier, count))
-            if not await confirm.ask(ask[0], detail=ask[1], confirm=t("word.remove"),
-                                     icon=verbs.REMOVE):
+            if not await _ask_remove_asset(library, removable[0]):
                 return
         elif not await confirm.ask(
                 t("manager.files.remove_several", count=len(removable)),
@@ -445,12 +461,40 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
     offered: list[panel.Verb] = []
     if placeable:
         offered.append(panel.Verb(_slot_label(placeable), add_or_replace))
+    if roms:
+        offered.append(panel.Verb(t("manager.files.add"), add_roms))
+        if len(roms) == 1 and len(files) == 1:
+            offered.append(panel.Verb(t("manager.files.replace"), replace_rom))
     offered.extend(file_move.verbs_for(library, files, core.ASSET, after))
     if removable:
         offered.append(panel.Verb(t("word.remove"), remove, danger=True))
     if scripts:
         offered.append(panel.Verb(t("word.delete"), delete_scripts, danger=True))
     return offered
+
+
+async def _ask_remove_asset(library: Any, only: File) -> bool:
+    """Whether to remove this one asset, after saying who loses it."""
+    name = PurePosixPath(only.path).name
+    if only.kind in ROM_FILES:
+        try:
+            tables = await offload.io(library.tables_for, only.game_id)
+        except Exception:  # noqa: BLE001 - the ask is made without the table names
+            logger.debug("No tables for %s", only.game_id, exc_info=True)
+            tables = []
+        detail, lines = rom_acts.removal(only.row, tables)
+        return await confirm.ask(t("manager.workbench.remove_asset", name=name), detail=detail,
+                                 lines=lines, confirm=t("word.remove"), icon=verbs.REMOVE)
+    count = None
+    if only.kind in WHOLE_FOLDER:
+        try:
+            found = await offload.io(library.asset_detail, only.game_id, only.path, 0)
+            count = int(found.get("files") or 0)
+        except Exception:  # noqa: BLE001 - the ask is made without the count
+            logger.debug("No detail for %s", only.path, exc_info=True)
+    return await confirm.ask(t("manager.workbench.remove_asset", name=name),
+                             detail=asset_removal_detail(only.kind, only.tier, count),
+                             confirm=t("word.remove"), icon=verbs.REMOVE)
 
 
 # --- one held file ----------------------------------------------------------------
