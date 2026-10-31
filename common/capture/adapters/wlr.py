@@ -9,7 +9,7 @@ import os
 import socket
 import struct
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,8 @@ _MAGIC = b"i3-ipc"
 _RUN_COMMAND = 0
 _GET_OUTPUTS = 3
 _GET_TREE = 4
+# Hyprland's `fullscreen` field is 0 none, 1 maximized, 2 full screen.
+_FULL_SCREEN = 2
 # The output sway keeps its scratchpad under, which shows nothing.
 _SCRATCHPAD = "__i3"
 
@@ -175,6 +177,44 @@ def hyprland_windows(clients: Any, monitors: Any) -> list[Window]:
     return found
 
 
+def _sway_views(node: Any) -> Iterator[dict[str, Any]]:
+    inside = [*(node.get("nodes") or []), *(node.get("floating_nodes") or [])] \
+        if isinstance(node, dict) else []
+    if isinstance(node, dict) and node.get("type") in ("con", "floating_con") and not inside:
+        yield node
+    for child in inside:
+        yield from _sway_views(child)
+
+
+def sway_view(tree: Any, pid: int) -> str | None:
+    """The id of the view program `pid` has open, once sway has one."""
+    return next((str(one["id"]) for one in _sway_views(tree)
+                 if one.get("pid") == pid and "id" in one), None)
+
+
+def sway_focused(tree: Any) -> str | None:
+    """The id of the view that has focus, or None where focus is on an empty workspace."""
+    return next((str(one["id"]) for one in _sway_views(tree)
+                 if one.get("focused") and "id" in one), None)
+
+
+def hyprland_view(clients: Any, pid: int) -> dict[str, Any] | None:
+    """The client program `pid` has mapped, once Hyprland has one."""
+    return next((one for one in clients if isinstance(one, dict) and one.get("pid") == pid
+                 and one.get("mapped") is not False and not one.get("hidden")), None) \
+        if isinstance(clients, list) else None
+
+
+def hyprland_send(sock: socket.socket, request: bytes) -> str:
+    """What Hyprland says to a command: "ok", or why not."""
+    with sock:
+        sock.sendall(request)
+        held = b""
+        while got := sock.recv(4096):
+            held += got
+    return held.decode(errors="replace").strip()
+
+
 def render_node() -> str:
     found = sorted(glob.glob("/dev/dri/renderD*"))
     return found[0] if found else ""
@@ -265,6 +305,71 @@ class WlrAdapter:
         path = hyprland_socket(self.env)
         return hyprland_windows(ask_hyprland(self._connect(path), b"j/clients"),
                                 ask_hyprland(self._connect(path)))
+
+    def _sway(self, message: int, payload: bytes = b"") -> Any:
+        return ask_sway(self._connect(str(self.env["SWAYSOCK"])), message, payload)
+
+    def _sway_run(self, command: str) -> None:
+        said = self._sway(_RUN_COMMAND, command.encode())
+        if not said or not all(isinstance(one, dict) and one.get("success") for one in said):
+            raise OSError(next((str(one.get("error")) for one in said
+                                if isinstance(one, dict) and one.get("error")), command))
+
+    def _hyprland(self, request: bytes) -> Any:
+        return ask_hyprland(self._connect(hyprland_socket(self.env)), request)
+
+    def _hyprland_run(self, command: str) -> None:
+        said = hyprland_send(self._connect(hyprland_socket(self.env)),
+                             b"/dispatch " + command.encode())
+        if said != "ok":
+            raise OSError(said or command)
+
+    def view_of(self, pid: int) -> str | None:
+        """The compositor's handle for the window program `pid` has open, or None while it
+        has none. Raises OSError or ValueError where the compositor does not answer."""
+        if self.env.get("SWAYSOCK"):
+            return sway_view(self._sway(_GET_TREE), pid)
+        found = hyprland_view(self._hyprland(b"j/clients"), pid)
+        return str(found["address"]) if found and found.get("address") else None
+
+    def focused_view(self) -> str | None:
+        """The handle of the window that has focus. Raises as `view_of` does."""
+        if self.env.get("SWAYSOCK"):
+            return sway_focused(self._sway(_GET_TREE))
+        found = self._hyprland(b"j/activewindow")
+        return str(found["address"]) if isinstance(found, dict) and found.get("address") \
+            else None
+
+    def focus_view(self, view: str) -> None:
+        """Raises OSError where the compositor refuses."""
+        if self.env.get("SWAYSOCK"):
+            self._sway_run(f"[con_id={view}] focus")
+        else:
+            self._hyprland_run(f"focuswindow address:{view}")
+
+    def fill_output(self, view: str, output: Output) -> None:
+        """Sends the window to `output`, borderless and full screen. Raises OSError where
+        the compositor refuses and ValueError where it answers nothing readable."""
+        if self.env.get("SWAYSOCK"):
+            name = output.name.replace('"', '\\"')
+            self._sway_run(f'[con_id={view}] move to output "{name}", border none, '
+                           "fullscreen enable")
+            return
+        monitors = self._hyprland(b"j/monitors")
+        workspace = next((one["activeWorkspace"].get("id")
+                          for one in monitors if isinstance(monitors, list)
+                          and isinstance(one, dict) and one.get("name") == output.name
+                          and isinstance(one.get("activeWorkspace"), dict)), None)
+        if workspace is None:
+            raise OSError(output.name)
+        clients = self._hyprland(b"j/clients")
+        already = next((one.get("fullscreen") == _FULL_SCREEN for one in clients
+                        if isinstance(clients, list) and isinstance(one, dict)
+                        and one.get("address") == view), False)
+        self._hyprland_run(f"movetoworkspacesilent {workspace},address:{view}")
+        if not already:
+            self._hyprland_run(f"focuswindow address:{view}")
+            self._hyprland_run("fullscreen 0")
 
     def at_once(self, ffmpeg: tools.Found) -> bool:
         return bool(self.hardware(ffmpeg))

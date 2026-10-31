@@ -22,7 +22,7 @@ import time
 from collections import namedtuple
 from collections.abc import Callable, Iterable
 from shutil import which
-from typing import Any, NamedTuple
+from typing import IO, Any, NamedTuple
 from urllib.parse import quote, urlparse
 
 from common import i18n
@@ -534,6 +534,7 @@ class ChromiumManager:
         additional_options: str = "",
         include_default_options: bool = True,
         exclude_options: str = "",
+        stderr: IO[bytes] | None = None,
     ) -> subprocess.Popen[Any]:
         """Launch one Chromium instance for a given monitor.
 
@@ -543,6 +544,7 @@ class ChromiumManager:
             url: The URL to load (e.g. http://127.0.0.1:8001/app/backglass)
             monitor: screeninfo Monitor object with x, y, width, height
             index: Unique index for temp profile directory
+            stderr: where Chromium's error output goes, whatever the third-party log setting
         """
         chrome_path, using_local_install = get_chromium_path()
         if not os.path.exists(chrome_path):
@@ -600,6 +602,8 @@ class ChromiumManager:
         if not include_thirdparty_logs():
             popen_kwargs["stdout"] = subprocess.DEVNULL
             popen_kwargs["stderr"] = subprocess.DEVNULL
+        if stderr is not None:
+            popen_kwargs["stderr"] = stderr
 
         proc = subprocess.Popen(args, **popen_kwargs)
         self._processes.append((window_name, proc, user_data_dir, monitor))

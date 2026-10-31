@@ -226,6 +226,14 @@ def _matches(output: Output, monitor: Any) -> bool:
         == (output.x, output.y, output.width, output.height)
 
 
+def output_of(monitor: Any, outputs: Sequence[Output]) -> Output | None:
+    """The output a monitor is, by its place and size, else by its place alone: two outputs
+    do not start at the same corner."""
+    return next((one for one in outputs if _matches(one, monitor)), None) \
+        or next((one for one in outputs
+                 if (one.x, one.y) == (int(monitor.x), int(monitor.y))), None)
+
+
 def screen_of(window: str, outputs: Sequence[Output], config: Any,
               monitors: Sequence[Any]) -> Screen:
     """Which output shows `window`. `screen_id` indexes the display model's monitors, not

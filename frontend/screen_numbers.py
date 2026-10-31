@@ -1,7 +1,8 @@
 """A window on each screen saying its number and name, for a few seconds.
 
 What tells a person which screen the Manager means when its sizes are alike. Each window
-is placed the way every frontend window is, so it lands where the frontend would open one.
+is placed the way every frontend window is, so it lands where the frontend would open one,
+and on Sway and Hyprland, which ignore that, the compositor is asked to send it there.
 The playfield's also draws an arrow pointing up in the page's own frame, before any turn
 the frontend gives its UI, so which way it points on the cabinet is which turn is needed.
 """
@@ -10,12 +11,15 @@ from __future__ import annotations
 
 import html
 import logging
+import os
+import tempfile
 import threading
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import IO, Any
 from urllib.parse import quote
 
+from common.capture.adapters import output_of, wlr
 from common.config import paths
 from common.config.config_access import SettingsConfig, cfg_get
 from common.i18n import t
@@ -24,6 +28,12 @@ from frontend.chromium_manager import ChromiumManager
 logger = logging.getLogger("vpinfe.frontend.screen_numbers")
 
 SECONDS = 8
+# How long a window gets to appear in the compositor before it is given up on.
+PLACE_WAIT = 5.0
+PLACE_POLL = 0.1
+PLACE_SETTLE = 2.0
+PLACE_CHECK = 1.5
+PLACE_ATTEMPTS = 3
 
 _showing = threading.Lock()
 
@@ -53,30 +63,153 @@ def address(number: int, name: str, size: str, *, arrow: bool = False) -> str:
     return "data:text/html;charset=utf-8," + quote(page(number, name, size, arrow=arrow))
 
 
-def _open(manager: ChromiumManager, screens: Sequence[Any], arrowed: int | None,
-          seconds: float) -> None:
+def _compositor() -> wlr.WlrAdapter | None:
+    """The session's own window commands, where it has them: Sway and Hyprland place a
+    window themselves and take no notice of the position Chromium asks for."""
+    return wlr.WlrAdapter(os.environ) if wlr.WlrAdapter.applies(os.environ) else None
+
+
+def _view_of(compositor: wlr.WlrAdapter, proc: Any) -> str | None:
+    deadline = time.monotonic() + PLACE_WAIT
+    while proc.poll() is None:
+        try:
+            view = compositor.view_of(proc.pid)
+        except (OSError, ValueError):
+            logger.debug("Could not read the compositor's windows", exc_info=True)
+            return None
+        if view is not None or time.monotonic() >= deadline:
+            return view
+        time.sleep(PLACE_POLL)
+    return None
+
+
+def _place(compositor: wlr.WlrAdapter, opened: Sequence[tuple[Any, Any]]) -> list[Any]:
+    """Each window to the output its screen is, full screen. Returns the screens whose window
+    closed on the way: Chromium can abort on a command that reaches it while it starts, and
+    opening that window again is the caller's."""
+    try:
+        outputs = compositor.outputs()
+    except (OSError, ValueError):
+        logger.warning("Could not read the compositor's outputs", exc_info=True)
+        return []
+    views = [(screen, proc, _view_of(compositor, proc)) for screen, proc in opened]
+    time.sleep(PLACE_SETTLE)
+    for screen, proc, view in views:
+        output = output_of(screen, outputs)
+        if output is None or view is None:
+            if proc.poll() is None:
+                logger.warning("Could not place the number window on screen %s (%s)",
+                               screen.number, "no such output" if output is None else "no window")
+            continue
+        try:
+            compositor.fill_output(view, output)
+            logger.debug("Placed the number window on screen %s on %s", screen.number,
+                         output.name)
+        except (OSError, ValueError):
+            logger.warning("The compositor would not place the number window on screen %s",
+                           screen.number, exc_info=True)
+    time.sleep(PLACE_CHECK)
+    return [screen for screen, proc in opened if proc.poll() is not None]
+
+
+def _report(screen: Any, proc: Any, errors: IO[bytes], *, again: bool = False) -> None:
+    """What a window that went before its time said, and the output of those that did not."""
+    gone = proc.poll() is not None
+    said = ""
+    if gone:
+        errors.seek(0)
+        said = errors.read().decode(errors="replace").strip()
+    errors.close()
+    if gone:
+        (logger.info if again else logger.warning)(
+            "The number window on screen %s closed early (exit %s)",
+            screen.number, proc.returncode)
+    if said:
+        logger.debug("Chromium for the number window on screen %s said:\n%s",
+                     screen.number, said)
+
+
+def _launch(manager: ChromiumManager, screen: Any,
+            arrowed: int | None) -> tuple[Any, Any, IO[bytes]]:
     config = paths.get_ini_config()
     settings = SettingsConfig.from_config(config)
-    opened = 0
+    size = t("manager.screens.size", width=screen.width, height=screen.height)
+    errors = tempfile.TemporaryFile()
+    try:
+        proc = manager.launch_window(
+            f"screen{screen.number}",
+            address(screen.number, screen.name, size, arrow=screen.number == arrowed),
+            screen, screen.number, mute_audio=True,
+            additional_options=settings.chrome_options,
+            include_default_options=settings.default_chrome_options,
+            exclude_options=cfg_get(config, "Settings", "chromeoptionsexclude", ""),
+            stderr=errors)
+    except BaseException:
+        errors.close()
+        raise
+    return screen, proc, errors
+
+
+def _open(manager: ChromiumManager, compositor: wlr.WlrAdapter | None,
+          screens: Sequence[Any], arrowed: int | None, seconds: float) -> None:
+    opened: list[tuple[Any, Any, IO[bytes]]] = []
     failure: Exception | None = None
     for screen in screens:
-        size = t("manager.screens.size", width=screen.width, height=screen.height)
         try:
-            manager.launch_window(
-                f"screen{screen.number}",
-                address(screen.number, screen.name, size, arrow=screen.number == arrowed),
-                screen, screen.number, mute_audio=True,
-                additional_options=settings.chrome_options,
-                include_default_options=settings.default_chrome_options,
-                exclude_options=cfg_get(config, "Settings", "chromeoptionsexclude", ""))
-            opened += 1
+            opened.append(_launch(manager, screen, arrowed))
         except Exception as exc:  # noqa: BLE001 - one screen failing is one screen
             logger.warning("Could not open the number window on screen %s",
                            screen.number, exc_info=True)
             failure = exc
-    if screens and not opened and failure is not None:
-        raise failure
-    time.sleep(seconds)
+    try:
+        if screens and not opened and failure is not None:
+            raise failure
+        if compositor is not None:
+            _place_all(manager, compositor, opened, arrowed)
+        time.sleep(seconds)
+    finally:
+        for one in opened:
+            _report(*one)
+
+
+def _place_all(manager: ChromiumManager, compositor: wlr.WlrAdapter,
+               opened: list[tuple[Any, Any, IO[bytes]]], arrowed: int | None) -> None:
+    """Places `opened`, and opens again a window that closed while it was being placed, up to
+    PLACE_ATTEMPTS in all. Edits `opened` as it goes, so it always holds what is still open."""
+    pending = list(opened)
+    for attempt in range(PLACE_ATTEMPTS):
+        lost = _place(compositor, [(screen, proc) for screen, proc, _ in pending])
+        if not lost or attempt == PLACE_ATTEMPTS - 1:
+            return
+        pending = []
+        for one in [one for one in opened if one[0] in lost]:
+            opened.remove(one)
+            _report(*one, again=True)
+            try:
+                pending.append(_launch(manager, one[0], arrowed))
+            except Exception:  # noqa: BLE001 - one screen failing is one screen
+                logger.warning("Could not open the number window on screen %s again",
+                               one[0].number, exc_info=True)
+        opened.extend(pending)
+
+
+def _focused(compositor: wlr.WlrAdapter | None) -> str | None:
+    try:
+        return compositor.focused_view() if compositor is not None else None
+    except (OSError, ValueError):
+        logger.debug("Could not read which window has focus", exc_info=True)
+        return None
+
+
+def _refocus(compositor: wlr.WlrAdapter | None, view: str | None) -> None:
+    """Called once the windows are closed: focusing another window earlier would end the
+    full screen of a number window on the same workspace."""
+    if compositor is None or view is None:
+        return
+    try:
+        compositor.focus_view(view)
+    except (OSError, ValueError):
+        logger.debug("Could not give focus back", exc_info=True)
 
 
 def show(screens: Sequence[Any], arrowed: int | None = None, seconds: float = SECONDS) -> None:
@@ -89,9 +222,12 @@ def show(screens: Sequence[Any], arrowed: int | None = None, seconds: float = SE
         return
     try:
         manager = ChromiumManager()
+        compositor = _compositor()
+        focused = _focused(compositor)
         try:
-            _open(manager, screens, arrowed, seconds)
+            _open(manager, compositor, screens, arrowed, seconds)
         finally:
             manager.terminate_all()
+            _refocus(compositor, focused)
     finally:
         _showing.release()
