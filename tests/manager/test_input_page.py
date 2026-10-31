@@ -280,8 +280,8 @@ class DrawnOnTheInputPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["blocks"], [])
 
     async def test_the_words_of_the_intro_are_the_catalogs(self) -> None:
-        for key in ("how_title", "how_body", "how_relay", "how_step_1", "how_step_2",
-                    "how_step_3", "where_here", "where_browser", "where_device"):
+        for key in ("how_title", "how_body", "how_relay", "relay_title", "how_step_1",
+                    "how_step_2", "how_step_3", "where_here", "where_browser", "where_device"):
             with self.subTest(key=key):
                 self.assertIn(f"manager.binding_table.{key}", catalog())
 

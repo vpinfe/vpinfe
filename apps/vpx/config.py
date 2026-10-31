@@ -74,6 +74,8 @@ FROM_THE_SCREEN = frozenset(f"{section}.{window}{mode}{side}" for section, windo
                             for mode in ("", "FS") for side in ("Width", "Height"))
 # And a view's mode from the table, never by the mode it declares.
 FROM_THE_TABLE = areas.VIEW_MODES
+# Settings this app's catalog names, over the label the program's own file gives them.
+NAMED_HERE = frozenset({"Player.ScreenInclination"})
 NAMED_VALUES = {"Player.MaxFramerate": (("-1", "match_the_display"), ("0", "no_limit"))}
 DISPLAYS = frozenset(f"{section}.{window}Display" for section, window in _WINDOWS)
 
@@ -1003,7 +1005,7 @@ def _field(one: vini.Setting) -> Field:
         key=one.qualified,
         # The file gives the key where it has no label. A plugin's declaration may have
         # one, and the catalog has the words for the rest.
-        label="" if bindings.is_mapping(one.qualified)
+        label="" if bindings.is_mapping(one.qualified) or one.qualified in NAMED_HERE
         else _without_set_word(one.qualified, one.label)
         if one.label != one.key and not _KEY_AS_LABEL.fullmatch(one.label)
         else LABELS.get(one.qualified, ""),

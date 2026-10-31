@@ -2256,10 +2256,12 @@ async def _draw_schema_page(library: Library, key: str, sections: tuple[str, ...
         def write(changes: dict[str, dict[str, Any]]) -> Any:
             return _write_many(library, changes)
 
+        monitors = offered.get(config_schema.SUGGEST_SCREENS, [])
+        names = await offload.io(display_service.get_display_names)
         blocks.append((_section_label("windows.backglass"), [
-            *displays.rows(values, schema, offered.get(config_schema.SUGGEST_SCREENS, []),
-                           await offload.io(display_service.get_display_names), write,
-                           refill, follow=follow),
+            *displays.rows(values, schema, monitors, names, write, refill, follow=follow),
+            *await vpx_displays.apart_rows(library, displays.standing(values, schema),
+                                           screens.numbered(monitors, names), refill),
             *placement_panel.rows(await run.io_bound(placement_panel.read, os.environ),
                                   values, schema, write, refill)]))
     stands_in = await _theme_sources(library, state if state is not None else {}, refill) \

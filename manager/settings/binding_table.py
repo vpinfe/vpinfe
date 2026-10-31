@@ -13,7 +13,6 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from html import escape
 from typing import Any
 
 from nicegui import ui
@@ -371,14 +370,18 @@ class Table:
         self._labels: dict[str, ui.element] = {}
         self._chips: dict[tuple[str, str], ui.element] = {}
         self._where: ui.label | None = None
-        self._relay: ui.html | None = None
+        self._relay: ui.element | None = None
         with ui.element("div").classes("w-full") as self.container:
             if how_open is not None:
                 self._draw_how(how_open)
             ui.label(t("manager.binding_table.tester")) \
                 .classes("manager-fact-heading manager-binding-tester")
+            if how_open is not None:
+                self._where = ui.label().classes("manager-help manager-binding-where")
             self.line = ui.element("div")
             self.send = ui.element("div").classes("manager-binding-send")
+            if how_open is not None and self.elsewhere:
+                self._draw_relay_words()
             self.grid = ui.element("div").classes("manager-facts manager-bindings")
         self._client = ui.context.client
         self._asker = _asker()
@@ -555,19 +558,14 @@ class Table:
                         ui.label(t("manager.binding_table.how_step_2"))
                     with ui.element("li"):
                         ui.label(t("manager.binding_table.how_step_3"))
-                if self.elsewhere:
-                    self._draw_relay_words()
-                self._where = ui.label().classes("manager-help manager-binding-where")
         how.value = open_
 
     def _draw_relay_words(self) -> None:
-        """What the switch is for, the switch's name in bold wherever the language puts it."""
-        before, _, after = t("manager.binding_table.how_relay", device=self._cab,
-                             switch="\0").partition("\0")
-        switch = t("manager.binding_table.send_events", device=self._cab)
-        self._relay = ui.html(f"{escape(before)}<strong>{escape(switch)}</strong>{escape(after)}",
-                              sanitize=False, tag="p") \
-            .classes("manager-help manager-binding-relay")
+        """What the switch is for, closed under it."""
+        with panel.disclosure(t("manager.binding_table.relay_title")) \
+                .classes("manager-binding-relay") as self._relay:
+            ui.label(t("manager.binding_table.how_relay", device=self._cab)) \
+                .classes("manager-help")
         self._say_relay()
 
     def _say_relay(self) -> None:

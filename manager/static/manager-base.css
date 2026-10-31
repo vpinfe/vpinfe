@@ -874,7 +874,8 @@ body::before {
 .manager-binding-send-words { margin: 0; }
 .manager-binding-how { margin-bottom: 12px; max-width: var(--row-measure); }
 .manager-binding-steps { margin: 6px 0; padding-left: 20px; list-style: decimal; }
-.manager-binding-relay, .manager-binding-where { margin: 0; }
+.manager-binding-where { margin: 0; }
+.manager-binding-relay { max-width: var(--row-measure); margin-bottom: 12px; }
 
 /* A list taller than its pane says so: a fade over the last rows and a way down. Placed
    as the last child of the scrolling element; `hidden` once the end is in view. */
@@ -2175,6 +2176,11 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
   width: min(680px, 94vw); height: min(620px, 90vh);
   display: flex; flex-direction: column; padding: 18px 12px 14px;
 }
+/* Setup's steps draw a picture beside a list, and the list is lost below a picture that
+   stacks. */
+.manager-dialog.manager-wizard-card.manager-wizard-card--roomy.q-card {
+  width: min(840px, 96vw); height: min(740px, 96vh);
+}
 /* `stretch`, because the card's own `align-items` is flex-start and a scroll area
    would shrink to its content. */
 .manager-wizard-scroll {
@@ -2314,6 +2320,42 @@ button.q-btn--flat.text-primary:hover .q-btn__content {
 .manager-wizard-src > .q-icon { font-size: var(--icon-menu); margin-top: 1px; }
 .manager-wizard-src-label { color: var(--ink-2); }
 .manager-wizard-src--offer { align-items: center; margin-top: 4px; }
+
+/* Setup's playfield glass: each question beside the picture that says what is asked. The
+   size's sources are pick rows that carry their value, and the one for measuring carries
+   its two boxes. */
+.manager-glass-group { display: flex; align-items: flex-start; gap: 18px; width: 100%; }
+.manager-glass-group + .manager-glass-group { margin-top: 18px; }
+.manager-glass-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.manager-glass-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.manager-glass-head .manager-fact-heading { margin: 0; padding: 0; }
+.manager-glass-art { flex: none; width: 150px; }
+.manager-glass-art svg { display: block; width: 100%; height: auto; }
+.manager-glass-art .glass-wash { fill: var(--accent-wash); }
+.manager-glass-art .glass-edge { stroke: var(--ink-2); }
+.manager-glass-art .glass-level { stroke: var(--ink-3); }
+.manager-glass-art .glass-accent { stroke: var(--accent); }
+.manager-glass-art text { stroke: none; }
+.manager-glass-art .glass-ink2 { fill: var(--ink-2); }
+.manager-glass-art .glass-ink3 { fill: var(--ink-3); }
+.manager-glass-pick.manager-wizard-pick { gap: 12px; padding: 8px 12px; }
+.manager-glass-pick > .q-icon:first-child { flex: none; color: var(--ink-3); font-size: var(--icon-menu); }
+.manager-glass-pick.manager-source-row--chosen > .q-icon:first-child { color: var(--accent); }
+.manager-glass-pick .manager-glass-value {
+  margin-left: auto; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.manager-glass-pick .manager-wizard-pick-mark { margin-left: 0; flex: none; }
+.manager-glass-measure { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.manager-glass-measure .manager-glass-side { display: flex; align-items: center; gap: 6px; }
+.manager-glass-side > span { color: var(--ink-3); font-size: var(--fs-caption); }
+.manager-glass-angle { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.manager-glass-angle .manager-help { flex: 1 1 auto; }
+@media (max-width: 640px) {
+  .manager-glass-group { flex-direction: column; align-items: stretch; }
+  .manager-glass-art { align-self: center; }
+  .manager-glass-pick.manager-wizard-pick { flex-wrap: wrap; }
+  .manager-glass-measure { margin-left: 0; flex: 1 1 100%; }
+}
 
 /* A destructive action is still an action - it takes the same shape and says what it
    is with color on top, not instead. */
@@ -4146,7 +4188,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-screens-head { display: flex; align-items: center; gap: 12px; margin: 2px 0 12px; }
 .manager-screens-head > .manager-help { flex: 1; max-width: none; }
 .manager-screens { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
-.manager-screens, .manager-screens-head { max-width: var(--row-measure); }
+.manager-screens, .manager-screens-head, .manager-screens-differs { max-width: var(--row-measure); }
 /* A panel too narrow for both side by side puts the screens under the picture. The host is
    the container, so the rule holds in a dialog as well as on a settings page. */
 .manager-screens-host { container: manager-screens / inline-size; }

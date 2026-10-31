@@ -101,6 +101,8 @@
   "field.Player.PlayfieldDisplay.help": "The monitor it opens on, by the name Visual Pinball gives it",
   "field.Player.PlayfieldFullScreen.help": "Windowed, or filling the display",
   "field.Player.RumbleMode.label": "Rumble",
+  "field.Player.ScreenInclination.help": "Inclination in Visual Pinball",
+  "field.Player.ScreenInclination.label": "Screen Angle",
   "field.Player.Sharpen.help": "Sharpens the picture after it is drawn",
   "field.Player.ShowFPS.help": "Draw a frame-rate overlay",
   "field.Player.Sound3D.help": "How playfield sound is spread across speakers",

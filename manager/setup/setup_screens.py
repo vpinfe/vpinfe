@@ -2,7 +2,7 @@
 
 The picture and the panel rows are the ones Settings > Hardware > Displays draws, and each
 change is written as it is made. The answer is VPinFE's own; Visual Pinball's half of it is
-`fill`, which waits for the Visual Pinball step where no launcher exists yet.
+`fill`, which waits for the Visual Pinball step, where the person has confirmed the program.
 """
 
 from __future__ import annotations
@@ -12,17 +12,17 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import background_tasks, run, ui
 
 from common.failures import why
 from common.host import display_service
 from common.i18n import t
-from manager.kit import busy, offload, panel
+from manager.kit import busy, offload, panel, verbs
+from manager.kit import dialog as frame
 from manager.kit.api import ApiClient
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
 from manager.settings import displays, dmd_panel, placement_panel, screens, vpx_displays
-from manager.setup.setup_vpx import Vpx
 
 logger = logging.getLogger("vpinfe.manager.setup.setup_screens")
 
@@ -33,6 +33,8 @@ class Screens:
     answered: bool = False
     # The DMD panel's kind. VPinFE stores it only for PIN2DMD, so the others are kept here.
     kind: str = ""
+    # The question about a launcher that holds its own screens is put once.
+    asked: bool = False
 
 
 @dataclass(frozen=True)
@@ -118,17 +120,16 @@ async def ask(state: Screens) -> dict[str, Any]:
     return {"title": t("manager.setup.screens.title"), "draw": draw}
 
 
-async def answer(state: Screens, vpx: Vpx) -> None:
-    """The step is answered. Visual Pinball's half is written now where there is a launcher,
-    and by the Visual Pinball step (`fill`) where there is none yet."""
+async def answer(state: Screens) -> None:
+    """The step is answered. Nothing of Visual Pinball's is touched or shown until the
+    Visual Pinball step has confirmed the program: `fill` writes it from there."""
     state.answered = True
-    if vpx.launcher is not None:
-        await fill(state, vpx.launcher.launcher_id)
 
 
 @on_page
 async def fill(state: Screens, launcher_id: str) -> None:
-    """Visual Pinball's half of the answer, from VPinFE's settings as they stand."""
+    """Visual Pinball's half of the answer, from VPinFE's settings as they stand, then the
+    question for a part the file already puts elsewhere."""
     if not state.answered:
         return
     library = Library(ApiClient())
@@ -137,8 +138,42 @@ async def fill(state: Screens, launcher_id: str) -> None:
         here = screens.numbered(seen.monitors, seen.names)
         kind = (dmd_panel.kind_of(seen.values, seen.schema) or state.kind) \
             if dmd_panel.is_on(seen.values, seen.schema) else ""
-        await vpx_displays.fill(ApiClient(), launcher_id,
-                                displays.standing(seen.values, seen.schema), here, kind)
+        standing = displays.standing(seen.values, seen.schema)
+        await vpx_displays.fill(ApiClient(), launcher_id, standing, here, kind)
     except Exception as exc:  # noqa: BLE001 - say so, the step itself is answered
         logger.warning("Could not write the screens for Visual Pinball", exc_info=True)
         ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
+        return
+    try:
+        parts = await vpx_displays.disagreeing(ApiClient(), launcher_id, standing, here)
+    except Exception:  # noqa: BLE001 - written, so only the question is lost
+        logger.warning("Could not compare Visual Pinball's screens with VPinFE's", exc_info=True)
+        return
+    if parts and not state.asked:
+        state.asked = True
+        background_tasks.create(_ask_which(launcher_id, standing, here, parts),
+                                name="setup-screens-ask-which")
+
+
+@on_page
+async def _ask_which(launcher_id: str, standing: displays.Standing, here: Any,
+                     parts: list[str]) -> None:
+    """Visual Pinball's file already puts these screens somewhere else. Setup is not held
+    up: Escape, or Leave as Is, leaves the file as it is."""
+    with frame.opened(t("manager.setup.screens.apart"), classes="manager-confirm") as box:
+        ui.label(t("manager.setup.screens.apart_detail", parts=vpx_displays.named(parts))) \
+            .classes("manager-help px-3")
+        with frame.footer():
+            frame.quiet(t("manager.setup.screens.keep_vp"), lambda: box.submit(False),
+                        icon=verbs.CANCEL)
+            frame.answer(t("manager.setup.screens.use_vpinfe"), lambda: box.submit(True),
+                         icon=verbs.REVERT)
+        box.escape_answer = False
+    if not await box:
+        return
+    try:
+        written = await vpx_displays.match_launcher(ApiClient(), launcher_id, standing, here)
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+        ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
+        return
+    vpx_displays.say_unnamed(written)

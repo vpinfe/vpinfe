@@ -719,7 +719,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
                       aside: str = "", close_when_done: bool = False,
                       hand_off: Callable[[str], None] | None = None,
                       values: dict[str, Any] | None = None, until: str = "",
-                      place: str = "", walking: bool = False) -> bool | str | None:
+                      place: str = "", walking: bool = False,
+                      roomy: bool = False) -> bool | str | None:
     """Run one flow in the dialog host: ask what it asks, in as many steps as it asks
     it, then do it.
 
@@ -741,7 +742,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
     run that takes minutes is followed where jobs are followed, not held open here.
     `values` are answers the flow starts with, and `until` a step it is walked to, on
     them, before the dialog is drawn. The browser's Back presses the dialog's own Back, and
-    closes the dialog only on a step that has none.
+    closes the dialog only on a step that has none. `roomy` gives the card the larger size,
+    for a flow whose steps draw a picture beside a list.
 
     True when the flow was run and the dialog closed after it, False when it was cancelled
     before that. In a walk over rows (`walking`, `place` saying where in it) there is no
@@ -766,7 +768,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
     opened = False
     current_key = ""
 
-    with frame.opened("", ignore_outside_click=True, classes="manager-wizard-card") as dialog:
+    card = "manager-wizard-card manager-wizard-card--roomy" if roomy else "manager-wizard-card"
+    with frame.opened("", ignore_outside_click=True, classes=card) as dialog:
         track = ui.element("div").classes("w-full")
         with ui.element("div").classes("manager-wizard-scroll") as scroll:
             crest = ui.element("div").classes("manager-wizard-crest")

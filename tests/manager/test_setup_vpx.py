@@ -284,9 +284,14 @@ class WhichPagesApplyTests(unittest.TestCase):
 class GlassTests(unittest.TestCase):
     """What the glass starts from, and what it writes."""
 
+    BUILT_IN = (95.89, 53.94)
+
     def _ask(self, held: dict[str, Any], reported: tuple[float, float] | None = (34.4, 21.6),
              units: str = "cm") -> dict[str, Any]:
         client = _client(held)
+        client.launcher_config.return_value = {"values": held, "groups": [{"settings": [
+            {"key": "Player.ScreenWidth", "default": str(self.BUILT_IN[0])},
+            {"key": "Player.ScreenHeight", "default": str(self.BUILT_IN[1])}]}]}
         client.config_values.return_value = {"manager": {"units": units}}
         vpx = setup_vpx.Vpx(launcher=LAUNCHER, chosen=OLD, answered=True)
         values: dict[str, Any] = {}
@@ -335,6 +340,29 @@ class GlassTests(unittest.TestCase):
         held = {"Player.ScreenWidth": {"value": "50", "set_here": True}}
 
         self.assertEqual(setup_vpx.FROM_SCREEN, self._ask(held)["size_from"])
+
+    def test_visual_pinballs_own_size_in_the_file_is_not_a_size_kept(self) -> None:
+        held = {"Player.ScreenWidth": {"value": "95.89", "set_here": True},
+                "Player.ScreenHeight": {"value": "53.94", "set_here": True}}
+
+        glass = self._ask(held)
+
+        self.assertEqual(([34.4, 21.6], setup_vpx.FROM_SCREEN),
+                         (glass["size"], glass["size_from"]))
+
+    def test_a_screen_reporting_the_size_already_held_leaves_the_held_one_picked(self) -> None:
+        held = {"Player.ScreenWidth": {"value": "102.6", "set_here": True},
+                "Player.ScreenHeight": {"value": "56.9", "set_here": True}}
+
+        glass = self._ask(held, reported=(102.1, 56.9))
+
+        self.assertEqual(([102.6, 56.9], setup_vpx.KEPT), (glass["size"], glass["size_from"]))
+
+    def test_with_nothing_set_and_nothing_reported_no_size_is_chosen_and_none_is_written(
+            self) -> None:
+        glass = self._ask({}, reported=None)
+
+        self.assertIsNone(glass["size"])
 
     def test_the_units_are_the_managers(self) -> None:
         self.assertEqual("in", self._ask({}, units="in")["units"])
@@ -396,6 +424,12 @@ class AnswerGlassTests(unittest.TestCase):
 
         client.write_launcher_config.assert_called_once_with(
             "vpx-1", {"Player.ScreenHeight": "21.6"}, create=True)
+
+    def test_no_size_leaves_the_programs_own_and_still_writes_the_angle(self) -> None:
+        client = self._answer({"size": None, "angle": 6.0}, {})
+
+        client.write_launcher_config.assert_called_once_with(
+            "vpx-1", {setup_vpx.ANGLE_KEY: "6"}, create=True)
 
     def test_nothing_changed_writes_nothing(self) -> None:
         held = {"Player.ScreenWidth": {"value": "34.4"}, "Player.ScreenHeight": {"value": "21.6"},

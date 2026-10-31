@@ -220,6 +220,35 @@ class AgreeingWithVpinfeTests(unittest.TestCase):
                                      {"backglass": 2, "topper": 4}),
                          {"backglass": 4, "topper": None})
 
+    def test_a_part_vpx_holds_nothing_for_follows_the_move(self) -> None:
+        got = vs.followed({"backglass": 2}, {"backglass": 4}, {}, blank={"backglass"})
+
+        self.assertEqual(got, {"backglass": 4})
+
+    def test_a_part_vpx_holds_nothing_for_is_not_followed_to_nowhere(self) -> None:
+        got = vs.followed({"backglass": 2}, {"backglass": None}, {}, blank={"backglass"})
+
+        self.assertEqual(got, {})
+
+    def test_a_part_vpx_has_somewhere_else_stays_though_another_is_blank(self) -> None:
+        got = vs.followed({"backglass": 2, "scoreview": 3}, {"backglass": 4, "scoreview": 4},
+                          {"backglass": 1}, blank={"scoreview"})
+
+        self.assertEqual(got, {"scoreview": 4})
+
+    def test_a_key_that_is_missing_or_blank_holds_nothing_and_an_output_of_0_holds_something(
+            self) -> None:
+        got = vs.holds_nothing({"Player.PlayfieldDisplay": " ", "Backglass.BackglassOutput": "0",
+                                "Topper.TopperOutput": ""})
+
+        self.assertEqual(got, {"playfield", "scoreview", "topper"})
+
+    def test_a_screen_the_file_names_for_a_part_is_a_value_though_its_output_is_blank(
+            self) -> None:
+        got = vs.holds_nothing({"Backglass.BackglassDisplay": "DELL [0, 0]"})
+
+        self.assertNotIn("backglass", got)
+
 
 class TheTurnTests(unittest.TestCase):
     PORTRAIT_BY_ROTATION = {"0": "0.0", "90": "90.0", "180": "180.0", "270": "270.0"}

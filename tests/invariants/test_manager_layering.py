@@ -63,7 +63,7 @@ AREAS: dict[str, tuple[str, ...]] = {
     "devices": ("devices", "browser_state", "mobile_add", "pairing", "plays_on",
                 "send_to_device"),
     "setup": ("setup", "setup_appearance", "setup_controls", "setup_screens", "setup_tables",
-              "setup_vpx"),
+              "setup_vpx", "glass_art"),
     "system": ("about", "early_access", "whats_new", "jobs", "jobs_list", "job_report", "logs",
                "metrics", "support", "support_inspect"),
     "backups": ("backups", "backup_cleanup", "backup_go_back", "backup_rows", "backups_move"),

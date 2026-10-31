@@ -101,6 +101,8 @@
   "field.Player.PlayfieldDisplay.help": "f1b3dd604495",
   "field.Player.PlayfieldFullScreen.help": "62b63d877b6c",
   "field.Player.RumbleMode.label": "f2b6d841c71c",
+  "field.Player.ScreenInclination.help": "28319edc31c8",
+  "field.Player.ScreenInclination.label": "eb976e0cc7b3",
   "field.Player.Sharpen.help": "ec8ce9bd9183",
   "field.Player.ShowFPS.help": "d28545c33f5c",
   "field.Player.Sound3D.help": "dd7d70fbb0e3",

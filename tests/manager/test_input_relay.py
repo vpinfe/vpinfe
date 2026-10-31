@@ -5,10 +5,8 @@ cabinet can take them back."""
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 import unittest
-from html import escape, unescape
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
@@ -368,11 +366,9 @@ class _TableCase(_RelayCase):
         return t("manager.binding_table.send_events", device=control._cab)
 
     @staticmethod
-    def _relay_words(control: table.Table) -> list[ui.html]:
-        assert control._where is not None and control._where.parent_slot is not None
-        around = control._where.parent_slot.parent
-        assert around is not None
-        return [one for one in around.descendants() if isinstance(one, ui.html)]
+    def _relay_words(control: table.Table) -> list[str]:
+        assert control._relay is not None
+        return [one.text for one in control._relay.descendants() if isinstance(one, ui.label)]
 
     @staticmethod
     def _where_text(control: table.Table) -> str:
@@ -424,25 +420,22 @@ class TheSwitchTests(_TableCase):
 
         self.assertEqual(self._where_text(control), t("manager.binding_table.where_browser"))
 
-    async def test_the_intro_says_what_the_switch_is_for_with_its_name_in_bold(self) -> None:
+    async def test_what_the_switch_is_for_sits_under_it_in_a_closed_explanation(self) -> None:
         control = self.drawn(how_open=True)
 
-        [paragraph] = self._relay_words(control)
+        assert control._relay is not None
+        self.assertFalse(control._relay.value)  # type: ignore[attr-defined]
+        self.assertEqual(control._relay.props["label"], t("manager.binding_table.relay_title"))
+        self.assertEqual(self._relay_words(control),
+                         [t("manager.binding_table.how_relay", device=control._cab)])
 
-        self.assertIn(f"<strong>{escape(self._switch_label(control))}</strong>",
-                      paragraph.content)
-        self.assertEqual(unescape(re.sub(r"</?strong>", "", paragraph.content)),
-                         t("manager.binding_table.how_relay", device=control._cab,
-                           switch=self._switch_label(control)))
-
-    async def test_a_device_name_is_shown_as_text_in_the_intro(self) -> None:
+    async def test_a_device_name_is_shown_as_text_in_the_explanation(self) -> None:
         with patch.object(table, "display_name", return_value="<i>Cab</i>"):
             control = self.drawn(how_open=True)
 
-        [paragraph] = self._relay_words(control)
+        [words] = self._relay_words(control)
 
-        self.assertNotIn("<i>", paragraph.content)
-        self.assertIn("&lt;i&gt;Cab&lt;/i&gt;", paragraph.content)
+        self.assertIn("<i>Cab</i>", words)
 
     async def test_a_table_drawn_without_the_intro_has_no_where_line(self) -> None:
         self.assertIsNone(self.drawn()._where)
@@ -652,7 +645,8 @@ class TheOfferTests(_TableCase):
 
     async def test_the_intro_does_not_name_a_switch_that_is_not_drawn(self) -> None:
         control = self.drawn(how_open=True)
-        [paragraph] = self._relay_words(control)
+        paragraph = control._relay
+        assert paragraph is not None
         self._ask(confirm.Answer.CONFIRM)
 
         self.assertFalse(paragraph.visible)
@@ -762,7 +756,7 @@ class ATableOnTheServingDevice(_TableCase):
     async def test_the_intro_has_no_paragraph_about_a_switch_that_is_not_there(self) -> None:
         control = self.drawn(how_open=True)
 
-        self.assertEqual(self._relay_words(control), [])
+        self.assertIsNone(control._relay)
 
     async def test_it_draws_the_switch_and_no_offer_when_the_frontend_is_closed(self) -> None:
         control = self.drawn()

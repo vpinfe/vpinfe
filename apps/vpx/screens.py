@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -208,16 +208,27 @@ def differs(vpinfe: Mapping[str, Placement], vpx: Mapping[str, Placement]) -> li
             and (part != TOPPER or vpinfe.get(TOPPER) is not None)]
 
 
+def holds_nothing(values: Mapping[str, str]) -> frozenset[str]:
+    """The parts whose window the ini has no value for: neither the key that places it nor
+    the screen it names is set. An Output of 0 is a value."""
+    return frozenset(
+        part for part in DISPLAY
+        if not any(str(values.get(key) or "").strip()
+                   for key in (DISPLAY[part], OUTPUT.get(part, ""))))
+
+
 def followed(before: Mapping[str, Placement], moved: Mapping[str, Placement],
-             vpx: Mapping[str, Placement]) -> dict[str, Placement]:
-    """Of the parts VPinFE moved, those VPX has where VPinFE had them: a part VPX has
-    set apart stays where it was put.
+             vpx: Mapping[str, Placement],
+             blank: Collection[str] = ()) -> dict[str, Placement]:
+    """Of the parts VPinFE moved, those VPX has where VPinFE had them, and those in `blank`
+    that VPinFE gives a screen: a part VPX has set apart stays where it was put.
 
     A topper VPinFE no longer has a screen for stays too, unless a part that moved takes
     its screen, which leaves it with none.
     """
     found = {part: where for part, where in moved.items()
-             if vpx.get(part) == before.get(part) and (part != TOPPER or where is not None)}
+             if (vpx.get(part) == before.get(part) or part in blank and where is not None)
+             and (part != TOPPER or where is not None)}
     held = vpx.get(TOPPER)
     if TOPPER not in found and isinstance(held, int) and held in found.values():
         found[TOPPER] = None

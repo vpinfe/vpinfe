@@ -170,7 +170,7 @@ async def _ask_screens(session: Session) -> dict[str, Any]:
 
 
 async def _answer_screens(session: Session, values: dict[str, Any]) -> None:
-    await setup_screens.answer(session.screens, session.vpx)
+    await setup_screens.answer(session.screens)
 
 
 async def _ask_controls(session: Session) -> dict[str, Any]:
@@ -388,7 +388,7 @@ async def open_setup(*, window: bool = False) -> None:
     ran = await wizard.open_dialog(
         label=t("manager.setup.title"), calls=calls(session), under="setup", mark=True,
         aside=t("word.close") if session.again else t("manager.setup.finish_later"),
-        close_when_done=True, hand_off=handed.append)
+        close_when_done=True, hand_off=handed.append, roomy=True)
     if handed:
         ui.navigate.to(JOBS_VIEW)
     # The page was drawn for an unfinished install, line above it and all.

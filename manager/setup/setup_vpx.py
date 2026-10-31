@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,13 +26,14 @@ from common.games import launchers as launcher_model
 from common.games.launchers import Launcher
 from common.host import screen_size
 from common.i18n import t
-from manager.kit import offload, panel, units, verbs, when
+from manager.kit import offload, panel, units, when
 from manager.kit.api import ApiClient
 from manager.kit.data import config_groups
 from manager.kit.on_page import on_page
 from manager.settings import vpx_find, vpx_input
 from manager.settings.binding_table import Table
 from manager.settings.vpx_find import Find
+from manager.setup import glass_art
 
 logger = logging.getLogger("vpinfe.manager.setup.setup_vpx")
 
@@ -57,6 +59,9 @@ ANGLE_RANGE = (-30.0, 30.0)
 # What a stored length is kept to, in centimeters, and the difference that is a change.
 _CM_PLACES = 2
 _TOLERANCE_CM = 0.05
+# Two sizes this close are one size: a screen's report and a measurement of it never agree
+# to the millimeter.
+_SAME_CM = 1.0
 
 # Where each kind of find came from: the words and the icon beside them.
 _SOURCES = {
@@ -74,6 +79,7 @@ MEASURE = "measure"
 KEPT = "kept"
 TYPICAL = "typical"
 YOURS = "yours"
+BUILT_IN = "builtin"
 
 
 @dataclass
@@ -256,14 +262,13 @@ async def answer_program(vpx: Vpx, values: dict[str, Any], *, cabinet: bool,
                          write_bgset: bool = True,
                          then: Callable[[str], Awaitable[None]] | None = None) -> str:
     """The program answered, which the Tables step starts its search beside. `then` is
-    told the launcher's id when this answer is what made the launcher."""
+    told the launcher's id once the answer leaves one."""
     path = _program_chosen(vpx, values)
     vpx.chosen = path
     vpx.answered = True
     if not path:
         return path
     client = ApiClient()
-    made = vpx.launcher is None
     if not (vpx.stored and _same(path, vpx.stored)):
         launcher_id, body = _launcher_body(vpx, path)
         await offload.io(client.put_launcher, launcher_id, body)
@@ -281,7 +286,7 @@ async def answer_program(vpx: Vpx, values: dict[str, Any], *, cabinet: bool,
                 await _write_ini(vpx.launcher.launcher_id, {BGSET_KEY: wanted})
         except Exception:
             logger.warning("Could not write BGSet for the default launcher", exc_info=True)
-    if made and then is not None:
+    if then is not None:
         await then(vpx.launcher.launcher_id)
     return path
 
@@ -308,12 +313,29 @@ def _source(icon: str, label: str, detail: str = "") -> None:
                 ui.label(detail)
 
 
-def _differs(left: tuple[float, float], right: tuple[float, float]) -> bool:
-    return any(abs(one - other) > _TOLERANCE_CM for one, other in zip(left, right, strict=True))
+def _alike(left: tuple[float, float], right: tuple[float, float],
+           within: float = _TOLERANCE_CM) -> bool:
+    return all(abs(one - other) <= within for one, other in zip(left, right, strict=True))
 
 
 def _unreadable(title_key: str) -> dict[str, Any]:
     return {"title": t(title_key), "notes": [t("said.settings_unreadable")]}
+
+
+def _built_in(found: dict[str, Any]) -> tuple[float, float] | None:
+    """The size Visual Pinball uses where nothing sets one, as its own ini declares it."""
+    declared = {one.get("key"): one.get("default")
+                for group in found.get("groups") or [] for one in group.get("settings") or []}
+    try:
+        size = (_cm(declared[SIZE_KEYS[0]]), _cm(declared[SIZE_KEYS[1]]))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return size if all(side > 0 for side in size) else None
+
+
+def _sides(size: tuple[float, float], unit: str) -> str:
+    return " × ".join(f"{units.shown(side, unit):.1f}" for side in size) \
+        + f" {t(f'manager.units.{unit}')}"
 
 
 async def ask_glass(vpx: Vpx, config: Any) -> dict[str, Any]:
@@ -321,22 +343,30 @@ async def ask_glass(vpx: Vpx, config: Any) -> dict[str, Any]:
         return _unreadable("manager.setup.glass.title")
     client = ApiClient()
     try:
-        held = await offload.io(_read, client, vpx.launcher.launcher_id)
+        found = await offload.io(client.launcher_config, vpx.launcher.launcher_id)
         stored_config = await offload.io(client.config_values)
     except Exception:
         logger.warning("Could not read the glass settings", exc_info=True)
         return _unreadable("manager.setup.glass.title")
+    held = dict(found.get("values") or {})
     reported = await _reported_cm(config)
-    size = (_cm(_number(held, SIZE_KEYS[0])), _cm(_number(held, SIZE_KEYS[1])))
-    if all(_set_here(held, key) and _number(held, key) > 0 for key in SIZE_KEYS):
-        size_from = KEPT
-    elif reported:
-        size, size_from = reported, FROM_SCREEN
-    else:
-        size_from = MEASURE
+    built_in = _built_in(found)
+    held_size = (_cm(_number(held, SIZE_KEYS[0])), _cm(_number(held, SIZE_KEYS[1])))
+    # Visual Pinball's own size is what a file says when nobody has set one, so a file
+    # that holds it has not been set either.
+    kept = held_size if (
+        all(_set_here(held, key) and _number(held, key) > 0 for key in SIZE_KEYS)
+        and not (built_in and _alike(held_size, built_in))) else None
+    # A screen that reports what is already held is one source, not two.
+    from_screen = None if kept and reported and _alike(kept, reported, _SAME_CM) else reported
+    sizes: dict[str, tuple[float, float] | None] = {
+        KEPT: kept, FROM_SCREEN: from_screen, BUILT_IN: None if kept else built_in}
+    size_from = KEPT if kept else FROM_SCREEN if reported else MEASURE
     angle_kept = _set_here(held, ANGLE_KEY) and _held(held, ANGLE_KEY) != ""
+    first = sizes.get(size_from)
     glass: dict[str, Any] = {
-        "size": list(size), "size_from": size_from,
+        "size": list(first) if first else None,
+        "size_from": size_from, "measured": [None, None],
         "angle": _number(held, ANGLE_KEY) if angle_kept else TYPICAL_ANGLE,
         "angle_from": KEPT if angle_kept else TYPICAL,
         "units": units.resolved((stored_config.get("manager") or {}).get("units")),
@@ -344,57 +374,85 @@ async def ask_glass(vpx: Vpx, config: Any) -> dict[str, Any]:
 
     def draw(values: dict[str, Any]) -> None:
         now = values.setdefault(GLASS, glass)
-        drawn: dict[str, Any] = {}
+        drawn: dict[str, Any] = {"rows": {}}
 
-        def says_size() -> None:
-            drawn["size_says"].clear()
-            with drawn["size_says"]:
-                words = {FROM_SCREEN: ("tv", "manager.setup.glass.from_screen", ""),
-                         MEASURE: ("straighten", "manager.setup.glass.measure",
-                                   "manager.setup.glass.measure_size_help"),
-                         KEPT: ("history", "manager.setup.glass.kept", "")}.get(
-                    now["size_from"])
-                if words:
-                    _source(words[0], t(words[1]), t(words[2]) if words[2] else "")
-                if reported and now["size_from"] != FROM_SCREEN and _differs(
-                        reported, (now["size"][0], now["size"][1])):
-                    offer(reported)
+        def size_of(source: str) -> list[float] | None:
+            if source == MEASURE:
+                sides = now["measured"]
+                inside = all(side is not None and SIZE_RANGE_CM[0] <= side <= SIZE_RANGE_CM[1]
+                             for side in sides)
+                return list(sides) if inside else None
+            # Leaving Visual Pinball's own size writes nothing.
+            found_size = sizes.get(source)
+            return list(found_size) if found_size and source != BUILT_IN else None
 
-        def offer(from_screen: tuple[float, float]) -> None:
-            shown = " × ".join(f"{units.shown(one, now['units']):.1f}" for one in from_screen)
-            with ui.element("div").classes("manager-wizard-src manager-wizard-src--offer"):
-                ui.icon("tv")
-                ui.label(t("manager.setup.glass.offer", size=shown,
-                           unit=t(f"manager.units.{now['units']}"))
-                         ).classes("manager-wizard-src-label")
-                panel.action(t("manager.setup.glass.use_it"), lambda: use_it(from_screen),
-                             icon=verbs.ACCEPT, hint=t("manager.setup.glass.use_it_hint"))()
+        def choose(source: str) -> None:
+            now["size_from"], now["size"] = source, size_of(source)
+            for one, (holder, ticked) in drawn["rows"].items():
+                chosen = one == source
+                if chosen:
+                    holder.classes(add="manager-source-row--chosen")
+                else:
+                    holder.classes(remove="manager-source-row--chosen")
+                holder.props["aria-checked"] = "true" if chosen else "false"
+                ticked.set_visibility(chosen)
+            drawn["size_order"].set_visibility(source == MEASURE)
 
-        def use_it(from_screen: tuple[float, float]) -> None:
-            now["size"], now["size_from"] = list(from_screen), FROM_SCREEN
-            drawn["fill"]()
-
-        def says_angle() -> None:
-            drawn["angle_says"].clear()
-            with drawn["angle_says"]:
-                if now["angle_from"] == TYPICAL:
-                    _source("straighten", t("manager.setup.glass.typical"),
-                            t("manager.setup.glass.angle_help"))
-                elif now["angle_from"] == KEPT:
-                    _source("history", t("manager.setup.glass.kept"))
-
-        def typed_size(at: int, event: Any) -> None:
-            if event.value is None or drawn.get("filling"):
+        def typed_side(at: int, event: Any) -> None:
+            if drawn.get("filling"):
                 return
-            now["size"][at] = _cm(units.to_cm(float(event.value), now["units"]))
-            now["size_from"] = YOURS
-            says_size()
+            now["measured"][at] = None if event.value is None \
+                else _cm(units.to_cm(float(event.value), now["units"]))
+            choose(MEASURE)
 
-        def typed_angle(event: Any) -> None:
-            if event.value is None:
-                return
-            now["angle"], now["angle_from"] = float(event.value), YOURS
-            says_angle()
+        def row(source: str, icon: str, name: str, help_text: str = "",
+                value: str = "") -> ui.element:
+            chosen = now["size_from"] == source
+            holder = ui.element("div").classes(
+                "manager-source-row manager-source-row--pick manager-wizard-pick "
+                "manager-glass-pick" + (" manager-source-row--chosen" if chosen else ""))
+            holder.props(f"role=radio tabindex=0 aria-checked={'true' if chosen else 'false'}")
+            holder.on("click", lambda source=source: choose(source))
+            holder.on("keydown.space.self.prevent", lambda source=source: choose(source))
+            with holder:
+                ui.icon(icon)
+                with ui.column().classes("gap-0 min-w-0 manager-wizard-pick-text"):
+                    ui.label(name).classes("manager-source-name")
+                    if help_text:
+                        ui.label(help_text).classes("manager-help")
+                if value:
+                    ui.label(value).classes("manager-glass-value")
+            return holder
+
+        def mark(holder: ui.element, source: str) -> None:
+            with holder:
+                ticked = ui.icon("check_circle").classes("manager-wizard-pick-mark")
+                ticked.set_visibility(now["size_from"] == source)
+            drawn["rows"][source] = (holder, ticked)
+
+        def measuring_row() -> None:
+            holder = row(MEASURE, "straighten", t("manager.setup.glass.measured"))
+            with holder:
+                with ui.element("div").classes("manager-glass-measure"):
+                    for at, label in enumerate(("long_side", "short_side")):
+                        with ui.element("div").classes("manager-glass-side"):
+                            ui.label(t(f"manager.vpx_displays.{label}"))
+                            side = now["measured"][at]
+                            ui.number(
+                                value=None if side is None else units.shown(side, now["units"]),
+                                format="%.1f", step=0.1, placeholder="0.0",
+                                min=units.shown(SIZE_RANGE_CM[0], now["units"]),
+                                max=units.shown(SIZE_RANGE_CM[1], now["units"]),
+                                suffix=t(f"manager.units.{now['units']}"),
+                                on_change=lambda event, at=at: typed_side(at, event)) \
+                                .props("dense borderless") \
+                                .classes("manager-edit-field manager-edit-narrow")
+            mark(holder, MEASURE)
+
+        def source_row(source: str, icon: str, name: str, help_text: str = "") -> None:
+            found_size = sizes[source]
+            assert found_size is not None
+            mark(row(source, icon, name, help_text, _sides(found_size, now["units"])), source)
 
         @on_page
         async def chose_units(event: Any) -> None:
@@ -406,60 +464,77 @@ async def ask_glass(vpx: Vpx, config: Any) -> dict[str, Any]:
                 ui.notify(t("manager.settings.save_failed"), type="negative")
                 return
             now["units"] = chosen
-            drawn["fill"]()
-
-        def edit_size() -> None:
-            box = ui.element("div").classes("manager-fact-edit")
-
-            def fill() -> None:
-                # Making the controls is not typing in them.
-                drawn["filling"] = True
-                box.clear()
-                with box:
-                    with ui.element("div").classes("manager-field-pair"):
-                        for at, tip in enumerate(("long_side", "short_side")):
-                            with ui.element("div").classes("manager-field-part"):
-                                ui.number(
-                                    value=units.shown(now["size"][at], now["units"]),
-                                    format="%.1f", step=0.1,
-                                    min=units.shown(SIZE_RANGE_CM[0], now["units"]),
-                                    max=units.shown(SIZE_RANGE_CM[1], now["units"]),
-                                    suffix=t(f"manager.units.{now['units']}"),
-                                    on_change=lambda event, at=at: typed_size(at, event)) \
-                                    .props("dense borderless") \
-                                    .classes("manager-edit-field manager-edit-narrow") \
-                                    .tooltip(t(f"manager.vpx_displays.{tip}"))
-                                if not at:
-                                    ui.label("×").classes("manager-cell-join") \
-                                        .props("aria-hidden=true")
-                    panel.segmented({units.CM: t("manager.units.cm"),
-                                     units.INCH: t("manager.units.in")},
-                                    now["units"], chose_units).classes("manager-units")
-                drawn["filling"] = False
-                if "size_says" in drawn:
-                    says_size()
-
-            drawn["fill"] = fill
             fill()
 
-        def edit_angle() -> None:
-            panel.number(now["angle"], typed_angle, whole=False, step=0.5, unit="°",
-                     low=ANGLE_RANGE[0], high=ANGLE_RANGE[1])()
+        def says_angle() -> None:
+            drawn["angle_says"].clear()
+            with drawn["angle_says"]:
+                if now["angle_from"] == TYPICAL:
+                    ui.label(t("manager.setup.glass.not_measured")) \
+                        .classes("manager-tier manager-tier--warn")
+                    ui.label(t("manager.setup.glass.typical", angle=f"{TYPICAL_ANGLE:g}")) \
+                        .classes("manager-help")
+                elif now["angle_from"] == KEPT:
+                    _source("description", t("manager.setup.glass.kept"))
 
-        def holder(key: str) -> Callable[[], None]:
-            def make() -> None:
-                drawn[key] = ui.element("div")
+        def typed_angle(event: Any) -> None:
+            if event.value is None:
+                return
+            now["angle"], now["angle_from"] = float(event.value), YOURS
+            says_angle()
 
-            return make
+        def fill() -> None:
+            # Making the controls is not typing in them.
+            drawn["filling"] = True
+            drawn["rows"].clear()
+            box.clear()
+            with box:
+                with ui.element("div").classes("manager-glass-group"):
+                    with ui.element("div").classes("manager-glass-text"):
+                        with ui.element("div").classes("manager-glass-head"):
+                            ui.label(t("manager.setup.glass.size")).classes("manager-fact-heading")
+                            panel.segmented({units.CM: t("manager.units.cm"),
+                                             units.INCH: t("manager.units.in")},
+                                            now["units"], chose_units).classes("manager-units")
+                        ui.label(t("manager.setup.glass.size_help")).classes("manager-help")
+                        drawn["size_order"] = ui.label(t("manager.setup.glass.size_order")) \
+                            .classes("manager-help")
+                        drawn["size_order"].set_visibility(now["size_from"] == MEASURE)
+                        with ui.element("div").classes("manager-wizard-picks") as picks:
+                            picks.props("role=radiogroup")
+                            picks.props["aria-label"] = t("manager.setup.glass.size")
+                            if sizes[FROM_SCREEN]:
+                                source_row(FROM_SCREEN, "tv", t("manager.setup.glass.from_screen"))
+                            if sizes[KEPT]:
+                                source_row(KEPT, "description", t("manager.setup.glass.kept"),
+                                           t("manager.setup.glass.kept_same")
+                                           if reported and sizes[FROM_SCREEN] is None else "")
+                            measuring_row()
+                            if built_in and sizes[BUILT_IN]:
+                                source_row(BUILT_IN, "straighten",
+                                           t("manager.setup.glass.builtin"),
+                                           t("manager.setup.glass.builtin_help",
+                                             inches=round(math.hypot(*built_in) / 2.54)))
+                    ui.html(glass_art.size(), sanitize=False, tag="div") \
+                        .classes("manager-glass-art")
+                with ui.element("div").classes("manager-glass-group"):
+                    with ui.element("div").classes("manager-glass-text"):
+                        with ui.element("div").classes("manager-glass-head"):
+                            ui.label(t("manager.setup.glass.angle")).classes("manager-fact-heading")
+                        ui.label(t("manager.setup.glass.angle_help")).classes("manager-help")
+                        ui.label(t("manager.setup.glass.angle_how")).classes("manager-help")
+                        with ui.element("div").classes("manager-glass-angle"):
+                            panel.number(now["angle"], typed_angle, whole=False, step=0.5,
+                                         unit="°", low=ANGLE_RANGE[0], high=ANGLE_RANGE[1])()
+                            drawn["angle_says"] = ui.element("div").classes("manager-glass-angle")
+                    ui.html(glass_art.angle(), sanitize=False, tag="div") \
+                        .classes("manager-glass-art")
+            drawn["filling"] = False
+            says_angle()
 
-        panel.facts(ui, [
-            (t("manager.setup.glass.size"), edit_size),
-            (panel.ASIDE, holder("size_says")),
-            (t("manager.setup.glass.angle"), edit_angle),
-            (panel.ASIDE, holder("angle_says")),
-        ])
-        says_size()
-        says_angle()
+        ui.label(t("manager.setup.glass.later")).classes("manager-help")
+        box = ui.element("div").classes("w-full")
+        fill()
 
     return {"title": t("manager.setup.glass.title"), "help": t("manager.setup.glass.lead"),
             "draw": draw}
@@ -472,7 +547,8 @@ async def answer_glass(vpx: Vpx, values: dict[str, Any]) -> None:
         return
     held = await offload.io(_read, ApiClient(), vpx.launcher.launcher_id)
     keys: dict[str, str] = {}
-    for key, wanted in zip(SIZE_KEYS, glass["size"], strict=True):
+    # No size is the answer to leave Visual Pinball's own, and to boxes not both filled.
+    for key, wanted in zip(SIZE_KEYS, glass.get("size") or (), strict=False):
         if abs(_number(held, key) - wanted) > _TOLERANCE_CM / 10:
             keys[key] = f"{_cm(wanted):g}"
     if abs(_number(held, ANGLE_KEY) - float(glass["angle"])) > _TOLERANCE_CM / 10:

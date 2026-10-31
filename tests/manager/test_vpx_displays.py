@@ -108,6 +108,17 @@ class AppliesTests(unittest.TestCase):
             SimpleNamespace(key="displays", settings=[SimpleNamespace(key="Window.Left")])))
 
 
+class NamedTests(unittest.TestCase):
+    def test_parts_are_read_out_as_a_sentence_would(self) -> None:
+        one, two, three = ("backglass", "scoreview", "topper")
+        labels = {part.key: part.label for part in vpx_displays.picture.vpx_parts()}
+
+        self.assertEqual(vpx_displays.named([one]), labels[one])
+        self.assertEqual(vpx_displays.named([one, two]), f"{labels[one]} and {labels[two]}")
+        self.assertEqual(vpx_displays.named([one, two, three]),
+                         f"{labels[one]}, {labels[two]} and {labels[three]}")
+
+
 class TrimmedTests(unittest.TestCase):
     def _shown(self) -> list:
         return [_heading("playfield", "Player.PlayfieldDisplay", "Player.PlayfieldFullScreen"),
@@ -608,6 +619,40 @@ class SizeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.notify.call_args.args[0], t("manager.settings.save_failed"))
 
 
+class ConflictsTests(unittest.TestCase):
+    SET = {"Player.PlayfieldDisplay": SAMSUNG, "Backglass.BackglassOutput": "1",
+           "Backglass.BackglassDisplay": DELL}
+
+    def _conflicts(self, **over: str) -> list[str]:
+        held = {**self.SET, **{key.replace("__", "."): value for key, value in over.items()}}
+        return vpx_displays.conflicts(_standing(), HERE, held)
+
+    def test_a_file_that_puts_every_part_where_vpinfe_does_conflicts_in_nothing(self) -> None:
+        self.assertEqual(self._conflicts(), [])
+
+    def test_a_part_the_file_puts_on_another_screen_conflicts(self) -> None:
+        self.assertEqual(self._conflicts(Backglass__BackglassDisplay=CVT), ["backglass"])
+
+    def test_a_part_the_file_has_turned_off_conflicts_with_one_vpinfe_draws(self) -> None:
+        self.assertEqual(self._conflicts(Backglass__BackglassOutput="0"), ["backglass"])
+
+    def test_a_part_the_file_holds_nothing_for_is_not_a_conflict(self) -> None:
+        for blank in ("", " "):
+            with self.subTest(blank=blank):
+                self.assertEqual(self._conflicts(Backglass__BackglassOutput=blank,
+                                                 Backglass__BackglassDisplay=blank), [])
+        self.assertEqual(self._conflicts(Backglass__BackglassOutput=""), ["backglass"])
+        held = {"Player.PlayfieldDisplay": SAMSUNG}
+        self.assertEqual(vpx_displays.conflicts(_standing(), HERE, held), [])
+
+    def test_a_turn_the_file_holds_that_is_not_vpinfe_s_conflicts(self) -> None:
+        self.assertEqual(self._conflicts(TableOverride__ViewCabRotation="90"), ["playfield"])
+
+    def test_no_turn_in_the_file_is_not_a_conflict(self) -> None:
+        self.assertEqual(self._conflicts(TableOverride__ViewCabRotation=""), [])
+        self.assertEqual(vpx_displays.conflicts(_standing(), HERE, self.SET), [])
+
+
 class FollowingTests(unittest.TestCase):
     def _keys(self, before: Any, after: Any, flat: dict | None = None,
               logged: tuple = ()) -> dict[str, str]:
@@ -697,6 +742,27 @@ class FollowingTests(unittest.TestCase):
         self.assertEqual([keys[key] for key in vpx.REGION["scoreview"]],
                          [str(one) for one in vpx.embedded_region(TALL_TOO)])
 
+    def test_a_part_the_launcher_holds_nothing_for_follows_the_move(self) -> None:
+        for blank in ({"Backglass__BackglassOutput": ""}, {"Backglass__BackglassOutput": "  "}):
+            with self.subTest(blank=blank):
+                keys = self._keys(_standing(), _standing({"backglass": 3}), _flat(
+                    Backglass__BackglassDisplay="", **blank))
+
+                self.assertEqual(keys["Backglass.BackglassDisplay"], CVT)
+
+    def test_a_part_set_to_disabled_stays_disabled_when_vpinfe_moves_it(self) -> None:
+        keys = self._keys(_standing(), _standing({"backglass": 3}),
+                          _flat(Backglass__BackglassOutput="0", Backglass__BackglassDisplay=""))
+
+        self.assertNotIn("Backglass.BackglassDisplay", keys)
+
+    def test_a_turn_the_launcher_holds_nothing_for_goes_along(self) -> None:
+        keys = self._keys(_standing(), _standing({"playfield": 4}),
+                          _flat(TableOverride__ViewCabRotation=""))
+
+        self.assertEqual(keys["Player.PlayfieldDisplay"], LG)
+        self.assertEqual(keys["TableOverride.ViewCabRotation"], "0.0")
+
 
 class LaunchersTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -783,6 +849,121 @@ class LaunchersTests(unittest.IsolatedAsyncioTestCase):
                         _standing({"backglass": 3}), HERE)
 
         self.library.write_launcher_config.assert_not_called()
+
+
+class ApartTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.library = _Library()
+        self.enterContext(patch.object(vpx_displays, "config_groups",
+                                       side_effect=lambda found: found["groups"]))
+        self.enterContext(patch.object(vpx_displays.offload, "io",
+                                       new=AsyncMock(side_effect=_inline)))
+        self.notify = self.enterContext(patch.object(vpx_displays.ui, "notify"))
+
+    def _set(self, **keys: tuple[str, bool]) -> Mock:
+        """A client whose launcher holds `keys`, each with whether the file sets it."""
+        client = Mock()
+        client.launcher_config.return_value = {
+            "values": {key.replace("__", "."): {"value": value, "set_here": here}
+                       for key, (value, here) in keys.items()},
+            "program": None, "groups": []}
+        return client
+
+    async def test_only_what_the_file_sets_is_asked_about(self) -> None:
+        client = self._set(Player__PlayfieldDisplay=(SAMSUNG, True),
+                           Backglass__BackglassOutput=("1", False),
+                           Backglass__BackglassDisplay=(CVT, False))
+
+        got = await vpx_displays.disagreeing(client, "vpx-1", _standing(), HERE)
+
+        self.assertEqual(got, [])
+
+    async def test_a_part_the_file_sets_elsewhere_is_asked_about(self) -> None:
+        client = self._set(Player__PlayfieldDisplay=(SAMSUNG, True),
+                           Backglass__BackglassOutput=("1", True),
+                           Backglass__BackglassDisplay=(CVT, True))
+
+        got = await vpx_displays.disagreeing(client, "vpx-1", _standing(), HERE)
+
+        self.assertEqual(got, ["backglass"])
+
+    async def test_matching_a_launcher_writes_vpinfe_s_screens_into_its_file(self) -> None:
+        client = self._set(Player__PlayfieldDisplay=(SAMSUNG, True),
+                           Backglass__BackglassOutput=("1", True),
+                           Backglass__BackglassDisplay=(CVT, True))
+
+        written = await vpx_displays.match_launcher(client, "vpx-1", _standing(), HERE)
+
+        self.assertEqual(client.write_launcher_config.call_args.args[:1], ("vpx-1",))
+        self.assertEqual(client.write_launcher_config.call_args.args[1]
+                         ["Backglass.BackglassDisplay"], DELL)
+        self.assertIs(client.write_launcher_config.call_args.kwargs["create"], True)
+        self.assertEqual(written.unnamed, ())
+
+    async def test_a_screen_visual_pinball_has_no_name_for_is_left_and_said(self) -> None:
+        client = self._set(Player__PlayfieldDisplay=(SAMSUNG, True),
+                           Backglass__BackglassOutput=("1", True),
+                           Backglass__BackglassDisplay=(CVT, True))
+
+        written = await vpx_displays.match_launcher(
+            client, "vpx-1", _standing({"backglass": 5}), HERE)
+
+        self.assertEqual(written.unnamed, ("backglass",))
+        self.assertNotIn("Backglass.BackglassDisplay",
+                         client.write_launcher_config.call_args.args[1]
+                         if client.write_launcher_config.called else {})
+
+    async def test_a_launcher_that_agrees_has_no_row(self) -> None:
+        self.assertEqual(await vpx_displays.apart(self.library, _standing(), HERE), [])
+
+    async def test_a_launcher_that_differs_is_named_with_its_parts(self) -> None:
+        self.library.flat = _flat(Backglass__BackglassDisplay=CVT)
+        self.library.launchers.return_value = {"launchers": [
+            {"launcher_id": "vpx-1", "app": "vpx", "enabled": True, "has_config": True,
+             "display_name": "Visual Pinball X"}]}
+
+        [one] = await vpx_displays.apart(self.library, _standing(), HERE)
+
+        self.assertEqual((one.launcher_id, one.name, one.parts, one.can_match),
+                         ("vpx-1", "Visual Pinball X", ("backglass",), True))
+
+    async def test_a_part_with_no_screen_name_yet_waits_and_cannot_be_matched(self) -> None:
+        self.library.flat = _flat(Backglass__BackglassDisplay=CVT)
+
+        [one] = await vpx_displays.apart(self.library, _standing({"backglass": 5}), HERE)
+
+        self.assertEqual(one.waiting, ("backglass",))
+        self.assertFalse(one.can_match)
+
+    async def test_there_is_no_row_where_the_launchers_agree_or_cannot_be_read(self) -> None:
+        self.assertEqual(await vpx_displays.apart_rows(
+            self.library, _standing(), HERE, Mock()), [])
+        self.library.launchers.side_effect = RuntimeError("offline")
+
+        with self.assertLogs(vpx_displays.logger, "WARNING"):
+            self.assertEqual(await vpx_displays.apart_rows(
+                self.library, _standing(), HERE, Mock()), [])
+
+    async def test_the_row_is_drawn_under_the_screens_and_match_writes_and_redraws(self) -> None:
+        self.library.flat = _flat(Backglass__BackglassDisplay=CVT)
+        refill = Mock()
+        [(kind, draw)] = await vpx_displays.apart_rows(
+            self.library, _standing(), HERE, refill)
+
+        with patch.object(vpx_displays.panel, "action") as action:
+            await press(_drawn, draw)
+
+        self.assertIs(kind, panel.FULL)
+        self.assertEqual(action.call_args.args[0], t("manager.screens.match_vpinfe"))
+        self.assertTrue(action.call_args.kwargs["enabled"])
+        await press(action.call_args.args[1])
+        self.assertEqual(self.library.write_launcher_config.call_args.args[1]
+                         ["Backglass.BackglassDisplay"], DELL)
+        refill.assert_called_once_with()
+
+
+async def _drawn(draw: Any) -> None:
+    draw()
 
 
 class PanelKindTests(unittest.IsolatedAsyncioTestCase):
@@ -910,7 +1091,7 @@ class EntriesTests(unittest.IsolatedAsyncioTestCase):
         assert rows.await_args is not None
         self.assertEqual(list(rows.await_args.kwargs["ahead"]), ["Player.BGSet"])
         [(label, _)] = rows.await_args.kwargs["ahead"]["Player.BGSet"]
-        self.assertEqual(label, t("manager.vpx_displays.screen_size"))
+        self.assertEqual(label, t("manager.screens.screen_size"))
 
     async def test_with_no_row_after_it_the_size_row_goes_last(self) -> None:
         rows = AsyncMock(return_value=[("a row", None)])
@@ -920,7 +1101,7 @@ class EntriesTests(unittest.IsolatedAsyncioTestCase):
 
         assert rows.await_args is not None
         self.assertEqual(rows.await_args.kwargs["ahead"], {})
-        self.assertEqual(out[-1][0], t("manager.vpx_displays.screen_size"))
+        self.assertEqual(out[-1][0], t("manager.screens.screen_size"))
 
     async def test_what_cannot_be_read_is_said_in_place_of_the_page(self) -> None:
         context: dict[str, Any] = {"library": _Library(), "launcher": {"launcher_id": "vpx-1"},
