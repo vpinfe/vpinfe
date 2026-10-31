@@ -13,6 +13,7 @@ class _Element:
     def __init__(self) -> None:
         self.is_deleted = False
         self.cleared = 0
+        self.id = 7
 
     def __enter__(self) -> _Element:
         return self
@@ -63,6 +64,16 @@ class SectionsRedrawTests(unittest.TestCase):
 
         self.assertEqual(rail.cleared, 2)
         self.assertEqual(self._drawn(), [("a", 0)])
+
+    def test_a_kept_rail_wires_its_scroll_and_an_unkept_one_does_not(self) -> None:
+        panel.sections([("a", "A")], "a", self.pick)
+        panel.ui.run_javascript.assert_called_once_with(panel._OPEN_ROW_IN_VIEW_JS)
+        panel.ui.run_javascript.reset_mock()
+
+        panel.sections([("a", "A")], "a", self.pick, keep="settings")
+
+        sent = [call.args[0] for call in panel.ui.run_javascript.call_args_list]
+        self.assertIn(panel.KEEP_RAIL_SCROLL_JS % {"key": '"settings"', "id": '"c7"'}, sent)
 
     def test_a_rail_that_has_gone_is_left_alone(self) -> None:
         _work, draw = panel.sections([("a", "A")], "a", self.pick)

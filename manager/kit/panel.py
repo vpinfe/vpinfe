@@ -352,8 +352,28 @@ if (column && getComputedStyle(column).flexDirection === 'column') {
 """
 
 
+KEEP_RAIL_SCROLL_JS = """
+(() => {
+  const held = window.__hubRailTop || (window.__hubRailTop = {});
+  const key = %(key)s, id = %(id)s;
+  let tries = 0;
+  const wire = () => {
+    const rail = document.getElementById(id);
+    if (!rail) { if (++tries < 40) setTimeout(wire, 25); return; }
+    if (held[key] && rail.scrollHeight <= rail.clientHeight && ++tries < 40) {
+      setTimeout(wire, 25);
+      return;
+    }
+    if (held[key]) rail.scrollTop = held[key];
+    rail.addEventListener('scroll', () => { held[key] = rail.scrollTop; }, {passive: true});
+  };
+  wire();
+})()
+"""
+
+
 def sections(entries: Sequence[tuple[Any, ...]], current: str,
-             on_pick: Callable[[str], Any], *, rail_px: int = RAIL_PX
+             on_pick: Callable[[str], Any], *, rail_px: int = RAIL_PX, keep: str = ""
              ) -> tuple[Any, Callable[[Sequence[tuple[Any, ...]], str], None]]:
     """The rail and the region it opens into: that region, and a call that draws the rail
     again from other `entries` where it stands.
@@ -365,6 +385,9 @@ def sections(entries: Sequence[tuple[Any, ...]], current: str,
     Two regions, not loose rows: the rail scrolls on its own and the open page beside it
     holds still. Left loose, every row takes a grid track of its own and the region they
     are meant to sit beside gets whatever is left, which on a long index is a few lines.
+
+    `keep` names a rail whose scroll position survives the view being drawn again, as
+    every pick of a row does.
     """
     with ui.element("div").classes("w-full grow min-h-0 manager-sections-box"):
         frame = ui.element("div").classes("w-full grow min-h-0 manager-sections") \
@@ -396,6 +419,9 @@ def sections(entries: Sequence[tuple[Any, ...]], current: str,
 
     draw(entries, current)
     ui.run_javascript(_OPEN_ROW_IN_VIEW_JS)
+    if keep:
+        ui.run_javascript(KEEP_RAIL_SCROLL_JS % {"key": json.dumps(keep),
+                                                 "id": json.dumps(f"c{rail.id}")})
     return work, draw
 
 

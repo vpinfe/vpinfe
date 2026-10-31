@@ -2057,7 +2057,7 @@ def build_system(library: Library, state: dict[str, Any], redraw: Callable[[], N
 
     work, draw_index = panel.sections(_index_entries(state, pages), chosen,
                                       lambda key: open_page(state, redraw, key),
-                                      rail_px=RAIL_PX)
+                                      rail_px=RAIL_PX, keep="settings")
 
     def reindex() -> None:
         draw_index(_index_entries(state, system_pages(discovery.get("features"),
