@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from apps.vpx.capture import VPXCapture
 from common import apps
+from common.apps.contract import VIEW_FSS
 from common.capture import adapters, placing
 from common.capture.adapters import Window, wlr
 from common.host import launch
@@ -161,6 +162,22 @@ class ShownTests(unittest.TestCase):
                        else {"return_value": answer})):
                 self.assertIsNone(placing.shown())
                 self.assertIsNone(placing.placer("game"))
+
+    def test_the_views_the_app_can_start_the_table_in_are_asked(self) -> None:
+        entry = apps.Entry(table="/games/Example/Example.vpx")
+        with patch.object(launch, "launched_by", return_value=(apps.get("vpx"), entry, {})), \
+                patch.object(VPXCapture, "views", return_value=frozenset({VIEW_FSS})):
+            self.assertEqual(placing.views("game", "Example.vpx"), frozenset({VIEW_FSS}))
+
+    def test_no_views_are_offered_without_a_launcher_or_a_capture_hook(self) -> None:
+        answer: Any
+        for answer in (None, (apps.get("generic"), apps.Entry(), {}),
+                       launch.LaunchUnavailableError("no table")):
+            with self.subTest(answer=answer), patch.object(
+                    launch, "launched_by",
+                    **({"side_effect": answer} if isinstance(answer, Exception)
+                       else {"return_value": answer})):
+                self.assertEqual(placing.views("game"), frozenset())
 
     def test_the_default_launchers_app_with_no_table_has_no_placer(self) -> None:
         with patch.object(launch, "launched_by",

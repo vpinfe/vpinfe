@@ -191,6 +191,65 @@ class TabTests(unittest.IsolatedAsyncioTestCase):
                          "Visual Pinball X doesn't show the DMD on a screen of its own")
         self.shown.assert_not_called()
 
+    def _asleep_device(self, *answers: Any) -> tuple[mock.MagicMock, Any]:
+        device = Device({})
+        reads = self.enterContext(mock.patch.object(device, "capture_report",
+                                                    side_effect=list(answers)))
+        context = {"library": device, "game_id": "g1", "game": {"name": "Game"},
+                   "lens": "", "state": {}}
+        slot = mediasource._Slot(context, "playfield_video", "Playfield Video",
+                                 mock.AsyncMock(), mediasource._media(device,
+                                                                      "playfield_video"),
+                                 records=True)
+        slot.dialog = mock.Mock(is_deleted=False, value=True)
+        slot.placed_at = {"table": ""}
+        return reads, slot
+
+    async def test_the_screens_are_read_again_on_their_own_once_one_is_woken(self) -> None:
+        asleep = {"available": False,
+                  "reason": {"key": adapters.ASLEEP, "params": {}, "fix": "none",
+                             "remedy": None}}
+        _reads, slot = self._asleep_device(asleep, {"available": True})
+        timer = self.enterContext(mock.patch.object(mediasource.ui, "timer"))
+
+        await slot.record_tab(mock.MagicMock())
+
+        self.assertEqual(self.attention.call_args.args[0],
+                         "Every screen on this device is asleep - move the mouse to wake one")
+        self.assertNotIn("Try Again", [call.args[0] for call in self.action.call_args_list])
+        look = timer.call_args.args[1]
+        self.attention.reset_mock()
+        await look()
+
+        self.attention.assert_not_called()
+        record_button = [call for call in self.action.call_args_list
+                         if call.args[0] == "Record"][-1]
+        self.assertTrue(record_button.kwargs["enabled"])
+
+    async def test_screens_that_are_awake_are_not_polled(self) -> None:
+        _reads, slot = self._asleep_device({"available": True})
+        timer = self.enterContext(mock.patch.object(mediasource.ui, "timer"))
+
+        await slot.record_tab(mock.MagicMock())
+
+        timer.assert_not_called()
+
+    async def test_a_read_that_fails_leaves_the_old_answer_and_tries_again(self) -> None:
+        asleep = {"available": False,
+                  "reason": {"key": adapters.ASLEEP, "params": {}, "fix": "none",
+                             "remedy": None}}
+        reads, slot = self._asleep_device(asleep, RuntimeError("busy"), {"available": True})
+        timer = self.enterContext(mock.patch.object(mediasource.ui, "timer"))
+
+        await slot.record_tab(mock.MagicMock())
+        look = timer.call_args.args[1]
+        await look()
+        self.attention.reset_mock()
+        await look()
+
+        self.assertEqual(reads.call_count, 3)
+        self.attention.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

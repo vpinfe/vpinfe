@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from common import events, service_errors
+from common.apps.contract import VIEW_FSS
 from common.config.config_access import cfg_get
 from common.failures import why
 from common.games import asset_origin
@@ -36,7 +37,10 @@ KINDS = {adapters.PLAYFIELD: ("playfield", "playfield_video"),
          adapters.SCOREVIEW: ("scoreview", "scoreview_video"),
          adapters.TOPPER: ("topper", "topper_video")}
 AUDIO = "audio"
-RECORDABLE = frozenset({kind for pair in KINDS.values() for kind in pair} | {AUDIO})
+# The playfield window with the table started in Full Single Screen. A picture only, and a
+# launch of its own, since the other kinds are the table's own view.
+FSS = "playfield_fss"
+RECORDABLE = frozenset({kind for pair in KINDS.values() for kind in pair} | {AUDIO, FSS})
 
 RECORDED = "recorded"
 FAILED = "failed"
@@ -100,6 +104,9 @@ class Target:
     propose: frozenset[str] = frozenset()
     # Placed over a file, which goes where nothing else uses it.
     replace: frozenset[str] = frozenset()
+    # The view the table is started in: "" for the app's own, or `VIEW_FSS`, where `kinds`
+    # is `FSS` alone.
+    view: str = ""
 
 
 def playfield_turn(config: Any, base: geometry.Turn, orientation: str) -> geometry.Turn:
@@ -134,6 +141,7 @@ class Session:
         self.halt = halt or threading.Event()
         self.hardware = adapter.hardware(found[tools.FFMPEG.id]) if at_once else ""
         self.wanted = set(target.kinds)
+        self.kinds = {adapters.PLAYFIELD: (FSS, "")} if target.view == VIEW_FSS else KINDS
         self.screens = dict(screens)
         self.dropped: set[str] = set()
         self.sound = AUDIO in self.wanted
@@ -150,16 +158,16 @@ class Session:
     # --- which output each window is on ---------------------------------------------
 
     def _choose(self) -> None:
-        self.video = [window for window, (_, video) in KINDS.items()
+        self.video = [window for window, (_, video) in self.kinds.items()
                       if video in self.wanted and window in self.screens]
-        self.stills = [window for window, (picture, video) in KINDS.items()
+        self.stills = [window for window, (picture, video) in self.kinds.items()
                        if picture in self.wanted and video not in self.wanted
                        and window in self.screens]
 
     def _place(self, screens: Mapping[str, adapters.Screen]) -> None:
         """Each window asked for goes where `screens` says, or fails with its reason."""
         for window, screen in screens.items():
-            kinds = [kind for kind in KINDS[window] if kind in self.wanted]
+            kinds = [kind for kind in self.kinds.get(window, ()) if kind in self.wanted]
             if not kinds or window in self.dropped:
                 continue
             before = self.screens.get(window)
@@ -209,7 +217,7 @@ class Session:
             try:
                 self.kit.launch(self.target.game, self.config,
                                 source=launch_state.SOURCE_CAPTURE, table=self.target.table,
-                                record_sound=self.sound)
+                                record_sound=self.sound, record_view=self.target.view)
             except BaseException as exc:  # noqa: BLE001 - said as the table's outcome
                 self.failure.append(exc)
             finally:
@@ -404,7 +412,7 @@ class Session:
                                              at=skip + self.chosen.picture_at))
                 self._made(picture, cut, dest, made)
         for window in self.stills:
-            picture = KINDS[window][0]
+            picture = self.kinds[window][0]
             still = self.work / f"{window}.png"
             if not still.is_file():
                 self._fail(picture, said(NO_FRAMES, window=window))

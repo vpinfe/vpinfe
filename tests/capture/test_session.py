@@ -160,7 +160,7 @@ class _Sessions(unittest.TestCase):
                desktop: list[Window] | None = None,
                propose: frozenset[str] = frozenset(),
                replace: frozenset[str] = frozenset(),
-               halt: threading.Event | None = None) -> session.Result:
+               halt: threading.Event | None = None, view: str = "") -> session.Result:
         """With `shown`, where the app's settings put its windows; with `desktop`, what the
         desktop says once the table is up."""
         wlr.reset_for_tests()
@@ -169,7 +169,7 @@ class _Sessions(unittest.TestCase):
         if desktop is not None:
             adapter.windows = lambda: desktop  # type: ignore[method-assign]
         target = session.Target("game1", SimpleNamespace(full_path_game=""), "", None, kinds,
-                                propose=propose, replace=replace)
+                                propose=propose, replace=replace, view=view)
         placed = None if shown is None else placing.Placing(
             list(OUTPUTS.values()), _config(rotation), [], shown)
         screens = SCREENS if placed is None else {
@@ -339,6 +339,24 @@ class SessionTests(_Sessions):
         grims = [one[1] for one in cabinet.log if one[1][0].endswith("grim")]
         self.assertEqual([argv[1:3] for argv in grims], [["-o", "DP-1"], ["-o", "DP-2"]])
         self.assertEqual({one["kind"] for one in result.placed}, {"playfield", "backglass"})
+
+    def test_a_launch_in_full_single_screen_takes_one_still_of_the_playfield_screen(self) -> None:
+        cabinet = Cabinet()
+
+        result = self.record(cabinet, (session.FSS,), view="fss")
+
+        self.assertEqual(cabinet.launched_with["record_view"], "fss")
+        grims = [one[1] for one in cabinet.log if one[1][0].endswith("grim")]
+        self.assertEqual([argv[1:3] for argv in grims], [["-o", "DP-1"]])
+        self.assertEqual(result.placed, [{"kind": session.FSS}])
+        self.assertEqual(result.state, session.RECORDED)
+
+    def test_a_launch_of_the_tables_own_views_asks_for_no_view(self) -> None:
+        cabinet = Cabinet()
+
+        self.record(cabinet, ("playfield",))
+
+        self.assertEqual(cabinet.launched_with["record_view"], "")
 
     def test_the_playfield_is_turned_from_its_buffer_to_the_stored_orientation(self) -> None:
         for rotation, orientation in (("0", "bottom_right"), ("0", "upright"),

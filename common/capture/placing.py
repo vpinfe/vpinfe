@@ -69,6 +69,16 @@ def shown(game: Any = None, table: str | None = None) -> Shown | None:
                  app.capture.window, _placer(app, entry, settings))
 
 
+def views(game: Any, table: str | None = None) -> frozenset[str]:
+    """The views, besides its own, the app that plays this table can start it in for a
+    recording. Empty where no app with a capture hook would play it."""
+    found = _asked(game, table)
+    if found is None:
+        return frozenset()
+    app, entry, settings = found
+    return frozenset(app.capture.views(entry, settings))
+
+
 def placer(game: Any, table: str | None = None) -> Placer | None:
     """`shown(game, table).placer`, without reading where the windows go."""
     found = _asked(game, table)

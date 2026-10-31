@@ -64,6 +64,7 @@ logger = logging.getLogger("vpinfe.manager.library.mediasource")
 # Enough of a list to scroll rather than to page. A folder of artwork is tens of files,
 # not thousands, and a picker with pages in it is a database browser.
 _LIST_MAX = 60
+_RECHECK_S = 3.0
 
 _FIND_FROM = 8
 
@@ -942,7 +943,8 @@ class _Slot(_OnlineTab, _OneFile):
         held = record.Settings(record.options_of(schema),
                                dict((values or {}).get(recording.SECTION) or {}))
         running = bool((playing or {}).get("launching"))
-        now: dict[str, Any] = {"asked": 0, "plan": {}, "stop": "", "busy": False}
+        now: dict[str, Any] = {"asked": 0, "plan": {}, "stop": "", "busy": False,
+                              "looking": False}
         with body:
             top = ui.column().classes("w-full gap-2")
             made = ui.column().classes("w-full gap-1")
@@ -979,6 +981,23 @@ class _Slot(_OnlineTab, _OneFile):
             tuning.clear()
             with tuning:
                 panel.facts(ui, record.setting_rows(held, report, replan, draw_tuning))
+
+        async def look_again() -> None:
+            """Screens are read as the tab opens; one woken since is seen on the next
+            read. A failed read leaves the old answer standing."""
+            nonlocal report
+            if report.get("available") or now["looking"] or now["busy"] or not self.shown():
+                return
+            now["looking"] = True
+            try:
+                report = await offload.io(library.capture_report)
+            except Exception:  # noqa: BLE001 - tried again on the next tick
+                return
+            finally:
+                now["looking"] = False
+            if report.get("available"):
+                draw_tuning()
+            await replan()
 
         @on_page
         async def go() -> None:
@@ -1052,6 +1071,9 @@ class _Slot(_OnlineTab, _OneFile):
 
         draw_tuning()
         await replan()
+        if not report.get("available"):
+            with body:
+                ui.timer(_RECHECK_S, look_again)
 
 
 class _Folder(_OnlineTab):

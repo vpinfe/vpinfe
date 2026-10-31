@@ -13,6 +13,7 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common import events, service_errors
+from common.apps.contract import VIEW_FSS
 from common.capture import adapters, placing, run, session
 from common.capture.run import Request
 from common.games import asset_origin
@@ -148,6 +149,79 @@ class PlanTests(_Library):
             self.plan(games=[], tables=[(GAME_ID, "tbl9999999")])
 
 
+class FullSingleScreenPlanTests(_Library):
+    def plan_fss(self, views: frozenset[str], **kwargs) -> dict:
+        with patch("common.host.launch.this_devices_copy", side_effect=lambda game: game), \
+                patch("common.capture.placing.views", return_value=views):
+            return self.plan(**kwargs)
+
+    def test_a_table_without_the_view_leaves_it_with_why(self) -> None:
+        planned = self.plan_fss(frozenset(), kinds=["playfield_fss"])
+
+        self.assertEqual(planned["targets"][0]["kinds"][0]["does"], "leave")
+        self.assertEqual(planned["kinds"][0]["reason"]["key"], run.NO_FSS)
+        self.assertEqual(planned["launches"], 0)
+
+    def test_a_table_with_the_view_records_it_in_a_launch_of_its_own(self) -> None:
+        planned = self.plan_fss(frozenset({VIEW_FSS}), kinds=["playfield", "playfield_fss"])
+
+        self.assertEqual(planned["recording"], ["playfield", "playfield_fss"])
+        self.assertEqual(planned["launches"], 2)
+
+    def test_the_picture_alone_is_one_launch(self) -> None:
+        planned = self.plan_fss(frozenset({VIEW_FSS}), kinds=["playfield_fss"])
+
+        self.assertEqual(planned["launches"], 1)
+
+    def test_the_view_costs_a_second_launch_in_the_estimate(self) -> None:
+        own = self.plan_fss(frozenset({VIEW_FSS}), kinds=["playfield"])
+        both = self.plan_fss(frozenset({VIEW_FSS}), kinds=["playfield", "playfield_fss"])
+
+        self.assertGreater(both["estimate_seconds"], own["estimate_seconds"])
+
+    def test_it_is_not_among_the_kinds_recorded_when_none_is_named(self) -> None:
+        planned = self.plan_fss(frozenset({VIEW_FSS}))
+
+        self.assertNotIn("playfield_fss", [row["kind"] for row in planned["kinds"]])
+
+
+class JoinedTests(unittest.TestCase):
+    def test_a_launch_that_recorded_makes_the_table_recorded_whatever_the_other_did(self) -> None:
+        failed = {"kind": "playfield_fss", "reason": {"key": session.NO_FRAMES, "params": {}}}
+
+        joined = run._joined(session.Result(session.RECORDED, placed=[{"kind": "playfield"}]),
+                             session.Result(session.FAILED, failed=[failed],
+                                            reason={"key": "x", "params": {}}))
+
+        self.assertEqual((joined.state, joined.placed, joined.failed, joined.reason),
+                         (session.RECORDED, [{"kind": "playfield"}], [failed], None))
+
+    def test_two_launches_that_recorded_nothing_fail_with_the_first_reason(self) -> None:
+        first = {"key": "first", "params": {}}
+
+        joined = run._joined(session.Result(session.FAILED, reason=first),
+                             session.Result(session.FAILED, reason={"key": "second",
+                                                                    "params": {}}))
+
+        self.assertEqual((joined.state, joined.reason), (session.FAILED, first))
+
+    def test_a_table_closed_or_a_stop_in_the_second_launch_is_the_whole_outcome(self) -> None:
+        closed = {"key": "closed", "params": {}}
+        for state in (session.CLOSED, session.STOPPED):
+            with self.subTest(state):
+                joined = run._joined(
+                    session.Result(session.RECORDED, placed=[{"kind": "playfield"}]),
+                    session.Result(state, reason=closed))
+
+                self.assertEqual((joined.state, joined.placed, joined.reason),
+                                 (state, [{"kind": "playfield"}], closed))
+
+    def test_two_launches_that_were_skipped_are_skipped(self) -> None:
+        joined = run._joined(session.Result(session.SKIPPED), session.Result(session.SKIPPED))
+
+        self.assertEqual(joined.state, session.SKIPPED)
+
+
 class _Started(_Library):
     def setUp(self) -> None:
         super().setUp()
@@ -216,6 +290,29 @@ class StartTests(_Started):
         target = self.sessions[0].target
         self.assertEqual((target.game_id, target.table_id, target.table, target.kinds),
                          (GAME_ID, "", None, ("playfield",)))
+
+    def test_the_full_single_screen_picture_is_a_launch_after_the_tables_own(self) -> None:
+        with patch("common.capture.placing.views", return_value=frozenset({VIEW_FSS})):
+            job = self.finished(run.start(Request(games=[GAME_ID],
+                                                  kinds=["playfield", "playfield_fss"])))
+
+        self.assertEqual([(one.target.kinds, one.target.view) for one in self.sessions],
+                         [(("playfield",), ""), (("playfield_fss",), VIEW_FSS)])
+        assert isinstance(job.result, dict)
+        self.assertEqual(job.result["tables"][0]["state"], session.RECORDED)
+
+    def test_a_stop_asked_between_the_two_launches_starts_no_second(self) -> None:
+        class AsksToStop(list):
+            def append(self, one: Any) -> None:
+                super().append(one)
+                run._halt.set()
+
+        self.sessions = AsksToStop()
+        with patch("common.capture.placing.views", return_value=frozenset({VIEW_FSS})):
+            self.finished(run.start(Request(games=[GAME_ID],
+                                            kinds=["playfield", "playfield_fss"])))
+
+        self.assertEqual([one.target.view for one in self.sessions], [""])
 
     def test_a_table_is_launched_by_its_own_file(self) -> None:
         self.finished(run.start(Request(tables=[(GAME_ID, MOD)], kinds=["playfield"])))

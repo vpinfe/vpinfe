@@ -41,8 +41,8 @@ def _plan(*rows: dict[str, Any], replacing: dict[str, int] | None = None,
 class RowTests(unittest.TestCase):
     def test_kinds_run_window_by_window_then_audio_and_only_those_kept(self) -> None:
         self.assertEqual(record.order(), [
-            "playfield", "playfield_video", "backglass", "backglass_video", "scoreview",
-            "scoreview_video", "topper", "topper_video", "audio"])
+            "playfield", "playfield_video", "playfield_fss", "backglass", "backglass_video",
+            "scoreview", "scoreview_video", "topper", "topper_video", "audio"])
         self.assertEqual(record.order({"playfield_video", "audio", "wheel"}),
                          ["playfield_video", "audio"])
 
@@ -78,6 +78,20 @@ class RowTests(unittest.TestCase):
         self.assertEqual(record.ticked(kinds, slots, {"playfield_video": False,
                                                       "topper": True}, sound=False),
                          {"playfield_video": False, "topper": False, "audio": False})
+
+    def test_the_full_single_screen_picture_is_a_row_of_its_own_that_starts_unticked(self) -> None:
+        kinds = ["playfield", "playfield_fss"]
+        no_view = {"key": "capture.view.no_fss", "fix": "none", "remedy": None, "params": {}}
+
+        self.assertEqual(record.rows_of(kinds, {}), [(("playfield",), ""),
+                                                     (("playfield_fss",), "")])
+        self.assertEqual(record.ticked(kinds, {}, {}, sound=False),
+                         {"playfield": True, "playfield_fss": False})
+        self.assertEqual(record.ticked(kinds, {}, {"playfield_fss": True}, sound=False),
+                         {"playfield": True, "playfield_fss": True})
+        self.assertEqual(
+            record.rows_of(kinds, {"playfield_fss": _row("playfield_fss", reason=no_view)})[1],
+            (("playfield_fss",), "This table has no Full Single Screen view"))
 
     def test_a_dimmed_row_keeps_what_the_browser_held_for_it(self) -> None:
         slots = {"topper": _row("topper", reason=TOPPER)}

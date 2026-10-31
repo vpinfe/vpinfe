@@ -405,6 +405,8 @@ class Capability(Protocol):
 
 # --- capture ----------------------------------------------------------------------
 
+VIEW_FSS = "fss"
+
 
 @runtime_checkable
 class Capture(Protocol):
@@ -412,7 +414,12 @@ class Capture(Protocol):
 
     `command` answers in place of `Launch.command`; `Launch.session` still says when it
     is up. `folder` is empty, the app's to write into, and removed with everything in it
-    once the entry closes. `sound` is whether the entry's sound is being recorded.
+    once the entry closes. `sound` is whether the entry's sound is being recorded. `view`
+    is "" for the view the app starts the entry in, or one of `views` to have it start in
+    that one instead.
+
+    `views` answers which views, other than its own, the app can start this entry in:
+    `VIEW_FSS` where the entry is built for Full Single Screen.
 
     Windows are named as core names them: `playfield`, `backglass`, `scoreview` and
     `topper`. `outputs` answers, per window, the output the app's own settings show it on,
@@ -427,7 +434,9 @@ class Capture(Protocol):
     """
 
     def command(self, entry: Entry, settings: Mapping[str, Any], *, sound: bool,
-                folder: str) -> list[str]: ...
+                view: str, folder: str) -> list[str]: ...
+
+    def views(self, entry: Entry, settings: Mapping[str, Any]) -> frozenset[str]: ...
 
     def outputs(self, entry: Entry, settings: Mapping[str, Any]) -> Mapping[str, str]: ...
 

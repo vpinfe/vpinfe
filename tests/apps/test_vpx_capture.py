@@ -5,10 +5,11 @@ import unittest
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from apps.vpx import ini as vini
 from apps.vpx.capture import VPXCapture, connector
-from common.apps.contract import Entry
+from common.apps.contract import VIEW_FSS, Entry
 
 SETTINGS = """[Player]
 ; Synchronization:  [Default: 3, 0='No Sync', 1='Vertical Sync', 3='Frame Pacing']:
@@ -35,12 +36,12 @@ class CaptureTests(unittest.TestCase):
         self.game.mkdir()
         self.table = self.game / "Example.vpx"
 
-    def _command(self, sound: bool = False, table: str | None = None,
+    def _command(self, sound: bool = False, table: str | None = None, view: str = "",
                  **settings: str) -> list[str]:
         settings = {"bin_path": "/opt/vpinball/VPinballX",
                     "ini_path": str(self.settings_file), **settings}
         return VPXCapture().command(Entry(table=str(self.table) if table is None else table),
-                                    settings, sound=sound, folder=str(self.folder))
+                                    settings, sound=sound, view=view, folder=str(self.folder))
 
     def _passed(self, cmd: list[str], flag: str) -> vini.Ini:
         return vini.parse(Path(cmd[cmd.index(flag) + 1]).read_text(encoding="utf-8"))
@@ -74,6 +75,19 @@ class CaptureTests(unittest.TestCase):
                     "Player.MusicVolume"):
             self.assertEqual(muted.value(key), "0", key)
         self.assertIsNone(heard.value("Player.PlayMusic"))
+
+    def test_the_view_the_table_is_built_for_is_asked_for_only_in_full_single_screen(self) -> None:
+        own = self._passed(self._command(), "-ini")
+        fss = self._passed(self._command(view=VIEW_FSS), "-ini")
+
+        self.assertEqual((own.value("Player.BGSet"), fss.value("Player.BGSet")), ("1", "0"))
+
+    def test_a_table_setting_its_view_is_given_a_copy_asking_for_full_single_screen(self) -> None:
+        (self.game / "Example.ini").write_text("[Player]\nBGSet = 2\n", encoding="utf-8")
+
+        cmd = self._command(view=VIEW_FSS)
+
+        self.assertEqual(self._passed(cmd, "-tableini").value("Player.BGSet"), "0")
 
     def test_the_launcher_s_own_file_is_never_written(self) -> None:
         self._command()
@@ -124,7 +138,7 @@ class CaptureTests(unittest.TestCase):
 
     def test_an_entry_with_no_file_has_no_table_copy(self) -> None:
         cmd = VPXCapture().command(Entry(key="mm"), {"bin_path": "/opt/vpinball/VPinballX"},
-                                   sound=False, folder=str(self.folder))
+                                   sound=False, view="", folder=str(self.folder))
 
         self.assertNotIn("-tableini", cmd)
         self.assertIn("-ini", cmd)
@@ -224,6 +238,29 @@ class OutputTests(unittest.TestCase):
                                 ("VPinFE Table", ""), ("", "")):
             with self.subTest(title):
                 self.assertEqual(capture.window("VPinballX_BGFX", title), expected)
+
+
+class ViewsTests(unittest.TestCase):
+    """Full Single Screen is offered for a table that enables it, and only then."""
+
+    def setUp(self) -> None:
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.table = Path(tmp.name) / "Example.vpx"
+
+    def _views(self, enabled: bool | None) -> frozenset[str]:
+        with patch("apps.vpx.capture.fss_enabled", return_value=enabled):
+            return VPXCapture().views(Entry(table=str(self.table)), {})
+
+    def test_a_table_that_enables_full_single_screen_offers_it(self) -> None:
+        self.assertEqual(self._views(True), frozenset({VIEW_FSS}))
+
+    def test_a_table_that_does_not_or_cannot_be_read_offers_nothing(self) -> None:
+        self.assertEqual(self._views(False), frozenset())
+        self.assertEqual(self._views(None), frozenset())
+
+    def test_an_entry_with_no_file_offers_nothing(self) -> None:
+        self.assertEqual(VPXCapture().views(Entry(key="mm"), {}), frozenset())
 
 
 class PlacedByTests(unittest.TestCase):

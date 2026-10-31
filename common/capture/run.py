@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from common import events, service_errors
+from common.apps.contract import VIEW_FSS
 from common.atomic_write import write_atomic
 from common.config.paths import CAPTURE_DIR, get_ini_config
 from common.devices import install_identity
@@ -56,6 +57,8 @@ PAUSED = "paused"
 PAUSED_LAUNCHED = "capture.run.launched"
 PAUSED_SPACE = "capture.run.space"
 INTERRUPTED = "capture.run.interrupted"
+
+NO_FSS = "capture.view.no_fss"
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,8 @@ def _blocked(kind: str, report: Mapping[str, Any]) -> dict[str, Any] | None:
     row is one a device that records nothing was asked for."""
     if kind == session.AUDIO:
         return report["sound"]["reason"]
+    if kind == session.FSS:
+        kind = session.KINDS[adapters.PLAYFIELD][0]
     for screen in report["screens"]:
         picture, video = session.KINDS[screen["window"]]
         if kind in (picture, video):
@@ -140,25 +145,49 @@ def decide(existing: str, held: str | None, review: bool = False) -> str:
 
 
 def _estimate(kinds: Sequence[str], at_once: bool, chosen: settings.Settings) -> int:
-    screens = {window for window, pair in session.KINDS.items()
-               if pair[1] in kinds or pair[0] in kinds}
-    videos = sum(1 for pair in session.KINDS.values() if pair[1] in kinds)
-    recording = chosen.length * (1 if at_once else max(1, videos))
-    return (START_SECONDS + chosen.wait + recording + CLOSE_SECONDS
-            + ENCODE_SECONDS * len(screens))
+    """Seconds for the launch of the table's own view and, where `kinds` has the FSS
+    picture, the launch of its own after it."""
+    own = [kind for kind in kinds if kind != session.FSS]
+    seconds = 0
+    if own:
+        screens = {window for window, pair in session.KINDS.items()
+                   if pair[1] in own or pair[0] in own}
+        videos = sum(1 for pair in session.KINDS.values() if pair[1] in own)
+        recording = chosen.length * (1 if at_once else max(1, videos))
+        seconds = (START_SECONDS + chosen.wait + recording + CLOSE_SECONDS
+                   + ENCODE_SECONDS * len(screens))
+    if session.FSS in kinds:
+        seconds += (START_SECONDS + chosen.wait + chosen.picture_at + CLOSE_SECONDS
+                    + ENCODE_SECONDS)
+    return seconds
 
 
 _WINDOW_OF = {kind: window for window, pair in session.KINDS.items() for kind in pair}
+_WINDOW_OF[session.FSS] = adapters.PLAYFIELD
+
+
+def _without_fss(game: Any, table: str | None) -> dict[str, Any] | None:
+    """Why this table cannot be recorded in Full Single Screen, or None where it can."""
+    try:
+        here = launch.this_devices_copy(game)
+    except launch.LaunchUnavailableError:
+        return None
+    if VIEW_FSS in placing.views(here, table):
+        return None
+    return {"key": NO_FSS, "params": {}, "fix": tools.FIX_NONE, "remedy": None}
 
 
 def _plan_one(game_id: str, table_id: str, request: Request, report: Mapping[str, Any],
               chosen: settings.Settings, kinds: Sequence[str]) -> dict[str, Any]:
     """What recording one game or table would do."""
     game = game_lens.game_or_refuse(game_id)
-    unseen = unshown.of(game_id, game, _launch_key(game, table_id))
+    key = _launch_key(game, table_id)
+    unseen = unshown.of(game_id, game, key)
+    no_fss = _without_fss(game, key) if session.FSS in kinds else None
 
     def blocked_here(kind: str) -> dict[str, Any] | None:
-        return _blocked(kind, report) or unseen.get(_WINDOW_OF.get(kind, ""))
+        return (_blocked(kind, report) or unseen.get(_WINDOW_OF.get(kind, ""))
+                or (no_fss if kind == session.FSS else None))
 
     open_kinds = [kind for kind in kinds if not blocked_here(kind)]
     held = slots.serving_each(game_id, table_id, open_kinds) if open_kinds else {}
@@ -185,6 +214,12 @@ def _plan_one(game_id: str, table_id: str, request: Request, report: Mapping[str
             "replacing": sum(replacing.values()), "replacing_by_source": replacing,
             "estimate_seconds": _estimate(doing, bool(report["at_once"]), chosen)
             if doing else 0}
+
+
+def _launches(kinds: Sequence[str]) -> int:
+    """How many times the table is launched to record these: once for the kinds of its own
+    view, and once more for the Full Single Screen picture."""
+    return int(any(kind != session.FSS for kind in kinds)) + int(session.FSS in kinds)
 
 
 def _counted(kind: str, rows: Sequence[Mapping[str, Any]],
@@ -221,7 +256,7 @@ def _plan(request: Request, report: Mapping[str, Any],
                          or (row["does"] == REPLACED and not row["goes"])),
             "asks": sum(1 for row in rows if row["does"] == PROPOSED),
             "replacing": sum(replacing.values()), "replacing_by_source": replacing,
-            "launches": sum(1 for target in targets if target["recording"]),
+            "launches": sum(_launches(target["recording"]) for target in targets),
             "at_once": bool(report["at_once"]),
             "estimate_seconds": sum(target["estimate_seconds"] for target in targets)}
 
@@ -609,14 +644,48 @@ def _record(planned: Mapping[str, Any], request: Request, report: Mapping[str, A
         raise service_errors.UnavailableError(why(exc)) from exc
     key = _launch_key(game, planned["table_id"])
     device = reach(report, game, key)
-    target = session.Target(
-        planned["game_id"], game, planned["table_id"], key, tuple(planned["recording"]),
-        propose=frozenset(row["kind"] for row in planned["kinds"] if row["does"] == PROPOSED),
-        replace=frozenset(row["kind"] for row in planned["kinds"] if row["does"] == REPLACED))
-    return session.Session(
-        target, chosen, adapter=device.adapter, screens=device.screens, found=device.found,
-        at_once=at_once, codec=codec, work=WORK, config=device.config, kit=kit,
-        placed=device.placed, halt=_halt).run()
+    propose = frozenset(row["kind"] for row in planned["kinds"] if row["does"] == PROPOSED)
+    replace = frozenset(row["kind"] for row in planned["kinds"] if row["does"] == REPLACED)
+
+    def launched(kinds: Sequence[str], view: str, at_once: bool) -> session.Result:
+        target = session.Target(planned["game_id"], game, planned["table_id"], key,
+                                tuple(kinds), propose=propose, replace=replace, view=view)
+        return session.Session(
+            target, chosen, adapter=device.adapter, screens=device.screens,
+            found=device.found, at_once=at_once, codec=codec, work=WORK,
+            config=device.config, kit=kit, placed=device.placed, halt=_halt).run()
+
+    own = [kind for kind in planned["recording"] if kind != session.FSS]
+    if session.FSS not in planned["recording"]:
+        return launched(own, "", at_once)
+    first = launched(own, "", at_once) if own else None
+    if first is None:
+        return launched((session.FSS,), VIEW_FSS, at_once)
+    if first.state in (session.STOPPED, session.CLOSED):
+        return first
+    if _halt.is_set():
+        return _joined(first, session.Result(session.STOPPED, at_once=first.at_once))
+    return _joined(first, launched((session.FSS,), VIEW_FSS, first.at_once))
+
+
+def _joined(first: session.Result, second: session.Result) -> session.Result:
+    """What two launches of one table came to, the second after the first."""
+    placed = first.placed + second.placed
+    proposed = first.proposed + second.proposed
+    held_up = second.state in (session.STOPPED, session.CLOSED)
+    if held_up:
+        state = second.state
+    elif placed or proposed:
+        state = session.RECORDED
+    elif first.state == second.state == session.SKIPPED:
+        state = session.SKIPPED
+    else:
+        state = session.FAILED
+    return session.Result(
+        state, placed, first.failed + second.failed,
+        None if state == session.RECORDED
+        else (second.reason if held_up else first.reason or second.reason),
+        second.at_once, proposed)
 
 
 def reset_for_tests() -> None:

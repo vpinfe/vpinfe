@@ -14,16 +14,20 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from common.apps.contract import Entry
+from common.apps.contract import VIEW_FSS, Entry
 
 from . import ini as vini
 from .config import read_at_table, read_file, settings_file, table_layer
 from .launch import VPXLaunch
+from .tablefile import fss_enabled
 
 # In the program's own values: SyncMode 0 is No Sync, MaxFramerate -1 follows the display.
 PACING = {"Player.SyncMode": "0", "Player.MaxFramerate": "-1"}
 MUTED = {"Player.PlaySound": "0", "Player.PlayMusic": "0",
          "Player.SoundVolume": "0", "Player.MusicVolume": "0"}
+# Player.BGSet 0 is the view the table is built for: Full Single Screen where it enables
+# that, else Desktop.
+FSS_VIEW = {"Player.BGSet": "0"}
 
 SETTINGS_COPY = "VPinballX.ini"
 TABLE_COPY = "table.ini"
@@ -52,8 +56,9 @@ _DIGESTS: dict[str, tuple[int, int, str]] = {}
 _DIGESTS_LOCK = threading.Lock()
 
 
-def recording_values(sound: bool) -> dict[str, str]:
-    return dict(PACING) if sound else {**PACING, **MUTED}
+def recording_values(sound: bool, view: str = "") -> dict[str, str]:
+    values = dict(PACING) if sound else {**PACING, **MUTED}
+    return {**values, **FSS_VIEW} if view == VIEW_FSS else values
 
 
 def _stamp(path: Path) -> str:
@@ -98,11 +103,11 @@ def connector(display: str) -> str:
 
 class VPXCapture:
     def command(self, entry: Entry, settings: Mapping[str, Any], *, sound: bool,
-                folder: str) -> list[str]:
+                view: str, folder: str) -> list[str]:
         """The launch command with `-ini` naming a copy of the Settings File, and
         `-tableini` a copy of the table's own file where that sets one of the recording's
         values, since the table's would win over the Settings File's."""
-        values = recording_values(sound)
+        values = recording_values(sound, view)
         copy = Path(folder) / SETTINGS_COPY
         copy.write_text(vini.written(read_file(settings_file(settings)), values),
                         encoding="utf-8")
@@ -114,6 +119,9 @@ class VPXCapture:
             table_copy.write_text(vini.written(table, values), encoding="utf-8")
             cmd[-2:-2] = ["-tableini", str(table_copy)]
         return cmd
+
+    def views(self, entry: Entry, settings: Mapping[str, Any]) -> frozenset[str]:
+        return frozenset({VIEW_FSS}) if entry.table and fss_enabled(entry.table) else frozenset()
 
     def outputs(self, entry: Entry, settings: Mapping[str, Any]) -> dict[str, str]:
         app = read_file(settings_file(settings))

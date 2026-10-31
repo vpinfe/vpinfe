@@ -17,8 +17,9 @@ from typing import Any, Literal
 from nicegui import ui
 
 from common.capture import preflight
+from common.capture.adapters import PLAYFIELD
 from common.capture.run import EXISTING, FILL, INTERRUPTED, REPLACED
-from common.capture.session import AUDIO, KINDS
+from common.capture.session import AUDIO, FSS, KINDS
 from common.failures import why
 from common.games import asset_origin
 from common.i18n import size, t
@@ -43,10 +44,25 @@ _RUN_POLL_S = 2.0
 _RUN_POLLS = 43200
 
 
+# A kind a person ticks for themselves: it costs a launch of its own, so it starts unticked.
+UNTICKED = frozenset({FSS})
+
+
+def _rows() -> list[tuple[str, ...]]:
+    """What the Record dialog lists: each window's kinds, the Playfield's Full Single Screen
+    picture after the Playfield's own, then Audio."""
+    rows: list[tuple[str, ...]] = []
+    for window, pair in KINDS.items():
+        rows.append(pair)
+        if window == PLAYFIELD:
+            rows.append((FSS,))
+    return [*rows, (AUDIO,)]
+
+
 def order(kept: set[str] | None = None) -> list[str]:
-    """Every kind a recording makes, window by window, then Audio; only the kinds the
+    """Every kind this dialog lists, window by window, then Audio; only the kinds the
     library keeps, where it says."""
-    kinds = [kind for pair in KINDS.values() for kind in pair] + [AUDIO]
+    kinds = [kind for pair in _rows() for kind in pair]
     return [kind for kind in kinds if not kept or kind in kept]
 
 
@@ -94,7 +110,7 @@ def rows_of(kinds: Sequence[str], slots: dict[str, dict[str, Any]]
     """The Media rows: each one's kinds and why they cannot be recorded. A window whose
     picture and video are stopped by the same thing is one row."""
     rows: list[tuple[tuple[str, ...], str]] = []
-    for pair in [*KINDS.values(), (AUDIO,)]:
+    for pair in _rows():
         here = [kind for kind in pair if kind in kinds]
         said = [blocked(slots.get(kind)) for kind in here]
         if len(here) == 2 and said[0] and said[0] == said[1]:
@@ -125,10 +141,14 @@ def counted(row: dict[str, Any] | None) -> str:
 
 def ticked(kinds: Sequence[str], slots: dict[str, dict[str, Any]],
            held: dict[str, bool], sound: bool) -> dict[str, bool]:
-    """Which kinds start ticked: what this browser held, else every kind but Audio,
-    which starts as the device's Sound. A kind the device cannot record never is."""
-    return {kind: not blocked(slots.get(kind))
-            and bool(held.get(kind, sound if kind == AUDIO else True)) for kind in kinds}
+    """Which kinds start ticked: what this browser held, else every kind but Audio, which
+    starts as the device's Sound, and those in `UNTICKED`. A kind the device cannot record
+    never is."""
+    def starts(kind: str) -> bool:
+        return sound if kind == AUDIO else kind not in UNTICKED
+
+    return {kind: not blocked(slots.get(kind)) and bool(held.get(kind, starts(kind)))
+            for kind in kinds}
 
 
 def remember(held: dict[str, bool], chosen: dict[str, bool],

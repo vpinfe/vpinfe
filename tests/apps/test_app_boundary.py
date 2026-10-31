@@ -23,10 +23,12 @@ CONTRACT = "common.apps.contract"
 FIRST_PARTY = frozenset({"apps", "common", "manager", "frontend", "httpapi",
                          "tests"})
 
-# Third-party an app may use, one line per library. Empty today, and it stays a list
-# rather than a blanket allowance so that adding a dependency to an app is a decision
-# somebody made rather than one nobody saw.
-ALLOWED_THIRD_PARTY: frozenset[str] = frozenset()
+# Third-party an app may use, one line per library. It stays a list rather than a blanket
+# allowance so that adding a dependency to an app is a decision somebody made rather than
+# one nobody saw.
+ALLOWED_THIRD_PARTY: frozenset[str] = frozenset({
+    "olefile",  # reads the flags a .vpx table carries (apps/vpx/tablefile.py)
+})
 
 STDLIB = frozenset(sys.stdlib_module_names)
 

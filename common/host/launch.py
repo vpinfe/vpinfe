@@ -228,8 +228,8 @@ def _launch_env(launcher: launchers.Launcher) -> dict:
 
 
 def _plan(entry: apps.Entry, binary: str, launcher: launchers.Launcher, *,
-          capture: Path | None = None,
-          record_sound: bool = False) -> tuple[list[str], str]:
+          capture: Path | None = None, record_sound: bool = False,
+          record_view: str = "") -> tuple[list[str], str]:
     """What to run, and what the app writes once it is actually up.
 
     Both come from the app the launcher wraps. `bin_path` is overwritten with the
@@ -246,7 +246,7 @@ def _plan(entry: apps.Entry, binary: str, launcher: launchers.Launcher, *,
     marker = app.launch.session(settings).readiness_marker
     if capture is not None and app.capture is not None:
         return (app.capture.command(entry, settings, sound=record_sound,
-                                    folder=str(capture)), marker)
+                                    view=record_view, folder=str(capture)), marker)
     return app.launch.command(entry, settings), marker
 
 
@@ -446,7 +446,7 @@ def _reference_is_reachable(game: Game, entry: dict) -> None:
 def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                 table: str | None = None,
                 popen: Callable[..., subprocess.Popen[Any]] | None = None,
-                record_sound: bool = False) -> None:
+                record_sound: bool = False, record_view: str = "") -> None:
     """Launch a game and stay with it until it exits. Blocking.
 
     Callers that must not block run this on a thread; the API and the Remote page
@@ -455,7 +455,8 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
 
     A `SOURCE_CAPTURE` launch is a recording: nobody is up for it, it writes no play
     data, and `table.play_recorded` is not announced. Its app's capture hook says how it
-    is launched, told by `record_sound` whether the table's sound is recorded too.
+    is launched, told by `record_sound` whether the table's sound is recorded too and by
+    `record_view` which view it starts in ("" for the app's own).
     """
     # Looked up here rather than in the signature so a test can patch it.
     popen = popen or subprocess.Popen
@@ -516,7 +517,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                 controls=None if capturing else _controls_of(launcher, binary))
             folder = _capture_folder() if capturing else None
             cmd, marker = _plan(playing, binary, launcher, capture=folder,
-                                record_sound=record_sound)
+                                record_sound=record_sound, record_view=record_view)
             if not capturing:
                 before, _ = game_play_service.parse_score_from_nvram(
                     game, rom, initials="", entry=entry)
