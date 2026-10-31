@@ -1,5 +1,62 @@
 ## VPinFE Release Notes
 
+### New in beta.2
+
+#### New
+- **Manager** - The Remote, the page you open on a mobile device to drive VPinFE, is redone with three tabs: Wheel to browse and launch, Games to browse the library, Now to control the running table. It can be installed as an app.
+- **Manager** - Table Controls: from the Remote, press the running table's own buttons (Start, flippers, Launch Ball, coin door, service keys, Pause).
+- **Manager** - Drop files, an archive or a folder onto the library. VPinFE works out where each file goes, asks you when more than one could fit, and writes nothing until you confirm.
+- **Manager** - Convert pictures, sounds and videos a device cannot play, as you drop them or all at once from the Media view. Originals are backed up first.
+- **Manager** - Support Package: one button gathers system details, screen details and logs, with private details removed, to attach to a bug report.
+- **Manager** - The asset picker has an Online tab to find media for a game on VPS and VPinMediaDB.
+- **Manager** - The browser's Back and Forward buttons now move between Manager pages, dialogs and setup steps.
+- **Manager** - The frontend Menu shows the Manager's address and a QR code, to open it from a mobile device.
+- **Manager** - A game's Assets lists a section for each kind of file the library collects, with Add in its heading and a row for each file, so a game can hold several of any kind. ROM files and PUP packs are a row each, with Add, Replace and Remove, and a pack's folder can be removed. A file's card says whether it belongs to the game or to a table, shows the VPS release it is matched to, and can be matched from there.
+- **Manager** - The rotation check shows a test card and asks "Is the Playfield Rotated Correctly?" Looks Right then reopens the open windows, so the turn takes effect at once.
+- **Manager** - Create Settings File: makes the settings file a Visual Pinball install is missing.
+- **Manager** - Setup asks before it changes a screen Visual Pinball already has set. The question comes once, after you confirm the Visual Pinball program, as one dialog, "Change Visual Pinball's screens?", with Leave as Is and Match VPinFE. Screens it leaves unset are filled in without asking, and the Screens step itself shows only VPinFE's screens.
+- **Manager** - Setup and What's New offer to tell you about new beta releases.
+- **Manager** - Discovery shows maker and year on suggestions, and lists a mod under the table it modifies.
+- **Manager** - The Record panel says which screens are asleep and checks again on its own, and can record a table's Full Single Screen view as a picture (ticked off until you tick it, since it launches the table a second time).
+- **Frontend** - Show Numbers windows now open in the right place on Sway and Hyprland.
+
+#### Improved
+- **Manager** - A table is named by the release it is matched to. A game's default table is chosen from a short list with Automatic first.
+- **Manager** - Plainer words: VPS release, Matched and Skip, where it said tied and Leave Out.
+- **Manager** - Each problem is said once on the Game tab, and a failure across many games once.
+- **Manager** - Won't play counts only the devices that play your library.
+- **Manager** - The authenticator is optional on update and is no longer offered on first launch.
+- **Manager** - The Input page and Setup explain how mapping works. The Controls step keeps that explanation open, cut to two sentences, and the switch for mapping a device's buttons from another device has a closed "What does this do?" under it. It says the device redirects its buttons, pauses while a table plays, and turns itself off after 2 minutes without a press.
+- **Manager** - Setup's playfield screen step lists where each size came from: Your screen reports, Already set in Visual Pinball, I measured it, or Leave Visual Pinball's own size. The one Visual Pinball already holds is picked on arrival, so Next changes nothing. Each question has a picture, and the step says where to change the answers later.
+- **Manager** - The playfield screen's slope is called Screen Angle in Setup and on Visual Pinball's Displays page, with Inclination in Visual Pinball as its tooltip. An angle you have not measured shows Not measured, with a hint to use a level app on the screen.
+- **Manager** - Setup's card is wider and taller on every step, so steps no longer feel cramped.
+- **Frontend** - The main menu's address and QR code section is clearer: the headings read Manager, Remote Control and Join as Player, the Manager addresses show their http:// or https:// start, and the text and QR codes are larger.
+- **Manager** - A media file has a panel with an Edit row, and the other files of a kind, which take over if the one above is removed, each get a panel of their own.
+- **Manager** - The media card is tidier: no name row, Path cut from the start, the Edit toolbar above the picture, and Open in Media is a button like the others. Used by is a chip, This table, This game or Library default, and a stand-in file says which set or kind it stands in for. A thin line separates the name from Details on the media and Assets cards.
+- **Manager** - The Media list shows two tiles to a row, each in its own shape within a 240 by 120 box and centered, with the types you switch off closing the gap. Table Audio and Launch Audio fill the whole box, with a sound icon. Download Missing Media... and Record Media... stay in a strip above the tiles. Audio is now called Table Audio.
+- **Manager** - On Discovery, the releases VPS lists that a game does not hold are headed Online, not Available, and a game you hold shows its Have chip beside its name on the Home shelves.
+- **Manager** - Smaller touches: the Settings list keeps its place, and a patched table matches the release it came from.
+
+#### Fixed
+- **Manager** - Matching a ROM file to its VPS release now keeps the match.
+- **Manager** - A fresh install, or one with no screen, no longer gets stuck or floods the log.
+- **Manager** - Opening the Remote from its QR code no longer blocks signing in with a code.
+- **Manager** - The Remote's tab bar is no longer hidden under Safari's toolbar on a mobile device.
+- **Manager** - On macOS the Remote's right flipper no longer presses the left one.
+- **Manager** - A Windows device's file paths now read correctly when you pick a source.
+- **Manager** - The main menu no longer leaves the previous page showing.
+- **Manager** - A long value no longer stretches a game's panel past its edge, and long file names in the table list are cut at the front.
+- **Frontend** - Backglass and other display windows no longer flash the wrong game while the frontend starts, and the splash no longer hangs on a video the browser cannot play.
+
+#### Removed
+- **Manager** - VPX Patch Scripts support is removed, since the VPX engine no longer needs them: the script fix source, its Tables column and notice, and the `--vpxpatch` option. Take `--vpxpatch` out of any command that passes it. Scripts already beside their tables run as before, and Table Patches (.dif) are unaffected.
+
+#### For theme and API authors
+- **Core** - Import stops on a drop with unanswered choices (HTTP 422, `choose_one`), and its report gains `written` and `not_written`.
+- **Core** - `GET` and `POST /api/v1/play/controls` list and press the running table's controls.
+- **Core** - The Remote's `?screen=` takes `wheel`, `games` or `now`.
+- **Core** - A game's files and folders can be renamed, moved or removed, and a folder made, over the API. Each call is asked about first, so what it would change is known before anything is written.
+
 ### Summary
 VPinFE 3.0 rebuilds and expands the Manager: one place on this device or any other to run
 your library, set up your screens and controls, and keep it all backed up. Setup walks a new
@@ -83,7 +140,7 @@ rewrites, so read the next section first.
   ROMs, PUP Packs, AltSound, Alt Colors, tables, backglasses and the media kinds all work the
   same way, and Save It As shows whether a file goes to the game or to one table.
 - **Manager** - A file picker opens in the folder the last file of its kind came from. Places
-  lists it first as Last Used, then Downloads. On the device VPinFE runs on, upload and that
+  lists it first as Last Used. On the device VPinFE runs on, upload and that
   device's own files are one This Device tab; from another device the tab is On and the
   device's name, so it is clear whose files they are. A drive that is
   unplugged opens at the game's folder and says why.
@@ -203,8 +260,9 @@ rewrites, so read the next section first.
 - **Manager** - Displays asks "Is the Playfield Rotated Correctly?" in place of
   four arrow buttons. Show Test Card opens a card on the playfield screen with TOP at one edge,
   and Turn Left, Turn Around and Turn Right turn it until TOP is toward the backglass. Looks
-  Right ends the check and reopens the open windows so the playfield turns at once, a key or a click on the card closes it and the panel asks whether the card
-  faced the right way up, and a chip beside the question says how the screen is turned. It sets
+  Right ends the check and reopens the open windows so the playfield turns at once, a key or a
+  click on the card closes it and the panel asks whether the card faced the right way up, and a
+  chip beside the question says how the screen is turned. It sets
   Rotation and Mounting for you. Visual Pinball's launcher page now shows the same card without
   changing anything from it, and a launcher turned differently lists Playfield under Different
   from VPinFE.
@@ -229,7 +287,7 @@ rewrites, so read the next section first.
   attach when you ask for help, in three steps. What Goes In picks the current log, the previous
   log and your settings. Privacy shows what was replaced by kind, such as your user name and the
   device's name, and Hide Table Names and Also Hide add your own words. Inspect Everything lists
-  every line to read, with Remove Line, Keep Line and Leave File Out. Share downloads the zip,
+  every line to read, with Remove Line, Keep Line and Skip File. Share downloads the zip,
   copies a summary for Discord, opens Discord or a new GitHub issue, and copies the summary as
   Markdown. The zip is made on this device and sent nowhere, and `vpinfe --support-package`
   makes the same one from the command line. About also gains a Displays and Layout section.
