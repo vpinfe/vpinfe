@@ -394,7 +394,7 @@ class TheLineOnLocations(unittest.TestCase):
             [{"id": JOB, "kind": import_report.IMPORT_KIND, "report": True, "started_at": 5}],
             self._kept())
 
-        self.assertTrue(line[0].startswith("Import, imported "))
+        self.assertTrue(line[0].startswith("Import Tables and Settings, imported "))
 
     def test_jobs_that_cannot_be_read_are_no_line(self) -> None:
         async def broken(call: Any, *args: Any) -> Any:

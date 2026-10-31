@@ -376,7 +376,8 @@ class _Sources:
 
     def _opens_at(self, starts: list[dict[str, Any]]) -> str:
         """The folder of what fills this now, else the game's own folder or the library's,
-        else nothing, which is the person's Home - never the top of the disk."""
+        else nothing, which is the person's Home - or the top of the disk where the account
+        has no Home folder."""
         if self.current:
             return self.current
         return next((str(one["path"]) for one in starts

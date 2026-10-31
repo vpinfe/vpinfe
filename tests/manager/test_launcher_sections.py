@@ -438,6 +438,31 @@ class ProgramNoteTests(unittest.TestCase):
     def test_a_program_that_is_there_needs_no_note(self) -> None:
         self.assertEqual(all_settings._program_note(_launcher(path_state.OK)), "")
 
+    def test_a_program_that_has_not_written_its_file_says_so_only_on_its_own_page(self) -> None:
+        found = {**_launcher(path_state.OK), "has_settings_file": False}
+
+        self.assertEqual(all_settings.no_file_note(found),
+                         t("manager.workbench.file_not_written", app="Visual Pinball X"))
+        self.assertEqual(all_settings._program_note(found), "",
+                         "a table's settings read it as a reason to draw nothing")
+
+    def test_a_program_that_wrote_no_file_says_so_in_place_of_the_run_it_again_line(self) -> None:
+        found = {**_launcher(path_state.OK), "has_settings_file": False,
+                 "settings_file_not_made": True}
+
+        self.assertEqual(all_settings.no_file_note(found),
+                         t("manager.workbench.file_not_made"))
+
+    def test_a_program_with_its_file_needs_no_note(self) -> None:
+        found = {**_launcher(path_state.OK), "has_settings_file": True}
+
+        self.assertEqual(all_settings.no_file_note(found), "")
+
+    def test_a_program_that_is_not_there_is_not_told_to_run(self) -> None:
+        found = {**_launcher(path_state.MISSING), "has_settings_file": False}
+
+        self.assertEqual(all_settings.no_file_note(found), "")
+
     def test_an_app_with_no_settings_of_its_own_gets_none(self) -> None:
         for state in (path_state.UNSET, path_state.MISSING):
             with self.subTest(state=state):

@@ -9,6 +9,7 @@ import asyncio
 import configparser
 import os
 import pathlib
+import subprocess
 import threading
 import time
 import unittest
@@ -22,7 +23,7 @@ from nicegui import run, ui
 
 import httpapi
 from common import service_errors
-from common.games import launchers
+from common.games import launcher_ops, launchers
 from common.runtime import jobs
 from manager.kit import data, panel
 from manager.kit.api import ApiClient
@@ -365,6 +366,199 @@ class ConfigFilesTests(unittest.TestCase):
         self.assertEqual(self.client.get("/launchers/l1/config/backups").status_code, 404)
         self.assertEqual(self.client.post("/launchers/l1/config/backups",
                                           json={}).status_code, 404)
+
+
+class MakeSettingsFileTests(unittest.TestCase):
+    """The program asked once for the file it has not written yet."""
+
+    def setUp(self) -> None:
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = own_launchers(self, self.tmp.name)
+        patcher = patch.object(launchers, "get_launcher_store", return_value=self.store)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(launcher_ops._wrote_nothing.clear)
+        self.store.save([], {})
+        self.client = _client()
+        self.ini = pathlib.Path(self.tmp.name, "VPinballX.ini")
+        self.program = pathlib.Path(self.tmp.name, "vpx")
+        self.program.write_text("#!/bin/sh\n")
+        self.program.chmod(0o755)
+        put_launcher(self.client, "l1", json={"app": "vpx", "settings": {
+            "bin_path": str(self.program), "ini_path": str(self.ini)}})
+
+    def _run(self, writes: bool = True) -> Any:
+        def made(command: list[str], **_: Any) -> None:
+            if writes:
+                self.ini.write_text("[Player]\nFXAA = 1\n")
+        return patch("common.games.launcher_ops.subprocess.run", side_effect=made)
+
+    def _launcher(self) -> dict[str, Any]:
+        return next(one for one in self.client.get("/launchers").json()["launchers"]
+                    if one["launcher_id"] == "l1")
+
+    def test_the_listing_says_the_file_is_missing_and_can_be_made(self) -> None:
+        found = self._launcher()
+
+        self.assertIs(found["has_settings_file"], False)
+        self.assertIs(found["can_make_settings_file"], True)
+
+    def test_the_program_runs_with_the_ini_and_the_flag_and_the_file_is_answered(self) -> None:
+        with self._run() as run_program:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 200, got.text)
+        self.assertEqual(got.json()["files"], {"application": str(self.ini)})
+        command = run_program.call_args.args[0]
+        self.assertEqual(command[1:], ["-ini", str(self.ini), "-v"])
+        self.assertIs(self._launcher()["has_settings_file"], True)
+
+    def test_a_program_that_leaves_no_file_is_refused(self) -> None:
+        with self._run(writes=False):
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+        self.assertFalse(self.ini.exists())
+
+    def test_a_program_that_left_no_file_is_not_offered_again(self) -> None:
+        with self._run(writes=False):
+            self.client.post("/launchers/l1/config/file")
+
+        found = self._launcher()
+        self.assertIs(found["settings_file_not_made"], True)
+        self.assertIs(found["can_make_settings_file"], False)
+
+    def test_a_different_program_is_offered_again(self) -> None:
+        with self._run(writes=False):
+            self.client.post("/launchers/l1/config/file")
+        other = pathlib.Path(self.tmp.name, "vpx2")
+        other.write_text("#!/bin/sh\n", encoding="utf-8")
+        other.chmod(0o755)
+        put_launcher(self.client, "l1", json={"app": "vpx", "settings": {
+            "bin_path": str(other), "ini_path": str(self.ini)}})
+
+        found = self._launcher()
+        self.assertIs(found["settings_file_not_made"], False)
+        self.assertIs(found["can_make_settings_file"], True)
+
+    def test_a_program_stopped_for_running_too_long_is_offered_again(self) -> None:
+        with patch("common.games.launcher_ops.subprocess.run",
+                   side_effect=subprocess.TimeoutExpired("vpx", 30)):
+            self.client.post("/launchers/l1/config/file")
+
+        self.assertIs(self._launcher()["can_make_settings_file"], True)
+
+    def test_a_file_made_since_a_run_that_made_none_ends_the_hiding(self) -> None:
+        with self._run(writes=False):
+            self.client.post("/launchers/l1/config/file")
+        self.ini.write_text("[Player]\n")
+        self.assertIs(self._launcher()["settings_file_not_made"], False)
+        self.ini.unlink()
+
+        self.assertIs(self._launcher()["can_make_settings_file"], True)
+
+    def test_a_program_that_cannot_start_is_refused_and_the_reason_is_logged(self) -> None:
+        with patch("common.games.launcher_ops.subprocess.run",
+                   side_effect=PermissionError("not allowed")), \
+                self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING") as logged:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+        self.assertIn("not allowed", logged.output[0])
+
+    def test_a_linux_account_with_nowhere_to_save_is_refused_before_anything_runs(self) -> None:
+        shut = pathlib.Path(self.tmp.name, "shut")
+        shut.mkdir()
+        shut.chmod(0o500)
+        self.addCleanup(shut.chmod, 0o700)
+        with patch("common.games.launcher_ops.sys.platform", "linux"), \
+                patch.dict(os.environ, {"HOME": str(shut / "home"), "XDG_DATA_HOME": ""}), \
+                self._run() as run_program:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+        run_program.assert_not_called()
+
+    def test_a_linux_data_home_not_made_yet_under_a_writable_folder_is_enough(self) -> None:
+        later = pathlib.Path(self.tmp.name, "not", "yet")
+        with patch("common.games.launcher_ops.sys.platform", "linux"), \
+                patch.dict(os.environ, {"HOME": "", "XDG_DATA_HOME": str(later)}), \
+                self._run():
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 200, got.text)
+
+    def test_a_program_that_is_not_there_cannot_be_asked(self) -> None:
+        self.program.unlink()
+
+        self.assertIs(self._launcher()["can_make_settings_file"], False)
+
+    def test_nothing_runs_while_a_table_is_playing(self) -> None:
+        with patch("common.games.launcher_ops.launch_state.current",
+                   return_value=SimpleNamespace(launching=True)), \
+                self._run() as run_program:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 409, got.text)
+        run_program.assert_not_called()
+
+    def test_a_second_request_while_the_program_runs_is_refused(self) -> None:
+        with launcher_ops._making_file, self._run() as run_program:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 409, got.text)
+        run_program.assert_not_called()
+        self.assertFalse(launcher_ops._making_file.locked())
+
+    def test_a_program_that_stays_open_is_stopped_and_the_file_it_wrote_is_answered(self) -> None:
+        def hangs(command: list[str], **_: Any) -> None:
+            self.ini.write_text("[Player]\nFXAA = 1\n")
+            raise subprocess.TimeoutExpired(command, 30)
+
+        with patch("common.games.launcher_ops.subprocess.run", side_effect=hangs), \
+                self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING"):
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 200, got.text)
+
+    def test_a_program_that_stays_open_and_wrote_nothing_is_refused(self) -> None:
+        def hangs(command: list[str], **_: Any) -> None:
+            raise subprocess.TimeoutExpired(command, 30)
+
+        with patch("common.games.launcher_ops.subprocess.run", side_effect=hangs), \
+                self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING"):
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+
+    def test_a_linux_data_home_that_takes_a_write_is_enough_without_a_home(self) -> None:
+        with patch("common.games.launcher_ops.sys.platform", "linux"), \
+                patch.dict(os.environ, {"HOME": "", "XDG_DATA_HOME": self.tmp.name}), \
+                self._run():
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 200, got.text)
+
+    def test_a_file_already_there_is_not_run_over(self) -> None:
+        self.ini.write_text("[Player]\n")
+
+        with self._run() as run_program:
+            got = self.client.post("/launchers/l1/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+        run_program.assert_not_called()
+
+    def test_a_launcher_with_no_program_is_refused(self) -> None:
+        made = put_launcher(self.client, "l2",
+                            json={"app": "vpx", "display_name": "Other", "settings": {}})
+        self.assertEqual(made.status_code, 200, made.text)
+
+        with self._run() as run_program:
+            got = self.client.post("/launchers/l2/config/file")
+
+        self.assertEqual(got.status_code, 400, got.text)
+        run_program.assert_not_called()
 
 
 class NeverRunTests(unittest.TestCase):

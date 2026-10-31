@@ -875,6 +875,9 @@ class Library:
                         scope: str = "launcher") -> dict:
         return self._client.launcher_config(launcher_id, table, scope)
 
+    def make_launcher_settings_file(self, launcher_id: str) -> dict:
+        return self._client.make_launcher_settings_file(launcher_id)
+
     def launcher_leftovers(self, launcher_id: str) -> dict:
         """Read fresh every time: moving them is what changes the answer."""
         return self._client.launcher_leftovers(launcher_id)

@@ -230,11 +230,17 @@ def _machine_folders() -> tuple[Path | None, Path | None]:
     if sys.platform == "win32":
         roaming = os.environ.get("APPDATA", "")
         return (Path(roaming) / "VPinballX" if roaming else None), None
-    old = Path.home() / ".vpinball"
+    try:
+        home = Path.home()
+    except (RuntimeError, KeyError, OSError):
+        home = None
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "VPinballX", old
-    shared = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(shared) / "VPinballX", old
+        if home is None:
+            return None, None
+        return home / "Library" / "Application Support" / "VPinballX", home / ".vpinball"
+    shared = os.environ.get("XDG_DATA_HOME") or (str(home / ".local" / "share") if home else "")
+    old = home / ".vpinball" if home else None
+    return (Path(shared) / "VPinballX" if shared else None), old
 
 
 def preferences_file(version: str) -> Path | None:
@@ -720,6 +726,18 @@ class VPXConfig:
             settings = {**settings, "ini_path": str(held)}
         self.write(SCOPE_LAUNCHER, "", values, settings)
         return held
+
+    def settings_file_command(self, settings: Mapping[str, Any]) -> list[str]:
+        """The command that has the program write its settings file and exit: it loads
+        and saves them before it acts on `-v`. Empty where no program is set. Not a
+        documented use of the flag, so the caller checks the file is there afterwards."""
+        program = str(settings.get("bin_path") or "").strip()
+        if not program:
+            return []
+        command = [program]
+        if named := str(settings.get("ini_path") or "").strip():
+            command += ["-ini", str(Path(named).expanduser())]
+        return [*command, "-v"]
 
     def files(self, settings: Mapping[str, Any]) -> dict[str, str]:
         """The files this launcher's settings live in.

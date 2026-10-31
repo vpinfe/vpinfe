@@ -14,7 +14,7 @@ from common.failures import why
 from common.i18n import t
 from manager.backups import backup_rows
 from manager.frontend import launchers as launchers_page
-from manager.kit import deeplink, game_tables, offload, panel, table_features
+from manager.kit import deeplink, game_tables, offload, panel, table_features, verbs
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
 from manager.settings import commands as commands_help
@@ -28,6 +28,7 @@ from manager.workbench.all_settings import (
     _program_note,
     _switched_off_goes_to,
     _why_not_the_default,
+    no_file_note,
 )
 from manager.workbench.core import HEADING, _choose, _rows, _save_overrides, _switch
 
@@ -256,6 +257,19 @@ async def _launcher_details(context: dict[str, Any]) -> None:
                 await again()
         await rebuild()
 
+    @on_page
+    async def make_file() -> None:
+        try:
+            await run.io_bound(library.make_launcher_settings_file, launcher["launcher_id"])
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(t("manager.workbench.make_file_failed"), caption=why(exc), type="negative")
+        else:
+            ui.notify(t("manager.workbench.make_file_made"), type="positive")
+        refresh = context["state"].get("refresh_launchers")
+        if callable(refresh):
+            await refresh()
+        await rebuild()
+
     def save_field(key: str) -> Callable[[Any], Any]:
         async def save(value: Any) -> bool:
             return await write(settings={**launcher["settings"], key: value})
@@ -282,6 +296,12 @@ async def _launcher_details(context: dict[str, Any]) -> None:
     entries.append((HEADING, t("word.program")))
     if note := _program_note(launcher):
         entries.append(panel.note(note))
+    elif note := no_file_note(launcher):
+        entries.append(panel.note(note))
+        if launcher.get("can_make_settings_file"):
+            entries.append((panel.FULL, panel.action(
+                t("manager.workbench.make_file"), make_file, icon=verbs.CREATE,
+                hint=t("manager.workbench.make_file.help", app=launcher["app_name"]))))
     for field in launcher.get("fields") or []:
         if field["key"] == COMMANDS_FROM:
             entries.append((HEADING, t("manager.workbench.commands")))

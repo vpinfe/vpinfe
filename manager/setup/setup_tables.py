@@ -193,7 +193,7 @@ def _folder_detail(client: ApiClient,
         panel.path_field(t("manager.setup.tables.folder_placeholder"), wants="dir",
                          value=str(values[FOLDER] or ""), width="w-full", on_checked=checked,
                          browse=client.folders,
-                         opens_at=start or str(Path.home())).on_value_change(edited)
+                         opens_at=start).on_value_change(edited)
 
     return draw
 
@@ -213,8 +213,7 @@ def _new_detail(client: ApiClient) -> Callable[[dict[str, Any], Callable[[], Non
 
         panel.path_field(t("manager.setup.tables.new_placeholder"), wants="dir",
                          value=str(values[NEW_FOLDER] or ""), width="w-full", on_checked=checked,
-                         browse=client.folders,
-                         opens_at=str(Path.home())).on_value_change(edited)
+                         browse=client.folders).on_value_change(edited)
 
     return draw
 

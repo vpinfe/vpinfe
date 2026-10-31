@@ -319,6 +319,27 @@ class SetupCallsTests(unittest.TestCase):
         self.assertEqual("tables.source", step["step"])
 
 
+class BrowseStartTests(unittest.TestCase):
+    """Both folder fields leave the picker's start to the listing, which answers home."""
+
+    def _opens_at(self, draw_for: Any) -> list[Any]:
+        fields = mock.Mock()
+        with mock.patch.object(setup_tables, "ui"), \
+                mock.patch.object(setup_tables, "panel", fields), \
+                mock.patch("pathlib.Path.home", return_value=pathlib.Path("/no/such/home")):
+            draw_for({}, lambda: None)
+        return [call.kwargs.get("opens_at", "") for call in fields.path_field.call_args_list]
+
+    def test_the_folder_field_opens_at_the_folder_beside_the_program_or_the_listings_start(
+            self) -> None:
+        self.assertEqual([""], self._opens_at(setup_tables._folder_detail(mock.Mock(), "")))
+        self.assertEqual(["/vpx/Tables"],
+                         self._opens_at(setup_tables._folder_detail(mock.Mock(), "/vpx/Tables")))
+
+    def test_the_new_folder_field_opens_at_the_listings_start(self) -> None:
+        self.assertEqual([""], self._opens_at(setup_tables._new_detail(mock.Mock())))
+
+
 class DoneTests(unittest.TestCase):
     def test_setup_finishes_once_and_not_when_run_again(self) -> None:
         for again, calls in ((False, 1), (True, 0)):

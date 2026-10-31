@@ -109,7 +109,7 @@ BASELINE: dict[str, int] = {
     # and the Screens answer handed to the launcher it makes.
     "manager/setup/setup.py": 14,
     # The three pages of that step: the program, the playfield glass, the buttons.
-    "manager/setup/setup_vpx.py": 23,
+    "manager/setup/setup_vpx.py": 25,
     "manager/kit/table_features.py": 1,
     "manager/kit/appearance.py": 2,
     # The Displays page of a Visual Pinball launcher: the file's keys are its subject.

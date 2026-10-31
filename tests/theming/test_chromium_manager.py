@@ -484,6 +484,65 @@ class WindowRoleTests(unittest.TestCase):
                                  [("show", 1), ("show", 2), ("show", 0), ("front", 0)])
 
 
+class NoBrowserTests(unittest.TestCase):
+    """A browser that is not there is the same fact for every window."""
+
+    def _launch(self) -> mock.Mock:
+        ini = Path(self.enterContext(tempfile.TemporaryDirectory())) / "vpinfe.ini"
+        ini.write_text("[windows.playfield]\nscreen_id = 0\n"
+                       "[windows.backglass]\nscreen_id = 1\n", encoding="utf-8")
+        config = ConfigStore(str(ini))
+        screens = [types.SimpleNamespace(x=i * 100, y=0, width=100, height=100)
+                   for i in range(2)]
+        launch = mock.Mock(side_effect=chromium_manager.BrowserNotFoundError("no chrome"))
+        with (
+            mock.patch.object(theme_windows, "active",
+                              return_value=theme_windows.DEFAULT_WINDOWS[2]),
+            mock.patch.object(sys, "platform", "linux"),
+            mock.patch("screeninfo.get_monitors", return_value=screens),
+            mock.patch.object(ChromiumManager, "launch_window", launch),
+            mock.patch.object(chromium_manager.time, "sleep"),
+        ):
+            ChromiumManager().launch_all_windows(config)
+        return launch
+
+    def test_one_plain_line_says_so_and_no_other_window_is_tried(self) -> None:
+        with self.assertLogs(chromium_manager.logger, "INFO") as logged:
+            launch = self._launch()
+
+        warnings = [record for record in logged.records if record.levelname != "INFO"]
+        self.assertEqual([record.levelname for record in warnings], ["WARNING"])
+        self.assertIsNone(warnings[0].exc_info)
+        launch.assert_called_once()
+
+    def test_a_path_with_nothing_there_raises_the_error_that_says_so(self) -> None:
+        monitor = types.SimpleNamespace(x=0, y=0, width=800, height=600)
+        gone = chromium_manager.ChromiumPath("/nowhere/chrome", True)
+        with mock.patch("frontend.chromium_manager.get_chromium_path", return_value=gone), \
+                self.assertRaises(chromium_manager.BrowserNotFoundError):
+            ChromiumManager().launch_window("table", "http://127.0.0.1:8001/", monitor, 0)
+
+    def test_a_window_that_fails_for_another_reason_still_leaves_the_rest(self) -> None:
+        launch = mock.Mock(side_effect=[RuntimeError("no"), None])
+        ini = Path(self.enterContext(tempfile.TemporaryDirectory())) / "vpinfe.ini"
+        ini.write_text("[windows.playfield]\nscreen_id = 0\n"
+                       "[windows.backglass]\nscreen_id = 1\n", encoding="utf-8")
+        screens = [types.SimpleNamespace(x=i * 100, y=0, width=100, height=100)
+                   for i in range(2)]
+        with (
+            mock.patch.object(theme_windows, "active",
+                              return_value=theme_windows.DEFAULT_WINDOWS[2]),
+            mock.patch.object(sys, "platform", "linux"),
+            mock.patch("screeninfo.get_monitors", return_value=screens),
+            mock.patch.object(ChromiumManager, "launch_window", launch),
+            mock.patch.object(chromium_manager.time, "sleep"),
+            self.assertLogs(chromium_manager.logger, "ERROR"),
+        ):
+            ChromiumManager().launch_all_windows(ConfigStore(str(ini)))
+
+        self.assertEqual(launch.call_count, 2)
+
+
 class ScreenWaitTests(unittest.TestCase):
     """Three windows on screens 0, 1 and 2, and a screen list that is short at first."""
 

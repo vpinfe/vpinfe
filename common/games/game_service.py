@@ -179,6 +179,10 @@ def load_vpsdb() -> list[dict]:
             _vpsdb_cache = data
         else:
             _vpsdb_cache = data.get("games") or data.get("items") or []
+    except FileNotFoundError:
+        # Before the first download finishes. A download that fails says so itself.
+        logger.info("vpsdb.json is not downloaded yet")
+        _vpsdb_cache = []
     except Exception as e:
         logger.error("Failed to load vpsdb.json: %s", e)
         _vpsdb_cache = []

@@ -75,6 +75,44 @@ class FolderApiTests(TempTree):
 
         self.assertEqual(body["path"], str(self.root))
 
+    def test_an_empty_path_opens_at_the_top_of_the_disk_where_home_is_not_a_folder(self) -> None:
+        nowhere = self.root / "no-such-home"
+
+        with patch("common.media.folder_browse.Path.home", return_value=nowhere):
+            response = self._get("")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["path"], nowhere.anchor)
+
+    def test_a_home_that_is_not_a_folder_is_not_offered_as_a_place(self) -> None:
+        nowhere = self.root / "no-such-home"
+
+        with patch("common.media.folder_browse.Path.home", return_value=nowhere):
+            for kind in ("dir", "file", "exe"):
+                with self.subTest(kind=kind):
+                    paths = [one["path"] for one in self._get("", kind=kind).json()["roots"]]
+                    self.assertNotIn(str(nowhere), paths)
+                    self.assertTrue(paths)
+
+    def test_an_account_with_no_home_at_all_still_opens_somewhere(self) -> None:
+        for kind in ("dir", "file", "exe"):
+            with self.subTest(kind=kind), \
+                    patch("common.media.folder_browse.Path.home",
+                          side_effect=RuntimeError("no home")):
+                response = self._get("", kind=kind)
+
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["roots"])
+
+    def test_a_home_that_is_a_folder_is_still_where_an_empty_path_opens(self) -> None:
+        for kind in ("dir", "file"):
+            with self.subTest(kind=kind), \
+                    patch("common.media.folder_browse.Path.home", return_value=self.root):
+                body = self._get("", kind=kind).json()
+
+                self.assertEqual(body["path"], str(self.root))
+                self.assertIn(str(self.root), [one["path"] for one in body["roots"]])
+
     def test_roots_is_never_empty(self) -> None:
         body = self._get(str(self.root)).json()
 

@@ -11,6 +11,10 @@ what a Visual Pinball launcher happens to hold.
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+import threading
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -29,10 +33,18 @@ from common.apps.contract import (
 from common.config import config_schema, path_state
 from common.games import game_repository, launchers, library_folders, tables
 from common.games.table_identity import find_table_by_id
+from common.host import bundled_libraries, launch_state
 from common.i18n import t
+from common.launcher_path import resolve_launcher_path
 from common.runtime import jobs, shutdown
 
 logger = logging.getLogger("vpinfe.common.games.launcher_ops")
+
+_MAKE_FILE_SECONDS = 30
+_making_file = threading.Lock()
+# launcher id -> the program that ran for its settings file and wrote none. A different
+# program under the same launcher is a new question, so it is keyed by what ran.
+_wrote_nothing: dict[str, str] = {}
 
 
 def launcher_or_refuse(launcher_id: str) -> launchers.Launcher:
@@ -61,6 +73,10 @@ def _described(launcher: launchers.Launcher) -> dict[str, Any]:
         "enabled": launcher.enabled,
         "owns_ini": launcher.owns_ini,
         "has_config": _app_settings_surface(launcher) is not None,
+        "has_settings_file": _has_settings_file(launcher),
+        "settings_file_not_made": _asked_without_result(launcher),
+        "can_make_settings_file": _can_run_for_file(launcher)
+                                  and not _asked_without_result(launcher),
         "settings": settings,
         # `lines`, `choices` and the bounds travel with the field because the control a
         # surface draws is decided from them - a field declared over three lines that
@@ -624,6 +640,90 @@ def config_files(launcher: launchers.Launcher) -> dict[str, str]:
     config = _app_settings_surface(launcher)
     naming = getattr(config, "files", None)
     return dict(naming(_launcher_settings(launcher))) if naming else {}
+
+
+def _has_settings_file(launcher: launchers.Launcher) -> bool:
+    return any(Path(file).is_file() for file in config_files(launcher).values())
+
+
+def _settings_file_command(launcher: launchers.Launcher) -> list[str]:
+    asking = getattr(_app_settings_surface(launcher), "settings_file_command", None)
+    command = asking(_launcher_settings(launcher)) if callable(asking) else []
+    return [str(resolve_launcher_path(command[0])), *command[1:]] if command else []
+
+
+def _asked_without_result(launcher: launchers.Launcher) -> bool:
+    """Whether the program already ran for its settings file and left none. A file that
+    has appeared since ends it: the program can write one."""
+    held = _wrote_nothing.get(launcher.launcher_id)
+    if held and _has_settings_file(launcher):
+        del _wrote_nothing[launcher.launcher_id]
+        return False
+    command = _settings_file_command(launcher)
+    return bool(command) and held == command[0]
+
+
+def _can_run_for_file(launcher: launchers.Launcher) -> bool:
+    command = _settings_file_command(launcher)
+    return bool(command) and Path(command[0]).is_file() and os.access(command[0], os.X_OK)
+
+
+def _can_write_preferences() -> bool:
+    """Whether a Linux program can keep its preferences: it uses `XDG_DATA_HOME` where set,
+    else the home folder, and Visual Pinball crashes without saying why where neither takes
+    a write. Every other platform names its own folder and is not asked."""
+    if not sys.platform.startswith("linux"):
+        return True
+    named = os.environ.get("XDG_DATA_HOME") or os.environ.get("HOME") or ""
+    if not named:
+        return False
+    root = Path(named)
+    while not root.exists() and root != root.parent:
+        root = root.parent
+    return os.access(root, os.W_OK | os.X_OK)
+
+
+def make_settings_file(launcher_id: str) -> dict[str, Any]:
+    """Run the program once so it writes its own settings file, then say where it is.
+
+    Refused where the app has no such command, the program is not set, a file is already
+    there, or the program ran and left none - which the app does not promise it will.
+    """
+    found = launcher_or_refuse(launcher_id)
+    app_name = apps.app_name(found.app)
+    command = _settings_file_command(found)
+    if not command:
+        raise service_errors.RefusedError(t("error.launchers.cannot_make_file", app_name=app_name))
+    if launch_state.current().launching:
+        raise service_errors.BlockedError(t("error.launchers.make_file_playing"))
+    if not _making_file.acquire(blocking=False):
+        raise service_errors.BlockedError(t("error.launchers.make_file_running", app_name=app_name))
+    try:
+        if _has_settings_file(found):
+            raise service_errors.RefusedError(t("error.launchers.file_exists", app_name=app_name))
+        if not _can_write_preferences():
+            raise service_errors.RefusedError(
+                t("error.launchers.no_preferences_folder", app_name=app_name))
+        exited = True
+        try:
+            subprocess.run(command, env=bundled_libraries.for_child(), stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=_MAKE_FILE_SECONDS, check=False)
+        except subprocess.TimeoutExpired:
+            exited = False
+            logger.warning("%s did not exit in %s s making its settings file", app_name,
+                           _MAKE_FILE_SECONDS)
+        except OSError as exc:
+            logger.warning("%s could not be run for its settings file: %s", app_name, exc)
+            raise service_errors.RefusedError(
+                t("error.launchers.make_file_failed", app_name=app_name)) from exc
+    finally:
+        _making_file.release()
+    if not _has_settings_file(found):
+        if exited:
+            _wrote_nothing[found.launcher_id] = command[0]
+        raise service_errors.RefusedError(t("error.launchers.no_file_made"))
+    return {"files": config_files(found)}
 
 
 def make_default(launcher_id: str) -> dict[str, Any]:

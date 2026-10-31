@@ -280,6 +280,10 @@ def resource_path(relative_path: str) -> str:
 ChromiumPath = namedtuple("ChromiumPath", ["path", "using_local_install"])
 
 
+class BrowserNotFoundError(FileNotFoundError):
+    """No browser at the path a window would open with."""
+
+
 def configured_browser_path() -> str:
     """The Browser Program setting, or "" when the browser is to be found."""
     try:
@@ -542,7 +546,7 @@ class ChromiumManager:
         """
         chrome_path, using_local_install = get_chromium_path()
         if not os.path.exists(chrome_path):
-            raise FileNotFoundError(f"Chromium binary not found: {chrome_path}")
+            raise BrowserNotFoundError(f"Chromium binary not found: {chrome_path}")
         logger.debug("Using Chromium executable for '%s': %s", window_name, chrome_path)
 
         user_data_dir = tempfile.mkdtemp(
@@ -680,6 +684,10 @@ class ChromiumManager:
                     exclude_options=cfg_get(iniconfig, "Settings",
                                             "chromeoptionsexclude", ""),
                 )
+            except BrowserNotFoundError as missing:
+                # The same browser serves every window, so one line says it for all.
+                logger.warning("No browser, running headless: %s", missing)
+                break
             except Exception:
                 logger.exception("Could not launch the %s window", window_name)
 

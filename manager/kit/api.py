@@ -38,6 +38,8 @@ STEP_TIMEOUT = _IMPORT_TIMEOUT
 # Three of the event stream's 15-second keepalives. An install that goes away without
 # closing the connection is otherwise waited on forever.
 _FOLLOW_TIMEOUT = 45
+# The program gets 30 seconds to write its file and exit; the answer comes after that.
+_MAKE_FILE_TIMEOUT = 45
 
 
 def local_base_url() -> str:
@@ -1536,6 +1538,11 @@ class ApiClient:
         """The app's declared groups and their values at one scope."""
         return dict(self._get(
             f"/launchers/{launcher_id}/config?table={table}&scope={scope}") or {})
+
+    def make_launcher_settings_file(self, launcher_id: str) -> dict:
+        """Runs the launcher's program once so it writes its own settings file."""
+        return dict(self._post(f"/launchers/{launcher_id}/config/file", {},
+                               timeout=_MAKE_FILE_TIMEOUT) or {})
 
     def launcher_leftovers(self, launcher_id: str) -> dict:
         """What an upgrade of the launcher's program left in its settings."""

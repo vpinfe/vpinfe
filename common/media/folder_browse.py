@@ -52,7 +52,7 @@ def _name(path: Path) -> str:
 
 
 def _private_roots() -> tuple[Path, ...]:
-    home = Path.home()
+    home = _home()
     relative = _PRIVATE_COMMON + _PRIVATE_BY_PLATFORM.get(sys.platform, ())
     return tuple(candidate.resolve() for rel in relative
                  if (candidate := home / rel).exists())
@@ -140,15 +140,29 @@ def _entries(path: Path, private: tuple[Path, ...], kind: str,
     return folders, files
 
 
+def _home() -> Path:
+    """Home, or the top of the disk where the account has none: `Path.home()` raises when
+    neither HOME nor a user entry names one."""
+    try:
+        return Path.home()
+    except (RuntimeError, KeyError, OSError):
+        return Path(os.sep)
+
+
+def _home_place() -> list[dict]:
+    """Home as a place to restart from, or nothing where it is not a folder."""
+    home = _home()
+    return [{"name": t("word.home"), "path": str(home)}] if home.is_dir() else []
+
+
 def _common_roots() -> list[dict]:
-    home = Path.home()
     if sys.platform == "win32":
         found = [{"name": f"{letter}:", "path": f"{letter}:\\"} for letter in
                  (chr(code) for code in range(ord("A"), ord("Z") + 1))
                  if Path(f"{letter}:\\").exists()]
-        found.append({"name": t("word.home"), "path": str(home)})
+        found += _home_place()
         return found
-    found = [{"name": "/", "path": "/"}, {"name": t("word.home"), "path": str(home)}]
+    found = [{"name": "/", "path": "/"}, *_home_place()]
     if sys.platform == "darwin" and Path("/Volumes").exists():
         found.append({"name": t("word.volumes"), "path": "/Volumes"})
     if sys.platform == "linux":
@@ -158,33 +172,33 @@ def _common_roots() -> list[dict]:
 
 
 def _program_roots() -> list[dict]:
-    home = Path.home()
+    home = _home()
     if sys.platform == "darwin":
         found = [{"name": _name(candidate), "path": str(candidate)} for candidate in
                 (Path("/Applications"), home / "Applications",
                  Path("/opt/homebrew/bin"), Path("/usr/local/bin")) if candidate.exists()]
-        found.append({"name": t("word.home"), "path": str(home)})
+        found += _home_place()
         found.append({"name": "/", "path": "/"})
         return found
     if sys.platform == "win32":
         found = [{"name": _name(Path(candidate)), "path": candidate} for candidate in
                 (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"))
                 if candidate and Path(candidate).exists()]
-        found.append({"name": t("word.home"), "path": str(home)})
+        found += _home_place()
         found += [{"name": f"{letter}:", "path": f"{letter}:\\"} for letter in
                  (chr(code) for code in range(ord("A"), ord("Z") + 1))
                  if Path(f"{letter}:\\").exists()]
         return found
     found = [{"name": _name(candidate), "path": str(candidate)} for candidate in
             (Path("/usr/bin"), Path("/usr/local/bin"), Path("/opt")) if candidate.exists()]
-    found.append({"name": t("word.home"), "path": str(home)})
+    found += _home_place()
     found.append({"name": "/", "path": "/"})
     return found
 
 
 def _shown(path: str) -> str:
     """A place's path as a person writes it: `~` for home where the system has one."""
-    home = str(Path.home())
+    home = str(_home())
     if sys.platform != "win32" and (path == home or path.startswith(home + os.sep)):
         return "~" + path[len(home):]
     return path
@@ -201,12 +215,17 @@ def _roots(kind: str) -> list[dict]:
 
 def _start(kind: str) -> Path:
     """Where an empty path opens: home for a folder or a file, an `exe` field's own
-    first root for a program - never one VPinFE picked for somebody."""
+    first root for a program - never one VPinFE picked for somebody. An account whose
+    home is not a folder opens at the top of the disk instead of failing to open."""
     if kind == "exe":
         found = _program_roots()
         if found:
             return Path(found[0]["path"])
-    return Path.home()
+    home = _home()
+    for place in (home, Path(home.anchor), Path(os.sep)):
+        if place.is_dir():
+            return place
+    return home
 
 
 def listing(path: str = "", kind: str = "dir", suffixes: tuple[str, ...] = (),

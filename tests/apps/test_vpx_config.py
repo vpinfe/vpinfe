@@ -22,6 +22,7 @@ from apps.vpx.config import VPXConfig, own_file, own_log, settings_file
 from apps.vpx.setting_types import LABELS, TYPES, Span
 from common import apps
 from common.apps.contract import SCOPE_ENTRY, SCOPE_FOLDER, SCOPE_LAUNCHER, Standing
+from tests import REAL_MACHINE_FOLDERS
 
 APP_INI = """\
 [Backglass]
@@ -2026,6 +2027,43 @@ class ReportedDisplayTests(unittest.TestCase):
                          ("Built-in Display [0, 0]", "Built-in Display"))
         self.assertEqual(settings_file({"ini_path": "/cfg/other.ini"}),
                          Path("/cfg/other.ini"))
+
+
+class SettingsFileCommandTests(unittest.TestCase):
+    """The command that has the program write its own file."""
+
+    def test_the_program_is_run_with_the_flag_that_saves_the_settings(self) -> None:
+        command = VPXConfig().settings_file_command({"bin_path": "/opt/vpx/VPinballX_BGFX"})
+
+        self.assertEqual(command[1:], ["-v"])
+        self.assertTrue(command[0].endswith("VPinballX_BGFX"))
+
+    def test_a_named_ini_is_passed_so_the_file_is_made_where_it_will_be_read(self) -> None:
+        command = VPXConfig().settings_file_command(
+            {"bin_path": "/opt/vpx/VPinballX_BGFX", "ini_path": "/cfg/own.ini"})
+
+        self.assertEqual(command[1:], ["-ini", "/cfg/own.ini", "-v"])
+
+    def test_no_program_is_no_command(self) -> None:
+        self.assertEqual(VPXConfig().settings_file_command({"bin_path": " "}), [])
+
+
+class NoHomeFolderTests(unittest.TestCase):
+    """An account with no Home folder still lists its launchers."""
+
+    def _folders(self, platform: str, **env: str) -> tuple[Path | None, Path | None]:
+        with mock.patch("apps.vpx.config.Path.home", side_effect=RuntimeError("no home")), \
+                mock.patch("apps.vpx.config.sys.platform", platform), \
+                mock.patch.dict("os.environ", {"XDG_DATA_HOME": "", **env}):
+            return REAL_MACHINE_FOLDERS()
+
+    def test_no_home_and_no_data_home_names_no_folder(self) -> None:
+        self.assertEqual(self._folders("linux"), (None, None))
+        self.assertEqual(self._folders("darwin"), (None, None))
+
+    def test_a_data_home_stands_in_for_the_missing_home(self) -> None:
+        self.assertEqual(self._folders("linux", XDG_DATA_HOME="/data"),
+                         (Path("/data/VPinballX"), None))
 
 
 if __name__ == "__main__":

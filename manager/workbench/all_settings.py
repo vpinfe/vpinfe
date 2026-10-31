@@ -95,11 +95,24 @@ def _program_note(launcher: dict[str, Any]) -> str:
     """Why its program's own settings are not shown, or "" where they are or it has
     none to show."""
     state = _program_state(launcher)
-    if not launcher.get("has_config") or state == path_state.OK:
+    if not launcher.get("has_config"):
+        return ""
+    if state == path_state.OK:
         return ""
     if state == path_state.UNSET:
         return t("manager.workbench.program_hint", app=launcher["app_name"])
     return t("manager.workbench.app_missing", app=launcher["app_name"])
+
+
+def no_file_note(launcher: dict[str, Any]) -> str:
+    """Said on the launcher's own page where its program is there and has not written its
+    settings file, which is where it can be asked to; "" otherwise."""
+    if launcher.get("has_config") and _program_state(launcher) == path_state.OK \
+            and launcher.get("has_settings_file") is False:
+        if launcher.get("settings_file_not_made"):
+            return t("manager.workbench.file_not_made")
+        return t("manager.workbench.file_not_written", app=launcher["app_name"])
+    return ""
 
 
 def _config_group_label(key: str) -> Callable[[dict[str, Any]], str]:

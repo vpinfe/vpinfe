@@ -116,6 +116,14 @@ def write_launcher_config(request: Request, response: Response, launcher_id: str
     return done
 
 
+@router.post("/{launcher_id}/config/file", summary="Have its program write its settings file",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def make_launcher_settings_file(launcher_id: str) -> dict[str, Any]:
+    """Runs the program once, with the flag that makes it write its settings file and
+    exit, and answers `{"files"}`. Never done by itself."""
+    return launcher_ops.make_settings_file(launcher_id)
+
+
 @router.post("/{launcher_id}/default", summary="Make it the default for its app",
              dependencies=[requires(scopes.CONFIG_WRITE)])
 def make_launcher_default(launcher_id: str) -> dict[str, Any]:

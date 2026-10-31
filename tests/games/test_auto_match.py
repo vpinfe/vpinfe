@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
@@ -599,6 +600,29 @@ class ImportWithPickTests(TempTree):
         self.assertIs(report["vps_associated"], False)
         self.assertEqual(report["vps_error"], t("error.uploads.see_log"))
         self.assertIn("tableFiles", "\n".join(logged.output))
+
+
+class VpsdbNotThereYetTests(unittest.TestCase):
+    """The catalog is downloaded in the background, so a first start asks before it is there."""
+
+    def setUp(self) -> None:
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for patcher in (patch.object(game_service, "VPSDB_JSON_PATH", self.root / "vpsdb.json"),
+                        patch.object(game_service, "_vpsdb_cache", None)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_catalog_not_downloaded_yet_is_an_info_line_and_an_empty_list(self) -> None:
+        with self.assertLogs(game_service.logger, "INFO") as logged:
+            self.assertEqual(game_service.load_vpsdb(), [])
+
+        self.assertEqual([record.levelname for record in logged.records], ["INFO"])
+
+    def test_a_catalog_that_will_not_parse_is_still_an_error(self) -> None:
+        (self.root / "vpsdb.json").write_text("{not json", encoding="utf-8")
+
+        with self.assertLogs(game_service.logger, "ERROR"):
+            self.assertEqual(game_service.load_vpsdb(), [])
 
 
 if __name__ == "__main__":
