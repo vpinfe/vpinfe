@@ -18,6 +18,7 @@ from nicegui import ui
 from common.failures import why
 from common.i18n import t
 from manager.kit import arrange, offload, panel, verbs
+from manager.kit.api import updates_shown
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
 from manager.library import discovery_shelves
@@ -36,8 +37,9 @@ class Shelves:
 
     def __init__(self, library: Library, settings: Mapping[str, Any],
                  redraw: Callable[[], None] | None = None,
-                 refresh: Callable[[], None] | None = None) -> None:
+                 refresh: Callable[[], None] | None = None, updates: bool = True) -> None:
         self.library = library
+        self.updates = updates
         self.redraw: Callable[[], None] = redraw or (lambda: None)
         self.refresh: Callable[[], None] = refresh or (lambda: None)
         self.order = discovery_shelves.order(settings.get(discovery_shelves.ORDER_KEY))
@@ -123,7 +125,8 @@ def entries(library: Library, state: dict[str, Any],
             values: Mapping[str, Any]) -> list[tuple[Any, ...]]:
     """The group's rows for the page's list of facts, from the settings the page has already
     read."""
-    block = state[KEY] = Shelves(library, values.get(discovery_shelves.SECTION) or {})
+    block = state[KEY] = Shelves(library, values.get(discovery_shelves.SECTION) or {},
+                                 updates=updates_shown(dict(values)))
     rows = panel.region(partial(draw, block))
     slot = panel.region(partial(draw_reset, block))
     block.redraw, block.refresh = rows.refill, slot.refill
@@ -153,15 +156,17 @@ def draw_reset(block: Shelves) -> None:
 
 
 def _row(block: Shelves, shelf: discovery_shelves.Shelf, at: int, of: int) -> None:
+    held = shelf.id == discovery_shelves.UPDATES and not block.updates
     with ui.row().classes("items-center gap-2 w-full no-wrap manager-member-row"):
         ui.icon(verbs.DRAG).classes("manager-drag-handle") \
             .props("tabindex=0 role=button").tooltip(t("manager.workbench.drag_hint"))
         with ui.column().classes("gap-0 grow min-w-0"):
             ui.label(t(shelf.name)).classes("manager-fact-value truncate min-w-0")
-            ui.label(t(shelf.description)).classes("manager-member-table")
+            ui.label(t("manager.settings.shelf.updates.held") if held
+                     else t(shelf.description)).classes("manager-member-table")
         _moves(block, shelf.id, at, of)
-        panel.switch(shelf.id not in block.off, _flipper(block, shelf.id),
-                     hint=t(shelf.name))()
+        panel.switch(shelf.id not in block.off and not held, _flipper(block, shelf.id),
+                     disabled=held, hint=t(shelf.name))()
 
 
 def _flipper(block: Shelves, shelf_id: str) -> Callable[[Any], Any]:

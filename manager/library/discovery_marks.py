@@ -18,7 +18,7 @@ from nicegui import ui
 from common.failures import why
 from common.i18n import t
 from common.media.media_specs import media_label_map
-from common.online import picture_changes, vps_marked, vps_marks
+from common.online import picture_changes, vps_marked, vps_marks, vps_updates
 from manager.kit import offload, panel, undo, verbs
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
@@ -320,6 +320,38 @@ def recounting(state: dict[str, Any], redraw: After) -> After:
     return again
 
 
+def redrawing(context: dict[str, Any]) -> After:
+    """What draws the pane again once a mark made from it has been set."""
+    async def after() -> None:
+        again = context["state"].get("redraw_discovery")
+        if callable(again):
+            await again()
+
+    return after
+
+
+def update_notice_verbs(context: dict[str, Any], game: str, kind_word: str,
+                        move: Mapping[str, Any]) -> list[panel.Verb]:
+    """Skip This Version and Ignore Updates to This Table, for the one release `move` is of."""
+    return Marking(context["library"], redrawing(context)).update_verbs(
+        {"game": game, "moves": [move]}, lambda _listing: kind_word)
+
+
+def take_back(context: dict[str, Any], game: str, kind_word: str,
+              move: Mapping[str, Any], after: After | None = None) -> Callable[[], Awaitable[None]]:
+    """Stop Ignoring for the mark that set `move` aside: the version skipped, or the
+    release's updates. `after` draws what shows it; the pane's own redraw where none is given."""
+    release_id = str(move["release_id"])
+    if move["set_aside"] == vps_updates.IGNORED:
+        one = Subject(vps_marks.UPDATES, release_id,
+                      t("manager.discovery.mark.updates_name", game=game), IGNORED)
+    else:
+        version = str(move["now"])
+        one = Subject(vps_marks.VERSION, release_id, release_name(game, kind_word, version),
+                      IGNORED, version)
+    return lambda: apply(context["library"], "", [one], after or redrawing(context))
+
+
 def release_marks(context: dict[str, Any], row: Any, game: str, kind_word: str,
                   record: Mapping[str, Any]) -> None:
     """A release in the pane: its mark beside the name, and the menu a right click or a long
@@ -329,11 +361,7 @@ def release_marks(context: dict[str, Any], row: Any, game: str, kind_word: str,
         return
     library = context["library"]
     state = read(library).state(vps_marks.RELEASE, file_id)
-
-    async def after() -> None:
-        again = context["state"].get("redraw_discovery")
-        if callable(again):
-            await again()
+    after = redrawing(context)
 
     one = [Subject(vps_marks.RELEASE, file_id,
                    release_name(game, kind_word, str(record.get("version") or "")), state)]

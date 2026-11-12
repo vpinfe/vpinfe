@@ -4865,7 +4865,8 @@ class HomeUpdateMove(ApiModel):
     listing for `vps` and the kind of file the other source speaks of. `file` is the file
     the tie is on, and for another source the folder of the game. `md5` is the hash of the
     replacing picture where the source has replaced one of the game's pictures; `kind` is then
-    the media kind."""
+    the media kind. `set_aside` is `skipped` or `ignored` on a move the person has hidden
+    and asked to keep with the others, and empty on one that shows."""
 
     source: str
     kind: str
@@ -4875,6 +4876,7 @@ class HomeUpdateMove(ApiModel):
     then: str = ""
     now: str = ""
     md5: str = ""
+    set_aside: str = ""
 
 
 class HomeUpdate(ApiModel):

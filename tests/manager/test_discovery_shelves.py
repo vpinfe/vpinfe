@@ -13,6 +13,7 @@ from unittest import mock
 from nicegui import ui
 
 from common.i18n import t
+from manager.library import discovery as discovery_page
 from manager.library import discovery_home as home
 from manager.library import discovery_search
 from manager.library import discovery_shelves as shelves
@@ -108,6 +109,25 @@ class TheStoredArrangement(unittest.TestCase):
             with self.subTest(shelf=shelf.id):
                 self.assertNotEqual(shelf.name, t(shelf.name))
                 self.assertNotEqual(shelf.description, t(shelf.description))
+
+
+class HomeLeavesOutTheUpdatesShelfWhileUpdatesAreOff(unittest.IsolatedAsyncioTestCase):
+    async def test_the_shelf_goes_and_the_others_keep_their_places(self) -> None:
+        async def inline(call: Any, *args: Any, **more: Any) -> Any:
+            return call(*args, **more)
+
+        for shown in (True, False):
+            with self.subTest(shown=shown), \
+                    mock.patch.object(discovery_page.offload, "io", inline):
+                library = mock.Mock()
+                library.manager_policy.return_value = {}
+                library.updates_shown.return_value = shown
+
+                drawn = await discovery_page._home_shelves(library)
+
+                self.assertEqual(shown, shelves.UPDATES in drawn)
+                self.assertEqual([one for one in shelves.IDS if shown or one != shelves.UPDATES],
+                                 drawn)
 
 
 class EveryShelfHasADraw(unittest.TestCase):
@@ -291,6 +311,20 @@ class TheSettingsList(unittest.IsolatedAsyncioTestCase):
         self.assertLess(words.index(t("manager.discovery.views")),
                         words.index(t("manager.discovery.updates")))
         self.assertEqual([False] + [True] * (len(switches) - 1), [one.value for one in switches])
+
+    async def test_the_updates_row_is_off_and_says_why_while_updates_are_off(self) -> None:
+        block = settings_shelves.Shelves(self.library, {}, self.redraw, self.refresh,
+                                         updates=False)
+
+        body = self._drawn(block)
+
+        words = words_of(body)
+        switches = [one for one in body.descendants() if isinstance(one, ui.switch)]
+        self.assertIn(t("manager.settings.shelf.updates.held"), words)
+        self.assertNotIn(t(shelves.BY_ID[shelves.UPDATES].description), words)
+        self.assertEqual([False] + [True] * (len(switches) - 1), [one.value for one in switches])
+        self.assertEqual([True] + [False] * (len(switches) - 1),
+                         [not one.enabled for one in switches])
 
     async def test_reset_is_offered_only_once_something_is_changed(self) -> None:
         def buttons(block: settings_shelves.Shelves) -> list[str]:

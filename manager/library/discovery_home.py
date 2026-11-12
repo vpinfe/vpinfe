@@ -301,11 +301,10 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
         panel.verb_menu(menu, marking.title(discovery_marks.UPDATE, item), entries)
 
     def open_tile(item: dict[str, Any]) -> Any:
-        """The game's pane, on the first replaced picture's section where pictures are all
-        the tile holds."""
-        if all(is_picture(one) for one in item["moves"]):
-            return see_picture(item["vps_id"], str(item["moves"][0]["kind"]))
-        return on_select({"id": item["vps_id"]})
+        """The game's pane, on the section of the first thing that has a later version: a
+        file before any picture, in the order the moves come."""
+        first = next((one for one in item["moves"] if not is_picture(one)), item["moves"][0])
+        return see_picture(item["vps_id"], str(first["kind"]))
 
     def update_tile(parent: Any, item: dict[str, Any]) -> None:
         with parent, ui.element("div").classes("manager-shelf-tile") as card:
@@ -760,12 +759,14 @@ def fill(body: Any, home: dict[str, Any], *, library: Any, scope: str,
                 ui.label(t("manager.discovery.authors")).classes("manager-fact-heading")
             with ui.row().classes("manager-shelf w-full px-3"):
                 for one in collected:
-                    with ui.element("div").classes("manager-shelf-tile manager-shelf-tile--plain"):
-                        author = {"type": vps_find.AUTHOR, "name": one["name"]}
-                        panel.link(one["name"], to="/manager?" + deeplink.query(
-                            {"view": "discovery", "subject": author}),
-                            on_click=partial(open_subject, author),
-                            classes="manager-shelf-name")()
+                    author = {"type": vps_find.AUTHOR, "name": one["name"]}
+                    with panel.link_tile(
+                            to="/manager?" + deeplink.query({"view": "discovery",
+                                                             "subject": author}),
+                            classes="manager-shelf-tile manager-shelf-tile--plain "
+                                    "manager-link--inplace") as card:
+                        card.on("click", lambda _e, who=author: open_subject(who))
+                        ui.label(one["name"]).classes("manager-shelf-name")
                         with ui.row().classes("items-center gap-1 no-wrap"):
                             ui.label(t("manager.discovery.authors.held", count=one["held"])) \
                                 .classes("text-xs manager-help")

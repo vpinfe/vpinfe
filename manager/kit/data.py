@@ -18,7 +18,7 @@ from common.media.media_specs import MEDIA_SPECS, media_family
 from common.online import sources as source_registry
 from common.runtime.jobs import KIND_MEDIA_FILL
 from manager.kit import art, game_tables, media_ownership, need_keys, thumbnails, when
-from manager.kit.api import ApiClient
+from manager.kit.api import ApiClient, updates_shown
 from manager.kit.thumbnails import Look
 from manager.kit.together import together
 
@@ -2264,16 +2264,31 @@ class Library:
         return list(self._client.picture_changes(game_id).get("pictures") or [])
 
 
+    def updates_shown(self) -> bool:
+        """Whether the person has update notices on. Off the loop."""
+        return updates_shown(self._client.config_values())
+
     def load_updates(self, game_id: str) -> list[dict[str, Any]]:
-        """Read what of this game has a later version. Off the loop."""
-        shelf = self._client.discovery_updates(game_id)
+        """Read what of this game has a later version, the skipped and ignored included; none
+        while the person has updates off. Off the loop."""
+        if not self.updates_shown():
+            self._update_moves[game_id] = []
+            return []
+        shelf = self._client.discovery_updates(game_id, set_aside=True)
         moves = [dict(move) for one in shelf.get("games") or () for move in one.get("moves") or ()]
         self._update_moves[game_id] = moves
         return moves
 
     def update_moves(self, game_id: str) -> list[dict[str, Any]]:
-        """What of this game has a later version, as last read; none before a read."""
-        return list(self._update_moves.get(game_id) or ())
+        """What of this game has a later version and shows, as last read; none before a
+        read."""
+        return [move for move in self._update_moves.get(game_id) or ()
+                if not move.get("set_aside")]
+
+    def set_aside_moves(self, game_id: str) -> list[dict[str, Any]]:
+        """What of this game has a later version that the person skipped or ignored, as last
+        read."""
+        return [move for move in self._update_moves.get(game_id) or () if move.get("set_aside")]
 
     def load_marks(self) -> list[dict[str, Any]]:
         """Read what is marked Wanted or Ignored. Off the loop."""

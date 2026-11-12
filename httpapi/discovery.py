@@ -54,13 +54,16 @@ def delete_mark(scope: str = Query(...), vps_id: str = Query(..., alias="id"),
 
 @router.get("/updates", summary="Games with a later version of something they hold",
             dependencies=[requires(scopes.GAMES_READ)])
-def discovery_updates(game_id: str = Query("")) -> models.HomeUpdates:
+def discovery_updates(game_id: str = Query(""),
+                      set_aside: bool = Query(False)) -> models.HomeUpdates:
     """Every game of the library holding a file tied to a release VPS now lists at a higher
     version than when the tie was made, or one a source says has a later file, minus what is
     skipped or ignored. The count is what Discovery's menu entry shows. `game_id` narrows the
-    answer to that one game, and only that game is looked at. Nothing is asked of any
-    site."""
-    return models.HomeUpdates.model_validate(library_ops.discovery_updates(game_id))
+    answer to that one game, and only that game is looked at. With `set_aside` the moves a
+    person skipped or ignored stay, each saying which in its `set_aside`. Nothing is asked of
+    any site."""
+    return models.HomeUpdates.model_validate(
+        library_ops.discovery_updates(game_id, set_aside))
 
 
 @router.get("/home", summary="Discovery's front page",

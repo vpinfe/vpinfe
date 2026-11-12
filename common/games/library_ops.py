@@ -340,11 +340,12 @@ def _updates_found() -> list[dict[str, Any]]:
         return []
 
 
-def discovery_updates(game_id: str = "") -> dict[str, Any]:
+def discovery_updates(game_id: str = "", with_set_aside: bool = False) -> dict[str, Any]:
     """Every game of the library with a later version of something it holds, minus what is
-    skipped or ignored; the one game named by `game_id` where it is set. Asks no site."""
+    skipped or ignored unless `with_set_aside` keeps those, labelled; the one game named by
+    `game_id` where it is set. Asks no site."""
     found = library_updates.found_for(game_id) if game_id else library_updates.found()
-    return vps_updates.shelf(found, vps_marks.read())
+    return vps_updates.shelf(found, vps_marks.read(), with_set_aside=with_set_aside)
 
 
 def picture_changes(game_id: str = "") -> dict[str, Any]:

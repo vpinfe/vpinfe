@@ -151,6 +151,13 @@ def _as_mobile_device(item: dict) -> dict:
             "port": item.get("port")}
 
 
+def updates_shown(values: dict) -> bool:
+    """Whether the person has update notices on: the setting is a switch that is on unless
+    it says otherwise."""
+    kept = str((values.get("updates") or {}).get("show_updates", "true"))
+    return kept.strip().lower() not in ("false", "0", "no", "off")
+
+
 class ApiClient:
     """An ordinary consumer of /api/v1, over HTTP rather than by import.
 
@@ -560,11 +567,13 @@ class ApiClient:
             "?" + urlencode({"game_id": game_id}) if game_id else "")))
 
 
-    def discovery_updates(self, game_id: str = "") -> dict:
+    def discovery_updates(self, game_id: str = "", set_aside: bool = False) -> dict:
         """The games with a later version of something they hold: `count`, `game_ids` and
-        `games`, each with the `moves` behind it. With `game_id`, that game alone."""
-        return dict(self._get(f"/discovery/updates?game_id={quote(game_id, safe='')}"
-                              if game_id else "/discovery/updates"))
+        `games`, each with the `moves` behind it. With `game_id`, that game alone; with
+        `set_aside`, the moves the person skipped or ignored too."""
+        query = urlencode({**({"game_id": game_id} if game_id else {}),
+                           **({"set_aside": "true"} if set_aside else {})})
+        return dict(self._get("/discovery/updates" + (f"?{query}" if query else "")))
 
     def discovery_marks(self) -> list[dict]:
         """Everything marked Wanted or Ignored on this install, the newest first."""

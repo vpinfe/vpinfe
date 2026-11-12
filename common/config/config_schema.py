@@ -760,7 +760,7 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
             home="library.discovery",
         ),
         ConfigOption(
-            "show_update_count",
+            "show_updates",
             type="bool",
             default="true",
             home="library.discovery",

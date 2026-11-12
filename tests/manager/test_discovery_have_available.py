@@ -40,6 +40,7 @@ class HaveAvailableTests(unittest.IsolatedAsyncioTestCase):
     def _body(self, kind: Kind) -> ui.element:
         library = mock.Mock()
         library.update_moves.return_value = []
+        library.set_aside_moves.return_value = []
         library.media = {}
         library.games = []
         library.marks.return_value = []

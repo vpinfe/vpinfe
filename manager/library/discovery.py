@@ -380,9 +380,13 @@ def build(library: Library, state: dict[str, Any], on_select: Callable[[Any], An
 
 async def _home_shelves(library: Library) -> list[str]:
     """The shelves Home draws, in the order the settings give. The default arrangement where
-    they cannot be read: a front page with every shelf beats one that does not draw."""
+    they cannot be read: a front page with every shelf beats one that does not draw. Updates
+    for Your Games is left out while the person has updates off."""
     try:
-        return discovery_shelves.shown(await offload.io(library.manager_policy))
+        drawn = discovery_shelves.shown(await offload.io(library.manager_policy))
+        if await offload.io(library.updates_shown):
+            return drawn
+        return [one for one in drawn if one != discovery_shelves.UPDATES]
     except Exception:  # noqa: BLE001 - whatever the read raised, Home still draws
         logger.warning("manager: could not read which Home shelves to draw", exc_info=True)
         return discovery_shelves.shown(None)

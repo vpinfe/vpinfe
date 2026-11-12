@@ -91,6 +91,135 @@ class RollupCountTests(unittest.TestCase):
         self.assertTrue(all("holding" in item for item in counted["kinds"]))
 
 
+class _Named:
+    """A game that names a catalog entry, for the follow-up of one game."""
+
+    def __init__(self, vps_id: str = "", tables: int = 1) -> None:
+        self.meta_config = {"Info": {"VPSId": vps_id}, "tables": {
+            f"tbl{one:07d}": {"id": f"tbl{one:07d}"} for one in range(tables)}}
+
+
+class FollowTests(unittest.TestCase):
+    """One game re-read: the entries it left and joined are rebuilt from every game on them."""
+
+    def setUp(self) -> None:
+        self.games: dict = {}
+        self.answers: dict = {}
+        self.written: list = []
+        self.counted: dict = {"schema": rollup.SCHEMA, "computed": "then", "entries": {}}
+        for patcher in (
+                patch.object(rollup, "stored", side_effect=lambda: dict(self.counted)),
+                patch.object(rollup, "store", side_effect=self.written.append),
+                patch.object(rollup, "clear_met_wants"),
+                patch.object(rollup.game_repository, "catalog",
+                             side_effect=lambda: self.games)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _follow(self, game_id: str) -> bool:
+        return rollup.follow(self.games[game_id], game_id,
+                             lambda game, gid: self.answers[gid])
+
+    def test_a_table_tied_to_a_newer_release_is_the_one_the_entry_holds_at_once(self) -> None:
+        self.games = {"g1": _Named("E1")}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": ["v1"],
+                                          "games": ["g1"]}}
+        self.answers = {"g1": {**_state(), "tables": [{"name": "a.vpx", "vps_file_id": "v2"}]}}
+
+        self.assertTrue(self._follow("g1"))
+
+        [written] = self.written
+        self.assertEqual(written["entries"]["E1"]["bound"], ["v2"])
+        self.assertEqual(written["computed"], "then")
+
+    def test_a_game_matched_to_another_entry_leaves_the_first_and_joins_the_second(self) -> None:
+        self.games = {"g1": _Named("E2")}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": [],
+                                          "games": ["g1"]}}
+        self.answers = {"g1": _state(vps_id="E2")}
+
+        self._follow("g1")
+
+        self.assertEqual(sorted(self.written[0]["entries"]), ["E2"])
+
+    def test_an_entry_another_game_names_keeps_what_that_game_holds(self) -> None:
+        self.games = {"g1": _Named("E2", 0), "g2": _Named("E1", 1)}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": ["b2sFiles"], "bound": [],
+                                          "games": ["g1", "g2"]}}
+        self.answers = {"g1": _state(vps_id="E2"),
+                        "g2": _state(b2sFiles=(True, False, 1, 1))}
+
+        self._follow("g1")
+
+        entries = self.written[0]["entries"]
+        self.assertEqual(entries["E1"]["games"], ["g2"])
+        self.assertEqual(entries["E1"]["held"], ["b2sFiles"])
+
+    def test_a_game_matched_to_nothing_leaves_the_library_count_of_its_entry(self) -> None:
+        self.games = {"g1": _Named("")}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": [],
+                                          "games": ["g1"]}}
+        self.answers = {"g1": _state(matched=False)}
+
+        self._follow("g1")
+
+        self.assertEqual(self.written[0]["entries"], {})
+
+    def test_nothing_is_written_when_the_entry_already_reads_so(self) -> None:
+        self.games = {"g1": _Named("E1")}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": [],
+                                          "games": ["g1"]}}
+        self.answers = {"g1": _state()}
+
+        self.assertFalse(self._follow("g1"))
+        self.assertEqual(self.written, [])
+
+    def test_a_library_never_counted_stays_so(self) -> None:
+        self.counted = {}
+        self.games = {"g1": _Named("E1")}
+        self.answers = {"g1": _state()}
+
+        self.assertFalse(self._follow("g1"))
+        self.assertEqual(self.written, [])
+
+    def test_a_game_is_counted_as_it_stands_when_the_count_holds_it_under_its_entry(self) -> None:
+        self.games = {"g1": _Named("E1")}
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": [],
+                                          "games": ["g1"]}}
+
+        self.assertTrue(rollup.counted_as(self.games["g1"], "g1"))
+
+    def test_a_game_is_not_counted_as_it_stands_under_another_entry_or_none(self) -> None:
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": [],
+                                          "games": ["g1"]},
+                                   "E2": {"tables": 0, "held": [], "bound": [], "games": []}}
+
+        self.assertFalse(rollup.counted_as(_Named("E2"), "g1"))
+        self.assertFalse(rollup.counted_as(_Named(""), "g1"))
+
+    def test_a_game_tied_to_a_release_the_count_lacks_is_not_counted_as_it_stands(self) -> None:
+        self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": ["v1"],
+                                          "games": ["g1"]}}
+        game = _Named("E1")
+        game.meta_config["tables"]["tbl0000000"]["source"] = {"vps_file_id": "v2"}
+
+        self.assertFalse(rollup.counted_as(game, "g1"))
+
+    def test_a_library_never_counted_has_nothing_to_be_out_of_step_with(self) -> None:
+        self.counted = {}
+
+        self.assertTrue(rollup.counted_as(_Named("E1"), "g1"))
+
+    def test_ties_differ_for_a_match_and_for_a_table_tied_again(self) -> None:
+        one = _Named("E1")
+        before = rollup.ties_of(one)
+        one.meta_config["tables"]["tbl0000000"]["source"] = {"vps_file_id": "v2"}
+
+        self.assertNotEqual(before, rollup.ties_of(one))
+        self.assertNotEqual(before, rollup.ties_of(_Named("E2")))
+        self.assertEqual(before, rollup.ties_of(_Named("E1")))
+
+
 class RollupEntriesTests(unittest.TestCase):
     """What the library holds, per catalog entry: the part a list of the catalog reads."""
 
@@ -105,12 +234,14 @@ class RollupEntriesTests(unittest.TestCase):
              _state(romFiles=(True, False, 1, 1))])
 
         self.assertEqual(entries, {"E1": {"tables": 1, "held": ["b2sFiles", "romFiles"],
-                                          "bound": []}})
+                                          "bound": [],
+                                          "games": ["g1", "g2"]}})
 
     def test_a_game_with_no_table_is_still_in_the_library(self) -> None:
         entries = self._entries({"g1": _Game(0)}, [_state()])
 
-        self.assertEqual(entries, {"E1": {"tables": 0, "held": [], "bound": []}})
+        self.assertEqual(entries, {"E1": {"tables": 0, "held": [], "bound": [],
+                                          "games": ["g1"]}})
 
     def test_a_table_whose_file_is_gone_is_not_a_table_held(self) -> None:
         """The record stays after the file goes, so counting records would tell a client

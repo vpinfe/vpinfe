@@ -15,7 +15,7 @@ from common.failures import why
 from common.i18n import t
 from manager import rail_marks
 from manager.kit import offload
-from manager.kit.api import ApiClient
+from manager.kit.api import ApiClient, updates_shown
 
 logger = logging.getLogger("vpinfe.manager.update_count")
 
@@ -25,8 +25,7 @@ KEY = "discovery"
 def shown(values: dict[str, Any]) -> bool:
     """Whether the person has Discovery's entry count its games with an update. On unless
     the setting says otherwise."""
-    kept = str((values.get("updates") or {}).get("show_update_count", "true"))
-    return kept.strip().lower() not in ("false", "0", "no", "off")
+    return updates_shown(values)
 
 
 def waiting(client: ApiClient | None = None) -> tuple[bool, int]:

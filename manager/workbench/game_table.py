@@ -15,7 +15,7 @@ from common.devices import install_identity
 from common.failures import why
 from common.games import ties
 from common.i18n import t
-from common.online import sites
+from common.online import sites, vps_updates
 from manager.backups import backup_rows
 from manager.extensions import ext_groups, ext_lists
 from manager.kit import (
@@ -35,6 +35,7 @@ from manager.kit.data import Library, tag_source
 from manager.kit.on_page import on_page
 from manager.library import (
     collection_adds,
+    discovery_marks,
     file_acts,
     game_states,
     getting_file,
@@ -941,7 +942,21 @@ async def _findings(context: dict[str, Any],
     """
     releases: dict[str, dict[str, Any]] = {}
     entry_url = unread = ""
-    if any(table.get("update_available") for table in tables):
+    updates = newer = any(table.get("update_available") for table in tables)
+    if newer:
+        try:
+            updates = await offload.io(context["library"].updates_shown)
+        except Exception:  # noqa: BLE001 - a notice shown beats the real faults lost
+            logger.warning("manager: could not read Show Updates", exc_info=True)
+    aside: dict[str, dict[str, Any]] = {}
+    if newer and updates:
+        try:
+            await offload.io(context["library"].load_updates, str(context["game_id"]))
+        except Exception:  # noqa: BLE001 - the strip shows where the marks cannot be read
+            logger.warning("manager: could not read the skipped updates", exc_info=True)
+        else:
+            aside = {str(move["release_id"]): move
+                     for move in context["library"].set_aside_moves(str(context["game_id"]))}
         vps_id = str(context["game"].get("vps_id") or "")
         listed, unread = await _read_releases(context, vps_id)
         releases = {str(one.get("vps_file_id") or ""): one for one in listed}
@@ -955,8 +970,12 @@ async def _findings(context: dict[str, Any],
                 entry_url = str((entry or {}).get("url") or "")
     everyone = context["tables"]
     causes: dict[tuple[str, ...], list[tuple[dict[str, Any], _Fault]]] = {}
+    quiet: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for table in tables:
-        for fault in _faults(context, table, releases, entry_url, unread):
+        move = aside.get(str((table.get("source") or {}).get("vps_file_id") or ""))
+        if move and table.get("update_available"):
+            quiet.append((table, move))
+        for fault in _faults(context, table, releases, entry_url, unread, updates and not move):
             causes.setdefault(fault.cause, []).append((table, fault))
     entries: list[tuple[Any, Any]] = []
     for found in causes.values():
@@ -964,7 +983,32 @@ async def _findings(context: dict[str, Any],
         first = found[0][1]
         line = t(first.words, count=len(members), **first.params)
         entries.append((FULL, _alert(line, first.act, *_said(members, everyone))))
+    entries += [(FULL, _set_aside_line(context, table, move, everyone)) for table, move in quiet]
     return entries
+
+
+def _set_aside_line(context: dict[str, Any], table: dict[str, Any], move: dict[str, Any],
+                    everyone: Sequence[dict[str, Any]]) -> Callable[[], None]:
+    """The quiet line a skipped or ignored update leaves where the strip would be, with the
+    link that takes the mark back. It names the table where the game has several."""
+    stop = discovery_marks.take_back(
+        context, str(context["game"].get("name") or ""), t("word.table"), move,
+        discovery_marks.recounting(context["state"], partial(_table_list_changed, context)))
+
+    def draw() -> None:
+        with ui.row().classes("items-center gap-x-1 no-wrap w-full min-w-0 manager-help"):
+            if len(everyone) > 1:
+                ui.label(game_tables.name_among(table, list(everyone))).classes("truncate min-w-0")
+                ui.label("·").classes("flex-none")
+            ui.label(t("manager.discovery.update.ignored")
+                     if move["set_aside"] == vps_updates.IGNORED
+                     else t("manager.discovery.update.skipped", version=move["now"])
+                     ).classes("flex-none")
+            ui.label("·").classes("flex-none")
+            ui.label(t("manager.discovery.mark.stop")).classes("manager-link flex-none") \
+                .props("role=button tabindex=0").on("click", stop).on("keydown.enter", stop)
+
+    return draw
 
 
 _NAMED_AT_MOST = 3
@@ -1007,7 +1051,7 @@ class _Fault(NamedTuple):
 
 def _faults(context: dict[str, Any], table: dict[str, Any],
             releases: dict[str, dict[str, Any]], entry_url: str,
-            unread: str = "") -> list[_Fault]:
+            unread: str = "", updates: bool = True) -> list[_Fault]:
     pinmame = (table.get("dependencies") or {}).get("pinmame") or {}
     own = str(table.get("id") or "")
     faults: list[_Fault] = []
@@ -1044,7 +1088,7 @@ def _faults(context: dict[str, Any], table: dict[str, Any],
             (words, rom), words, {"rom": rom},
             panel.action(t("word.add"), opens, icon=verbs.ADD,
                          hint=t("manager.workbench.add_missing.help")) if opens else None))
-    if table.get("update_available"):
+    if updates and table.get("update_available"):
         source = table.get("source") or {}
         theirs = str(source.get("version") or "")
         release = releases.get(str(source.get("vps_file_id") or "")) or {}

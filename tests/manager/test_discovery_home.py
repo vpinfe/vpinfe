@@ -454,14 +454,23 @@ class DrivenHome(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([{"id": "g1"}], self.selected)
         self.assertEqual("discovery_wheel", self.state["section"])
 
-    async def test_a_tile_that_also_holds_a_table_update_opens_the_pane_as_it_was(self) -> None:
-        self.updates = [{**ALIEN_UPDATE, "moves": [*ALIEN_UPDATE["moves"], _picture("wheel")]}]
+    async def test_a_tile_opens_the_pane_on_the_table_section(self) -> None:
+        self.updates = [ALIEN_UPDATE]
         self.state["section"] = "discovery_game"
 
         await self._press(self._update_tile(await self._draw()))
 
         self.assertEqual([{"id": "g1"}], self.selected)
-        self.assertEqual("discovery_game", self.state["section"])
+        self.assertEqual("discovery_tablefiles", self.state["section"])
+
+    async def test_a_tile_that_also_holds_a_picture_opens_on_the_file_not_the_picture(
+            self) -> None:
+        self.updates = [{**ALIEN_UPDATE, "moves": [_picture("wheel"), *ALIEN_UPDATE["moves"]]}]
+        self.state["section"] = "discovery_game"
+
+        await self._press(self._update_tile(await self._draw()))
+
+        self.assertEqual("discovery_tablefiles", self.state["section"])
 
     async def test_home_hands_the_entry_the_count_it_read(self) -> None:
         self.updates = [ALIEN_UPDATE]
@@ -1228,6 +1237,18 @@ class DrivenHome(unittest.IsolatedAsyncioTestCase):
         counts = [one for one in tiles[0].descendants() if isinstance(one, ui.row)]
         self.assertEqual(_words(counts[0])[0], "1 in your library")
         self.assertEqual(_words(counts[0])[1:], ["·", "4 new"])
+
+    async def test_a_tap_anywhere_on_an_author_card_opens_the_authors_page(self) -> None:
+        body = await self._draw()
+        card = next(one for one in body.descendants()
+                    if "manager-shelf-tile--plain" in one.classes
+                    and "1 in your library" in _words(one))
+
+        self.assertIsInstance(card, ui.link)
+        self.assertIn("manager-link--inplace", card.classes)
+        await self._press(card)
+
+        self.assertEqual({"type": "author", "name": "Alpha"}, self.state["subject"])
 
 
 if __name__ == "__main__":

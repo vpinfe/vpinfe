@@ -24,7 +24,7 @@ from common.failures import why
 from common.games import asset_resolver, opened_pages
 from common.i18n import t
 from common.media.media_specs import IMAGE_FAMILY
-from common.online import vps_find, vps_kinds
+from common.online import vps_find, vps_kinds, vps_updates
 from manager.kit import (
     art,
     candidates,
@@ -311,18 +311,11 @@ def _held_card(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held,
                     ui.label(spec).classes("manager-help truncate")
                 if kind.records:
                     _match_line(context, scene, kind, held, record)
-                if origin := _origin(held):
-                    ui.label(t("manager.discovery.source_line", source=origin)) \
-                        .classes("manager-help truncate")
+                _status_line(context, scene, kind, held)
+        if kind.records and (move := _move(context, scene, held.vps_file_id)):
+            _update_notice(context, scene, kind, held, record, move)
         with ui.element("div").classes("manager-slot-actions"):
             _verb(acts.get(file_acts.REPLACE), verbs.REPLACE)
-            if record and kind.listed_as == "tableFiles" and (
-                    later := _newer(context, scene, held.vps_file_id)):
-                panel.action(
-                    t("manager.workbench.update"),
-                    partial(_get_table, context, scene, kind, record, held.name, False),
-                    icon=verbs.REPLACE,
-                    hint=t("manager.workbench.update.help", version=later))()
             if kind.records:
                 label, icon, hint = (
                     (t("manager.workbench.change_match_2"), verbs.MATCH,
@@ -352,8 +345,6 @@ def _match_line(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held,
         ui.icon(verbs.MATCH).classes("manager-have")
         ui.label(t("manager.discovery.matched_to", release=_head(record))
                  if record else t("manager.workbench.delisted_file")).classes("truncate")
-        if later := _newer(context, scene, held.vps_file_id):
-            ui.label(t("manager.discovery.update.row", version=later)).classes("manager-label")
         if record:
             site, page = vps_records.site_of(record)
             if page:
@@ -481,13 +472,63 @@ def _own_picture(context: dict[str, Any], scene: Scene, kind: Kind,
     return (slot, str(held.get("version") or "")) if held.get("present") else None
 
 
-def _newer(context: dict[str, Any], scene: Scene, vps_file_id: str) -> str:
-    """The version VPS lists now for the release a held file is tied to, where that is later
-    than when it was tied and the update has not been skipped or ignored."""
+def _move(context: dict[str, Any], scene: Scene, vps_file_id: str, *,
+          set_aside: bool = False) -> dict[str, Any] | None:
+    """The later version of the release a held file is tied to, where VPS lists one and the
+    update has not been skipped or ignored; with `set_aside`, the one that has been."""
     if not vps_file_id or not scene.game_id:
-        return ""
-    return next((str(move["now"]) for move in context["library"].update_moves(scene.game_id)
-                 if move["release_id"] == vps_file_id), "")
+        return None
+    library = context["library"]
+    moves = (library.set_aside_moves if set_aside else library.update_moves)(scene.game_id)
+    return next((move for move in moves if move["release_id"] == vps_file_id), None)
+
+
+def _update_notice(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held,
+                   record: dict[str, Any] | None, move: dict[str, Any]) -> None:
+    """The amber strip on a card whose release has a later version."""
+    versions = t("manager.discovery.update.versions", then=move.get("then") or "",
+                 now=move["now"]) if move.get("then") else str(move["now"])
+    entries = discovery_marks.update_notice_verbs(
+        context, str(context["discovery"]["name"]), kind.label, move)
+    with ui.element("div").classes("manager-attention w-full"):
+        ui.icon("error_outline").classes("manager-attention-icon")
+        with ui.column().classes("gap-0 min-w-0 grow"):
+            ui.label(t("manager.discovery.update.available")).classes("manager-attention-line")
+            ui.label(versions).classes("manager-member-table")
+        if record and kind.listed_as == "tableFiles":
+            panel.action(
+                t("manager.workbench.update"),
+                partial(_get_table, context, scene, kind, record, held.name, False),
+                icon=verbs.REPLACE,
+                hint=t("manager.workbench.update.help", version=move["now"]))()
+        if entries:
+            _button, menu = panel.menu_button(verbs.MORE, t("manager.discovery.update.menu"))
+            with menu:
+                panel.verb_entries(entries, menu.close)
+
+
+def _status_line(context: dict[str, Any], scene: Scene, kind: Kind, held: _Held) -> None:
+    """One muted line under a held file: its source, and where its update is skipped or
+    ignored, that and the link that takes the mark back."""
+    source = _origin(held)
+    aside = _move(context, scene, held.vps_file_id, set_aside=True) if kind.records else None
+    if not source and not aside:
+        return
+    with ui.row().classes("items-center gap-x-1 no-wrap w-full min-w-0 manager-help"):
+        if source:
+            ui.label(t("manager.discovery.source_line", source=source)).classes("truncate min-w-0")
+        if aside:
+            if source:
+                ui.label("·").classes("flex-none")
+            ui.label(t("manager.discovery.update.ignored")
+                     if aside["set_aside"] == vps_updates.IGNORED
+                     else t("manager.discovery.update.skipped", version=aside["now"])
+                     ).classes("flex-none")
+            ui.label("·").classes("flex-none")
+            stop = discovery_marks.take_back(
+                context, str(context["discovery"]["name"]), kind.label, aside)
+            ui.label(t("manager.discovery.mark.stop")).classes("manager-link flex-none") \
+                .props("role=button tabindex=0").on("click", stop).on("keydown.enter", stop)
 
 
 def _looked(context: dict[str, Any], scene: Scene, kind: Kind) -> dict[str, str]:

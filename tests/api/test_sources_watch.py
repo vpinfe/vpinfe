@@ -275,6 +275,119 @@ class Ending(_Watch):
         self.assertTrue(sources_watch._comparison_owed)
 
 
+class Following(_Watch):
+    """A game re-read owes a comparison, settled a few seconds on, and its entry is brought
+    up to date at once."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        sources_watch._tied.clear()
+        sources_watch._comparison_owed = False
+        self.followed = patch("common.games.library_vps_state.follow", return_value=False).start()
+        self.counted = patch("common.games.library_vps_state.counted_as",
+                             return_value=False).start()
+        self.timer = patch.object(sources_watch.threading, "Timer").start()
+        self.addCleanup(lambda: sources_watch._tied.clear())
+        patch("common.games.game_identity.game_id", side_effect=lambda game: game.id).start()
+        patch("common.games.library_vps_state.ties_of", side_effect=lambda game: game.ties).start()
+
+    def _changed(self, ties: str, game_id: str = "g1") -> None:
+        sources_watch._on_game_changed(game=MagicMock(id=game_id, ties=ties))
+
+    def test_a_game_first_seen_that_the_count_already_holds_is_left_alone(self) -> None:
+        self.counted.return_value = True
+
+        self._changed("a")
+
+        self.followed.assert_not_called()
+        self.assertFalse(sources_watch._comparison_owed)
+
+    def test_a_game_first_seen_that_the_count_does_not_hold_is_followed_and_owes_it(
+            self) -> None:
+        self._changed("a")
+
+        self.followed.assert_called_once()
+        self.assertTrue(sources_watch._comparison_owed)
+
+        self.assertTrue(sources_watch._comparison_owed)
+        self.timer.assert_called_once_with(sources_watch._SETTLE_SECONDS,
+                                           sources_watch.compare_if_owed)
+        self.timer.return_value.start.assert_called_once_with()
+
+    def test_a_game_whose_ties_moved_is_followed_and_owes_the_comparison(self) -> None:
+        self._changed("a")
+        self.followed.reset_mock()
+
+        self._changed("b")
+
+        self.followed.assert_called_once()
+        self.assertTrue(sources_watch._comparison_owed)
+
+    def test_a_game_re_read_with_the_same_ties_is_not_followed(self) -> None:
+        self.counted.return_value = True
+        self._changed("a")
+        self.followed.reset_mock()
+
+        self._changed("a")
+
+        self.followed.assert_not_called()
+        self.assertFalse(sources_watch._comparison_owed)
+
+    def test_a_burst_of_changes_restarts_the_wait_rather_than_adding_one(self) -> None:
+        self._changed("a")
+        self._changed("b")
+        self._changed("c")
+
+        self.assertEqual(self.timer.return_value.cancel.call_count, 2)
+
+    def test_a_game_with_no_id_is_left_alone(self) -> None:
+        self._changed("a", game_id="")
+
+        self.followed.assert_not_called()
+        self.assertFalse(sources_watch._comparison_owed)
+
+    def test_a_game_that_is_gone_owes_the_comparison(self) -> None:
+        sources_watch._on_game_changed(game=None)
+
+        self.assertTrue(sources_watch._comparison_owed)
+
+    def test_a_failure_to_follow_still_owes_the_comparison(self) -> None:
+        self.followed.side_effect = OSError("unreadable")
+
+        self._changed("a")
+
+        self.assertTrue(sources_watch._comparison_owed)
+
+    def test_the_comparisons_own_ties_owe_nothing(self) -> None:
+        sources_watch._own.tying = True
+        self.addCleanup(setattr, sources_watch._own, "tying", False)
+
+        self._changed("a")
+        sources_watch._on_done("j1")
+
+        self.followed.assert_not_called()
+        self.assertFalse(sources_watch._comparison_owed)
+
+    def test_a_scan_that_ends_owes_the_comparison(self) -> None:
+        job = MagicMock(kind=sources_watch.job_registry.KIND_LIBRARY_SCAN)
+        with patch.object(sources_watch.job_registry, "get", return_value=job):
+            sources_watch._on_done("j1")
+
+        self.assertTrue(sources_watch._comparison_owed)
+
+    def test_the_real_events_reach_it(self) -> None:
+        from common import events
+
+        sources_watch.listen()
+        self.addCleanup(events.unsubscribe, events.GAME_CHANGED, sources_watch._on_game_changed)
+        self.addCleanup(events.unsubscribe, events.JOB_FAILED, sources_watch._on_failed)
+        self.addCleanup(events.unsubscribe, events.JOB_DONE, sources_watch._on_done)
+
+        events.emit(events.GAME_CHANGED, game=MagicMock(id="g9", ties="a"), path="x")
+
+        self.followed.assert_called_once()
+
+
 class Starting(unittest.TestCase):
     def setUp(self) -> None:
         self.tied = patch("common.games.exact_ties.tie_library", return_value=0).start()
@@ -475,3 +588,16 @@ class WarmingTheMediaIndex(_Watch):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_tying_tables_for_the_comparison_forgets_what_games_were_last_seen_tied_to(
+            self) -> None:
+        sources_watch._tied["g1"] = ("E1", ())
+        self.addCleanup(sources_watch._tied.clear)
+        with tempfile.TemporaryDirectory() as held:
+            catalog = Path(held) / "vpsdb.json"
+            catalog.write_text("[]", encoding="utf-8")
+            with patch("common.games.game_service.VPSDB_JSON_PATH", catalog), \
+                    patch("common.games.library_ops.recount_vps_state"):
+                sources_watch.compare()
+
+        self.assertEqual(sources_watch._tied, {})

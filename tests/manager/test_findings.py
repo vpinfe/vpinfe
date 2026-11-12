@@ -35,6 +35,7 @@ def _context(*tables: dict[str, Any]) -> dict[str, Any]:
         {"vps_file_id": "r-1", "version": "1.2", "url": "https://host.example/r-1"},
         {"vps_file_id": "r-2", "version": "2.0", "url": ""}]
     library.vps_entry.return_value = {"url": "https://vps.example/entry"}
+    library.set_aside_moves.return_value = []
     return {"library": library, "game": {"name": "Sample Game", "vps_id": "e-1",
                                          "folder": "/library/Sample Game"},
             "game_id": "g1", "tables": list(tables), "lens": "", "state": {},
@@ -79,6 +80,40 @@ class Findings(unittest.IsolatedAsyncioTestCase):
             t("manager.workbench.newer_on_vps", theirs="1.2", ours="1.1"),
             ("link", t("manager.workbench.get_version", version="1.2"),
              "https://host.example/r-1"), "")])
+
+    async def test_an_update_is_not_a_finding_while_updates_are_off(self) -> None:
+        tables = (_table("a", update_available=True, source={
+            "vps_file_id": "r-1", "version": "1.2", "vps_version": "1.1"}),)
+        context = _context(*tables)
+        context["library"].updates_shown.return_value = False
+
+        self.assertEqual([], await game_table._findings(context, tables))
+        context["library"].vps_releases.assert_not_called()
+
+    async def test_a_skipped_update_leaves_no_strip_and_one_quiet_line(self) -> None:
+        tables = (_table("a", update_available=True, source={
+            "vps_file_id": "r-1", "version": "1.2", "vps_version": "1.1"}),)
+        context = _context(*tables)
+        context["library"].set_aside_moves.return_value = [
+            {"release_id": "r-1", "now": "1.2", "set_aside": "skipped"}]
+
+        entries = await game_table._findings(context, tables)
+
+        self.assertEqual([core.FULL], [label for label, _ in entries])
+        self.assertTrue(callable(entries[0][1]))
+
+    async def test_an_update_set_aside_on_another_release_leaves_the_strip(self) -> None:
+        tables = (_table("a", update_available=True, source={
+            "vps_file_id": "r-1", "version": "1.2", "vps_version": "1.1"}),)
+        context = _context(*tables)
+        context["library"].set_aside_moves.return_value = [
+            {"release_id": "r-2", "now": "2.0", "set_aside": "ignored"}]
+
+        entries = await game_table._findings(context, tables)
+
+        self.assertEqual(
+            [t("manager.workbench.newer_on_vps", theirs="1.2", ours="1.1")],
+            [alert[0] for _, alert in entries])
 
     async def test_a_release_with_no_page_links_to_its_entry(self) -> None:
         found = await self._found(_table("a", update_available=True, source={

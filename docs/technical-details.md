@@ -156,7 +156,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `ask_where_new_games_go` | bool | `true` | On, adding a game asks which folder it goes to. Off, it goes to the folder marked for them. |
 | `new_games_location` | string |  | The folder a new game is created in. Set from the library's folders. |
 | `download_spreadsheet` | choice (never, daily, weekly, monthly) | `daily` | Downloads the latest copy on this schedule. Matching, game details and new VPS releases all read it. |
-| `show_update_count` | bool | `true` | Discovery in the menu shows how many of your games have an update |
+| `show_updates` | bool | `true` | Shows the menu number, the Updates shelf and the notices on a game |
 
 ### `presentation`
 

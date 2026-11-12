@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
@@ -32,6 +33,7 @@ from common.games import (
     media_service,
 )
 from common.games.game import Game
+from common.games.game_metadata import effective_vps_id, game_vps_id, normalize_meta
 from common.games.game_service import load_vpsdb
 from common.games.media_service import CACHE_DIR
 from common.games.tables import ABSENT_SINCE_KEY, entry_filename, table_entries
@@ -217,7 +219,25 @@ def _entry_of(entries: dict[str, dict[str, Any]], state: dict) -> dict[str, Any]
     vps_id = str(state.get("vps_id") or "")
     if not (state.get("matched") and vps_id):
         return None
-    return entries.setdefault(vps_id, {"tables": 0, "held": set(), "bound": set()})
+    return entries.setdefault(vps_id, {"tables": 0, "held": set(), "bound": set(),
+                                       "games": set()})
+
+
+def _hold(held: dict[str, Any], game_id: str, game: Game, state: dict) -> None:
+    """Add what one game holds to the entry it names. The one place an entry is built from a
+    game, for the count of the whole library and for the follow-up of a single game."""
+    known = {kind.listed_as for kind in vps_kinds.KINDS}
+    held["games"].add(game_id)
+    held["tables"] += sum(1 for one in table_entries(getattr(game, "meta_config", None)).values()
+                          if not one.get(ABSENT_SINCE_KEY))
+    held["bound"].update(_bound_ids(state))
+    held["held"].update(str(item.get("kind") or "") for item in state.get("kinds") or []
+                        if item.get("held") and str(item.get("kind") or "") in known)
+
+
+def _stored_entry(found: dict[str, Any]) -> dict[str, Any]:
+    return {"tables": found["tables"], "held": sorted(found["held"]),
+            "bound": sorted(found["bound"]), "games": sorted(found["games"])}
 
 
 def _bound_ids(state: dict) -> set[str]:
@@ -250,17 +270,12 @@ def compute(games: dict, per_game: Callable[[Game, str], dict],
         matched += 1 if state.get("matched") else 0
         held = _entry_of(entries, state)
         if held is not None:
-            held["tables"] += sum(
-                1 for one in table_entries(getattr(game, "meta_config", None)).values()
-                if not one.get(ABSENT_SINCE_KEY))
-            held["bound"].update(_bound_ids(state))
+            _hold(held, game_id, game, state)
         for item in state.get("kinds") or []:
             tally = counts.get(str(item.get("kind") or ""))
             if tally is None:
                 continue
             tally["holding"] += 1 if item.get("held") else 0
-            if held is not None and item.get("held"):
-                held["held"].add(str(item.get("kind") or ""))
             tally["identified"] += 1 if item.get("identified") else 0
             tally["listed"] += 1 if int(item.get("listed") or 0) else 0
             tally["obtainable"] += 1 if int(item.get("obtainable") or 0) else 0
@@ -268,9 +283,7 @@ def compute(games: dict, per_game: Callable[[Game, str], dict],
         "computed": timestamps.utc_now_iso(),
         "games": total,
         "matched": matched,
-        "entries": {vps_id: {"tables": found["tables"], "held": sorted(found["held"]),
-                             "bound": sorted(found["bound"])}
-                    for vps_id, found in entries.items()},
+        "entries": {vps_id: _stored_entry(found) for vps_id, found in entries.items()},
         "kinds": [{"kind": kind.listed_as, "ours": list(kind.ours),
                    "held_in": kind.held_in, **counts[kind.listed_as]}
                   for kind in vps_kinds.KINDS],
@@ -335,9 +348,94 @@ def note_in_library(vps_id: str) -> None:
     if not counted or not vps_id:
         return
     entries = dict(counted.get("entries") or {})
-    entries.setdefault(vps_id, {"tables": 0, "held": [], "bound": []})
+    entries.setdefault(vps_id, {"tables": 0, "held": [], "bound": [], "games": []})
     counted.pop("schema", None)
     store({**counted, "entries": entries})
+
+
+def ties_of(game: Game) -> tuple:
+    """What ties a game to the catalog: the entry in force and, for each table, its file, the
+    release it is tied to and whether it is gone. Two reads that differ here are a match,
+    an unmatch or a replaced table."""
+    meta = normalize_meta(getattr(game, "meta_config", None) or {})
+    return (effective_vps_id(meta),
+            tuple(sorted((str(table_id), str(entry_filename(one) or ""),
+                          str((one.get("source") or {}).get("vps_file_id") or ""),
+                          bool(one.get(ABSENT_SINCE_KEY)))
+                         for table_id, one in table_entries(meta).items()
+                         if isinstance(one, dict))))
+
+
+def counted_as(game: Game, game_id: str) -> bool:
+    """Whether the stored count already has this game under the entry it names now, with
+    the releases its tables are tied to. Read from the stored count and the game's own
+    record alone, so it is cheap enough to ask of a game nothing is known about. True for a
+    library never counted."""
+    counted = stored()
+    if not counted:
+        return True
+    entries = counted.get("entries") or {}
+    meta = normalize_meta(getattr(game, "meta_config", None) or {})
+    named = effective_vps_id(meta)
+    under = {vps_id for vps_id, one in entries.items() if game_id in (one.get("games") or ())}
+    if under != ({named} if named in entries else set()):
+        return False
+    tied = {str((one.get("source") or {}).get("vps_file_id") or "")
+            for one in table_entries(meta).values()
+            if isinstance(one, dict) and not one.get(ABSENT_SINCE_KEY)} - {""}
+    return tied <= set((entries.get(named) or {}).get("bound") or ())
+
+
+_follow_lock = threading.Lock()
+
+
+def follow(game: Game, game_id: str, per_game: Callable[[Game, str], dict] = state_of) -> bool:
+    """Bring the stored count's entries up to date for one game that was just re-read: the
+    entry it names now and any it was counted under, each rebuilt from every game that
+    names it. True when the stored count changed.
+
+    Leaves a library that has never been counted as it is, and the tallies of kinds to the
+    next count. Reads the games it rebuilds from, so a caller must not hold the library's
+    lock.
+    """
+    with _follow_lock:
+        counted = stored()
+        if not counted or not game_id:
+            return False
+        entries = dict(counted.get("entries") or {})
+        games = game_repository.catalog()
+        state = per_game(game, game_id)
+        now = str(state.get("vps_id") or "") if state.get("matched") else ""
+        affected = {vps_id for vps_id, one in entries.items()
+                    if game_id in (one.get("games") or ())}
+        affected.add(now)
+        affected.discard("")
+        rebuilt: dict[str, dict[str, Any]] = {}
+        for vps_id in sorted(affected):
+            held: dict[str, Any] = {"tables": 0, "held": set(), "bound": set(), "games": set()}
+            for other_id, other in games.items():
+                if other_id == game_id:
+                    answer = state
+                elif game_vps_id(other) == vps_id:
+                    try:
+                        answer = per_game(other, other_id)
+                    except Exception:
+                        logger.warning("Could not read VPS state for %s", other_id, exc_info=True)
+                        continue
+                else:
+                    continue
+                if answer.get("matched") and str(answer.get("vps_id") or "") == vps_id:
+                    _hold(held, other_id, other, answer)
+            if held["games"]:
+                rebuilt[vps_id] = _stored_entry(held)
+        updated = {vps_id: one for vps_id, one in entries.items() if vps_id not in affected}
+        updated.update(rebuilt)
+        if updated == entries:
+            return False
+        counted.pop("schema", None)
+        store({**counted, "entries": updated})
+        clear_met_wants({"entries": rebuilt})
+        return True
 
 
 def recompute(games: dict, per_game: Callable[[Game, str], dict],

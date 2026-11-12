@@ -406,6 +406,31 @@ class ShelfTests(unittest.TestCase):
             with self.subTest(held=held):
                 self.assertEqual(0, vps_updates.shelf(found, self.marks(held))["count"])
 
+    def test_a_skipped_or_ignored_move_is_kept_and_labelled_when_asked_for(self) -> None:
+        found = [self.one("a", "Alien", self.move(), self.move("b1"))]
+        held = (self.marks((vps_marks.IGNORED, vps_marks.VERSION, "t1", "1.2")),
+                self.marks((vps_marks.IGNORED, vps_marks.UPDATES, "t1", "")))
+
+        for marks, label in zip(held, (vps_updates.SKIPPED, vps_updates.IGNORED), strict=True):
+            with self.subTest(label=label):
+                [one] = vps_updates.games(found, marks, with_set_aside=True)
+                self.assertEqual({"t1": label, "b1": ""},
+                                 {move["release_id"]: move["set_aside"] for move in one["moves"]})
+
+    def test_a_released_or_game_ignored_move_is_gone_even_when_set_aside_is_asked_for(self) -> None:
+        found = [self.one("a", "Alien", self.move())]
+
+        for held in ((vps_marks.IGNORED, vps_marks.RELEASE, "t1", ""),
+                     (vps_marks.IGNORED, vps_marks.GAME, "g1", "")):
+            with self.subTest(held=held):
+                self.assertEqual([], vps_updates.games(found, self.marks(held),
+                                                       with_set_aside=True))
+
+    def test_the_moves_are_not_labelled_unless_asked_for(self) -> None:
+        [one] = vps_updates.games([self.one("a", "Alien", self.move())], vps_marks.Marks())
+
+        self.assertNotIn("set_aside", one["moves"][0])
+
     def test_a_wanted_release_is_still_an_update(self) -> None:
         found = [self.one("a", "Alien", self.move())]
 

@@ -149,7 +149,7 @@ class TheDiscoveryPage(_Offloaded):
             self) -> None:
         shown = await self._draw(EXTENSION, VPINMEDIADB)
 
-        self.assertEqual(["Updates", "Show Update Count", "note", "Home Shelves", "lede", "full",
+        self.assertEqual(["Updates", "Show Updates", "note", "Home Shelves", "lede", "full",
                           "Sources", "lede"], shown[:8])
         self.assertEqual("Virtual Pinball Spreadsheet", shown[8])
         at = shown.index("sub Last Checked")
@@ -225,7 +225,7 @@ class TheDiscoveryPage(_Offloaded):
         recount.assert_not_awaited()
         await on_change(MagicMock(value=False))
 
-        library.put_config.assert_called_once_with({"updates": {"show_update_count": False}})
+        library.put_config.assert_called_once_with({"updates": {"show_updates": False}})
         recount.assert_awaited_once()
 
     async def test_a_count_setting_that_was_refused_does_not_count_again(self) -> None:

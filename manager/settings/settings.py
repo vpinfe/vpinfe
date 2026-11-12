@@ -97,8 +97,8 @@ ASSETS_NOTE = t("manager.settings.assets_note")
 SOURCES_NOTE = t("manager.settings.sources_note")
 
 DISCOVERY_PAGE = "library.discovery"
-# The setting that shows the number of games with an update on the rail.
-SHOW_COUNT = "show_update_count"
+# The setting that shows updates: the number on the rail, the shelf and the notices.
+SHOW_COUNT = "show_updates"
 VERSION_WAIT = 2.0
 
 # This install's, unlike the checks: a device row is about the machine it is read on.
@@ -1180,6 +1180,7 @@ async def _discovery_page(library: Library, redraw: Callable[[], None],
             async def recount() -> None:
                 if (again := state.get("recount_updates")) is not None:
                     await again()
+                region.refill()
 
             entries.append((panel.HEADING, t("manager.settings.heading_updates")))
             entries += section_rows(library, "updates", counted, values, writable,

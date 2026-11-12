@@ -42,6 +42,7 @@ class HeldCardTests(unittest.IsolatedAsyncioTestCase):
               acts: dict[str, Any] | None = None) -> tuple[list[str], list[str]]:
         library = mock.Mock()
         library.update_moves.return_value = []
+        library.set_aside_moves.return_value = []
         library.media = {}
         kind = _kind(mine=[held])
         one = _Held(held["name"], held["vps_file_id"], {"origin": origin} if origin else None)

@@ -5,12 +5,17 @@ refresh whether it changed; a source that changed has what it lists stamped into
 arrivals, and a change to the spreadsheet owes the library a comparison against it. A process
 owes one from the start, so a page never opens on a library nobody has counted, and the
 comparison is a job the pages only show and never start.
+
+A match, an unmatch, a replaced table or a scan changes what the library holds of the
+catalog, so each owes a comparison too. It starts once those stop for a few seconds, and
+the entry of the game that changed is brought up to date at once, ahead of it.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 from common import events
 from common.config.config_store import ConfigStore
@@ -24,9 +29,18 @@ logger = logging.getLogger("vpinfe.common.online.sources_watch")
 # its own, and an install left running for a week has to notice a daily check coming round.
 _WAKE_SECONDS = 60 * 60
 
+# How long changes to what ties games to the catalog must stop before the comparison they
+# owe starts, so a burst of them costs one.
+_SETTLE_SECONDS = 3.0
+
 _lock = threading.Lock()
 # True from the start: a process owes the library one comparison before anything changes.
 _comparison_owed = True
+_settling: threading.Timer | None = None
+# What last tied each game to the catalog, by game id, to tell a change from a re-read.
+_tied: dict[str, tuple] = {}
+# Set on the thread that is tying tables for a comparison, whose own writes owe nothing.
+_own = threading.local()
 
 
 def refreshed(source: Source, changed: bool) -> None:
@@ -53,11 +67,16 @@ def compare() -> bool:
 
     if not VPSDB_JSON_PATH.exists():
         return False
+    _own.tying = True
     try:
         tied = exact_ties.tie_library()
     except Exception:
         logger.warning("Tying tables to their releases failed", exc_info=True)
         tied = 0
+    finally:
+        _own.tying = False
+        with _lock:
+            _tied.clear()
     if tied is None:
         return False
     if tied:
@@ -68,6 +87,18 @@ def compare() -> bool:
         logger.debug("The comparison with VPS did not start", exc_info=True)
         return False
     return True
+
+
+def owe_comparison_soon() -> None:
+    """Owe the comparison, and start it once nothing has asked for one for a few seconds."""
+    global _comparison_owed, _settling
+    with _lock:
+        _comparison_owed = True
+        if _settling is not None:
+            _settling.cancel()
+        _settling = threading.Timer(_SETTLE_SECONDS, compare_if_owed)
+        _settling.daemon = True
+        _settling.start()
 
 
 def compare_if_owed() -> None:
@@ -89,7 +120,13 @@ def _comparison_ended(job_id: str, *, failed: bool) -> None:
     if one was owed while it ran, it starts now rather than at the next wake."""
     global _comparison_owed
     job = job_registry.get(job_id)
-    if job is None or job.kind != job_registry.KIND_VPS_ROLLUP:
+    if job is None:
+        return
+    if job.kind == job_registry.KIND_LIBRARY_SCAN:
+        if not getattr(_own, "tying", False):
+            owe_comparison_soon()
+        return
+    if job.kind != job_registry.KIND_VPS_ROLLUP:
         return
     if failed:
         with _lock:
@@ -106,8 +143,40 @@ def _on_failed(job_id: str, **_: object) -> None:
     _comparison_ended(job_id, failed=True)
 
 
+def _on_game_changed(game: Any = None, **_: object) -> None:
+    """A game was re-read. If what ties it to the catalog moved, its entry in the stored
+    comparison is brought up to date now and a comparison is owed behind it. A game not seen
+    before is only looked at in the stored count, and acted on if that does not hold it."""
+    if getattr(_own, "tying", False):
+        return
+    from common.games import game_identity, library_vps_state
+
+    if game is None:
+        owe_comparison_soon()
+        return
+    game_id = game_identity.game_id(game)
+    if not game_id:
+        return
+    tied = library_vps_state.ties_of(game)
+    with _lock:
+        before = _tied.get(game_id)
+        _tied[game_id] = tied
+    if before == tied:
+        return
+    try:
+        if before is None and library_vps_state.counted_as(game, game_id):
+            return
+        library_vps_state.follow(game, game_id)
+    except Exception:
+        logger.warning("Could not bring the comparison up to date for %s", game_id,
+                       exc_info=True)
+    owe_comparison_soon()
+
+
 def listen() -> None:
-    """Hear comparisons end. Once is enough; asking again changes nothing."""
+    """Hear comparisons end and games change. Once is enough; asking again changes nothing."""
+    events.unsubscribe(events.GAME_CHANGED, _on_game_changed)
+    events.subscribe(events.GAME_CHANGED, _on_game_changed)
     for name, handler in ((events.JOB_DONE, _on_done), (events.JOB_FAILED, _on_failed)):
         events.unsubscribe(name, handler)
         events.subscribe(name, handler)

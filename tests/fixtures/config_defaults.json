@@ -161,7 +161,7 @@
     "match_new_games": "true",
     "new_games_location": "",
     "refresh_minutes": "0",
-    "show_update_count": "true",
+    "show_updates": "true",
     "update_downloaded_media": "true",
     "update_game_details": "false"
   },
