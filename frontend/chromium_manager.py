@@ -75,6 +75,11 @@ CHROMIUM_BASE_FLAGS = [
 if platform.system() == "Linux":
     CHROMIUM_BASE_FLAGS.append("--password-store=basic")
 
+# On a Mac the same wait is the login keychain: Chromium looks for "Chromium Safe Storage"
+# and stops on a dialog when it cannot be found or unlocked.
+elif platform.system() == "Darwin":
+    CHROMIUM_BASE_FLAGS.extend(["--use-mock-keychain", "--password-store=basic"])
+
 # The windows with a high-DPI override setting, by canonical name.
 OVERRIDE_SECTIONS = {"backglass": "windows.backglass", "scoreview": "windows.scoreview"}
 

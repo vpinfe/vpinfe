@@ -150,7 +150,8 @@ class ChromiumManagerTests(unittest.TestCase):
                        side_effect=lambda path: path == chromium):
             self.assertIsNone(chromium_manager.google_chrome_path())
 
-    def test_only_linux_stores_passwords_in_the_profile_instead_of_the_keyring(self) -> None:
+    def test_linux_and_mac_keep_passwords_out_of_the_keyring_and_the_keychain(self) -> None:
+        """Protects: (d) a first launch stopped on a dialog nobody is there to answer."""
         import importlib.util
         import platform
 
@@ -164,8 +165,11 @@ class ChromiumManagerTests(unittest.TestCase):
             return list(probe.CHROMIUM_BASE_FLAGS)
 
         self.assertIn("--password-store=basic", flags_on("Linux"))
-        for system in ("Darwin", "Windows"):
-            self.assertNotIn("--password-store=basic", flags_on(system))
+        self.assertNotIn("--use-mock-keychain", flags_on("Linux"))
+        for flag in ("--use-mock-keychain", "--password-store=basic"):
+            self.assertIn(flag, flags_on("Darwin"))
+        for flag in ("--use-mock-keychain", "--password-store=basic"):
+            self.assertNotIn(flag, flags_on("Windows"))
 
     def test_parse_additional_chromium_options_supports_multiple_flags(self) -> None:
         options = chromium_manager.parse_additional_chromium_options(
