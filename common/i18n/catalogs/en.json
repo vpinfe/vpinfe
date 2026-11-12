@@ -665,7 +665,8 @@
   "manager.support.inspect.back": "Back to Summary",
   "manager.support.inspect.back_hint": "Return to what was replaced",
   "manager.adds.add_to": "Add to “{name}”",
-  "manager.adds.verb": "Add to Collection",
+  "manager.adds.menu": "Collections",
+  "manager.adds.some_held": "{held:n} of {count:n}",
   "manager.adds.added_games": {
     "one": "Added to “{name}”",
     "other": "Added {count:n} games to “{name}”"
@@ -704,7 +705,6 @@
   },
   "manager.adds.find_collection": "Find a collection",
   "manager.adds.from_elsewhere": "Those are from another VPinFE, so nothing was added",
-  "manager.adds.in_it": "In It",
   "manager.adds.more_collections": "More Collections…",
   "manager.adds.new_collection": "New Collection…",
   "manager.adds.new_collection.help": "Makes a new collection, starting with what you're adding",
@@ -727,6 +727,14 @@
   "manager.adds.excluded_games": {
     "one": "Removed from “{name}”",
     "other": "Removed {count:n} games from “{name}”"
+  },
+  "manager.adds.removed_tables": {
+    "one": "Removed from “{name}”",
+    "other": "Removed {count:n} tables from “{name}”"
+  },
+  "manager.adds.excluded_tables": {
+    "one": "Removed from “{name}”",
+    "other": "Removed {count:n} tables from “{name}”"
   },
   "manager.api.api_answered": "The API answered {status_code}",
   "manager.app_settings.launcher_only": "Works only for the launcher",

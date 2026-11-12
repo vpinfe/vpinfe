@@ -178,7 +178,7 @@ def game_acts(library: Any, games: list[dict[str, Any]], state: dict[str, Any],
         t("manager.backups.take_now"),
         lambda: backup_rows.back_up_games(library, games, lambda: refresh(ids)), group=MOVE))
     if collections is not None:
-        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections,
+        offered.append(panel.Verb(t("manager.adds.menu"), draw=collections,
                                   group=COLLECTIONS))
     if reset := reset_games(library, ids, refresh):
         offered.append(reset)
@@ -580,7 +580,7 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
     if recording := recorder.verb(library, record_media):
         offered.append(replace(recording, group=MEDIA))
     if collections is not None:
-        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections,
+        offered.append(panel.Verb(t("manager.adds.menu"), draw=collections,
                                   group=COLLECTIONS))
     if any(game_tables.runs_its_own_script(item.table) for item in targets):
         offered.append(panel.Verb(t("manager.games.delete_script"), drop_script, danger=True))

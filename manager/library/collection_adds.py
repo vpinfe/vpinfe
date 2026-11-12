@@ -223,6 +223,8 @@ class Took:
     order: list[Row] | None = None
     # A row naming a game or a table the library no longer has.
     for_good: bool = False
+    # The tables a table-level removal acted on.
+    tables: set[Row] = field(default_factory=set)
 
     @property
     def taken(self) -> int:
@@ -272,6 +274,7 @@ def take(library: Any, name: str, games: Sequence[str]) -> Took:
         took.kept_out = [Row(game) for game in games if game in games_now]
         for row in took.kept_out:
             library.exclude_from_collection(name, row.game, row.table)
+            took.tables.add(row)
     return took
 
 
@@ -296,8 +299,33 @@ def take_row(library: Any, name: str, member: dict[str, Any]) -> Took:
     return took
 
 
+def take_tables(library: Any, name: str, rows: Sequence[Row]) -> Took:
+    """Take the tables `rows` name out of `name`: each stored ref that plays one, and the
+    table kept out where its rules would list it again. Blocking: run it off the loop."""
+    collection, members, took = _read(library, name)
+    for row in rows:
+        for member in members:
+            played = (member.get("tables") or [{}])[0]
+            if member.get("origin") != "named" or member.get("game") != row.game \
+                    or str(played.get("id") or "") != row.table:
+                continue
+            ref = row_of(member)
+            library.remove_from_collection(name, ref.game, ref.table)
+            took.removed.append(ref)
+            took.tables.add(row)
+            took.for_good = took.for_good or _refused(member)
+    if (collection.get("type") or "") == "filter":
+        if took.removed:
+            members = library.collection_members(name).get("members") or []
+        tables_now = holds(members)[1]
+        took.kept_out = [row for row in rows if (row.game, row.table) in tables_now]
+        for row in took.kept_out:
+            library.exclude_from_collection(name, row.game, row.table)
+    return took
+
+
 def untake(library: Any, name: str, took: Took) -> None:
-    """Put back what `take` or `take_row` took. Blocking: run it off the loop."""
+    """Put back what `take`, `take_tables` or `take_row` took. Blocking: run it off the loop."""
     for row in took.kept_out:
         library.unexclude_from_collection(name, row.game, row.table)
     for row in took.removed:
@@ -330,6 +358,13 @@ async def remove(library: Any, name: str, games: Sequence[str], *,
     await _taken(partial(take, library, name, list(games)), library, name, then)
 
 
+async def remove_tables(library: Any, name: str, rows: Sequence[Row], *,
+                        then: Callable[[], Awaitable[Any]] | None = None) -> None:
+    """Take the tables `rows` name out of `name`, say so, and offer the way back."""
+    await _taken(partial(take_tables, library, name, list(rows)), library, name, then,
+                 what=TABLES)
+
+
 async def remove_row(library: Any, name: str, member: dict[str, Any], *,
                      then: Callable[[], Awaitable[Any]] | None = None) -> None:
     """Take one row of the list out of `name`, say so, and offer the way back."""
@@ -338,7 +373,7 @@ async def remove_row(library: Any, name: str, member: dict[str, Any], *,
 
 @on_page
 async def _taken(taking: Callable[[], Took], library: Any, name: str,
-                 then: Callable[[], Awaitable[Any]] | None) -> None:
+                 then: Callable[[], Awaitable[Any]] | None, what: str = GAMES) -> None:
     try:
         took = await offload.io(taking)
     except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
@@ -352,9 +387,13 @@ async def _taken(taking: Callable[[], Took], library: Any, name: str,
         if then is not None:
             await then()
 
-    key = "manager.adds.excluded_games" if took.kept_out and not took.removed \
-        else "manager.adds.removed_games"
-    said = t(key, count=took.taken, name=name)
+    kept_out = bool(took.kept_out) and not took.removed
+    if what == TABLES:
+        key = "manager.adds.excluded_tables" if kept_out else "manager.adds.removed_tables"
+        said = t(key, count=len(took.tables), name=name)
+    else:
+        key = "manager.adds.excluded_games" if kept_out else "manager.adds.removed_games"
+        said = t(key, count=took.taken, name=name)
     if took.for_good:
         ui.notify(said, type="positive")
     else:
@@ -435,27 +474,27 @@ def holds_all(held: dict[str, list[dict[str, Any]]], name: str, rows: list[Row])
 
 
 def draw(offer: Offer, known: Read, close: Callable[[], Any]) -> None:
-    """The adds for a grid's row or selection, drawn into the menu being built: the
-    collection added to last, the recent ones under Add to Collection with the rest a
-    dialog away, and Remove where the grid is narrowed to one."""
+    """The adds for a grid's row or selection, drawn into the menu being built. `known`
+    must be read when the menu opens: what it holds decides the quick item and the checks."""
     def go(name: str) -> Callable[[], Any]:
         async def run_it() -> None:
             close()
             await add(offer.library, name, offer.rows, what=offer.what, then=offer.then)
         return run_it
 
-    if known.recent:
+    if known.recent and not holds_all(known.held, known.recent[0], offer.rows):
         top = known.recent[0]
-        _item(t("manager.adds.add_to", name=top), go(top),
-              held=holds_all(known.held, top, offer.rows), slot=False)
-    parent = _item(t("manager.adds.verb"), None, opens=True, slot=False)
+        _item(t("manager.adds.add_to", name=top), go(top), slot=False)
+    parent = _item(t("manager.adds.menu"), None, opens=True, slot=False)
     with parent, ui.menu().props('anchor="top end" self="top start"') as sub:
         if known.recent:
             ui.item_label(t("manager.adds.recent")).props("header") \
                 .classes("manager-menu-header")
             for name in known.recent:
-                _item(name, go(name), smart=known.kinds.get(name, False),
-                      held=holds_all(known.held, name, offer.rows))
+                _toggle(name, _toggler(offer, known.held, close, name),
+                        smart=known.kinds.get(name, False),
+                        have=len(held_rows(known.held.get(name) or [], offer.rows)),
+                        of=len(offer.rows))
             ui.separator()
 
         async def more() -> None:
@@ -479,17 +518,28 @@ def draw(offer: Offer, known: Read, close: Callable[[], Any]) -> None:
         _item(t("manager.adds.remove_from", name=offer.narrowed), take_out, slot=False)
 
 
+def _toggler(offer: Offer, held: dict[str, list[dict[str, Any]]], close: Callable[[], Any],
+             name: str) -> Callable[[], Any]:
+    @on_page
+    async def run_it() -> None:
+        close()
+        if not holds_all(held, name, offer.rows):
+            await add(offer.library, name, offer.rows, what=offer.what, then=offer.then)
+        elif offer.what == TABLES:
+            await remove_tables(offer.library, name, offer.rows, then=offer.then)
+        else:
+            await remove(offer.library, name, [row.game for row in offer.rows],
+                         then=offer.then)
+    return run_it
+
+
 def draw_every(offer: Offer, collections: list[dict[str, Any]],
                held: dict[str, list[dict[str, Any]]], close: Callable[[], Any]) -> None:
     for one in sorted(collections, key=lambda one: str(one.get("name") or "").casefold()):
         name = str(one.get("name") or "")
-
-        async def go(name: str = name) -> None:
-            close()
-            await add(offer.library, name, offer.rows, what=offer.what, then=offer.then)
-
-        _item(name, go, smart=(one.get("type") or "") == "filter",
-              held=holds_all(held, name, offer.rows))
+        _toggle(name, _toggler(offer, held, close, name),
+                smart=(one.get("type") or "") == "filter",
+                have=len(held_rows(held.get(name) or [], offer.rows)), of=len(offer.rows))
     if collections:
         ui.separator()
 
@@ -501,23 +551,43 @@ def draw_every(offer: Offer, collections: list[dict[str, Any]],
 
 
 def _item(label: str, act: Callable[[], Any] | None, *, smart: bool = False,
-          held: bool = False, opens: bool = False, slot: bool = True) -> Any:
-    """One entry: the Smart mark in the leading slot, In It in the trailing one. An entry
-    already true is inert, and stays open on a click it will not act on. `slot=False` is
-    the entry in a menu of verbs, which has no leading slot."""
+          opens: bool = False, slot: bool = True) -> Any:
+    """One entry: the Smart mark in the leading slot, a drill arrow in the trailing one
+    where it opens a submenu. `slot=False` is the entry in a menu of verbs, which has no
+    leading slot."""
     def mark() -> None:
         ui.icon(verbs.SMART).classes("manager-menu-mark")
 
     def trail() -> None:
-        if held:
-            ui.label(t("manager.adds.in_it")).classes("manager-menu-trail")
-        else:
-            ui.icon(verbs.DRILL).classes("manager-menu-trail")
+        ui.icon(verbs.DRILL).classes("manager-menu-trail")
 
-    return panel.menu_entry(label, None if held else act, mark=mark if smart else None,
-                            trail=trail if held or opens else None,
-                            classes="manager-menu-blocked" if held else "",
-                            auto_close=False, slot=slot)
+    return panel.menu_entry(label, act, mark=mark if smart else None,
+                            trail=trail if opens else None, auto_close=False, slot=slot)
+
+
+def _toggle(label: str, act: Callable[[], Any], *, smart: bool, have: int, of: int) -> Any:
+    """A click adds the missing rows, or removes all of them when `have == of`."""
+    whole = have == of
+
+    def mark() -> None:
+        ui.icon(verbs.SMART).classes("manager-menu-mark")
+
+    def trail() -> None:
+        if whole:
+            with ui.element("span").classes("manager-menu-trail manager-menu-toggle"):
+                ui.icon(verbs.CHOOSE).classes("manager-menu-check")
+                ui.label(t("word.remove")).classes("manager-menu-remove")
+        else:
+            ui.label(t("manager.adds.some_held", held=have, count=of)) \
+                .classes("manager-menu-trail")
+
+    item = panel.menu_entry(label, act, mark=mark if smart else None,
+                            trail=trail if have else None,
+                            classes="manager-menu-checked" if whole else "",
+                            auto_close=False)
+    state = "true" if whole else "mixed" if have else "false"
+    item.props(f"role=menuitemcheckbox aria-checked={state}")
+    return item
 
 
 # --- More Collections... and New Collection... ------------------------------------
@@ -613,8 +683,8 @@ async def _pick_one(title: str, collections: list[dict[str, Any]],
 
 def _collection_row(one: dict[str, Any], held: bool, chosen: bool,
                     take: Callable[[], None]) -> None:
-    """One collection to pick: its name, what kind it is and how many games it has, and
-    In It where it holds every row already."""
+    """One collection to pick: its name, what kind it is and how many games it has, and a
+    check where it holds every row already."""
     smart = (one.get("type") or "") == "filter"
     count = int(one.get("count") or 0)
     classes = "items-center gap-3 w-full no-wrap manager-source-row manager-source-row--entry"
@@ -633,7 +703,7 @@ def _collection_row(one: dict[str, Any], held: bool, chosen: bool,
                        else "manager.workbench.hand_picked", count=count)) \
                 .classes("manager-help")
         if held:
-            ui.label(t("manager.adds.in_it")).classes("manager-help shrink-0")
+            ui.icon(verbs.CHOOSE).classes("manager-menu-check shrink-0")
     if not held:
         row.on("click", take)
 

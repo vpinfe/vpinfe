@@ -692,6 +692,7 @@ def build(rows: list[dict[str, Any]], kinds: list[str], library: Any,
         selected[:] = [one for one in selected if str(one["id"]) in by_id]
         if viewing["on"] and on_selection is not None and viewing["ids"]:
             selected[:] = [by_id[str(one["id"])] for one in selected if str(one["id"]) in by_id]
+            await read_collections()
             await on_selection(sorted(viewing["ids"]))
         elif state.get("game") in wanted:
             answer = on_select(by_id.get(str(state["game"])))
@@ -1587,6 +1588,7 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
         for game_id in game_ids:
             await refresh_game(game_id)
         if viewing["on"] and on_selection is not None:
+            await read_collections()
             await on_selection(sorted(viewing["ids"]))
             return
         # The panel is about one of these rows and would otherwise still show what

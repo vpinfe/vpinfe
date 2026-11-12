@@ -64,12 +64,12 @@ class ForAGame(unittest.TestCase):
 
         self.assertEqual(["Launch", "Mark Private", "Match to VPS…", "Auto-Match",
                           "Download Missing Media…", "Send to Device…", "Back Up Now…",
-                          "Add to Collection", "Delete from Disk"], _labels(verbs))
+                          "Collections", "Delete from Disk"], _labels(verbs))
 
     def test_it_is_filed_only_once_the_collections_are_read(self) -> None:
         verbs = game_acts.game_acts(_library(), [_game()], {}, _refresh)
 
-        self.assertNotIn("Add to Collection", _labels(verbs))
+        self.assertNotIn("Collections", _labels(verbs))
 
     def test_launching_is_for_one_game(self) -> None:
         verbs = game_acts.game_acts(_library(), [_game(), _game("medusa")], {}, _refresh)
@@ -169,7 +169,7 @@ class ForATable(unittest.TestCase):
 
         self.assertEqual("Forget", verbs[-1].label)
         self.assertTrue(verbs[-1].danger)
-        self.assertEqual("Add to Collection", verbs[-2].label)
+        self.assertEqual("Collections", verbs[-2].label)
 
     def test_the_play_record_can_be_reset_only_where_there_is_one(self) -> None:
         played = _acts(_table("a", user={"last_played": "2026-10-01T20:00:00Z"}))

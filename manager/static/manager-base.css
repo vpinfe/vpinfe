@@ -1811,7 +1811,7 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
 .q-menu .manager-menu-item:hover .manager-menu-mark,
 .q-menu .manager-menu-item:hover .manager-menu-add { color: var(--ink); }
 .q-menu .manager-menu-item.manager-menu-on .manager-menu-mark { color: var(--accent); }
-/* The trailing slot: a state such as In It, or the arrow of an item that opens more. */
+/* The trailing slot: a state such as a check or a count, or the arrow of an item that opens more. */
 .q-menu .manager-menu-item .manager-menu-trail {
   flex: none;
   margin-left: 12px;
@@ -1819,6 +1819,17 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
   color: var(--ink-3);
 }
 .q-menu .manager-menu-item .q-icon.manager-menu-trail { font-size: var(--icon-menu); }
+.q-menu .manager-menu-item .q-icon.manager-menu-check { color: var(--accent); }
+
+/* A checked entry: the check at rest, the word Remove where a click would take it out, in
+   one box so the entry keeps its width. */
+.q-menu .manager-menu-item .manager-menu-toggle { display: inline-grid; justify-items: end; }
+.q-menu .manager-menu-item .manager-menu-toggle > * { grid-area: 1 / 1; }
+.q-menu .manager-menu-item .manager-menu-remove { visibility: hidden; }
+.q-menu .manager-menu-item.manager-menu-checked:hover .manager-menu-check,
+.q-menu .manager-menu-item.manager-menu-checked:focus-visible .manager-menu-check { visibility: hidden; }
+.q-menu .manager-menu-item.manager-menu-checked:hover .manager-menu-remove,
+.q-menu .manager-menu-item.manager-menu-checked:focus-visible .manager-menu-remove { visibility: visible; }
 
 /* The act, not the row, is what is destructive: the text carries it and the hover band
    stays the ordinary one. A red row reads as an error that has already happened. */
@@ -4362,7 +4373,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-pick-list > .manager-source-row.manager-source-row--chosen {
   background: var(--accent-wash-on);
 }
-/* Offered and already true, so not a choice: shown, the way a menu shows In It. */
+/* Offered and already true, so not a choice: shown, with its check. */
 .manager-source-row--held { opacity: 0.55; }
 /* A mod under the release it is based on. One step however deep: a deeper chain
    stepping further in leaves no room for the words by the third. */

@@ -248,6 +248,39 @@ class AddingToACollection(TempTree):
                                                 self._listed("Friday Night", game, table))
                 self.assertEqual(game != "mm", took.for_good)
 
+    def test_a_table_out_is_that_table_only_and_undo_puts_it_back_in_its_place(self) -> None:
+        with self.store.mutate():
+            self.store.set_order("Friday Night", "manual")
+            self.store.add_member("Friday Night", "afm", "a1")
+            self.store.add_member("Friday Night", "afm", "a2")
+            self.store.add_member("Friday Night", "xen")
+        before = self._refs("Friday Night")
+
+        took = collection_adds.take_tables(self.library, "Friday Night", [Row("afm", "a1")])
+
+        self.assertIn({"game": "afm", "table": "a2"}, self._refs("Friday Night"))
+        self.assertNotIn({"game": "afm", "table": "a1"}, self._refs("Friday Night"))
+        self.assertEqual({Row("afm", "a1")}, took.tables)
+        collection_adds.untake(self.library, "Friday Night", took)
+        self.assertEqual(before, self._refs("Friday Night"))
+
+    def test_the_table_a_game_follows_goes_out_with_the_ref_that_follows_it(self) -> None:
+        with self.store.mutate():
+            self.store.add_member("Friday Night", "afm")
+
+        collection_adds.take_tables(self.library, "Friday Night", [Row("afm", "a2")])
+
+        self.assertNotIn({"game": "afm"}, self._refs("Friday Night"))
+
+    def test_a_table_its_rules_found_is_kept_out_on_its_own_and_undo_lets_it_back(self) -> None:
+        took = collection_adds.take_tables(self.library, "Bally", [Row("afm", "a2")])
+
+        self.assertEqual(([], [Row("afm", "a2")]), (took.removed, took.kept_out))
+        self.assertEqual([{"game": "afm", "table": "a2"}],
+                         self.store.get_excluded_refs("Bally"))
+        collection_adds.untake(self.library, "Bally", took)
+        self.assertEqual([], self.store.get_excluded_refs("Bally"))
+
 
 class TheCollectionsAddedToLast(unittest.TestCase):
     def setUp(self) -> None:

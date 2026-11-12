@@ -665,7 +665,8 @@
   "manager.support.inspect.back": "Ɓàçķ ţö Šûɱɱàřý",
   "manager.support.inspect.back_hint": "Řèţûřñ ţö ŵĥàţ ŵàš řèþŀàçèđ",
   "manager.adds.add_to": "Àđđ ţö “{name}”",
-  "manager.adds.verb": "Àđđ ţö Çöŀŀèçţîöñ",
+  "manager.adds.menu": "Çöŀŀèçţîöñš",
+  "manager.adds.some_held": "{held:n} öƒ {count:n}",
   "manager.adds.added_games": {
     "one": "Àđđèđ ţö “{name}”",
     "other": "Àđđèđ {count:n} ĝàɱèš ţö “{name}”"
@@ -704,7 +705,6 @@
   },
   "manager.adds.find_collection": "Ƒîñđ à çöŀŀèçţîöñ",
   "manager.adds.from_elsewhere": "Ţĥöšè àřè ƒřöɱ àñöţĥèř ṼÞîñƑÈ, šö ñöţĥîñĝ ŵàš àđđèđ",
-  "manager.adds.in_it": "Îñ Îţ",
   "manager.adds.more_collections": "Ḿöřè Çöŀŀèçţîöñš…",
   "manager.adds.new_collection": "Ñèŵ Çöŀŀèçţîöñ…",
   "manager.adds.new_collection.help": "Ḿàķèš à ñèŵ çöŀŀèçţîöñ, šţàřţîñĝ ŵîţĥ ŵĥàţ ýöû'řè àđđîñĝ",
@@ -727,6 +727,14 @@
   "manager.adds.excluded_games": {
     "one": "Řèɱöṽèđ ƒřöɱ “{name}”",
     "other": "Řèɱöṽèđ {count:n} ĝàɱèš ƒřöɱ “{name}”"
+  },
+  "manager.adds.removed_tables": {
+    "one": "Řèɱöṽèđ ƒřöɱ “{name}”",
+    "other": "Řèɱöṽèđ {count:n} ţàƀŀèš ƒřöɱ “{name}”"
+  },
+  "manager.adds.excluded_tables": {
+    "one": "Řèɱöṽèđ ƒřöɱ “{name}”",
+    "other": "Řèɱöṽèđ {count:n} ţàƀŀèš ƒřöɱ “{name}”"
   },
   "manager.api.api_answered": "Ţĥè ÀÞÎ àñšŵèřèđ {status_code}",
   "manager.app_settings.launcher_only": "Ŵöřķš öñŀý ƒöř ţĥè ŀàûñçĥèř",

@@ -144,6 +144,11 @@ class CollectionAddsDrive(unittest.TestCase):
                     await browser.click(selector, nth=int(at) - 1)
                 return click
 
+            async def clear_notices() -> None:
+                """The notices still on screen from the steps before sit over the menu."""
+                await browser.evaluate("document.querySelectorAll('.q-notification')"
+                                       ".forEach(n => n.remove())")
+
             async def outside() -> None:
                 async def press() -> None:
                     await mouse("mousePressed", 1200, 700)
@@ -178,7 +183,7 @@ class CollectionAddsDrive(unittest.TestCase):
                 await said(t("manager.undo.undone"), press)
 
             async def pick_from_dialog(name: str, text: str) -> list:
-                await walk.act(click_text(".q-menu .manager-menu-item", "Add to Collection"),
+                await walk.act(click_text(".q-menu .manager-menu-item", "Collections"),
                                until=HAS % (json.dumps(".q-menu .manager-menu-item"),
                                             json.dumps("More Collections")))
                 await walk.act(click_text(".q-menu .manager-menu-item", "More Collections"),
@@ -205,6 +210,20 @@ class CollectionAddsDrive(unittest.TestCase):
             await undo("Added to")
             seen["undone"] = refs(HAND)
 
+            await right_click("delta", "name")
+            seen["quick_menu"] = await browser.evaluate(MENU)
+            await said("Added to", click_text(".q-menu .manager-menu-item",
+                                              f"Add to “{HAND}”"))
+            await right_click("delta", "name")
+            seen["held_menu"] = await browser.evaluate(MENU)
+            await walk.act(click_text(".q-menu .manager-menu-item", "Collections"),
+                           until=HAS % (json.dumps(".q-menu .manager-menu-item"),
+                                        json.dumps("More Collections")))
+            seen["submenu"] = await browser.evaluate(MENU)
+            seen["toggled"] = await said("Removed from", click_text(
+                ".q-menu .manager-menu-item", HAND))
+            seen["toggled_refs"] = refs(HAND)
+
             await right_click("charlie", "name")
             seen["exception"] = await pick_from_dialog(SMART, "exception")
             seen["exception_refs"] = refs(SMART)
@@ -215,6 +234,18 @@ class CollectionAddsDrive(unittest.TestCase):
             seen["table_menu"] = await browser.evaluate(MENU)
             await pick_from_dialog(HAND, "Added to")
             seen["table_refs"] = refs(HAND)
+            await clear_notices()
+            await right_click("t-a1", "game")
+            await walk.act(click_text(".q-menu .manager-menu-item", "Collections"),
+                           until=HAS % (json.dumps(".q-menu .manager-menu-item"),
+                                        json.dumps("More Collections")))
+            await said("Removed from", click_text(".q-menu .manager-menu-item", HAND))
+            seen["table_removed_refs"] = refs(HAND)
+            await clear_notices()
+            await right_click("t-a1", "game")
+            await said("Added to", click_text(".q-menu .manager-menu-item",
+                                              f"Add to “{HAND}”"))
+            seen["table_back_refs"] = refs(HAND)
 
             await walk.visit(f"/manager?view=games&collection={quote(HAND)}")
             await browser.wait_for(API + ".getDisplayedRowCount() > 0")
@@ -290,12 +321,23 @@ class CollectionAddsDrive(unittest.TestCase):
             seen["panel_x_refs"] = refs(HAND)
             await undo("Removed from")
             seen["panel_x_undone"] = refs(HAND)
+
+            # Removing a notice's element leaves it live to Quasar, which folds a second
+            # "Undone" into the one it still holds, so the earlier ones are left to expire.
+            await browser.wait_for("document.querySelectorAll('.q-notification').length === 0")
+            await walk.act(click_text(".manager-section-work button", "Add to Collection"),
+                           until="!!document.querySelector('.q-menu .manager-menu-item')")
+            seen["menu_removed_said"] = await said("Removed from", click_text(
+                ".q-menu .manager-menu-item", HAND))
+            seen["menu_removed_refs"] = refs(HAND)
+            await undo("Removed from")
+            seen["menu_undone_refs"] = refs(HAND)
         return seen
 
     def test_a_first_menu_offers_the_rest_through_a_dialog(self) -> None:
         labels = [label for label, _inert in self.seen["first_menu"]]
         self.assertEqual("Launch", labels[0])
-        self.assertEqual("Add to Collection / chevron_right", labels[-2])
+        self.assertEqual("Collections / chevron_right", labels[-2])
         self.assertEqual("Delete from Disk", labels[-1])
         self.assertLess(labels.index("Back Up Now…"), len(labels) - 2)
         self.assertIn("Hand-picked · 2 games", self.seen["dialogs"][0])
@@ -308,9 +350,25 @@ class CollectionAddsDrive(unittest.TestCase):
         self.assertIn("bg-positive", classes)
         self.assertIn(("delta", "", "named"), self.seen["added_refs"])
 
-    def test_the_collection_used_last_leads_and_says_when_it_holds_the_row(self) -> None:
-        self.assertIn((f"Add to “{HAND}” / In It", True),
-                      [tuple(entry) for entry in self.seen["again"]])
+    def test_the_collection_used_last_leads_until_it_holds_the_row(self) -> None:
+        quick = f"Add to “{HAND}”"
+        self.assertIn(quick, [label for label, _inert in self.seen["quick_menu"]])
+        for menu in ("again", "held_menu"):
+            self.assertNotIn(quick, [label for label, _inert in self.seen[menu]])
+
+    def test_a_collection_that_holds_the_row_is_checked_and_a_click_takes_it_out(self) -> None:
+        checked = [label for label, inert in self.seen["submenu"]
+                   if label.startswith(HAND) and not inert]
+        self.assertEqual([f"{HAND} / check"], checked)
+        text, classes = self.seen["toggled"]
+        self.assertIn(f"Removed from “{HAND}”", text)
+        self.assertIn("Undo", text)
+        self.assertIn("bg-positive", classes)
+        self.assertNotIn("delta", [game for game, _t, _o in self.seen["toggled_refs"]])
+
+    def test_a_table_is_taken_out_by_its_own_check_and_put_back(self) -> None:
+        self.assertNotIn(("alpha", "t-a1", "named"), self.seen["table_removed_refs"])
+        self.assertIn(("alpha", "t-a1", "named"), self.seen["table_back_refs"])
 
     def test_undo_takes_the_add_back(self) -> None:
         self.assertNotIn("delta", [game for game, _t, _o in self.seen["undone"]])
@@ -346,10 +404,18 @@ class CollectionAddsDrive(unittest.TestCase):
         self.assertIn(("bravo", "", "filter"), self.seen["put_back"])
 
     def test_a_game_s_panel_offers_every_collection_and_a_new_one(self) -> None:
-        self.assertEqual([[f"{HAND} / In It", True],
+        self.assertEqual([[f"{HAND} / check", False],
                           ["settings_suggest / Last Played", False],
                           [f"settings_suggest / {SMART}", False],
                           ["New Collection…", False]], self.seen["game_menu"])
+
+    def test_the_check_in_a_game_s_menu_takes_it_out_and_undo_puts_it_back(self) -> None:
+        text, classes = self.seen["menu_removed_said"]
+        self.assertIn(f"Removed from “{HAND}”", text)
+        self.assertIn("Undo", text)
+        self.assertIn("bg-positive", classes)
+        self.assertNotIn("bravo", [game for game, _t, _o in self.seen["menu_removed_refs"]])
+        self.assertEqual(self.seen["panel_x_undone"], self.seen["menu_undone_refs"])
 
     def test_undoing_a_removal_puts_it_back_in_its_place(self) -> None:
         order = [game for game, _t, origin in self.seen["put_back_refs"] if origin == "named"]

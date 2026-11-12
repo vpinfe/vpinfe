@@ -1054,7 +1054,7 @@ called Actions, which names the mechanism and says nothing about the subject.
 - **A menu is grouped by what its entries act on.** Set `Verb.group` and `verb_entries` draws a
   rule where it changes: opening or playing, then what the item is (details, matching), then
   its media, then moving or copying it elsewhere, then collections. A group of one still gets its
-  own rule, and an entry that draws its own items (Add to Collection) does not draw one.
+  own rule, and an entry that draws its own items (Collections) does not draw one.
 - **Dots mean the item asks for something first.** `…` (the one character, never three
   periods) ends a label that opens a choice or a form before it acts: *Rate…*, *Back Up Now…*,
   *Copy to Devices…*. A plain yes or no confirm takes none, because the confirm is the
@@ -1775,12 +1775,15 @@ What's busy, puts them in a `.manager-tile-rows`: a name, a share and a size to 
     every item is accent-colored the color stops meaning anything.
   - **One leading slot**, fixed width, for whatever marks the item; items with no mark
     indent to it so the labels line up. `panel.menu_entry` draws an item that way. A menu of
-    verbs has no slot, so an entry in one (Add to Collection among a row's acts) is drawn with
+    verbs has no slot, so an entry in one (Collections among a row's acts) is drawn with
     `slot=False` and carries no mark, so one icon never shifts the other labels. A list of
     collections keeps its slot, where the Smart mark tells entries apart.
-  - **The trailing slot is state** - a checkmark, a count, a shortcut, or *In It* on an
-    entry that is already true, which is then inert. Never a second action, except the info
-    mark that gives a refused item's reason.
+  - **The trailing slot is state** - a checkmark, a count or a shortcut. Never a second
+    action, except the info mark that gives a refused item's reason, and a checkmark that is
+    itself the toggle, as on the Collections entries a table is in (the menu on a table's
+    row, and the all-collections menu on the game panel), which shows *Remove* in its place
+    on hover. A pick-one list that cannot remove, such as the More Collections dialog, shows
+    the same checkmark and is inert.
   - A **destructive** item colors its *text*; the band stays the ordinary one. A red row
     reads as an error that has already happened.
   - **A separator divides groups**, never decorates.
