@@ -1,4 +1,4 @@
-"""A game's ROM files as rows of the asset lens, each with the tables that read it."""
+"""A game's ROM files and readmes as rows of the asset lens, ROMs with the tables that read them."""
 
 from __future__ import annotations
 
@@ -94,6 +94,18 @@ class RomFilesInTheAssetLens(TempTree):
 
     def test_rom_is_a_kind_the_lens_lists(self) -> None:
         self.assertIn("rom", asset_lens.KINDS)
+
+    def test_each_readme_file_in_the_folder_is_a_row(self) -> None:
+        rows = [row for row in self._rows({"Readme.TXT": b"t", "a.nfo": b"n", "notes.txt": b"t",
+                                           "extra/readme.txt": b"t"}, kind="readme")]
+
+        self.assertEqual(["a.nfo", "Readme.TXT"], [row["file"] for row in rows])
+        for row in rows:
+            self.assertEqual(("readme", row["file"], True, None),
+                             (row["kind"], row["path"], row["present"], row["serves"]))
+
+    def test_a_game_with_no_readme_has_no_readme_row(self) -> None:
+        self.assertEqual([], self._rows({}, kind="readme"))
 
     def test_each_pup_pack_folder_is_a_row_of_its_own(self) -> None:
         rows = self._rows({"pupvideos/tom_13/a.mp4": b"x", "pupvideos/afm_113/b.mp4": b"x"})

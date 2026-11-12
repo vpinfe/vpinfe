@@ -69,6 +69,9 @@ GLYPHS = {
     "rule_sheet": "description",
 }
 
+# Kinds whose file is edited in the panel, and so can hold changes not yet saved.
+DRAFTABLE = frozenset({"rule_sheet"})
+
 
 def _glyph_for(kind: str) -> str | None:
     """The stand-in for a kind with nothing to show, or None if it has a frame.
@@ -125,7 +128,8 @@ def _state(entry: dict[str, Any]) -> str:
 
 def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
           on_pick: Callable[[str], None] | None, selected: str | None,
-          differing: int = 0, offered: int = 0, wont_play: Sequence[str] = ()) -> None:
+          differing: int = 0, offered: int = 0, wont_play: Sequence[str] = (),
+          marks: dict[str, ui.label] | None = None, drafted: bool = False) -> None:
     state = _state(entry)
     version = entry.get("version")
     src = art.media(game_id, kind, table_id, version=version, size=art.PANEL)
@@ -172,6 +176,12 @@ def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
             if state != "missing" and wont_play:
                 ui.label(t("manager.plays_on.wont_play")) \
                     .classes("manager-tier manager-tier--warn manager-mediatile-plays")
+            if marks is not None and state != "missing" and kind in DRAFTABLE:
+                # Drawn for every such tile and shown for the one with a draft, so a
+                # draft that starts or ends is a toggle and not a redraw of the map.
+                marks[kind] = ui.label(t("word.not_saved")) \
+                    .classes("manager-mediatile-draft")
+                marks[kind].set_visibility(drafted)
             pages = mediapages.count(kind, entry)
             if pages >= mediapages.STRIP_FROM:
                 ui.label(t("manager.mediamap.pages", count=pages)) \
@@ -216,7 +226,8 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
           overrides: dict[str, list[dict[str, Any]]] | None = None,
           offered: dict[str, int] | None = None,
           kept: set[str] | None = None,
-          wont_play: dict[str, list[str]] | None = None) -> None:
+          wont_play: dict[str, list[str]] | None = None,
+          drafted: set[str] | None = None) -> Callable[[set[str]], None]:
     """Draw the map into the current container.
 
     `table_id` is the lens: empty for the game's shared media, or one table's. The map
@@ -231,7 +242,11 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
     nobody wants.
 
     `wont_play` is, by kind, each device that won't play that kind's file, in words.
+
+    `drafted` is the kinds whose file has changes typed and not saved. Returns the function
+    that sets that set again, which marks and unmarks the tiles in place.
     """
+    marks: dict[str, ui.label] = {}
     if kept is not None:
         entries = {kind: entry for kind, entry in entries.items() if kind in kept}
 
@@ -242,7 +257,8 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
                     with ui.element("div").classes("manager-mediaslot"):
                         _tile(game_id, table_id, kind, entries[kind], on_pick, selected,
                               len((overrides or {}).get(kind) or []),
-                              (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()))
+                              (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()),
+                              marks, kind in (drafted or ()))
 
     # Roughly the width browse gets once work takes its half. The rows inside are two
     # tile columns wide and centered, so a wider pane leaves the surplus either side.
@@ -257,6 +273,13 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
             ui.element("div").classes("manager-mediatile-rule")
             draw(extras)
     ui.run_javascript(_HOVER)
+
+    def mark(kinds: set[str]) -> None:
+        for kind, label in marks.items():
+            if not label.is_deleted:
+                label.set_visibility(kind in kinds)
+
+    return mark
 
 
 def summary(entries: dict[str, dict[str, Any]]) -> tuple[int, int, int]:

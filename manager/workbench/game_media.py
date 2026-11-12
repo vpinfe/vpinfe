@@ -15,7 +15,12 @@ from common.failures import why
 from common.games import file_move as moved_files
 from common.games import file_ops
 from common.i18n import t
-from common.media.media_specs import PAGED_KINDS, media_family, media_label_map
+from common.media.media_specs import (
+    PAGED_KINDS,
+    held_family,
+    media_family,
+    media_label_map,
+)
 from manager.devices import plays_on
 from manager.kit import art, confirm, deeplink, game_tables, media_ownership, offload, panel, verbs
 from manager.kit.on_page import on_page
@@ -30,6 +35,8 @@ from manager.library import (
     mediapages,
     mediasource,
     mediaview,
+    rule_sheet,
+    text_editor,
     uploads,
 )
 from manager.library import record as recorder
@@ -78,6 +85,14 @@ def _file_line(context: dict[str, Any], kind: str, name: str, view: str,
         panel.copy_text(where)
 
 
+def _drafted_kinds(entries: dict[str, dict[str, Any]], game_id: str,
+                   drafts: set[tuple[str, str]]) -> set[str]:
+    """The kinds whose file has text typed and not saved, from the editor's draft keys."""
+    held = {path for game, path in drafts if game == game_id}
+    return {kind for kind in mediamap.DRAFTABLE
+            if str((entries.get(kind) or {}).get("path") or "") in held}
+
+
 async def _media_block(context: dict[str, Any]) -> None:
     """The map, and whatever tile is picked out of it."""
     library, game_id = context["library"], context["game_id"]
@@ -100,11 +115,14 @@ async def _media_block(context: dict[str, Any]) -> None:
         wont_play = await _wont_play(context)
         holder.clear()
         with holder:
-            mediamap.build(entries, game_id, table_id or "",
-                           on_pick=lambda kind: _pick_slot(context, kind, draw),
-                           selected=context["slot"]["kind"],
-                           overrides=overrides, offered=offered, kept=kept,
-                           wont_play=wont_play)
+            mark = mediamap.build(entries, game_id, table_id or "",
+                                  on_pick=lambda kind: _pick_slot(context, kind, draw),
+                                  selected=context["slot"]["kind"],
+                                  overrides=overrides, offered=offered, kept=kept,
+                                  wont_play=wont_play,
+                                  drafted=_drafted_kinds(entries, game_id,
+                                                         set(text_editor.drafts_of(
+                                                             context["state"]))))
             # A slot arrived at by link can be anywhere in a map of twenty tiles,
             # including below the fold - and a selection you cannot see is not one.
             # `nearest` moves the least that makes it visible, so a tile already on
@@ -123,6 +141,8 @@ async def _media_block(context: dict[str, Any]) -> None:
                   if (tile) tile.scrollIntoView({block: 'nearest', inline: 'nearest'});
                 });
                 """)
+        context["state"]["mark_unsaved_media"] = lambda drafts: mark(
+            _drafted_kinds(entries, game_id, drafts))
         dock = context.get("dock")
         if dock is not None:
             dock.clear()
@@ -354,6 +374,7 @@ def _slot_art(context: dict[str, Any], kind: str, entry: dict[str, Any],
     game_id, table_id = context["game_id"], context["lens"]
     label = media_label_map().get(kind, kind)
     path = str((detail or {}).get("path") or "")
+    family = held_family(kind, path or str(entry.get("path") or ""))
     chosen = (edit_tools.tools_for(media_family(kind),
                                    animated=edit_tools.is_animated(_on_disk(context, path)))
               if then is not None and entry.get("present") and path else [])
@@ -364,11 +385,15 @@ def _slot_art(context: dict[str, Any], kind: str, entry: dict[str, Any],
     with box:
         if entry.get("present"):
             version = entry.get("version")
-            mediaview.preview(art.media(game_id, kind, table_id or "", version=version,
-                               size=art.PANEL, page=page), kind, label, shown)
+            held = path or str(entry.get("path") or "")
+            address = art.media(game_id, kind, table_id or "", version=version,
+                                size=art.PANEL, page=page)
+            if not (family == "doc" and rule_sheet.draw(
+                    context, kind, label, address, held, then=then)):
+                mediaview.preview(address, kind, label, shown, family=family)
             # On the picture, where the map puts it. Images only: a video keeps its
             # native controls here, and those carry a full-screen button already.
-            if media_family(kind) == "image":
+            if family == "image":
                 if mediapages.count(kind, entry) >= mediapages.STRIP_FROM:
                     enlarge = partial(
                         mediaview.open_pages,
@@ -378,7 +403,7 @@ def _slot_art(context: dict[str, Any], kind: str, entry: dict[str, Any],
                     enlarge = partial(
                         mediaview.open_viewer,
                         art.media(game_id, kind, table_id or "", version=version),
-                        kind, label)
+                        kind, label, family=family)
                 ui.button(icon=verbs.ENLARGE, on_click=lambda: enlarge()) \
                     .props("flat dense round size=sm") \
                     .classes("manager-slot-zoom").tooltip(t("word.enlarge"))

@@ -18,7 +18,7 @@ import mimetypes
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
 
 from common.i18n import t
@@ -333,6 +333,15 @@ def media_family(kind: str) -> str:
     spec = next((item for item in MEDIA_SPECS
                  if item.kind == canonical_kind(kind)), None)
     return _FAMILY_NAMES.get(spec.family, "") if spec else ""
+
+
+def held_family(kind: str, filename: str) -> str:
+    """A rule sheet's kind is a document family that also accepts pictures, so a picture
+    file draws as an image."""
+    family = media_family(kind)
+    if family == "doc" and PurePosixPath(filename).suffix.lower() in IMAGE_FAMILY:
+        return "image"
+    return family
 
 
 PAGED_KINDS = frozenset(spec.kind for spec in MEDIA_SPECS if spec.pages)

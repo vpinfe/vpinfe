@@ -54,7 +54,7 @@ AREAS: dict[str, tuple[str, ...]] = {
                 "info_row", "convert_row", "get_tool", "which_game",
                 "file_acts", "rom_acts", "file_facts", "file_move", "move_picker", "move_plan",
                 "game_acts",
-                "row_drag", "tageditor", "text_editor", "wizard_settle"),
+                "row_drag", "rule_sheet", "tageditor", "text_editor", "wizard_settle"),
     "settings": ("settings", "sections", "attract", "binding_editor", "binding_table",
                  "chrome_options", "commands", "displays", "dmd_panel", "dof", "folders",
                  "input_page", "library_folders", "input_relay", "placement_panel", "recording",

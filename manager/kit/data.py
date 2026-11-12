@@ -529,13 +529,19 @@ class Library:
     def place_asset(self, game_id: str, table_id: str, kind: str,
                     filename: str, data: bytes) -> dict:
         result = self._client.place_asset(game_id, table_id, kind, filename, data)
-        self._forget_tables(game_id)
+        self._forget_folder_asset(game_id)
         return result
 
     def remove_asset(self, game_id: str, path: str) -> dict:
         result = self._client.remove_asset(game_id, path)
-        self._forget_tables(game_id)
+        self._forget_folder_asset(game_id)
         return result
+
+    def _forget_folder_asset(self, game_id: str) -> None:
+        """The game's row says which folder-wide kinds it holds, a PuP pack, music or a
+        readme, so it is read again with the tables."""
+        self._forget_tables(game_id)
+        self._forget_game(game_id)
 
     def set_table_hidden(self, game_id: str, table_id: str, hidden: bool) -> dict:
         result = self._client.set_table_hidden(game_id, table_id, hidden)
@@ -1933,10 +1939,10 @@ class Library:
         return self._client.asset_text(game_id, path)
 
     def save_asset_text(self, game_id: str, path: str, text: str, version: str,
-                        replace_changed: bool = False,
-                        keep_copy: bool = True) -> dict[str, Any]:
+                        replace_changed: bool = False, keep_copy: bool = True,
+                        media: bool = False) -> dict[str, Any]:
         return self._client.put_asset_text(game_id, path, text, version,
-                                           replace_changed, keep_copy)
+                                           replace_changed, keep_copy, media)
 
     def place_backglass_displays(self, game_id: str, path: str, target: str,
                                  box: tuple[int, int, int, int] | None) -> dict[str, Any]:

@@ -12,6 +12,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlencode
 
@@ -28,11 +29,16 @@ from manager.kit.on_page import on_page
 
 logger = logging.getLogger("vpinfe.manager.library.text_editor")
 
-# The asset kinds whose files this edits, and the language each is highlighted as.
+# The kinds whose files this edits, and the language each is highlighted as. A rule sheet
+# is a media kind and its language follows the file: see `language_of`.
 LANGUAGES: dict[str, SUPPORTED_LANGUAGES | None] = {"script": "VBScript", "ini": "Properties files",
                                     "pov": "XML", "scv": None, "nix": None, "patch": "diff",
-                                    "readme": "Markdown"}
-WRAPPED = frozenset({"readme"})
+                                    "readme": "Markdown", "rule_sheet": None}
+WRAPPED = frozenset({"readme", "rule_sheet"})
+# Media kinds: a save files its copy under Backups > Media, and the file has no window of
+# its own, which is addressed by an asset kind.
+MEDIA_KINDS = frozenset({"rule_sheet"})
+_RULE_SHEET_LANGUAGES: dict[str, SUPPORTED_LANGUAGES] = {".md": "Markdown", ".html": "HTML"}
 CHANGED, NO_COPY = "changed", "no_copy"
 
 # The browser's own question, for a reload or a link out while a rule or a file is unsaved.
@@ -74,6 +80,12 @@ def draft_key(game_id: str, path: str) -> tuple[str, str]:
 
 def edits(kind: str) -> bool:
     return kind in LANGUAGES
+
+
+def language_of(kind: str, path: str) -> SUPPORTED_LANGUAGES | None:
+    if kind == "rule_sheet":
+        return _RULE_SHEET_LANGUAGES.get(PurePosixPath(path).suffix.lower())
+    return LANGUAGES[kind]
 
 
 def wire() -> Callable[[Any], None]:
@@ -125,9 +137,10 @@ def waiting(state: dict[str, Any]) -> list[str]:
 
 def note(state: dict[str, Any]) -> None:
     """After a draft starts or ends: the grid's marks and the browser's reload question."""
-    mark = state.get("mark_unsaved_files")
-    if callable(mark):
-        mark(set(drafts_of(state)))
+    for hook in ("mark_unsaved_files", "mark_unsaved_media"):
+        mark = state.get(hook)
+        if callable(mark):
+            mark(set(drafts_of(state)))
     flag(state)
 
 
@@ -178,6 +191,23 @@ class Held:
         self.touch()
 
 
+def _closing(context: dict[str, Any], dialog: Any) -> dict[str, Any]:
+    """The context for an enlarged editor: where an editor opened in place goes back to the
+    page behind it on Cancel or Save, the dialog closes too."""
+    if not callable(context.get("after_cancel")):
+        return context
+
+    def closes(after: Any) -> Any:
+        async def run() -> None:
+            dialog.close()
+            if callable(after):
+                await after()
+        return run
+
+    return {**context, "after_cancel": closes(context["after_cancel"]),
+            "after_save": closes(context.get("after_save"))}
+
+
 def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any],
            locked: str, locked_help: str = "", *,
            held: Held | None = None) -> None:
@@ -199,6 +229,8 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
         held = Held(draft["base"] if draft else found["text"],
                     draft["version"] if draft else found["version"])
     name = str((context.get("game") or {}).get("name") or game_id) + " - " + label
+    # An editor opened in place is left through Cancel, with or without a change typed.
+    leaves = callable(context.get("after_cancel"))
     big: ui.button | None = None
     opener: ui.button | None = None
     tip: ui.tooltip | None = None
@@ -211,8 +243,8 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
             return
         dirty = key in drafts
         said.set_visibility(dirty)
-        cancel.set_visibility(dirty or not locked)
-        cancel.set_enabled(dirty and not held.saving)
+        cancel.set_visibility(dirty or not locked or leaves)
+        cancel.set_enabled((dirty or leaves) and not held.saving)
         save.set_enabled(dirty and not held.saving)
         if big is not None:
             big.set_enabled(not held.saving)
@@ -239,7 +271,8 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
                         .classes("manager-help truncate")
                 ui.space()
                 panel.icon_only(verbs.CLOSE, dialog.close, hint=t("word.close"))
-            editor(context, path, label, found, locked, locked_help, held=held)
+            editor(_closing(context, dialog), path, label, found, locked, locked_help,
+                   held=held)
         dialog.on("hide", catch_up)
         dialog.open()
 
@@ -273,7 +306,8 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
     async def send(text: str, replace_changed: bool, keep_copy: bool) -> None:
         try:
             done = await offload.io(library.save_asset_text, game_id, path, text,
-                                    held.version, replace_changed, keep_copy)
+                                    held.version, replace_changed, keep_copy,
+                                    kind in MEDIA_KINDS)
         except ApiError as exc:
             refused = exc.details.get("refused")
             if refused == CHANGED:
@@ -346,6 +380,8 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
         code.value = held.base
         held.touch()
         note(state)
+        if callable(after := context.get("after_cancel")):
+            await after()
 
     with ui.element("div").classes("manager-editor"):
         with ui.row().classes("items-center gap-2 w-full no-wrap manager-editor-strip"):
@@ -354,7 +390,7 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
             if locked:
                 panel.line(locked, hint=locked_help, classes="manager-help truncate")
             with ui.row().classes("items-center gap-1 no-wrap ml-auto"):
-                if not windowed:
+                if not windowed and kind not in MEDIA_KINDS:
                     with ui.element("span") as shelf:
                         opener = panel.icon_only(verbs.OPEN_WINDOW, lambda: None)
                         opener.on("click", js_handler=(
@@ -374,7 +410,7 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
                 save.set_visibility(False)
         with ui.element("div").classes("manager-editor-box"):
             code = ui.codemirror(
-                current(), language=LANGUAGES[kind],
+                current(), language=language_of(kind, path),
                 theme=_THEMES[_DARK.get(ui.context.client, True)],
                 line_wrapping=kind in WRAPPED, on_change=changed,
                 keymap={"Mod-s": save_it})

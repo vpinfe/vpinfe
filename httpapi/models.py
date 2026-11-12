@@ -2194,9 +2194,10 @@ class AssetSlot(ApiModel):
     vps_id: str = ""
     binding: str
     present: bool = False
-    # How many tables this file answers for. Null on a file named for one table, and
-    # **0 on a folder-named file for a kind VPX resolves stem-only** - a `.vbs` or a
-    # `.pov` named for the folder is inert, which is a thing worth being able to see.
+    # How many tables this file answers for. Null on a file named for one table and on a
+    # readme, which no table reads, and **0 on a folder-named file for a kind VPX
+    # resolves stem-only** - a `.vbs` or a `.pov` named for the folder is inert, which is
+    # a thing worth being able to see.
     serves: int | None = None
     file: str | None = None
     path: str | None = None
@@ -2364,12 +2365,14 @@ class AssetText(ApiModel):
 
 class AssetTextSave(ApiModel):
     """`replace_changed` writes over a file that is no longer the version read, and
-    `keep_copy` false writes without the copy of the file as it was."""
+    `keep_copy` false writes without the copy of the file as it was. `media` files that
+    copy under Media, for a file that is one of the game's media, rather than Assets."""
 
     text: str
     version: str
     replace_changed: bool = False
     keep_copy: bool = True
+    media: bool = False
 
 
 class AssetTextSaved(ApiModel):

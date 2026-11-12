@@ -5,6 +5,7 @@ screeninfo==0.8.1
 olefile==0.47
 pynput==1.8.2
 nicegui==3.16.0
+markdown2==2.5.5
 platformdirs==4.11.7
 pillow==12.3.0
 qrcode==8.2

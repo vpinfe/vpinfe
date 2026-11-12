@@ -31,7 +31,7 @@ from common.games import (
     media_probe,
     table_lens,
 )
-from common.games.asset_registry import altsound_folder, altsound_folders, spec_for
+from common.games.asset_registry import altsound_folder, altsound_folders, is_readme, spec_for
 from common.games.formats import directb2s_parser
 from common.games.game_metadata import effective_vps_id
 from common.games.game_repository import game_to_row
@@ -51,6 +51,9 @@ _FOLDER_KINDS = ("pup_pack", "alt_color", "alt_sound", "music")
 # whichever of its tables name it.
 ROM_KIND = "rom"
 
+# The author's notes: one row per file in the game folder's root that reads as a readme.
+README_KIND = "readme"
+
 # A row with no file still carries every field one with a file does, so nothing reading
 # these has to ask which shape it got.
 _ABSENT = {"binding": "none", "present": False, "table": "", "table_file": "",
@@ -63,8 +66,8 @@ _BY_BINDING = {asset_resolver.BINDING_DEDICATED: "table",
 
 
 # Every kind a row of this lens can be about: the five resolved per table, the four the
-# folder holds whole, then ROM files. What a filter on the Kind column offers.
-KINDS = (*asset_resolver.PER_TABLE_KINDS, *_FOLDER_KINDS, ROM_KIND)
+# folder holds whole, then ROM files and readmes. What a filter on the Kind column offers.
+KINDS = (*asset_resolver.PER_TABLE_KINDS, *_FOLDER_KINDS, ROM_KIND, README_KIND)
 
 
 def label_of(kind: str) -> str:
@@ -217,6 +220,24 @@ def _rom_rows(game_id: str, row: dict, game: Any, game_dir: Path, recorded: dict
     return found
 
 
+def _readme_rows(game_id: str, row: dict, game_dir: Path, files: list[str], recorded: dict,
+                 hosts: dict) -> list[dict]:
+    """A readme serves no table, so `serves` is None: 0 would read as Unused."""
+    base = _row(game_id, row, README_KIND)
+    found = []
+    for name in sorted((one for one in files if is_readme(one)), key=str.lower):
+        path = game_dir / name
+        found.append({**base, **_ABSENT,
+                      "id": f"{game_id}:{README_KIND}:{name}",
+                      "binding": "game", "present": True, "file": name,
+                      "path": asset_origin.path_of(game_dir, path) or None,
+                      "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
+                      "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+                      "matched_by": asset_origin.basis_of(recorded, game_dir, path) or None,
+                      "serves": None, "size_bytes": os.path.getsize(path)})
+    return found
+
+
 def listing(limit: int = 0, offset: int = 0, game: str = "",
             kind: str = "") -> dict[str, Any]:
     """One row per asset file the library holds, plus one per file it does not.
@@ -231,6 +252,7 @@ def listing(limit: int = 0, offset: int = 0, game: str = "",
         kinds = [item for item in kinds if item == kind]
         folder_kinds = [item for item in folder_kinds if item == kind]
     with_roms = not kind or kind == ROM_KIND
+    with_readme = not kind or kind == README_KIND
     fallback = {item.key: item.folder_fallback for item in asset_resolver.VPX_ASSET_KINDS}
 
     found: list[dict] = []
@@ -282,6 +304,9 @@ def listing(limit: int = 0, offset: int = 0, game: str = "",
         if with_roms:
             found.extend(_rom_rows(game_id, row, entry, game_dir, recorded, hosts))
 
+        if with_readme:
+            found.extend(_readme_rows(game_id, row, game_dir, files, recorded, hosts))
+
         for name in folder_kinds:
             here = _folder_state(name, game_dir, subdirs)
             if name == "pup_pack" and (packs := _pup_packs(game_dir, here)):
@@ -327,15 +352,21 @@ def inside(game_dir: Path, path: str) -> Path:
     return target
 
 
+def legacy_codepage(path: Path) -> str:
+    """The code page a text file that is not UTF-8 is read in: the DOS one an .nfo was
+    drawn in, and otherwise the Windows one most scripts were written in."""
+    return "cp437" if path.suffix.lower() == ".nfo" else "cp1252"
+
+
 def _head(path: Path, lines: int) -> str:
     """The first `lines` lines, or all of them for 0. UTF-8 where it is, and otherwise
-    the Windows code page most scripts were written in."""
+    the file's legacy code page."""
     with path.open("rb") as handle:
         data = handle.read(_ALL_LINES_BYTES if lines == 0 else 256 * max(lines, 1))
     try:
         text = codecs.getincrementaldecoder("utf-8")().decode(data, final=False)
     except UnicodeDecodeError:
-        text = data.decode("cp1252", errors="replace")
+        text = data.decode(legacy_codepage(path), errors="replace")
     kept = text.lstrip("\ufeff").splitlines()
     return "\n".join(kept if lines == 0 else kept[:lines])
 

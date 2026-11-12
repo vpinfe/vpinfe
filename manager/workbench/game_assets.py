@@ -165,7 +165,7 @@ def _section(context: dict[str, Any], kind: str, files: list[dict[str, Any]],
                     rows[one["id"]] = element
             told = kind == "rom" and _table_rom(chosen, here)
             if not here and not told:
-                _nothing_here(context, kind, scripted)
+                _nothing_here(scripted)
 
     return draw
 
@@ -194,13 +194,10 @@ def _table_rom(chosen: dict[str, Any] | None, here: list[dict[str, Any]]) -> boo
     return True
 
 
-def _nothing_here(context: dict[str, Any], kind: str, scripted: bool) -> None:
+def _nothing_here(scripted: bool) -> None:
     if scripted:
         panel.line(game_tables.word_for(game_tables.SCRIPT_WORDS, False),
                    hint=t("manager.workbench.script_embedded"))
-        return
-    if kind == "readme" and ((context["game"].get("assets") or {}).get(kind) or {}).get("present"):
-        _state(t("word.present"), "on")()
         return
 
 

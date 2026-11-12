@@ -12,7 +12,7 @@ from pathlib import Path
 from common import service_errors
 from common.atomic_write import staged_for
 from common.games import asset_lens, game_lens, media_ops, media_placement, table_lens
-from common.games.asset_registry import spec_for
+from common.games.asset_registry import is_readme, spec_for
 from common.games.asset_resolver import ROMS_FOLDER, VPX_ASSET_KINDS, AssetKind
 from common.games.game import Game
 from common.games.game_repository import game_to_row
@@ -159,8 +159,8 @@ def place_file(game_id: str, kind: str, table_id: str, source: Path,
 
 
 def remove(game_id: str, path: str) -> dict:
-    """Delete one asset file, one kind's folder, or a file directly in the ROM folder,
-    named by its path in the game's folder."""
+    """Delete one asset file, one kind's folder, a file directly in the ROM folder, or a
+    readme directly in the game's folder, named by its path in the game's folder."""
     game = game_lens.game_for_writing(game_id)
     root = _folder(game).resolve()
     found = asset_lens.inside(root, path)
@@ -172,6 +172,8 @@ def remove(game_id: str, path: str) -> dict:
         found.unlink()
         settle_if_backglass(game_id, found)
     elif found.is_file() and found.parent.relative_to(root).as_posix().lower() == ROMS_FOLDER:
+        found.unlink()
+    elif found.is_file() and found.parent == root and is_readme(found.name):
         found.unlink()
     else:
         raise service_errors.RefusedError(t("error.assets.not_removable"),

@@ -1,4 +1,4 @@
-"""Removing one ROM file from a game's pinmame/roms folder, and only there."""
+"""Removing a ROM file from pinmame/roms or a readme from the game folder, and only those."""
 
 from __future__ import annotations
 
@@ -70,6 +70,26 @@ class RemovingAROMFile(unittest.TestCase):
                 self._remove(root, "pinmame/roms")
 
             self.assertTrue((root / "pinmame/roms/cc_13.zip").exists())
+
+    def test_a_readme_in_the_game_folder_goes(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = _game(tmp, {"README.txt": b"t", "Cactus Canyon.nfo": b"n"})
+
+            self._remove(root, "README.txt")
+            self._remove(root, "Cactus Canyon.nfo")
+
+            self.assertEqual(["Cactus Canyon.vpx"], [one.name for one in root.iterdir()])
+
+    def test_a_plain_notes_file_or_a_readme_in_a_subfolder_is_refused(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = _game(tmp, {"notes.txt": b"t", "extra/readme.txt": b"t"})
+
+            for path in ("notes.txt", "extra/readme.txt"):
+                with self.subTest(path=path), self.assertRaises(service_errors.RefusedError):
+                    self._remove(root, path)
+
+            self.assertTrue((root / "notes.txt").exists())
+            self.assertTrue((root / "extra/readme.txt").exists())
 
 
 if __name__ == "__main__":

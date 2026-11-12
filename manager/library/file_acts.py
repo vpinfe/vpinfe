@@ -21,6 +21,7 @@ from typing import Any
 from nicegui import run, ui
 
 from common.failures import why
+from common.games import asset_lens
 from common.games import file_move as core
 from common.games import media_fill as gaps_in
 from common.games.asset_resolver import VPX_ASSET_KINDS
@@ -48,6 +49,8 @@ PLACEABLE = frozenset(one.key for one in VPX_ASSET_KINDS)
 WHOLE_FOLDER = frozenset({"pup_pack", "alt_color", "alt_sound", "music"})
 # One file among several in a folder: added to, replaced and removed one at a time.
 ROM_FILES = frozenset({rom_acts.KIND})
+# What the lens lists that no table reads: the author's notes, taken out and never placed.
+READ_BY_NO_TABLE = frozenset(asset_lens.KINDS) - PLACEABLE - WHOLE_FOLDER - ROM_FILES
 # Names listed before "...and N more" in a confirmation.
 _NAMED = 8
 
@@ -135,10 +138,9 @@ def is_unsupported(row: dict[str, Any]) -> bool:
 
 
 def asset_has_acts(row: dict[str, Any]) -> bool:
-    """Whether an asset row is of a kind VPX looks up by name, which is all a file here can
-    be placed as or removed from."""
-    kind = str(row.get("kind") or "")
-    return kind in PLACEABLE or kind in WHOLE_FOLDER or kind in ROM_FILES
+    """Whether an asset row is of a kind the lens lists, each of which a file can be
+    removed as."""
+    return str(row.get("kind") or "") in asset_lens.KINDS
 
 
 def listed_as(kind: str, inventory: str) -> Any:
@@ -186,6 +188,8 @@ def asset_removal_detail(kind: str, tier: str, files: int | None = None) -> str:
     """Who loses an asset when it is removed."""
     if files is not None:
         return t("manager.workbench.remove_asset.folder", count=files)
+    if kind in READ_BY_NO_TABLE:
+        return ""
     falls_back = any(one.key == kind and one.folder_fallback for one in VPX_ASSET_KINDS)
     return {media_ownership.TABLE: t("manager.workbench.remove_asset.table" if falls_back
                                      else "manager.workbench.remove_asset.table_only"),
@@ -418,7 +422,7 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
     if not files:
         return []
     roms = [one for one in files if one.kind in ROM_FILES]
-    placeable = [one for one in files if one.kind not in ROM_FILES
+    placeable = [one for one in files if one.kind in PLACEABLE | WHOLE_FOLDER
                  and (not is_loose(one.row) or one.kind in WHOLE_FOLDER)]
     scripts = [one for one in files if one.kind == "script" and one.present and one.path
                and one.table and one.tier == media_ownership.TABLE]

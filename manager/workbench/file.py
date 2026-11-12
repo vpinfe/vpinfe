@@ -19,6 +19,7 @@ from common.games import asset_registry, identity_claims
 from common.games import file_move as moved_files
 from common.games.asset_resolver import VPX_ASSET_KINDS
 from common.i18n import t
+from common.media.media_specs import held_family
 from common.online import vps_kinds
 from manager.kit import (
     art,
@@ -40,6 +41,7 @@ from manager.library import (
     mediasource,
     mediaview,
     rom_acts,
+    rule_sheet,
     text_editor,
 )
 from manager.library import record as recorder
@@ -198,6 +200,14 @@ async def _media_file_block(context: dict[str, Any]) -> None:
           waiting=await recorder.waiting_on(library, game_id, table_id or "", kind))
 
 
+# Asset kinds drawn as a page to read, with an Edit button, rather than opening in the editor.
+READ_FIRST_KINDS = frozenset({"readme"})
+
+
+def _file_address(folder: str, path: str) -> str:
+    return "/api/v1/filesystem/file?" + urlencode({"path": str(PurePosixPath(folder) / path)})
+
+
 def _loose_media(context: dict[str, Any]) -> None:
     """No acts here: the slot's would act on the file the slot resolves to, which is
     another one."""
@@ -207,9 +217,11 @@ def _loose_media(context: dict[str, Any]) -> None:
     path = str(row.get("path") or "")
     if context["dock"] is not None and folder and path:
         with _stage(context), ui.element("div").classes("manager-slot-art"):
-            mediaview.preview("/api/v1/filesystem/file?" + urlencode(
-                {"path": str(PurePosixPath(folder) / path)}), kind,
-                str(row.get("label") or kind))
+            address = _file_address(folder, path)
+            label, family = str(row.get("label") or kind), held_family(kind, path)
+            if not (family == "doc"
+                    and rule_sheet.draw(context, kind, label, address, path)):
+                mediaview.preview(address, kind, label, family=family)
     with ui.column().classes("w-full gap-1 manager-slot p-2"):
         with ui.column().classes("w-full gap-0 manager-slot-facts"):
             with ui.row().classes("items-center gap-2 w-full no-wrap"):
@@ -360,7 +372,7 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
         entries: list[tuple[Any, Any]] = [
             (panel.HEADING, t("word.file")),
             (panel.FULL, identity)]
-        if kind in (*file_acts.WHOLE_FOLDER, *file_acts.PLACEABLE, *file_acts.ROM_FILES):
+        if file_acts.asset_has_acts(row):
             entries.append((panel.FULL, acts))
         if present:
             entries += _asset_details(context, detail, glass)
@@ -397,6 +409,11 @@ async def _asset_stage(context: dict[str, Any], path: str, glass: dict[str, Any]
                        head: str, label: str) -> None:
     if glass and not glass["damaged"]:
         await _backglass_picture(context, path, glass, label)
+        return
+    if (context["kind"] in READ_FIRST_KINDS
+            and rule_sheet.draw(context, context["kind"], label,
+                                _file_address(str(context["game"].get("folder") or ""), path),
+                                path, then=context["after_save"])):
         return
     if found := context["detail"].get("text"):
         locked, help_ = await text_lock(context["library"], context["kind"], found)
@@ -778,6 +795,11 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
     if kind in file_acts.ROM_FILES:
         _rom_actions(context)
         return
+    if kind in file_acts.READ_BY_NO_TABLE:
+        if present and path:
+            with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
+                _remove_button(context, kind, path, tier)
+        return
     if kind not in file_acts.PLACEABLE:
         return
     loose = tier in (media_ownership.ORPHAN, media_ownership.UNUSED)
@@ -802,10 +824,14 @@ def _asset_actions(context: dict[str, Any], kind: str, label: str, present: bool
             return
         _match_button(context, kind, label, context["row"], _nothing, vps_kinds.ASSET)
         _move_actions(context)
-        ui.button(t("word.remove"), icon=verbs.REMOVE,
-                  on_click=lambda: _remove_asset(context, kind, path, tier)) \
-            .props("flat dense no-caps size=sm") \
-            .classes("manager-action manager-action--danger")
+        _remove_button(context, kind, path, tier)
+
+
+def _remove_button(context: dict[str, Any], kind: str, path: str, tier: str) -> None:
+    ui.button(t("word.remove"), icon=verbs.REMOVE,
+              on_click=lambda: _remove_asset(context, kind, path, tier)) \
+        .props("flat dense no-caps size=sm") \
+        .classes("manager-action manager-action--danger")
 
 
 def _nothing() -> None:

@@ -26,7 +26,6 @@ from common.i18n import t
 
 UTF8 = "utf-8"
 UTF8_BOM = "utf-8-sig"
-CP1252 = "cp1252"
 
 CRLF = "crlf"
 LF = "lf"
@@ -35,9 +34,10 @@ LF = "lf"
 MAX_BYTES = 4 * 1024 * 1024
 
 # The files of a game that are text: what the Assets page lists as a script, a settings
-# file, a point of view, a score view or Nixie layout, a patch or the author's notes.
+# file, a point of view, a score view or Nixie layout, a patch or the author's notes, and a
+# web page rule sheet.
 SUFFIXES = frozenset({".vbs", ".ini", ".pov", ".scv", ".nix", ".dif", ".txt", ".md", ".nfo",
-                      ".cfg"})
+                      ".cfg", ".html"})
 
 _BOM = b"\xef\xbb\xbf"
 
@@ -60,8 +60,9 @@ def version_of(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _decode(data: bytes) -> tuple[str, str, bool]:
-    """The text, the encoding it was read as, and whether that was lossless."""
+def _decode(data: bytes, target: Path) -> tuple[str, str, bool]:
+    """The text, the encoding it was read as, and whether that was lossless. Bytes that are
+    not UTF-8 are read in the file's legacy code page."""
     if data.startswith(_BOM):
         try:
             return data[len(_BOM):].decode("utf-8"), UTF8_BOM, True
@@ -72,10 +73,11 @@ def _decode(data: bytes) -> tuple[str, str, bool]:
             return data.decode("utf-8"), UTF8, True
         except UnicodeDecodeError:
             pass
+    legacy = asset_lens.legacy_codepage(target)
     try:
-        return data.decode(CP1252), CP1252, True
+        return data.decode(legacy), legacy, True
     except UnicodeDecodeError:
-        return data.decode(CP1252, errors="replace"), CP1252, False
+        return data.decode(legacy, errors="replace"), legacy, False
 
 
 def _newline_of(data: bytes) -> str:
@@ -128,7 +130,7 @@ def read(game_id: str, path: str) -> dict[str, Any]:
     if too_large:
         # The cut can fall inside a character; what it splits is dropped, not misread.
         data = data[:len(data) - _split_tail(data)]
-    text, encoding, exact = _decode(data)
+    text, encoding, exact = _decode(data, target)
     why = ""
     if too_large:
         why = t("asset.text.too_large")
@@ -164,13 +166,15 @@ def _encoded(text: str, encoding: str, newline: str) -> bytes:
 
 
 def save(game_id: str, path: str, text: str, version: str, *,
-         replace_changed: bool = False, keep_copy: bool = True) -> dict[str, Any]:
+         replace_changed: bool = False, keep_copy: bool = True,
+         media: bool = False) -> dict[str, Any]:
     """Write `text` over the file, keeping the file as it was first.
 
     `version` is what `read` returned. A file that no longer matches raises `ChangedError`
     unless `replace_changed` says to write over it, and the copy kept first is what makes
     that safe. A copy that cannot be kept raises `NoCopyError` unless `keep_copy` is false.
-    Returns the new version and where the copy went, or None for none.
+    `media` files the copy under Media, for a file that is one of the game's media, rather
+    than under Assets. Returns the new version and where the copy went, or None for none.
     """
     game = game_lens.game_for_writing(game_id)
     game_dir = Path(game.full_path_game or "")
@@ -179,7 +183,7 @@ def save(game_id: str, path: str, text: str, version: str, *,
     if len(current) > MAX_BYTES or b"\x00" in current:
         raise service_errors.RefusedError(t("error.assets.not_editable"),
                                           details={"path": path})
-    held, encoding, exact = _decode(current)
+    held, encoding, exact = _decode(current, target)
     if not exact:
         raise service_errors.RefusedError(t("asset.text.lossy"), details={"path": path})
     if version_of(current) != version and not replace_changed:
@@ -200,7 +204,8 @@ def save(game_id: str, path: str, text: str, version: str, *,
             raise NoCopyError(failures.why(refusal),
                               details={"refused": NO_COPY, "path": path}) from None
         kept = backup_media.keep(folder, game_id, target, target.relative_to(
-            game_dir.resolve()).as_posix(), REASON_EDIT, area=backup_media.ASSETS)
+            game_dir.resolve()).as_posix(), REASON_EDIT,
+            area=backup_media.MEDIA if media else backup_media.ASSETS)
 
     try:
         with atomic_write.staged_for(target) as staged:

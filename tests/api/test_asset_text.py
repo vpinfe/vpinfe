@@ -67,6 +67,15 @@ class ReadTests(TextCase):
 
         self.assertEqual((found["text"], found["encoding"]), ("caf\xe9 €\n", "cp1252"))
 
+    def test_an_nfo_that_is_not_utf8_is_read_as_dos_text(self) -> None:
+        self.write(b"\xc9\xcd\xbb\r\n\xba\xba\r\n\xc8\xcd\xbc\r\n", "readme.nfo")
+
+        found = self.get("readme.nfo").json()
+
+        self.assertEqual((found["text"], found["encoding"], found["editable"]),
+                         ("\u2554\u2550\u2557\n\u2551\u2551\n\u255a\u2550\u255d\n",
+                          "cp437", True))
+
     def test_the_majority_line_ending_names_a_mixed_file(self) -> None:
         self.write(b"a\r\nb\r\nc\n")
 
@@ -171,6 +180,18 @@ class SaveTests(TextCase):
 
         self.assertEqual(target.read_bytes(), "caf\xe9 €\r\n".encode("cp1252"))
 
+    def test_an_nfo_saved_unchanged_writes_nothing_and_one_edit_changes_one_line(self) -> None:
+        base = b"\xc9\xcd\xbb\r\n\xba a\xba\r\n\xc8\xcd\xbc\r\n"
+        target = self.write(base, "readme.nfo")
+        text = self.get("readme.nfo").json()["text"]
+
+        self.put(text, base, "readme.nfo")
+        self.assertEqual(target.read_bytes(), base)
+
+        self.put(text.replace("a", "b"), base, "readme.nfo")
+        self.assertEqual(target.read_bytes(), b"\xc9\xcd\xbb\r\n\xba b\xba\r\n\xc8\xcd\xbc\r\n")
+        self.assertEqual(self.get("readme.nfo").json()["encoding"], "cp437")
+
     def test_a_bom_is_kept_and_no_final_newline_stays_gone(self) -> None:
         base = b"\xef\xbb\xbfa\nb"
         target = self.write(base)
@@ -202,6 +223,18 @@ class SaveTests(TextCase):
         self.assertEqual([one.read_bytes() for one in kept], [b"one\r\n", b"two\r\n"])
         self.assertEqual(first.json()["kept"], str(kept[0]))
         self.assertEqual([one["reason"] for one in self.assets()], ["edit", "edit"])
+
+    def test_a_media_file_keeps_its_copy_under_media_and_a_web_page_is_text(self) -> None:
+        base = b"<p>one</p>\n"
+        self.write(base, "rules.html")
+
+        self.assertEqual(self.get("rules.html").json()["text"], "<p>one</p>\n")
+        answered = self.put("<p>two</p>\n", base, "rules.html", media=True)
+
+        self.assertEqual(answered.status_code, 200)
+        (kept,) = pathlib.Path(self.root / "media" / GAME).iterdir()
+        self.assertEqual(kept.read_bytes(), base)
+        self.assertFalse((self.root / "assets" / GAME).exists())
 
     def test_a_file_that_changed_is_a_409_and_stays_as_it_is(self) -> None:
         base = b"one\n"

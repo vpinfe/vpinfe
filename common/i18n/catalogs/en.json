@@ -5320,6 +5320,7 @@
   "manager.rom.replace_detail": "The new file keeps its own name and this one is removed. The tables below read Not Installed unless the new file has the same name.",
   "manager.rom.replace_title": "Replace “{name}”?",
   "manager.rom.replaced": "Replaced {old} with {new}",
+  "manager.rule_sheet.edit.help": "Change this file",
   "manager.workbench.plays_heading": "Which Table Plays",
   "manager.workbench.width_by_height": "{width} × {height}",
   "manager.workbench.writes_to_tables": {

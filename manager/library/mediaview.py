@@ -9,7 +9,9 @@ the thing it photographs is portrait. Changing the file is the Edit row's.
 
 from __future__ import annotations
 
+import html
 import json
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -282,16 +284,70 @@ if (window.__hubPageKeys) {
 """
 
 
-def preview(src: str, kind: str, label: str, element_id: str = "") -> None:
+# A PDF at the card's size shows pages and no toolbar, fitted to the width. The large
+# viewer takes the address as it is, so the browser draws its toolbar.
+_PDF_IN_CARD = "#toolbar=0&view=FitH"
+
+
+def _frame(src: str, label: str, *, element_id: str = "", sandboxed: bool = False) -> None:
+    """A page of its own in a frame. `sandboxed` is a frame with every permission off: no
+    scripts, no same-origin access, no forms, no top navigation."""
+    named = f' id="{element_id}"' if element_id else ""
+    held = " sandbox" if sandboxed else ""
+    light = ' style="background:#fff; color-scheme:light"' if sandboxed else ""
+    # `sanitize=False` because the sanitizer removes a frame. The address is the app's own.
+    ui.html(f'<iframe{named} class="manager-doc-frame"{held}{light} '
+            f'src="{html.escape(src)}" title="{html.escape(label)}"></iframe>',
+            sanitize=False).classes("manager-doc")
+
+
+# Only the browser knows whether it can draw a PDF in a frame, so the link that stands in
+# for the frame is drawn hidden and shown from here. Android Chrome has no inline viewer.
+def _link_if_no_viewer(frame_id: str, link_id: str) -> str:
+    return f"""
+(() => {{
+  let tries = 0;
+  const go = () => {{
+    const f = document.getElementById('{frame_id}');
+    const l = document.getElementById('{link_id}');
+    if (!f || !l) {{ if (++tries < 30) requestAnimationFrame(go); return; }}
+    if (navigator.pdfViewerEnabled === false) {{
+      f.style.display = 'none'; l.style.display = '';
+    }}
+  }};
+  go();
+}})()
+"""
+
+
+def pdf(src: str, label: str, *, large: bool = False) -> None:
+    """The file in the browser's own viewer, or an Open link where it has none."""
+    token = uuid.uuid4().hex[:8]
+    frame_id, link_id = f"manager-pdf-{token}", f"manager-pdf-link-{token}"
+    _frame(src + ("" if large else _PDF_IN_CARD), label, element_id=frame_id)
+    with ui.element("div").props(f"id={link_id}").style("display: none"):
+        panel.link_out(t("manager.workbench.open", kind=label), to=src)()
+    ui.run_javascript(_link_if_no_viewer(frame_id, link_id))
+
+
+def web_page(src: str, label: str) -> None:
+    """A web page file drawn with its scripts off."""
+    _frame(src, label, sandboxed=True)
+
+
+def preview(src: str, kind: str, label: str, element_id: str = "", *,
+            family: str = "") -> None:
     """Present the file with an element that can actually play it.
 
     An <img> pointing at a .mp4 downloads the whole file and paints nothing - the slot
     reads as empty for a video that is there, and on a library that is not local the
     fetch is long enough to read as the page having stopped. `preload="metadata"` is
     what keeps the poster frame cheap: enough to show it, not the whole video.
-    `element_id` names the picture or video, for a script that has to find it.
+    `element_id` names the picture or video, for a script that has to find it. `family`
+    is what the file itself draws as where that differs from its kind's, a picture held
+    in a rule sheet's slot.
     """
-    family = media_family(kind)
+    family = family or media_family(kind)
     named = f' id="{element_id}"' if element_id else ""
     if family == "video":
         # `#t=0.1` for the same reason the map tiles use it: metadata alone can leave
@@ -304,8 +360,8 @@ def preview(src: str, kind: str, label: str, element_id: str = "") -> None:
     elif family == "image":
         ui.html(f'<img{named} src="{src}">')
     else:
-        # A rule sheet is a document; there is no element that previews one usefully
-        # in a panel this size, and a broken <img> would say it is missing.
+        # A broken <img> would say the file is missing. A rule sheet that is a document is
+        # drawn by `rule_sheet` before it gets here.
         panel.link_out(t("manager.workbench.open", kind=label), to=src)()
 
 
@@ -321,6 +377,19 @@ def open_image(src: str, label: str, acts: Sequence[Act] = ()) -> None:
 def open_pages(urls: Sequence[str], label: str, start: int = 1) -> None:
     """Show a paged kind's pictures large, one at a time, starting at page `start`."""
     _open(urls[start - 1], "image", label, pages=urls, start=start)
+
+
+def open_document(label: str, draw: Callable[[], None]) -> None:
+    """Show a document large. `draw` puts the document in the stage; the rotate control
+    is for pictures and is not offered."""
+    with frame.made() as dialog, ui.card().classes("manager-viewer-card manager-viewer-doc"):
+        with ui.row().classes("items-center gap-2 w-full no-wrap manager-viewer-bar"):
+            ui.label(label).classes("manager-card-title shrink-0")
+            ui.space()
+            panel.icon_only(verbs.CLOSE, dialog.close, hint=t("word.close"))
+        with ui.element("div").classes("manager-viewer-stage"):
+            draw()
+    dialog.open()
 
 
 def open_viewer(src: str, kind: str, label: str, *, family: str = "") -> None:

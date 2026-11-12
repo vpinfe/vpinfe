@@ -5320,6 +5320,7 @@
   "manager.rom.replace_detail": "Ţĥè ñèŵ ƒîŀè ķèèþš îţš öŵñ ñàɱè àñđ ţĥîš öñè îš řèɱöṽèđ. Ţĥè ţàƀŀèš ƀèŀöŵ řèàđ Ñöţ Îñšţàŀŀèđ ûñŀèšš ţĥè ñèŵ ƒîŀè ĥàš ţĥè šàɱè ñàɱè.",
   "manager.rom.replace_title": "Řèþŀàçè “{name}”?",
   "manager.rom.replaced": "Řèþŀàçèđ {old} ŵîţĥ {new}",
+  "manager.rule_sheet.edit.help": "Çĥàñĝè ţĥîš ƒîŀè",
   "manager.workbench.plays_heading": "Ŵĥîçĥ Ţàƀŀè Þŀàýš",
   "manager.workbench.width_by_height": "{width} × {height}",
   "manager.workbench.writes_to_tables": {

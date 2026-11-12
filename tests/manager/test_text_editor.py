@@ -42,7 +42,8 @@ class Drafts(unittest.TestCase):
 
 class WhichKinds(unittest.TestCase):
     def test_every_text_kind_the_assets_view_lists_is_edited(self) -> None:
-        for kind in ("script", "ini", "pov", "scv", "nix", "patch", "readme"):
+        for kind in ("script", "ini", "pov", "scv", "nix", "patch", "readme",
+                     "rule_sheet"):
             with self.subTest(kind=kind):
                 self.assertTrue(text_editor.edits(kind))
 
@@ -52,7 +53,7 @@ class WhichKinds(unittest.TestCase):
                 self.assertFalse(text_editor.edits(kind))
 
     def test_only_notes_wrap(self) -> None:
-        self.assertEqual(frozenset({"readme"}), text_editor.WRAPPED)
+        self.assertEqual(frozenset({"readme", "rule_sheet"}), text_editor.WRAPPED)
 
 
 class TheGridMark(unittest.TestCase):
@@ -97,7 +98,8 @@ class _Library:
         return {"text": self.on_disk, "version": f"v{self.version}"}
 
     def save_asset_text(self, game_id: str, path: str, text: str, version: str,
-                        replace_changed: bool, keep_copy: bool) -> dict[str, Any]:
+                        replace_changed: bool, keep_copy: bool,
+                        media: bool = False) -> dict[str, Any]:
         self.saved.append(text)
         if version != f"v{self.version}":
             raise ApiError("changed", {"refused": text_editor.CHANGED})

@@ -388,10 +388,12 @@ class ApiClient:
         return self._get(f"/games/{game_id}/assets/text?" + urlencode({"path": path}))
 
     def put_asset_text(self, game_id: str, path: str, text: str, version: str,
-                       replace_changed: bool = False, keep_copy: bool = True) -> dict:
+                       replace_changed: bool = False, keep_copy: bool = True,
+                       media: bool = False) -> dict:
         return self._put(f"/games/{game_id}/assets/text?" + urlencode({"path": path}),
                          {"text": text, "version": version,
-                          "replace_changed": replace_changed, "keep_copy": keep_copy})
+                          "replace_changed": replace_changed, "keep_copy": keep_copy,
+                          "media": media})
 
     def put_backglass_displays(self, game_id: str, path: str, target: str,
                                box: tuple[int, int, int, int] | None) -> dict:

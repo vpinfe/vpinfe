@@ -3679,7 +3679,7 @@ a.manager-tag:hover { background: var(--wash-hover); }
    level, positioning it collapsed this box - which is sized by its content - and a
    size container cannot be one without a definite height, which is the thing missing.
    Excludes the blank state, which is a column that lays itself out. */
-.manager-slot-art > div:not(.manager-slot-zoom):not(.manager-slot-blank):not(.manager-wheel-mosaic) {
+.manager-slot-art > div:not(.manager-slot-zoom):not(.manager-slot-blank):not(.manager-wheel-mosaic):not(.manager-rulesheet) {
   display: contents;
 }
 /* The file as it will be seen, in the dock. It has a size of its own, taken from the dock
@@ -3705,6 +3705,57 @@ a.manager-tag:hover { background: var(--wash-hover); }
   max-height: 100%;
 }
 .manager-stage .manager-file-text { max-height: none; height: 100%; }
+/* A rule sheet: a PDF or web page in a frame, or a text page with a strip over it that
+   becomes the editor's. In the dock it has a height of its own; in the stage it takes the
+   stage's. */
+.manager-doc { display: contents; }
+.manager-doc-frame {
+  flex: 1 1 100%; width: 100%; height: min(60vh, 420px); min-height: 240px;
+  border: 0; border-radius: 8px; background: var(--surface-2);
+}
+.manager-stage .manager-doc-frame { height: auto; align-self: stretch; }
+.manager-rulesheet {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+  height: min(60vh, 420px); min-height: 240px;
+}
+.manager-stage .manager-rulesheet { flex: 1 1 0; height: auto; }
+.manager-rulesheet-strip { flex: 0 0 auto; min-height: 28px; }
+.manager-rulesheet .manager-doc-frame { height: auto; min-height: 0; flex: 1 1 0; }
+.manager-rulesheet-page {
+  flex: 1 1 0; min-height: 0; overflow: auto; padding: 10px 14px; border-radius: 8px;
+  background: var(--surface-2); color: var(--ink); line-height: 1.5;
+  overflow-wrap: anywhere; font-size: var(--fs-body);
+}
+.manager-rulesheet-page--text { white-space: pre-wrap; }
+.manager-rulesheet-page--fixed {
+  white-space: pre; overflow-wrap: normal; line-height: 1.2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.manager-rulesheet-page :is(h1, h2, h3) { margin: 0.8em 0 0.4em; font-weight: 600; line-height: 1.25; }
+.manager-rulesheet-page h1 { font-size: 1.4em; }
+.manager-rulesheet-page h2 { font-size: 1.2em; }
+.manager-rulesheet-page h3 { font-size: 1.05em; }
+.manager-rulesheet-page > :first-child { margin-top: 0; }
+.manager-rulesheet-page p { margin: 0 0 0.7em; }
+.manager-rulesheet-page :is(ul, ol) { margin: 0 0 0.7em; padding-left: 1.5em; }
+.manager-rulesheet-page ul { list-style: disc; }
+.manager-rulesheet-page ol { list-style: decimal; }
+.manager-rulesheet-page a { color: var(--accent); }
+.manager-rulesheet-page code, .manager-rulesheet-page pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em;
+}
+.manager-rulesheet-page pre { overflow: auto; padding: 8px 10px; border-radius: 6px; background: var(--surface-work); }
+.manager-rulesheet-page table { border-collapse: collapse; margin: 0 0 0.7em; }
+.manager-rulesheet-page :is(th, td) { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+/* The large view of a document: the stage scrolls it and selects from it, which the
+   picture stage turns off. */
+.manager-viewer-doc { width: min(92vw, 1100px); height: 88vh; }
+.manager-viewer-doc .manager-viewer-stage {
+  align-self: stretch;
+  flex-direction: column; align-items: stretch; justify-content: flex-start;
+  overflow: auto; touch-action: auto; user-select: text; -webkit-user-select: text;
+}
+.manager-viewer-doc .manager-doc-frame { height: auto; align-self: stretch; flex: 1 1 0; }
 /* The text editor: the stage's one child, a strip above the text. The editor fills the
    box rather than sizing it, so the strip stays on screen whatever the file's length.
    The page's tokens repaint what CodeMirror's theme draws. */
@@ -3713,7 +3764,7 @@ a.manager-tag:hover { background: var(--wash-hover); }
 }
 /* The stage scrolls, so a gap inside it goes with the content; the card below needs one
    outside it, or a short dock cuts the text off against the card's border. */
-.manager-stage:has(> .manager-editor) { margin-bottom: 8px; }
+.manager-stage:has(> .manager-editor, > .manager-rulesheet > .manager-editor) { margin-bottom: 8px; }
 .manager-editor-box {
   flex: 1 1 0; min-height: 160px; position: relative; overflow: hidden;
   border: 1px solid var(--line); border-radius: 8px;
@@ -4027,6 +4078,12 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-mediatile-plays {
   position: absolute; bottom: 6px; left: 3px;
   background: var(--scrim-media-warm);
+}
+/* Top right, which a document's tile leaves free: it has no Enlarge there. */
+.manager-mediatile-draft {
+  position: absolute; top: 3px; right: 3px;
+  padding: 0 5px; border-radius: 3px; font-size: 11px; line-height: 16px;
+  color: var(--warm); background: var(--scrim-media);
 }
 /* Bottom right, opposite the warning, and quiet: a flyer with pages is ordinary. */
 .manager-mediatile-pages {

@@ -228,7 +228,7 @@ def put_asset_text(game_id: str, body: models.AssetTextSave,
                    path: str = Query(...)) -> models.AssetTextSaved:
     return models.AssetTextSaved.model_validate(text_file.save(
         game_id, path, body.text, body.version, replace_changed=body.replace_changed,
-        keep_copy=body.keep_copy))
+        keep_copy=body.keep_copy, media=body.media))
 
 
 @router.put("/{game_id}/assets/backglass/displays",
