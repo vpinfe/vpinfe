@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -68,11 +68,13 @@ class LocalDevice:
             logger.debug("Could not enumerate this machine's screens", exc_info=True)
             return []
 
-    def show_numbers(self, screens: Sequence[Any]) -> None:
-        """Put each screen's number and name on it for a few seconds. Blocking."""
+    def show_numbers(self, screens: Sequence[Any],
+                     uses: Mapping[int, Sequence[str]] | None = None) -> None:
+        """Put each screen's number, what it is used for and its name on it for a few
+        seconds. `uses` gives each screen's lines by its number. Blocking."""
         from frontend import screen_numbers
 
-        screen_numbers.show(screens)
+        screen_numbers.show(screens, uses=uses)
 
     def show_test_card(self, screen: Any, rotation: Any) -> None:
         """Put the test card on `screen`, turned by `rotation`, and leave it there until

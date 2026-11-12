@@ -123,6 +123,8 @@ BASELINE: dict[str, int] = {
     "manager/kit/appearance.py": 2,
     # The Displays page of a Visual Pinball launcher: the file's keys are its subject.
     "manager/settings/vpx_displays.py": 12,
+    # A preset sets the View Mode of a Visual Pinball launcher: the key is its subject.
+    "manager/settings/presets.py": 1,
     # Where the program is on this machine: the names its builds go by are the subject.
     "manager/settings/vpx_find.py": 11,
     # The Input page of a Visual Pinball launcher: the file's keys are its subject.

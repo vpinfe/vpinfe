@@ -69,7 +69,7 @@ async def write(changes: dict[str, dict[str, Any]]) -> bool:
 def _entries(state: Screens, library: Library, seen: Seen,
              rebuild: Any) -> list[tuple[Any, Any]]:
     """The picture without its heading, which the step's title already says, then the
-    DMD panel, then where the windows go."""
+    DMD panel where the cabinet has one, then where the windows go."""
     @on_page
     async def follow(before: Any, after: Any, here: Any) -> None:
         await vpx_displays.follow(library, before, after, here)
@@ -85,8 +85,10 @@ def _entries(state: Screens, library: Library, seen: Seen,
     picture = [one for one in displays.rows(seen.values, seen.schema, seen.monitors, seen.names,
                                             write, rebuild, follow=follow)
                if one[0] is not panel.HEADING]
+    cabinet = displays.cabinet(seen.values, seen.schema)
     return [*picture,
-            *dmd_panel.rows(seen.values, seen.schema, write, rebuild, kept, kind=state.kind),
+            *(dmd_panel.rows(seen.values, seen.schema, write, rebuild, kept, kind=state.kind)
+              if cabinet else []),
             *placement_panel.rows(seen.reading, seen.values, seen.schema, write, rebuild)]
 
 

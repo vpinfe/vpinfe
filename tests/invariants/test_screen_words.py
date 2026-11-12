@@ -15,6 +15,7 @@ CATALOG = served()
 REPO = Path(__file__).resolve().parents[2]
 
 CABINET = {
+    "app.vpx.field.Player.BGSet.choice.1.label": "Visual Pinball's view for a cabinet's screen",
     "app.vpx.field.TableOverride.ViewCabMode.choice.2.help": "the physical cabinet",
     "app.vpx.field.TableOverride.ViewDTMode.choice.2.help": "the physical cabinet",
     "app.vpx.field.TableOverride.ViewFSSMode.choice.2.help": "the physical cabinet",
@@ -26,7 +27,9 @@ CABINET = {
     "config.windows.playfield.orientation.description": "how a screen is mounted in it",
     "manager.screens.hint_cabinet": "where a screen sits in the physical cabinet",
     "manager.setup.glass.typical": "the physical cabinet's usual playfield tilt",
-    "manager.setup.cabinet": "the physical cabinet, Setup's own How you play answer",
+    "manager.presets.button.help": "Cabinet Mode, and a cabinet as the physical one",
+    "manager.presets.cabinet": "the physical cabinet, the preset's own name",
+    "manager.presets.cabinet_help": "the physical cabinet the preset is for",
     "manager.themes.both": "a theme made for a cabinet or a desktop",
     "manager.themes.cabinet": "a theme made for a cabinet rather than a desktop",
 }

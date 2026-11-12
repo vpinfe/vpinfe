@@ -4453,6 +4453,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 /* --- the screens picture: the cabinet's parts, and this device's screens to drag onto them --- */
 .manager-screens-head { display: flex; align-items: center; gap: 12px; margin: 2px 0 12px; }
 .manager-screens-head > .manager-help { flex: 1; max-width: none; }
+.manager-screens-head-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 .manager-screens { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
 .manager-screens, .manager-screens-head, .manager-screens-differs { max-width: var(--row-measure); }
 /* A panel too narrow for both side by side puts the screens under the picture. The host is
@@ -4552,6 +4553,59 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   border-top: 1px solid var(--line-soft);
 }
 .manager-screens-differs-title { color: var(--tier-table); font-size: var(--fs-body); }
+/* At a desk the screens are drawn where the system arranges them, each in its own shape, with
+   the parts to drag onto them beside. */
+.manager-screens--desk { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+@container manager-screens (max-width: 760px) {
+  .manager-screens--desk { grid-template-columns: minmax(0, 1fr); }
+}
+.manager-desk {
+  padding: 14px; border-radius: 8px; background: var(--surface-work);
+  border: 1px solid var(--line-soft); min-width: 0;
+}
+.manager-desk-arr { position: relative; margin: 0 auto; }
+.manager-mon {
+  position: absolute; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; padding: 4px; overflow: hidden; text-align: center;
+  border: 1.5px solid var(--line); border-radius: 4px; background: var(--surface-0);
+  color: var(--ink); cursor: pointer; container-type: size;
+}
+.manager-mon > * { pointer-events: none; }
+.manager-mon:hover, .manager-mon.manager-drop-hot { border-color: var(--accent); }
+.manager-mon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.manager-mon--held { border-color: var(--accent); background: var(--accent-wash); }
+.manager-mon-num { font-size: 24px; font-weight: 700; line-height: 1; }
+.manager-mon-part { color: var(--accent); font-weight: 500; font-size: var(--fs-caption); line-height: 1.1; }
+.manager-mon-part--none { color: var(--ink-3); font-weight: 400; }
+.manager-mon-inside { font-size: 11px; color: var(--ink-2); line-height: 1.15; }
+.manager-mon-name {
+  font-size: 11px; color: var(--ink-3); max-width: 100%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+/* A small screen drops its name first, then shrinks its number, so the part always shows. */
+@container (max-height: 66px) { .manager-mon-name { display: none; } }
+@container (max-height: 84px) { .manager-mon:has(.manager-mon-inside) .manager-mon-name { display: none; } }
+@container (max-height: 48px) { .manager-mon-num { font-size: 18px; } }
+@container (max-height: 40px) {
+  .manager-mon-num { font-size: 12px; }
+  .manager-mon-part { font-size: 11px; }
+}
+@container (max-height: 28px) { .manager-mon-num { display: none; } }
+.manager-prow {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px; cursor: grab;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface-work);
+}
+.manager-prow:hover { border-color: var(--accent); }
+.manager-prow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.manager-prow-name { flex: 1; color: var(--ink); font-size: var(--fs-body); }
+.manager-prow--differs .manager-prow-name { color: var(--tier-table); }
+.manager-prow-where { font-size: var(--fs-caption); white-space: nowrap; }
+.manager-prow-where--set { color: var(--accent); }
+.manager-prow-where--none { color: var(--ink-3); }
+.manager-prow-where--missing { color: var(--tier-table); }
+.manager-screens-sentence { display: flex; flex-wrap: wrap; gap: 0 4px; align-items: baseline; }
+.manager-screens-same { font-size: var(--fs-caption); color: var(--ink-3); }
+
 /* A choice between a few named states: one control with an edge, so it reads as a thing
    to press and not as a row of words. The edge is the control boundary, --line-strong,
    and the state in force is the filled segment. */
@@ -5237,3 +5291,27 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
 .manager-member-go:hover { color: var(--ink); }
 .manager-member-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .manager-member-go .q-icon { font-size: var(--icon-row); }
+
+/* The preset dialog. The changes area is sized for both settings and the note, so the
+   dialog keeps the height it opened at whichever preset is picked. */
+.manager-presets.q-card { width: min(560px, 94vw); }
+.manager-presets-choices { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 0 12px; }
+.manager-presets-pick { display: flex; align-items: center; gap: 10px; padding: 10px 12px; width: 100%; }
+.manager-presets-radio { flex: none; color: var(--ink-3); font-size: var(--icon-mark); }
+.manager-source-row--chosen > .manager-presets-radio { color: var(--accent); }
+.manager-presets-heading { margin-top: 14px; padding: 0 12px; color: var(--accent); font-weight: 600; }
+.manager-presets-changes {
+  min-height: 236px; display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 0; width: 100%;
+}
+.manager-presets-change {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 2px 12px;
+  align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line);
+}
+.manager-presets-key { font-weight: 600; color: var(--ink); }
+.manager-presets-values { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.manager-presets-arrow { color: var(--ink-3); font-size: var(--icon-mark); }
+.manager-presets-to { color: var(--ink); font-weight: 600; }
+@media (max-width: 520px) {
+  .manager-presets-change { grid-template-columns: minmax(0, 1fr); }
+  .manager-presets-changes { min-height: 300px; }
+}

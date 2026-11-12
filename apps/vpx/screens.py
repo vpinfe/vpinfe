@@ -44,6 +44,16 @@ REGION = {part: tuple(f"{key.removesuffix('Output')}{one}"
 
 VIEW_CAB_ROTATION = "TableOverride.ViewCabRotation"
 
+# The view mode: 1 plays the cabinet view, and 0 and 2 the desktop view, which only 0 lets
+# a table's Full Single Screen setup replace. A file that does not say is 0.
+VIEW_MODE = "Player.BGSet"
+CABINET_VIEW = "1"
+
+
+def plays_cabinet_view(flat: Mapping[str, str]) -> bool:
+    """Whether the launcher's ini has Visual Pinball play the cabinet view."""
+    return str(flat.get(VIEW_MODE) or "").strip() == CABINET_VIEW
+
 # The Displays group's headings, by the part each is for, and the cabinet's own.
 WINDOW_HEADINGS = {"playfield": PLAYFIELD, "backglass": BACKGLASS, "scoreview": SCOREVIEW,
                    "topper": TOPPER}

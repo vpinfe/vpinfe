@@ -5,6 +5,7 @@ list holds one and every later step relies on the same mechanics."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import unittest
 from typing import Any
@@ -14,8 +15,8 @@ from nicegui import ui
 
 from common.config.config_store import ConfigStore
 from common.devices import device_registry, install_setup
-from common.games.launchers import Launcher
 from common.i18n import t
+from manager.settings.presets import Now
 from manager.setup import setup, setup_appearance, setup_tables, setup_vpx
 from tests.support.library import TempTree
 
@@ -41,6 +42,15 @@ class _Fresh(TempTree):
         return mock.patch.object(setup, "_screens_here", mock.AsyncMock(return_value=count))
 
 
+def _settings(now: Any, launcher: str | None = None) -> Any:
+    """The settings an install holds, as How you play reads them."""
+    stack = contextlib.ExitStack()
+    stack.enter_context(mock.patch.object(setup.presets, "launcher_for_default",
+                                          return_value=launcher))
+    stack.enter_context(mock.patch.object(setup.presets, "read", return_value=now))
+    return stack
+
+
 class AskHowTests(_Fresh):
     def _field(self, step: dict[str, Any]) -> dict[str, Any]:
         (field,) = step["fields"]
@@ -51,12 +61,15 @@ class AskHowTests(_Fresh):
             step = _ran(setup._ask_how(setup.Session(again=False)))
 
         self.assertEqual(self._field(step)["value"], "desktop")
+        self.assertNotIn("gate", step)
 
-    def test_two_screens_preselect_cabinet(self) -> None:
+    def test_two_screens_preselect_nothing_and_wait_for_an_answer(self) -> None:
         with self._screens(2):
             step = _ran(setup._ask_how(setup.Session(again=False)))
 
-        self.assertEqual(self._field(step)["value"], "cabinet")
+        self.assertEqual(self._field(step)["value"], "")
+        self.assertFalse(step["gate"]({"preset": ""}))
+        self.assertTrue(step["gate"]({"preset": "cabinet"}))
 
     def test_screens_that_cannot_be_counted_preselect_desktop(self) -> None:
         with mock.patch.object(setup.screens, "connected", side_effect=RuntimeError("no")), \
@@ -65,14 +78,15 @@ class AskHowTests(_Fresh):
 
         self.assertEqual(self._field(step)["value"], "desktop")
 
-    def test_both_answers_are_picture_tiles(self) -> None:
+    def test_both_answers_are_the_presets_as_picture_tiles(self) -> None:
         with self._screens(1):
             step = _ran(setup._ask_how(setup.Session(again=False)))
 
         choices = self._field(step)["choices"]
         self.assertEqual([(key, picture) for key, _label, _help, picture in choices],
-                         [("desktop", "desktop"), ("cabinet", "cabinet")])
-        self.assertTrue(all(label and hint for _key, label, hint, _picture in choices))
+                         [("cabinet", "cabinet"), ("desktop", "desktop")])
+        self.assertEqual([(label, hint) for _key, label, hint, _picture in choices],
+                         [(preset.name, preset.help) for preset in setup.presets.PRESETS])
 
     def test_the_first_time_it_is_the_welcome(self) -> None:
         with self._screens(1):
@@ -82,18 +96,17 @@ class AskHowTests(_Fresh):
         self.assertEqual(step["title"], "Welcome to VPinFE")
 
     def test_an_answer_already_given_beats_the_screen_count(self) -> None:
-        self.store.set_value("presentation", "cab_mode", False)
         install_setup.answer(setup.HOW)
 
-        with self._screens(3):
+        with self._screens(3), _settings(Now(cabinet=False)):
             step = _ran(setup._ask_how(setup.Session(again=False)))
 
         self.assertEqual(self._field(step)["value"], "desktop")
+        self.assertNotIn("gate", step)
 
-    def test_asked_again_it_opens_on_the_current_answer_titled_setup(self) -> None:
-        self.store.set_value("presentation", "cab_mode", True)
-
-        with self._screens(1):
+    def test_asked_again_it_opens_on_the_preset_the_settings_match_titled_setup(self) -> None:
+        with self._screens(1), _settings(Now(cabinet=True, view="1", launcher_id="vpx-1"),
+                                         "vpx-1"):
             step = _ran(setup._ask_how(setup.Session(again=True)))
 
         self.assertEqual(self._field(step)["value"], "cabinet")
@@ -101,6 +114,14 @@ class AskHowTests(_Fresh):
         self.assertEqual(step["title"], "Setup")
         self.assertEqual(step["help"], self._field(step)["label"],
                          "the title is no longer the question, so the lead asks it")
+
+    def test_asked_again_with_settings_that_match_neither_preselects_nothing(self) -> None:
+        with self._screens(1), _settings(Now(cabinet=True, view="0", launcher_id="vpx-1"),
+                                         "vpx-1"):
+            step = _ran(setup._ask_how(setup.Session(again=True)))
+
+        self.assertEqual(self._field(step)["value"], "")
+        self.assertNotIn("gate", step, "a rerun may leave the settings as they are")
 
     def test_the_window_the_frontend_opened_says_where_else_to_reach_setup(self) -> None:
         with self._screens(1), mock.patch.object(setup, "_address",
@@ -119,77 +140,112 @@ class AskHowTests(_Fresh):
 
 
 class AnswerHowTests(_Fresh):
-    def _answer(self, session: setup.Session, mode: str, *, launcher: bool = True) -> Any:
+    def _answer(self, session: setup.Session, preset: str, now: Any, *,
+                launcher: str | None = "vpx-1") -> Any:
         client = mock.Mock()
-        found = (Launcher(launcher_id="vpx-1", app="vpx", settings={"bin_path": "/opt/vpx"})
-                 if launcher else None)
-        with mock.patch.object(setup, "ApiClient", return_value=client), \
-             mock.patch("common.games.launchers.default_launcher", return_value=found):
-            _ran(setup._answer_how(session, {"cab_mode": mode}))
+        with mock.patch.object(setup.presets, "ApiClient", return_value=client), \
+             _settings(now, launcher):
+            _ran(setup._answer_how(session, {"preset": preset}))
         return client
 
-    def test_cabinet_writes_the_setting_and_the_default_launchers_bgset(self) -> None:
-        client = self._answer(setup.Session(again=False), "cabinet")
+    def test_cabinet_writes_the_setting_and_the_default_launchers_view_mode(self) -> None:
+        client = self._answer(setup.Session(again=False), "cabinet", Now(cabinet=False, view="0",
+                                                                         launcher_id="vpx-1"))
 
         client.put_config.assert_called_once_with({"presentation": {"cab_mode": True}})
         client.write_launcher_config.assert_called_once_with(
-            "vpx-1", {setup.BGSET_KEY: "1"}, create=True)
+            "vpx-1", {setup.presets.vpx.VIEW_MODE: "1"}, create=True)
 
-    def test_desktop_writes_bgset_zero(self) -> None:
-        client = self._answer(setup.Session(again=False), "desktop")
+    def test_desktop_writes_the_view_mode_zero(self) -> None:
+        client = self._answer(setup.Session(again=False), "desktop", Now(cabinet=False, view="0",
+                                                                         launcher_id="vpx-1"))
 
         client.put_config.assert_called_once_with({"presentation": {"cab_mode": False}})
         client.write_launcher_config.assert_called_once_with(
-            "vpx-1", {setup.BGSET_KEY: "0"}, create=True)
+            "vpx-1", {setup.presets.vpx.VIEW_MODE: "0"}, create=True)
 
-    def test_no_launcher_yet_still_writes_the_setting(self) -> None:
-        client = self._answer(setup.Session(again=False), "cabinet", launcher=False)
+    def test_no_launcher_yet_still_writes_the_setting_and_leaves_the_view_mode_due(self) -> None:
+        session = setup.Session(again=False)
+        client = self._answer(session, "cabinet", Now(cabinet=False), launcher=None)
 
         client.put_config.assert_called_once_with({"presentation": {"cab_mode": True}})
         client.write_launcher_config.assert_not_called()
-
-    def test_a_launcher_with_no_program_writes_nothing_and_logs_nothing(self) -> None:
-        client = mock.Mock()
-        launcher = Launcher(launcher_id="vpx-1", app="vpx")
-
-        with mock.patch.object(setup, "ApiClient", return_value=client), \
-             mock.patch("common.games.launchers.default_launcher", return_value=launcher), \
-             self.assertNoLogs("vpinfe.manager.setup", level="WARNING"):
-            _ran(setup._answer_how(setup.Session(again=False), {"cab_mode": "cabinet"}))
-
-        client.put_config.assert_called_once()
-        client.write_launcher_config.assert_not_called()
+        self.assertTrue(session.bgset_due)
 
     def test_a_write_that_fails_warns_and_the_answer_stands(self) -> None:
         client = mock.Mock()
         client.write_launcher_config.side_effect = RuntimeError("no settings file")
-        launcher = Launcher(launcher_id="vpx-1", app="vpx", settings={"bin_path": "/opt/vpx"})
 
-        with mock.patch.object(setup, "ApiClient", return_value=client), \
-             mock.patch("common.games.launchers.default_launcher", return_value=launcher), \
+        with mock.patch.object(setup.presets, "ApiClient", return_value=client), \
+             _settings(Now(cabinet=False, view="0", launcher_id="vpx-1"), "vpx-1"), \
              self.assertLogs("vpinfe.manager.setup", level="WARNING"):
-            _ran(setup._answer_how(setup.Session(again=False), {"cab_mode": "cabinet"}))
+            _ran(setup._answer_how(setup.Session(again=False), {"preset": "cabinet"}))
 
         client.put_config.assert_called_once()
 
-    def test_asked_again_and_answered_the_same_writes_nothing(self) -> None:
-        self.store.set_value("presentation", "cab_mode", True)
+    def test_a_cabinet_mode_that_cannot_be_written_stops_the_answer(self) -> None:
+        client = mock.Mock()
+        client.put_config.side_effect = RuntimeError("refused")
 
-        client = self._answer(setup.Session(again=True), "cabinet")
+        with mock.patch.object(setup.presets, "ApiClient", return_value=client), \
+             _settings(Now(cabinet=False, view="0", launcher_id="vpx-1"), "vpx-1"), \
+             self.assertRaises(RuntimeError):
+            _ran(setup._answer_how(setup.Session(again=False), {"preset": "cabinet"}))
+
+    def test_going_back_and_answering_again_still_leaves_a_missing_launchers_view_due(self) -> None:
+        session = setup.Session(again=False)
+        with mock.patch.object(setup.install_setup, "answered", return_value=[setup.HOW]):
+            self._answer(session, "cabinet", Now(cabinet=True), launcher=None)
+
+        self.assertTrue(session.bgset_due)
+
+    def test_a_launcher_whose_settings_cannot_be_read_is_left_out(self) -> None:
+        client = mock.Mock()
+        client.config_values.return_value = {}
+        client.config_schema.return_value = {}
+        client.launcher_config.side_effect = RuntimeError("unreadable")
+
+        with mock.patch.object(setup.presets, "ApiClient", return_value=client), \
+             mock.patch.object(setup.presets, "launcher_for_default", return_value="vpx-1"), \
+             self.assertLogs("vpinfe.manager.setup", level="WARNING"):
+            _ran(setup._answer_how(setup.Session(again=True), {"preset": "cabinet"}))
+
+        client.put_config.assert_called_once_with({"presentation": {"cab_mode": True}})
+        client.write_launcher_config.assert_not_called()
+
+    def test_no_answer_writes_nothing(self) -> None:
+        client = self._answer(setup.Session(again=True), "", Now(cabinet=False))
 
         client.put_config.assert_not_called()
         client.write_launcher_config.assert_not_called()
 
-    def test_asked_again_and_answered_differently_writes_it(self) -> None:
-        self.store.set_value("presentation", "cab_mode", True)
+    def test_asked_again_and_answered_the_same_writes_nothing(self) -> None:
+        session = setup.Session(again=True)
+        client = self._answer(session, "cabinet", Now(cabinet=True, view="1", launcher_id="vpx-1"))
 
-        client = self._answer(setup.Session(again=True), "desktop")
+        client.put_config.assert_not_called()
+        client.write_launcher_config.assert_not_called()
+        self.assertFalse(session.bgset_due)
+
+    def test_asked_again_and_answered_differently_writes_what_differs(self) -> None:
+        client = self._answer(setup.Session(again=True), "desktop",
+                              Now(cabinet=True, view="1", launcher_id="vpx-1"))
 
         client.put_config.assert_called_once_with({"presentation": {"cab_mode": False}})
+        client.write_launcher_config.assert_called_once_with(
+            "vpx-1", {setup.presets.vpx.VIEW_MODE: "0"}, create=True)
+
+    def test_asked_again_a_desktop_view_mode_that_never_uses_fss_is_left_alone(self) -> None:
+        client = self._answer(setup.Session(again=True), "desktop",
+                              Now(cabinet=True, view="2", launcher_id="vpx-1"))
+
+        client.put_config.assert_called_once_with({"presentation": {"cab_mode": False}})
+        client.write_launcher_config.assert_not_called()
 
     def test_the_first_time_an_unchanged_answer_is_still_written(self) -> None:
         """cab_mode defaults to off, so desktop reads the same answered or untouched."""
-        client = self._answer(setup.Session(again=False), "desktop")
+        client = self._answer(setup.Session(again=False), "desktop",
+                              Now(cabinet=False, view="0", launcher_id="vpx-1"))
 
         client.put_config.assert_called_once()
 
@@ -430,7 +486,8 @@ class TheRealStepsTests(_Fresh):
                          [one.key for one in setup.STEPS])
         self.assertEqual(step["step"], setup.HOW)
         self.assertNotIn("confirm", step, "Visual Pinball's pages follow it")
-        self.assertEqual(["How you play", "Appearance", "Controls", "Visual Pinball", "Tables"],
+        self.assertEqual(["How you play", "Appearance", "Screens", "Controls", "Visual Pinball",
+                          "Tables"],
                          [segment["label"] for segment in step["steps"]])
 
     def test_every_step_names_itself_for_the_row(self) -> None:
@@ -444,10 +501,10 @@ class TheRealStepsTests(_Fresh):
         client = mock.Mock()
         session = setup.Session(again=False)
 
-        with mock.patch.object(setup, "ApiClient", return_value=client), \
-             mock.patch("common.games.launchers.default_launcher", return_value=None), \
+        with mock.patch.object(setup.presets, "ApiClient", return_value=client), \
+             _settings(Now(cabinet=False), None), \
              mock.patch.object(setup_vpx, "ApiClient", return_value=client):
-            answer = _ran(setup.calls(session).check({"cab_mode": "cabinet"}, setup.HOW))
+            answer = _ran(setup.calls(session).check({"preset": "cabinet"}, setup.HOW))
 
         client.put_config.assert_called_once_with({"presentation": {"cab_mode": True}})
         self.assertEqual(answer["step"], setup.APPEARANCE)

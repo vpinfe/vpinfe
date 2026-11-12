@@ -314,7 +314,7 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         self.write.assert_awaited_once_with(
             {"windows.playfield": {"screen_id": 0, "orientation": "landscape"}})
 
-    async def test_show_numbers_is_given_the_screens_and_nothing_else(self) -> None:
+    async def test_show_numbers_is_given_the_screens_and_what_each_shows(self) -> None:
         local = self.enterContext(patch.object(displays.device_client, "local"))
         self.enterContext(patch.object(displays.run, "io_bound", new=AsyncMock()))
         drawn = self._drawn({"presentation": {"cab_mode": "true"}})
@@ -325,7 +325,8 @@ class RowsTests(unittest.IsolatedAsyncioTestCase):
         args = cast(Any, displays.run.io_bound).await_args.args
         self.assertIs(args[0], local.return_value.show_numbers)
         self.assertEqual([one.number for one in args[1]], [1, 2])
-        self.assertEqual(len(args), 2)
+        self.assertEqual(args[2], {"playfield": 2})
+        self.assertEqual(len(args), 3)
 
     async def test_show_numbers_that_cannot_open_a_window_says_why(self) -> None:
         self.enterContext(patch.object(displays.device_client, "local"))

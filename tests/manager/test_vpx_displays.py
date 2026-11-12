@@ -80,9 +80,11 @@ async def _inline(function: Any, *args: Any, **kwargs: Any) -> Any:
 def _page(library: Any = None, flat: dict | None = None, *, vpinfe: Any = None,
           cabinet: bool = True, units_now: str = "cm", logged: tuple = ()) -> Any:
     library = library or _Library()
+    held = dict(_flat() if flat is None else flat)
+    held.setdefault("Player.BGSet", "1" if cabinet else "0")
     page = vpx_displays.Page(
-        library, "vpx-1", Mock(), flat=dict(_flat() if flat is None else flat),
-        vpinfe=vpinfe or _standing(), here=HERE, logged=logged, cabinet=cabinet,
+        library, "vpx-1", Mock(), flat=held,
+        vpinfe=vpinfe or _standing(), here=HERE, logged=logged,
         units_now=units_now, defaults={"Player.ScreenWidth": "95.89",
                                        "Player.ScreenHeight": "53.94"})
     return page
@@ -536,7 +538,7 @@ class DrawnTests(unittest.TestCase):
         self.assertNotIn("point", control.call_args.kwargs)
         self.assertNotIn("test", control.call_args.kwargs)
 
-    def test_a_desk_is_not_a_cabinet(self) -> None:
+    def test_the_picture_follows_the_view_mode_not_cabinet_mode(self) -> None:
         page = _page(cabinet=False)
         with patch.object(vpx_displays.picture, "Picture") as control:
             page.picture_rows()[1][1]()
@@ -558,7 +560,7 @@ class SizeTests(unittest.IsolatedAsyncioTestCase):
 
     def test_a_size_that_is_neither_is_nothing(self) -> None:
         page = vpx_displays.Page(_Library(), "vpx-1", Mock(), flat={"Player.ScreenWidth": "x"},
-                                 vpinfe=_standing(), here=HERE, logged=(), cabinet=True,
+                                 vpinfe=_standing(), here=HERE, logged=(),
                                  units_now="cm", defaults={})
 
         self.assertEqual(page.size, {"Player.ScreenWidth": 0.0, "Player.ScreenHeight": 0.0})
@@ -1057,7 +1059,7 @@ class EntriesTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(made.call_args.kwargs["program"])
 
-    async def test_the_heading_comes_first_then_the_intro_the_picture_and_the_rows(
+    async def test_the_heading_comes_first_then_the_picture_and_the_rows(
             self) -> None:
         rows = AsyncMock(return_value=[("a row", None)])
         shown = [_heading("playfield", "Player.PlayfieldDisplay"),
@@ -1065,8 +1067,8 @@ class EntriesTests(unittest.IsolatedAsyncioTestCase):
 
         out, _ = await self._entries(shown, rows)
 
-        self.assertEqual([kind for kind, _ in out[:4]],
-                         [panel.HEADING, panel.FULL, panel.FULL, panel.FULL])
+        self.assertEqual([kind for kind, _ in out[:3]],
+                         [panel.HEADING, panel.FULL, "a row"])
         self.assertEqual(out[0][1], t("manager.settings.section_screens"))
         self.assertIn(("a row", None), out)
 

@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 from common.i18n import t
 from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.live_instance import LiveInstance
-from tests.support.manager_walk import ManagerWalk
+from tests.support.manager_walk import ManagerWalk, answer_how_you_play
 
 CARD = ".manager-wizard-card"
 TITLE = f"{CARD} .manager-wizard-title"
@@ -71,6 +71,7 @@ class SetupBackDrive(unittest.TestCase):
         await asyncio.sleep(SETTLE_S)
         first = await browser.evaluate(TITLE_NOW)
 
+        await answer_how_you_play(browser)
         await browser.click(FORWARD)
         await browser.wait_for(f"{TITLE_NOW} !== {json.dumps(first)}")
         await asyncio.sleep(SETTLE_S)

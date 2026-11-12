@@ -240,6 +240,12 @@ def choice_words(app_id: str, field: Field) -> dict[str, str]:
     return {value: said for value, said in found.items() if said}
 
 
+def choice_word(app_id: str, key: str, value: str) -> str:
+    """The word the app's catalog has for one choice of a setting, by key, or "" where it
+    has none."""
+    return i18n.literal_or("", f"app.{app_id}.field.{key}.choice.{value}.label")[0]
+
+
 def choice_help(app_id: str, field: Field) -> dict[str, str]:
     """By stored value, what each of a setting's choices does, where the app's catalog
     says."""

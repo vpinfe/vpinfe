@@ -159,9 +159,10 @@ def waits_for_reopen(answer: Mapping[str, Any]) -> bool:
 
 def rows(values: Mapping[str, Any], schema: Sequence[dict], monitors: Sequence[Any],
          names: Sequence[str], write: Write,
-         refill: Callable[[], None], follow: Follow | None = None) -> list[tuple[Any, Any]]:
+         refill: Callable[[], None], follow: Follow | None = None,
+         presets: Callable[[], Awaitable[Any]] | None = None) -> list[tuple[Any, Any]]:
     """The picture as a heading and a row spanning the page. `follow` is told of each
-    change that was kept."""
+    change that was kept, and `presets` opens the preset dialog."""
     here = screens.numbered(monitors, names)
     held = placed(values, schema)
     turned = {"orientation": standing(values, schema).turn[0],
@@ -211,15 +212,15 @@ def rows(values: Mapping[str, Any], schema: Sequence[dict], monitors: Sequence[A
         return True
 
     @on_page
-    async def show(_on: Mapping[str, picture.Placement]) -> None:
+    async def show(uses: dict[int, list[str]]) -> None:
         try:
-            await run.io_bound(device_client.local().show_numbers, here)
+            await run.io_bound(device_client.local().show_numbers, here, uses)
         except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
             ui.notify(t("manager.screens.show_failed"), caption=why(exc), type="negative")
 
     def draw() -> None:
         picture.Picture(here, held, move=move, cabinet=on_cabinet, show=show,
                         rotation=turned["rotation"],
-                        point=point, test=test_card())
+                        point=point, test=test_card(), presets=presets)
 
     return [(panel.HEADING, t("manager.settings.section_screens")), (panel.FULL, draw)]

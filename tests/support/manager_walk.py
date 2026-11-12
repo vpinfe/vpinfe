@@ -217,3 +217,26 @@ def clicked(browser: BrowserSession, expression: str) -> Callable[[], Awaitable[
         if not await browser.evaluate(expression):
             raise AssertionError(f"nothing to click: {json.dumps(expression)[:120]}")
     return click
+
+
+async def answer_how_you_play(browser: BrowserSession) -> None:
+    """Pick Desktop where Setup's first question has nothing picked and Next is waiting.
+
+    On a machine with two screens or more the question starts empty, so a walk that only
+    presses Next stays on it. Where Next is already enabled, or the page asks something
+    else, this does nothing.
+    """
+    from common.i18n import t
+
+    forward = json.dumps(".manager-wizard-card .manager-wizard-forward")
+    picks = json.dumps(".manager-wizard-card .manager-wizard-pick")
+    waiting = f"document.querySelector({forward}).disabled === true"
+    if not await browser.evaluate(waiting):
+        return
+    index = int(await browser.evaluate(
+        f"[...document.querySelectorAll({picks})].findIndex("
+        f"el => el.innerText.includes({json.dumps(t('manager.presets.desktop'))}))"))
+    if index < 0:
+        return
+    await browser.click(".manager-wizard-card .manager-wizard-pick", nth=index)
+    await browser.wait_for(f"!({waiting})")

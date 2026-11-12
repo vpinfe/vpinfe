@@ -19,7 +19,7 @@ from common.i18n import t
 from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.library import write_game
 from tests.support.live_instance import LiveInstance
-from tests.support.manager_walk import ManagerWalk
+from tests.support.manager_walk import ManagerWalk, answer_how_you_play
 
 CARD = ".manager-wizard-card"
 TITLE = f"{CARD} .manager-wizard-title"
@@ -86,6 +86,7 @@ class SetupTablesDrive(unittest.TestCase):
                 ).strip()
 
             async def forward() -> None:
+                await answer_how_you_play(browser)
                 before = await title()
                 if before in (t("manager.setup.vpx.title_one"),
                               t("manager.setup.vpx.title_many")):

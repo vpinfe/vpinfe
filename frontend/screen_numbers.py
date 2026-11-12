@@ -1,4 +1,4 @@
-"""A window on each screen saying its number and name, for a few seconds.
+"""A window on each screen saying its number, its use and its name, for a few seconds.
 
 What tells a person which screen the Manager means when its sizes are alike. Each window
 is placed the way every frontend window is, so it lands where the frontend would open one,
@@ -13,7 +13,7 @@ import os
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import IO, Any
 from urllib.parse import quote
 
@@ -39,24 +39,39 @@ _showing = threading.Lock()
 Opened = tuple[Any, Any, IO[bytes]]
 
 
-def page(number: int, name: str, size: str) -> str:
-    """The page one screen shows. `name` is empty for a screen that has none."""
+def page(number: int, name: str, size: str, lines: Sequence[str] | None = None) -> str:
+    """The page one screen shows. `name` is empty for a screen that has none.
+
+    `lines` is what the screen is used for, the part first and then anything said of it
+    in a smaller voice. An empty one reads as unused, and None says nothing of use at all.
+    """
     named = f'<div class="name">{html.escape(name)}</div>' if name else ""
+    used = ""
+    if lines is not None:
+        if lines:
+            first, *rest = lines
+            used = f'<div class="part">{html.escape(first)}</div>' + "".join(
+                f'<div class="extra">{html.escape(one)}</div>' for one in rest)
+        else:
+            used = f'<div class="part off">{html.escape(t("manager.screens.not_used"))}</div>'
     return (
         "<!doctype html><meta charset=utf-8><title>VPinFE</title><style>"
         "html,body{margin:0;height:100%;background:#0f0722;color:#fff;overflow:hidden;"
         "font-family:system-ui,sans-serif;cursor:none}"
         "body{display:flex;flex-direction:column;align-items:center;justify-content:center;"
-        "gap:2vmin;box-sizing:border-box;border:1.2vmin solid #00d9ff}"
-        ".number{font-size:45vmin;font-weight:700;line-height:1}"
-        ".name{font-size:7vmin;font-weight:600}.size{font-size:4vmin;color:#cbb8ea}"
+        "gap:2vmin;box-sizing:border-box;border:1.2vmin solid #00d9ff;text-align:center}"
+        ".number{font-size:40vmin;font-weight:700;line-height:1}"
+        ".part{font-size:9vmin;font-weight:700;color:#00d9ff}"
+        ".part.off{color:#cbb8ea;opacity:.55;font-weight:600}"
+        ".extra{font-size:5vmin;color:#cbb8ea}"
+        ".name{font-size:4.5vmin;font-weight:600;color:#cbb8ea}.size{font-size:3.5vmin;color:#9a85bd}"
         "</style>"
-        f'<div class="number">{number}</div>{named}'
+        f'<div class="number">{number}</div>{used}{named}'
         f'<div class="size">{html.escape(size)}</div>')
 
 
-def address(number: int, name: str, size: str) -> str:
-    return "data:text/html;charset=utf-8," + quote(page(number, name, size))
+def address(number: int, name: str, size: str, lines: Sequence[str] | None = None) -> str:
+    return "data:text/html;charset=utf-8," + quote(page(number, name, size, lines))
 
 
 def window_commands() -> wlr.WlrAdapter | None:
@@ -144,18 +159,23 @@ def launch(manager: ChromiumManager, screen: Any, url: str) -> Opened:
     return screen, proc, errors
 
 
-def _number_window(screen: Any) -> str:
+def _number_window(screen: Any, uses: Mapping[int, Sequence[str]] | None = None) -> str:
     size = t("manager.screens.size", width=screen.width, height=screen.height)
-    return address(screen.number, screen.name, size)
+    return address(screen.number, screen.name, size,
+                   None if uses is None else uses.get(screen.number, ()))
 
 
 def _open(manager: ChromiumManager, compositor: wlr.WlrAdapter | None,
-          screens: Sequence[Any], seconds: float) -> None:
+          screens: Sequence[Any], seconds: float,
+          uses: Mapping[int, Sequence[str]] | None) -> None:
+    def window(screen: Any) -> str:
+        return _number_window(screen, uses)
+
     opened: list[Opened] = []
     failure: Exception | None = None
     for screen in screens:
         try:
-            opened.append(launch(manager, screen, _number_window(screen)))
+            opened.append(launch(manager, screen, window(screen)))
         except Exception as exc:  # noqa: BLE001 - one screen failing is one screen
             logger.warning("Could not open the window on screen %s",
                            screen.number, exc_info=True)
@@ -164,7 +184,7 @@ def _open(manager: ChromiumManager, compositor: wlr.WlrAdapter | None,
         if screens and not opened and failure is not None:
             raise failure
         if compositor is not None:
-            place_all(manager, compositor, opened, _number_window)
+            place_all(manager, compositor, opened, window)
         time.sleep(seconds)
     finally:
         for one in opened:
@@ -212,11 +232,13 @@ def refocus(compositor: wlr.WlrAdapter | None, view: str | None) -> None:
         logger.debug("Could not give focus back", exc_info=True)
 
 
-def show(screens: Sequence[Any], seconds: float = SECONDS) -> None:
+def show(screens: Sequence[Any], seconds: float = SECONDS,
+         uses: Mapping[int, Sequence[str]] | None = None) -> None:
     """Open a window on each of `screens` and close them all after `seconds`. Blocking.
 
-    A screen has `number`, `name`, `width`, `height`, `x` and `y`. A second call while one is
-    showing does nothing.
+    A screen has `number`, `name`, `width`, `height`, `x` and `y`. `uses` gives each screen's
+    lines by its number, as `page` takes them, and a screen missing from it reads as unused;
+    None says nothing of use. A second call while one is showing does nothing.
     """
     if not _showing.acquire(blocking=False):
         return
@@ -225,7 +247,7 @@ def show(screens: Sequence[Any], seconds: float = SECONDS) -> None:
         compositor = window_commands()
         before = focused(compositor)
         try:
-            _open(manager, compositor, screens, seconds)
+            _open(manager, compositor, screens, seconds, uses)
         finally:
             manager.terminate_all()
             refocus(compositor, before)

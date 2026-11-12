@@ -17,7 +17,7 @@ from tempfile import TemporaryDirectory
 from common.i18n import t
 from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.live_instance import LiveInstance
-from tests.support.manager_walk import ManagerWalk
+from tests.support.manager_walk import ManagerWalk, answer_how_you_play
 
 CARD = ".manager-wizard-card"
 TITLE = f"{CARD} .manager-wizard-title"
@@ -83,6 +83,7 @@ class SetupControlsDrive(unittest.TestCase):
             await browser.wait_for(CARD_UP, timeout=60)
             await walk.drawn()
             await browser.evaluate(PAD)
+            await answer_how_you_play(browser)
             for _ in range(6):
                 title = (await browser.evaluate(
                     f"document.querySelector({json.dumps(TITLE)}).innerText")).strip()

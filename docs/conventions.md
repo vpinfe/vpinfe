@@ -1341,11 +1341,25 @@ and an empty part reads **No screen**.
 A screen is called by its model name, and by its size when it has none. It is numbered from
 1, as a person counts, and a window stores that number less one. The picture asks
 Is the Playfield Rotated Correctly? under the screens, answered with a test card on the
-playfield screen that a key or a click closes, and three turns, and the playfield's box keeps a small card turned to the
-stored answer, whatever Cabinet Mode says. **Looks Right** reopens the open windows when the
-saved turn is waiting on that, so the playfield picks it up; closing the card another way keeps
-the turn and leaves it waiting. A launcher's page for Visual Pinball draws only
-the small card, whatever Cabinet Mode says.
+playfield screen that a key or a click closes, and three turns. **Looks Right** reopens the open
+windows when the saved turn is waiting on that, so the playfield picks it up; closing the card
+another way keeps the turn and leaves it waiting.
+
+The picture has two drawings. The cabinet drawing, with the playfield's box and a small card
+turned to the stored answer, shows while the screens are used as a cabinet. Otherwise the screens
+are drawn at a desk, where the system arranges them and in their own shape, each showing its part,
+with a row per part beside them to drag onto a screen or pick from. A part's row and a screen's
+menu both swap as the cabinet drawing does. **Identify Screens** opens a window on each screen
+that names the part on it. VPinFE's pages follow Cabinet Mode. A launcher's page for Visual
+Pinball follows that launcher's View Mode, so its small card shows only while View Mode is
+Cabinet.
+
+**Presets** (`manager/settings/presets.py`) set Cabinet Mode and a Visual Pinball launcher's View Mode together, from a
+Presets button beside Identify Screens on Displays and on a launcher's Visual Pinball page, and from Setup's first question.
+There are two, Cabinet and Desktop. Any View Mode other than Cabinet counts as Desktop, so a launcher on Desktop, never FSS
+matches Desktop and is left as it is. The dialog lists only the settings that would change; Apply says so with Undo, which
+puts back what Apply changed. From Displays or Setup the View Mode is the default launcher's; from a launcher's page it is
+that launcher's.
 
 Window placement is a set of rows, `manager/settings/placement_panel.py`, that a page mounts under the
 screens picture: Displays does today and the Screens step of Setup can. The rows write

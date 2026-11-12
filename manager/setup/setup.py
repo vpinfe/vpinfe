@@ -22,14 +22,12 @@ from nicegui import run, ui
 
 from common.config.config_access import DisplayConfig
 from common.devices import install_setup, serving
-from common.games import launchers as launcher_model
 from common.host import addresses
 from common.i18n import t
 from common.vpinfe_version import get_version
 from manager.kit import deeplink, offload, wizard
-from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
-from manager.settings import screens
+from manager.settings import presets, screens
 from manager.setup import setup_appearance, setup_controls, setup_screens, setup_tables, setup_vpx
 from manager.system import early_access
 
@@ -46,8 +44,8 @@ TABLES = "tables"
 # Where an import that Setup started is followed once Setup has closed.
 JOBS_VIEW = "/manager?" + deeplink.query({"view": "jobs"})
 
-# The launcher setting `presentation.cab_mode` mirrors in VPX's own ini.
-BGSET_KEY = "Player.BGSet"
+# How you play's answer: one of the presets.
+PRESET = "preset"
 
 # Where How you play preselects Cabinet. Only the preselection: the person answers.
 CABINET_SCREENS = 2
@@ -105,28 +103,36 @@ async def _screens_here() -> int:
         return 0
 
 
+async def _settings_now(launcher: str | None) -> presets.Now:
+    """The settings now. A launcher whose settings cannot be read is left out of it."""
+    try:
+        return await offload.io(presets.read, launcher)
+    except Exception:
+        if launcher is None:
+            raise
+        logger.warning("Could not read the View Mode of %s", launcher, exc_info=True)
+        return await offload.io(presets.read, None)
+
+
 async def _ask_how(session: Session) -> dict[str, Any]:
-    config = _config()
     if session.again or HOW in install_setup.answered():
-        cabinet = DisplayConfig.from_config(config).cab_mode
+        launcher = await run.io_bound(presets.launcher_for_default)
+        found = presets.matching(await _settings_now(launcher))
     else:
-        cabinet = await _screens_here() >= CABINET_SCREENS
+        found = presets.DESKTOP if await _screens_here() < CABINET_SCREENS else None
     question = t("manager.setup.how_question")
     step: dict[str, Any] = {
         "title": t("manager.setup.title") if session.again else t("manager.setup.welcome_title"),
         "help": question if session.again else t("manager.setup.welcome_lead"),
         "welcome": not session.again,
         "fields": [{
-            "key": "cab_mode", "type": "choice", "label": question,
-            "value": "cabinet" if cabinet else "desktop",
-            "choices": [
-                ("desktop", t("manager.setup.desktop"), t("manager.setup.desktop_help"),
-                 "desktop"),
-                ("cabinet", t("manager.setup.cabinet"), t("manager.setup.cabinet_help"),
-                 "cabinet"),
-            ],
+            "key": PRESET, "type": "choice", "label": question,
+            "value": found.key if found is not None else "",
+            "choices": [(one.key, one.name, one.help, one.key) for one in presets.PRESETS],
         }],
     }
+    if found is None and not session.again and HOW not in install_setup.answered():
+        step["gate"] = lambda values: bool(values.get(PRESET))
     if session.window and (address := await offload.io(_address)):
         step["notes"] = [t("manager.setup.address_note", address=address,
                            action=t("signin.page.get_code"))]
@@ -134,23 +140,27 @@ async def _ask_how(session: Session) -> dict[str, Any]:
 
 
 async def _answer_how(session: Session, values: dict[str, Any]) -> None:
-    cabinet = str(values.get("cab_mode") or "desktop") == "cabinet"
-    if session.again and cabinet == DisplayConfig.from_config(_config()).cab_mode:
+    pick = next((one for one in presets.PRESETS if one.key == values.get(PRESET)), None)
+    if pick is None:
         session.bgset_due = False
         return
-    client = ApiClient()
-    await offload.io(client.put_config, {"presentation": {"cab_mode": cabinet}})
-    # Not offload.io: no launcher at all is a real answer, not a shutdown.
-    launcher = await run.io_bound(launcher_model.default_launcher, "vpx")
-    # A launcher with no program has no settings file to write to; the VPX step writes
-    # BGSet when the program is chosen. One with a program that has never run has no file
-    # yet, so the write makes it.
-    if launcher is not None and launcher.has_program():
-        try:
-            await offload.io(client.write_launcher_config, launcher.launcher_id,
-                             {BGSET_KEY: "1" if cabinet else "0"}, create=True)
-        except Exception:
-            logger.warning("Could not write BGSet for the default launcher", exc_info=True)
+    # Not offload.io: no launcher at all is a real answer, not a shutdown. A launcher with
+    # no program has no settings file to write to; the VPX step writes the View Mode when
+    # the program is chosen. One with a program that has never run has no file yet, so the
+    # write makes it.
+    launcher = await run.io_bound(presets.launcher_for_default)
+    first = not (session.again or HOW in install_setup.answered())
+    session.bgset_due = launcher is None
+    now = await _settings_now(launcher)
+    try:
+        if first:
+            await run.io_bound(presets.write, pick.cabinet,
+                               presets.CABINET_VIEW if pick.cabinet else presets.DESKTOP_VIEW,
+                               launcher)
+        elif presets.changes(now, pick):
+            await run.io_bound(presets.apply, now, pick)
+    except presets.ViewModeError:
+        logger.warning("Could not write the View Mode of the default launcher", exc_info=True)
 
 
 def _cabinet() -> bool:
@@ -220,8 +230,7 @@ async def _answer_tables(session: Session, values: dict[str, Any]) -> None:
 STEPS: tuple[Step, ...] = (
     Step(HOW, "manager.setup.step.how", _ask_how, _answer_how),
     Step(APPEARANCE, "manager.setup.step.appearance", _ask_appearance, _answer_appearance),
-    Step(SCREENS, "manager.setup.step.screens", _ask_screens, _answer_screens,
-         lambda session: _cabinet()),
+    Step(SCREENS, "manager.setup.step.screens", _ask_screens, _answer_screens),
     Step(CONTROLS, "manager.setup.step.controls", _ask_controls, _answer_controls),
     # Three pages under one name in the row.
     Step(VPX, "manager.setup.step.vpx", _ask_vpx, _answer_vpx),

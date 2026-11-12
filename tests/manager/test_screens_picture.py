@@ -274,12 +274,13 @@ class DrawnTests(unittest.TestCase):
 
         self.assertNotIn("manager-pf-card", _classes(body))
 
-    def test_a_desktop_page_asks_the_rotation_question_and_words_its_hint_for_a_desk(self) -> None:
+    def test_a_desk_draws_the_screens_not_the_card_and_still_asks_the_question(self) -> None:
         _, body = _drawn({"playfield": 1}, cabinet=False, **_ASKS)
 
-        self.assertIn("manager-pf-card", _classes(body))
+        self.assertNotIn("manager-pf-card", _classes(body))
+        self.assertIn("manager-mon", _classes(body))
         self.assertIn("manager-rotation", _classes(body))
-        self.assertIn(t("manager.screens.hint_desktop"), _labels(body))
+        self.assertIn(t("manager.screens.hint_desk"), _labels(body))
 
     def test_a_playfield_with_no_screen_has_no_card_and_asks_nothing(self) -> None:
         _, body = _drawn({"playfield": None}, **_ASKS)
@@ -322,10 +323,10 @@ class DrawnTests(unittest.TestCase):
         _, without = _drawn({})
         _, with_it = _drawn({}, show=AsyncMock())
 
-        self.assertNotIn(t("manager.screens.show_numbers"),
+        self.assertNotIn(t("manager.screens.identify"),
                          [one.text for one in without.descendants()
                           if isinstance(one, ui.button)])
-        self.assertIn(t("manager.screens.show_numbers"),
+        self.assertIn(t("manager.screens.identify"),
                       [one.props.get("label") for one in with_it.descendants()
                        if isinstance(one, ui.button)])
 
@@ -534,7 +535,7 @@ class ActedOnTests(unittest.IsolatedAsyncioTestCase):
                                           t("manager.screens.test_card_close")])
         self.assertIn(t("manager.screens.rotation_press"), _labels(body))
         self.assertIn(t("manager.screens.rotation_stop"), _labels(body))
-        self.assertFalse(_button(body, t("manager.screens.show_numbers")).enabled)
+        self.assertFalse(_button(body, t("manager.screens.identify")).enabled)
 
     async def test_each_turn_adds_to_the_stored_rotation_and_turns_the_card(self) -> None:
         for start, degrees, total in ((0, 90, 90), (0, 180, 180), (0, 270, 270),
@@ -873,7 +874,7 @@ class ActedOnTests(unittest.IsolatedAsyncioTestCase):
 
         await press(control._show)
 
-        show.assert_awaited_once_with({"playfield": 1})
+        show.assert_awaited_once_with({1: ["Playfield"], 2: [], 3: []})
         self.assertFalse(control.showing)
 
     async def test_show_numbers_that_fails_still_lets_it_be_pressed_again(self) -> None:
@@ -903,14 +904,15 @@ class ActedOnTests(unittest.IsolatedAsyncioTestCase):
         move.assert_awaited_once_with({"backglass": picture.INSIDE})
         self.assertEqual(control.on["backglass"], picture.INSIDE)
 
-    async def test_a_swap_does_not_leave_the_playfield_inside_itself(self) -> None:
+    async def test_a_part_inside_is_not_swapped_onto_the_screen_of_the_playfield(self) -> None:
         move = AsyncMock(return_value=True)
         control, _ = self._drawn({"backglass": picture.INSIDE, "playfield": 1},
                                  parts=picture.vpx_parts(), move=move)
 
         await press(control._put, "backglass", 1)
 
-        move.assert_awaited_once_with({"backglass": 1, "playfield": None})
+        move.assert_not_awaited()
+        self.assertEqual(control.on, {"backglass": picture.INSIDE, "playfield": 1})
 
     async def test_a_swap_leaves_a_part_that_can_be_inside_where_it_is(self) -> None:
         move = AsyncMock(return_value=True)

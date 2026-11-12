@@ -491,7 +491,8 @@ async def _config_rows(context: dict[str, Any], group: Any) -> None:
             entries = await vpx_displays.entries(
                 context, group, shown, values,
                 partial(_setting_entries, context, curated=True,
-                        redraw_on=switches(group.curated), refill=again),
+                        redraw_on=switches(group.curated) | {vpx_displays.VIEW_MODE},
+                        refill=again),
                 again)
         else:
             entries = await _setting_entries(

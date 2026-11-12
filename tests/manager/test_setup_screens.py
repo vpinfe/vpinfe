@@ -311,10 +311,10 @@ class ProgramStepTests(unittest.TestCase):
 
 
 class StepTests(unittest.TestCase):
-    def test_the_step_is_asked_of_a_cabinet_alone_between_the_look_and_the_controls(self) -> None:
+    def test_the_step_is_asked_of_either_between_the_look_and_the_controls(self) -> None:
         session = setup.Session(again=False)
-        for cabinet, keys in ((True, [setup.HOW, setup.APPEARANCE, setup.SCREENS, setup.CONTROLS]),
-                              (False, [setup.HOW, setup.APPEARANCE, setup.CONTROLS])):
+        keys = [setup.HOW, setup.APPEARANCE, setup.SCREENS, setup.CONTROLS]
+        for cabinet in (True, False):
             with self.subTest(cabinet=cabinet), \
                  mock.patch.object(setup, "_cabinet", return_value=cabinet):
                 found = [one.key for one in setup._applicable(session)]

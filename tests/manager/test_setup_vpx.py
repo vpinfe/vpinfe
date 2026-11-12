@@ -259,7 +259,7 @@ class WhichPagesApplyTests(unittest.TestCase):
         session = setup.Session(again=False, vpx=setup_vpx.Vpx(chosen=NEW, answered=True))
         every = [setup.HOW, setup.APPEARANCE, setup.SCREENS, setup.CONTROLS, setup.VPX, setup.GLASS,
                  setup.VPX_KEYS, setup.TABLES]
-        desktop = [one for one in every if one not in (setup.SCREENS, setup.GLASS)]
+        desktop = [one for one in every if one != setup.GLASS]
         for cabinet, keys in ((True, every), (False, desktop)):
             with self.subTest(cabinet=cabinet), \
                  mock.patch.object(setup, "_cabinet", return_value=cabinet):

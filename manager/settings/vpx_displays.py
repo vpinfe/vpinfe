@@ -1,9 +1,11 @@
 """Launchers > Visual Pinball X > Displays: the screens picture over that launcher's ini.
 
 The picture is the one VPinFE's own Displays page draws, with a part's menu offering to draw
-it inside the playfield. It writes this launcher's ini only. Where it disagrees with
-VPinFE's screens the page says so and offers to match them; a change to VPinFE's screens
-moves this one only where it still matched (`follow`).
+it inside the playfield. It follows the launcher's View Mode, not Cabinet Mode: the cabinet
+drawing while Visual Pinball plays the cabinet view, the screens at a desk otherwise. It
+writes this launcher's ini only. Where it disagrees with VPinFE's screens the page says so
+and offers to match them; a change to VPinFE's screens moves this one only where it still
+matched (`follow`).
 """
 
 from __future__ import annotations
@@ -24,11 +26,11 @@ from common.failures import why
 from common.host import display_service
 from common.i18n import t
 from common.values import quarter_turn
-from manager.kit import offload, panel, units, verbs
+from manager.kit import deeplink, offload, panel, units, verbs
 from manager.kit.data import config_groups
 from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
-from manager.settings import displays, screens
+from manager.settings import displays, presets, screens
 from manager.settings import screens_picture as picture
 from manager.settings.screens import Screen
 
@@ -39,6 +41,10 @@ Entries = list[tuple[Any, Any]]
 
 # A launcher whose app is this one has the keys this page draws.
 VPX_APP = "vpx"
+VIEW_MODE = vpx.VIEW_MODE
+# VPinFE's own Displays page, where the screens this page is compared with are set.
+VPINFE_DISPLAYS = "/manager?" + deeplink.query({"view": "settings",
+                                                "settings_page": displays.KEY})
 # What a placed number is rounded to when it is written back as centimeters.
 _CM_PLACES = 2
 
@@ -96,10 +102,7 @@ def size_row_goes_before(shown: Sequence[tuple[Any, list[Any]]]) -> str:
 def named(parts: Sequence[str]) -> str:
     """The parts as a person calls them: "A", "A and B", "A, B and C"."""
     labels = {part.key: part.label for part in picture.vpx_parts()}
-    names = [labels.get(part, part) for part in parts]
-    if len(names) < 2:
-        return "".join(names)
-    return t("manager.vpx_displays.and_last", most=", ".join(names[:-1]), last=names[-1])
+    return picture.listed([labels.get(part, part) for part in parts])
 
 
 def say_unnamed(written: vpx.Written) -> None:
@@ -162,7 +165,7 @@ class Page:
 
     def __init__(self, library: Any, launcher_id: str, rebuild: Callable[[], Any], *,
                  flat: dict[str, str], vpinfe: displays.Standing, here: Sequence[Screen],
-                 logged: Sequence[str], cabinet: bool, units_now: str,
+                 logged: Sequence[str], units_now: str,
                  defaults: Mapping[str, str],
                  program: Mapping[str, Any] | None = None) -> None:
         self.library = library
@@ -172,7 +175,6 @@ class Page:
         self.vpinfe = vpinfe
         self.here = list(here)
         self.logged = list(logged)
-        self.cabinet = cabinet
         self.units = units_now
         self.defaults = dict(defaults)
         self.program = program
@@ -182,6 +184,10 @@ class Page:
 
     def screen(self, number: Placement) -> Screen | None:
         return next((one for one in self.here if one.number == number), None)
+
+    @property
+    def cabinet(self) -> bool:
+        return vpx.plays_cabinet_view(self.flat)
 
     def rotation(self) -> str:
         return self.flat.get(vpx.VIEW_CAB_ROTATION, "")
@@ -254,9 +260,9 @@ class Page:
         self.rebuild()
 
     @on_page
-    async def show(self, _on: Mapping[str, Placement]) -> None:
+    async def show(self, uses: dict[int, list[str]]) -> None:
         try:
-            await run.io_bound(device_client.local().show_numbers, self.here)
+            await run.io_bound(device_client.local().show_numbers, self.here, uses)
         except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
             ui.notify(t("manager.screens.show_failed"), caption=why(exc), type="negative")
 
@@ -264,7 +270,9 @@ class Page:
         def draw() -> None:
             picture.Picture(self.here, self.on, move=self.move, parts=picture.vpx_parts(),
                             cabinet=self.cabinet, rotation=self.turned(), show=self.show,
-                            differs=self.differences(), match=self.match)
+                            differs=self.differences(), match=self.match,
+                            vpinfe_at=VPINFE_DISPLAYS,
+                            presets=partial(presets.choose, self.launcher_id, self.rebuild))
 
         return [(panel.HEADING, t("manager.settings.section_screens")), (panel.FULL, draw)]
 
@@ -355,7 +363,6 @@ async def entries(context: dict[str, Any], group: Any, shown: Sequence[tuple[Any
         vpinfe=displays.standing(vpinfe, schema), here=here,
         logged=sorted({name for key in vpx.DISPLAY.values() if key in by_key
                        for name in by_key[key].reported}),
-        cabinet=displays.cabinet(vpinfe, schema),
         units_now=units.resolved(displays.stored(vpinfe, schema, "manager", "units")),
         defaults={key: str(by_key[key].default or "") for key in vpx.SCREEN_SIZE
                   if key in by_key}, program=program)
@@ -366,8 +373,7 @@ async def entries(context: dict[str, Any], group: Any, shown: Sequence[tuple[Any
     sized = page.size_row(joiner, [by_key[key].label if key in by_key else key
                                    for key in vpx.SCREEN_SIZE])
     heading, *picture_rows = page.picture_rows()
-    out: Entries = [heading, panel.intro(t("manager.vpx_displays.intro")),
-                    panel.intro(t("manager.vpx_displays.intro_where")), *picture_rows]
+    out: Entries = [heading, *picture_rows]
     out += await rows([(heading.label, heading.note, fields) for heading, fields in kept],
                       pairs=pairs_for(shown, page.on), ahead={after: sized} if after else {})
     return out if after else [*out, *sized]
