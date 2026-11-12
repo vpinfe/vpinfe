@@ -20,14 +20,14 @@ from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from common.media.media_specs import MEDIA_SPECS
 from frontend.chromium_manager import get_chromium_path
 from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.library import write_game
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk, clicked
 
-RELEASE_ONLY = True
-ROOT = Path(__file__).resolve().parents[2]
+ROOT =Path(__file__).resolve().parents[2]
 
 # Sections whose screens are mostly not ours to translate, and so cannot be read this
 # way: `logs` is log lines, English on purpose because a log is read by one person
@@ -205,7 +205,10 @@ class PseudoLocaleTests(unittest.TestCase):
             # The formats' own names, which Browser Program draws as chips
             # (`frontend_browser.FORMATS`). H.264, VP9, AV1, AAC and MP3 are under four
             # letters or carry a digit, so only these three reach the pattern.
-            | {"hevc", "vorbis", "opus"})
+            | {"hevc", "vorbis", "opus"}
+            # On-disk file names; translating them would rename the files.
+            | {w.lower() for spec in MEDIA_SPECS for token in (spec.token, *spec.alt_tokens)
+               if token for w in re.findall(r"[A-Za-z]{4,}", token)})
         allowed = set(content)
 
         from manager import page as manager_page

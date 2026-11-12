@@ -30,9 +30,9 @@ PLACE_JS = """
     return ((label || (owner && owner.matches('.q-btn') ? owner : null) || {}).textContent || '')
       .trim().replace(/\\s+/g, ' ').slice(0, 60);
   };
+  // No placeholder: it describes the value, which a save can change.
   const key = (el) => [el.tagName, el.type || '', el.getAttribute('role') || '',
-    el.getAttribute('aria-label') || '', el.getAttribute('placeholder') || '',
-    named(el)].join('|');
+    el.getAttribute('aria-label') || '', named(el)].join('|');
   const like = (box, wanted) => [...box.querySelectorAll(FOCUSABLE)]
     .filter((el) => shown(el) && key(el) === wanted);
   let last = null;

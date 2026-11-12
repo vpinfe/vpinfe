@@ -95,6 +95,13 @@ class SetupFirstRunDrive(unittest.TestCase):
                     f" && !document.querySelector({json.dumps(FORWARD)}).classList"
                     ".contains('disabled')", timeout=30)
 
+            async def choose_not_installed() -> None:
+                # Whether the program is found depends on the machine; Next waits for an
+                # answer where it is not, so the walk answers the same way everywhere.
+                await click_text(f"{CARD} .manager-wizard-pick", t("manager.setup.vpx.none"))
+                await browser.wait_for(
+                    f"!document.querySelector({json.dumps(FORWARD)}).disabled")
+
             async def left_for_later() -> None:
                 await walk.act(lambda: browser.click(ASIDE), until=CARD_GONE)
 
@@ -136,6 +143,8 @@ class SetupFirstRunDrive(unittest.TestCase):
                 title = (await browser.evaluate(TEXT_OF % json.dumps(TITLE))).strip()
                 if title == t("manager.setup.tables.title"):
                     await choose_none_yet()
+                if title in (t("manager.setup.vpx.title_one"), t("manager.setup.vpx.title_many")):
+                    await choose_not_installed()
                 if await forward_says() == t("word.finish"):
                     break
                 await walk.act(

@@ -268,10 +268,12 @@ class ReleaseOnlyTests(unittest.TestCase):
             self.assertEqual(["tests.held"], runner.release_only(names, top))
 
     def test_a_whole_run_leaves_it_out_and_release_runs_it(self) -> None:
-        held = "tests.theming.test_pseudo_locale"
+        held = "tests.invariants.test_a_main_block_comes_last"
         asked: list[list[str]] = []
         with mock.patch.object(runner, "run_modules",
                                side_effect=lambda names, *_: asked.append(list(names))), \
+                mock.patch.object(runner, "release_only",
+                                  side_effect=lambda names, *_: [n for n in names if n == held]), \
                 mock.patch.object(runner.wholesuite, "take", return_value=None), \
                 mock.patch.object(runner.wholesuite, "release"), \
                 mock.patch.object(runner.wholesuite, "record"), \

@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from common.config import input_registry
 from common.i18n import t
 from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.library import game_info, write_game
@@ -56,6 +57,9 @@ SAVED_POLL_S = 0.25
 CLOSED = t("manager.binding_table.frontend_closed", device="@@").split("@@")[0]
 TAKEN = t("manager.binding_table.off_taken", device="@@").split("@@")[0]
 IDLE = t("manager.binding_table.press_anything")
+# The line names the press it is showing, and after a row stores one it keeps showing that
+# one, so "not idle" says nothing about the next press having been seen.
+PAD_BUTTON_0 = input_registry.describe("pad:standard/button:0")
 CABINET_LINE = t("frontend.capture.line", browser="@@", device="").split("@@")[0]
 CABINET_TEXT = ("(el => el ? el.textContent.trim() : null)"
                 "(document.querySelector('.vpinfe-capture-text'))")
@@ -156,7 +160,7 @@ class InputRelayDrive(unittest.TestCase):
                                              seen["keys_before"])
 
             await controller.evaluate("window.__pad.buttons[0] = {pressed: true}")
-            await manager.wait_for(f"{LINE} !== {json.dumps(IDLE)}",
+            await manager.wait_for(f"({LINE} || '').startsWith({json.dumps(PAD_BUTTON_0)})",
                                    timeout=ARMED_FOR_THE_PAD_BY)
             seen["line_while_down"] = await manager.evaluate(LINE)
             await controller.evaluate("window.__pad.buttons[0] = {pressed: false}")
@@ -195,7 +199,7 @@ class InputRelayDrive(unittest.TestCase):
         self.assertTrue(self.seen["still_sending"], self.seen)
 
     def test_a_button_on_the_controller_window_shows_while_down_and_goes_when_let_go(self) -> None:
-        self.assertNotEqual(self.seen["line_while_down"], IDLE, self.seen)
+        self.assertTrue(self.seen["line_while_down"].startswith(PAD_BUTTON_0), self.seen)
         self.assertEqual(self.seen["line_after_up"], IDLE, self.seen)
 
     def test_a_button_held_at_the_cabinet_takes_them_back_and_the_page_says_so(self) -> None:

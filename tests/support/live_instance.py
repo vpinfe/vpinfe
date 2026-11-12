@@ -168,6 +168,12 @@ class LiveInstance:
         cfg_set(store, "device", "setup_pending", False)
         for (section, key), value in self.extra_settings.items():
             cfg_set(store, section, key, value)
+        # A window the instance opens (Identify screens, Reopen windows) is a real Chromium
+        # under this HOME, which has no login keychain. Appended to a test's own options,
+        # never replaced by them.
+        from tests.support.browser_session import NO_KEYCHAIN_FLAGS
+        own = str(self.extra_settings.get(("chromium", "options"), "") or "")
+        cfg_set(store, "chromium", "options", " ".join([*NO_KEYCHAIN_FLAGS, own]).strip())
         store.save()
 
     def _install_harness_theme(self) -> None:

@@ -19,6 +19,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import urllib.request
 from contextlib import suppress
@@ -40,6 +41,13 @@ OVERFLOWING = """(() => [...document.querySelectorAll('body *')]
 )()"""
 
 
+# Every Chromium a test starts, or starts through the app under test, carries these. macOS
+# asks the login keychain for a "Safe Storage" password at launch, and a process whose HOME
+# is a scratch folder has no keychain to ask: the system raises "Keychain Not Found" on
+# screen and the browser waits on it.
+NO_KEYCHAIN_FLAGS = ("--use-mock-keychain", "--password-store=basic")
+
+
 def free_port() -> int:
     """A port nothing holds. Probed the way the instance binds, not on loopback.
 
@@ -53,7 +61,16 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
+# Chrome for Testing, unpacked into the cache. Never fall back to the Chrome in /Applications.
+_MAC_TEST_BROWSER = os.path.expanduser(
+    "~/Library/Caches/vpinfe/cft-157/chrome-mac-arm64/"
+    "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")
+
+
 def _installed_browser() -> str | None:
+    if sys.platform == "darwin":
+        found = _MAC_TEST_BROWSER
+        return found if os.path.isfile(found) and os.access(found, os.X_OK) else None
     with suppress(Exception):
         from frontend.chromium_manager import get_chromium_path
 
@@ -152,6 +169,7 @@ class BrowserSession:
                  # exits immediately without this. Safe here: the only pages it opens
                  # are ours, on loopback, in a profile thrown away afterwards.
                  "--no-sandbox", "--disable-setuid-sandbox",
+                 *NO_KEYCHAIN_FLAGS,
                  "--window-size=1280,720", "about:blank"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                 start_new_session=os.name == "posix")

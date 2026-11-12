@@ -87,6 +87,11 @@ class SetupTablesDrive(unittest.TestCase):
 
             async def forward() -> None:
                 before = await title()
+                if before in (t("manager.setup.vpx.title_one"),
+                              t("manager.setup.vpx.title_many")):
+                    # Next waits for an answer where the program is not found, which
+                    # depends on the machine, so the walk answers the same way everywhere.
+                    await choose(t("manager.setup.vpx.none"))
                 await walk.act(
                     lambda: browser.click(FORWARD),
                     mark=f"window.fromTitle = {json.dumps(before)}",

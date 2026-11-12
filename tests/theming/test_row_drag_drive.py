@@ -107,6 +107,10 @@ class RowDragDrive(unittest.TestCase):
                 f"/api/v1/collections/{quote(name)}/members")["members"]]
 
         async with BrowserSession(chromium_path() or "") as browser:
+            # The drop below the last row needs room under the list.
+            await browser.send("Emulation.setDeviceMetricsOverride",
+                               {"width": 1280, "height": 1000, "deviceScaleFactor": 1,
+                                "mobile": False})
             caught: list[dict] = []
             heard = browser._on_event
 

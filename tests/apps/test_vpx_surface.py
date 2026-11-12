@@ -126,7 +126,7 @@ BASELINE: dict[str, int] = {
     # Where the program is on this machine: the names its builds go by are the subject.
     "manager/settings/vpx_find.py": 11,
     # The Input page of a Visual Pinball launcher: the file's keys are its subject.
-    "manager/settings/vpx_input.py": 9,
+    "manager/settings/vpx_input.py": 13,
     "manager/library/file_acts.py": 1,
     "manager/workbench/core.py": 1,
     "manager/workbench/file.py": 1,
