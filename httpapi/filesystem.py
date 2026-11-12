@@ -18,6 +18,7 @@ from common.i18n import t
 
 from . import models, scopes
 from .auth import requires
+from .responses import LIBRARY_FILE
 
 router = APIRouter(prefix="/filesystem", tags=["filesystem"])
 
@@ -38,7 +39,7 @@ def get_roots(game: str = Query("")) -> models.FilesystemRootList:
 def get_file(path: str = Query(...)) -> FileResponse:
     """Serve a file so it can be looked at before it is taken. Judging artwork means
     seeing it, and a name and a byte count do not do that."""
-    return FileResponse(media_browse.media_file(path))
+    return FileResponse(media_browse.media_file(path), headers=LIBRARY_FILE)
 
 
 @router.get("/entries", summary="What is in one folder",

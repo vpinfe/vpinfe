@@ -15,6 +15,11 @@ from common.media.sized_media import Served
 FOREVER = "public, max-age=31536000, immutable"
 HELD_LIMIT = 16 * 1024 * 1024
 
+# A library file is the app's own address but not the app's own content: a downloaded .html
+# opened from here would run in the Manager's origin. `sandbox` gives the document an opaque
+# origin and no scripts, and `nosniff` stops a file served as one type being read as another.
+LIBRARY_FILE = {"Content-Security-Policy": "sandbox", "X-Content-Type-Options": "nosniff"}
+
 MEDIA_SIZE = Query(None, description="The longest edge in pixels, for an image: "
                                      + " or ".join(str(one) for one in sized_media.SIZES))
 MEDIA_VERSION = Query("", description="The `version` the listing gave; a match is kept "
@@ -25,7 +30,8 @@ def media_file(served: Served, request: Request, sent_version: str) -> Response:
     """Kept for good when the address names the file's current version, and asked
     about every time otherwise."""
     if sent_version and sent_version == served.version:
-        return _whole_file(served.path, request, {"Cache-Control": FOREVER}, revalidate=False)
+        return _whole_file(served.path, request,
+                           {"Cache-Control": FOREVER, **LIBRARY_FILE}, revalidate=False)
     return revalidating_file(served.path, request)
 
 
@@ -40,7 +46,8 @@ def revalidating_file(path: Path, request: Request) -> Response:
     `StaticFiles`, so a bare `FileResponse` re-sends the whole file every time - which
     on a media map of thirteen tiles turns "sometimes stale" into megabytes per draw.
     """
-    return _whole_file(path, request, {"Cache-Control": "no-cache"}, revalidate=True)
+    return _whole_file(path, request, {"Cache-Control": "no-cache", **LIBRARY_FILE},
+                       revalidate=True)
 
 
 def _whole_file(path: Path, request: Request, headers: dict[str, str], *,

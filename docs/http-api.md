@@ -531,6 +531,12 @@ year's `max-age`, so a browser never asks again; anything else, including no `v`
 is sent `no-cache` and answered `304` while the file is unchanged. A stale `v` is never
 kept, so an address from an old listing still gets the new file.
 
+**Library files are sent sandboxed.** Every response that sends a file from the library,
+`GET /filesystem/file` included, carries `Content-Security-Policy: sandbox` and
+`X-Content-Type-Options: nosniff`, so a web page a game holds, such as an `.html` rule sheet,
+opens without the Manager's origin and without scripts, and no file is read as a type it was
+not sent as. A picture, a video or a PDF is shown as it was.
+
 Assets have two lenses, both computed from the folder at request time:
 
 - **The launch lens** — each entry in `GET .../tables` reports what *that* table
