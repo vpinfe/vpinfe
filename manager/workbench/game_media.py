@@ -547,7 +547,8 @@ def _slot(context: dict[str, Any], kind: str, entry: dict[str, Any],
                           on_click=lambda: mediasource.open_sources(
                               context, kind, slot_label, draw,
                               str(detail.get("path") or entry.get("path") or ""),
-                              backglass_file=detail.get("backglass_file"), page=page)) \
+                              backglass_files=mediasource.backglass_files(detail),
+                              page=page)) \
                     .props("flat dense no-caps size=sm").classes("manager-action")
             if present and in_place and kind in PAGED_KINDS and not many and not borrowed:
                 mediapages.add_button(context, kind, entry, draw)
@@ -558,7 +559,7 @@ def _slot(context: dict[str, Any], kind: str, entry: dict[str, Any],
                                  context, kind, label, draw,
                                  str(detail.get("path") or entry.get("path") or ""),
                                  recording_it=True,
-                                 backglass_file=detail.get("backglass_file")),
+                                 backglass_files=mediasource.backglass_files(detail)),
                              icon=verbs.RECORD, enabled=bool(able.get("available")),
                              hint=str(able.get("reason") or ""))()
             # Beside the acts on the bytes: a slot holding nothing has no identity. Of

@@ -21,7 +21,10 @@ logger = logging.getLogger("vpinfe.common.games.asset_origin")
 ASSETS_KEY = "assets"
 UNKNOWN = "unknown"
 RECORDED = "capture"
+# A picture drawn from a backglass file, by the kind of file it was drawn from, which is
+# the one a redraw draws it from again.
 BACKGLASS_FILE = "backglass_file"
+B2SPRO_FILE = "b2spro_file"
 
 
 def _key(game_dir: Path, path: Path) -> str:

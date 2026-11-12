@@ -31,7 +31,13 @@ from common.games import (
     media_probe,
     table_lens,
 )
-from common.games.asset_registry import altsound_folder, altsound_folders, is_readme, spec_for
+from common.games.asset_registry import (
+    altsound_folder,
+    altsound_folders,
+    backglass_file_kind,
+    is_readme,
+    spec_for,
+)
 from common.games.formats import directb2s_parser
 from common.games.game_metadata import effective_vps_id
 from common.games.game_repository import game_to_row
@@ -399,7 +405,7 @@ def file_detail(game_id: str, path: str, lines: int = HEAD_LINES) -> dict[str, A
     detail = {**shown, "size_bytes": stat.st_size, "modified": _stamp(stat.st_mtime),
               "format": media_probe.probe(target)["format"],
               "head": _head(target, lines) if target.suffix.lower() in _TEXT else None}
-    if target.suffix.lower() == ".directb2s":
+    if backglass_file_kind(target):
         detail["backglass"] = _backglass_facts(target)
     return detail
 

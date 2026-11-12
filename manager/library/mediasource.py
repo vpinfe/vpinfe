@@ -616,7 +616,7 @@ class _Slot(_OnlineTab, _OneFile):
     def __init__(self, context: dict[str, Any], kind: str, label: str,
                  done: Callable, target: _Target, current: str = "", *,
                  records: bool = False, first: str = "",
-                 backglass_file: dict[str, Any] | None = None, page: int = 1) -> None:
+                 backglass_files: Sequence[dict[str, Any]] = (), page: int = 1) -> None:
         super().__init__(context["library"], label, done, target.accept,
                          _on_host(context, current))
         self.target = target
@@ -628,8 +628,8 @@ class _Slot(_OnlineTab, _OneFile):
         self.family = target.family
         self.setup_online(not target.file, first_page=page == 1)
         self.records = records
-        self.backglass_file = backglass_file
-        self.backglass = bool(backglass_file)
+        self.backglass_files = list(backglass_files)
+        self.backglass = bool(self.backglass_files)
         self.first = first
         self.context = context
         self.game_id = context["game_id"]
@@ -930,16 +930,18 @@ class _Slot(_OnlineTab, _OneFile):
             self.note_extension(BACKGLASS_PICTURE if tab == "backglass" else "")
 
     async def backglass_tab(self, body: ui.column) -> None:
-        """The picture the game's backglass file draws, as one candidate."""
-        offer = self.backglass_file or {}
+        """The picture each of the game's backglass files draws, as a candidate apiece."""
+        for offer in self.backglass_files:
+            self._backglass_candidate(body, offer)
 
+    def _backglass_candidate(self, body: ui.column, offer: dict[str, Any]) -> None:
         @on_page
         async def take() -> None:
             if not await self.confirmed(BACKGLASS_PICTURE):
                 return
             try:
                 await run.io_bound(self.library.draw_backglass_picture, self.game_id,
-                                   self.destination)
+                                   self.destination, str(offer.get("asset_kind") or ""))
             except Exception as exc:  # noqa: BLE001 - the notice says why
                 ui.notify(t("manager.mediasource.place_failed"), caption=why(exc),
                           type="negative")
@@ -1756,24 +1758,33 @@ def records(library: Any, kind: str) -> dict[str, Any] | None:
                  if one.get("name") == "capture"), None)
 
 
+def backglass_files(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    """The backglass files of a slot's media detail whose picture could fill it, as
+    `open_sources` takes them: each with the kind of file it is."""
+    return [{**offer, "asset_kind": kind}
+            for kind, offer in (("backglass", detail.get("backglass_file")),
+                                ("b2spro", detail.get("b2spro_file"))) if offer]
+
+
 def open_sources(context: dict[str, Any], kind: str, label: str,
                  done: Callable, current: str = "", *, recording_it: bool = False,
-                 backglass_file: dict[str, Any] | None = None,
+                 backglass_files: Sequence[dict[str, Any]] = (),
                  place: str = "", page: int = 1) -> ui.dialog:
     """Open the ways to fill this slot. Returns as soon as the dialog is up.
 
     `current` is what fills it now, as a path in the game's folder. `recording_it` opens
-    it on its Record tab. `backglass_file` is the picture the game's backglass file draws,
-    which adds a tab and, on an empty slot, is where the dialog opens. `place` is the
-    position in a walk, which makes the way out Skip and Stop. `page` is the page of a
-    paged kind the file becomes; `label` then names the page, not the kind.
+    it on its Record tab. `backglass_files` are the pictures the game's backglass files
+    draw, from `backglass_files`, which add a tab and, on an empty slot, are where the
+    dialog opens. `place` is the position in a walk, which makes the way out Skip and Stop.
+    `page` is the page of a paged kind the file becomes; `label` then names the page, not
+    the kind.
     """
     library = context["library"]
     first = "record" if recording_it else \
-        "backglass" if backglass_file and not current and page == 1 else ""
+        "backglass" if backglass_files and not current and page == 1 else ""
     sources = _Slot(context, kind, label, done, _media(library, kind), current,
                     records=records(library, kind) is not None and page == 1, first=first,
-                    backglass_file=backglass_file if page == 1 else None, page=page)
+                    backglass_files=backglass_files if page == 1 else (), page=page)
     sources.walk_place = place
     return sources.open()
 

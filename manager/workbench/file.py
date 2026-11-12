@@ -146,7 +146,8 @@ def _asset_has_stage(context: dict[str, Any]) -> bool:
     folder, a ROM, a damaged backglass or an absent file is only an icon, which the
     column carries."""
     detail = context.get("detail") or {}
-    glass = detail.get("backglass") if context.get("kind") == "backglass" else None
+    glass = (detail.get("backglass") if context.get("kind") in asset_registry.BACKGLASS_FILES
+             else None)
     return (bool(glass and not glass["damaged"]) or bool(detail.get("head"))
             or bool(detail.get("text")))
 
@@ -301,7 +302,7 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
     tier = file_acts.tier_of(row)
     links = (await offload.io(library.outside_links, game_id, "", path)
              if present and path else [])
-    glass = detail.get("backglass") if kind == "backglass" else None
+    glass = detail.get("backglass") if kind in asset_registry.BACKGLASS_FILES else None
     listed = present and bool(path) and file_acts.listed_as(kind, vps_kinds.ASSET) is not None
     matched = (await _match_line(context, kind, row.get("matched_to"), vps_kinds.ASSET)
                if listed else "")

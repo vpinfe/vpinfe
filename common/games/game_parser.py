@@ -213,7 +213,8 @@ class GameParser:
         # Assets: what this game needs to play as intended, beyond the table
         # itself. Media is a different thing and is loaded below. See
         # docs/conventions.md.
-        if any(name.lower().endswith(".directb2s") for name in game_contents):
+        from common.games.asset_registry import altsound_folder, backglass_file_kind, is_readme
+        if any(backglass_file_kind(name) for name in game_contents):
             game.b2s_exists = True
         if "pupvideos" in game_subdirs:
             game.pup_pack_exists = True
@@ -225,7 +226,6 @@ class GameParser:
             game.music_exists = True
         if any(name.lower().endswith(".ini") for name in game_contents):
             game.ini_exists = True
-        from common.games.asset_registry import altsound_folder, is_readme
         if altsound_folder(game_dir, game_subdirs):
             game.alt_sound_exists = True
         if any(is_readme(name) for name in game_contents):

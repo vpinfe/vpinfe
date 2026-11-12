@@ -360,8 +360,8 @@ def change(game_id: str, path: str, *, folder: bool, name: str | None = None,
                 "name": plan.target.name}
     file_move.change_in_place(game_id, plan.game_dir, plan.source, plan.target, plan.replacing,
                               keep_copy=keep_copy)
-    if not folder and (asset_ops.is_backglass(plan.source) or asset_ops.is_backglass(plan.target)):
-        asset_ops.refresh_backglass(game_id)
+    if not folder:
+        asset_ops.refresh_if_backglass(game_id, plan.source, plan.target)
     return {"path": plan.relative(plan.target), "was": plan.relative(plan.source),
             "name": plan.target.name}
 
@@ -397,12 +397,10 @@ def remove(game_id: str, path: str, *, folder: bool, resolve: list[str],
     if folder:
         moving = list(plan.source.iterdir()) if keeping else []
         file_move.remove_folder_in_place(game_id, plan.game_dir, plan.source, keep=keeping)
-        if any(asset_ops.is_backglass(one) for one in moving):
-            asset_ops.refresh_backglass(game_id)
+        asset_ops.refresh_if_backglass(game_id, *moving)
     else:
         file_move.remove_in_place(game_id, plan.game_dir, plan.source, keep_copy=keep_copy)
-        if asset_ops.is_backglass(plan.source):
-            asset_ops.refresh_backglass(game_id)
+        asset_ops.refresh_if_backglass(game_id, plan.source)
     return {"removed": [path]}
 
 

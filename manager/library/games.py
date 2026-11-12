@@ -15,7 +15,7 @@ from nicegui import run, ui
 
 from common import icons
 from common.config.labels import humanize
-from common.games import asset_registry, ties
+from common.games import asset_registry, asset_resolver, ties
 from common.i18n import t
 from common.media.media_specs import media_label_map
 from manager.kit import (
@@ -81,6 +81,7 @@ _ASSET_LABELS = {
     # drives the second screen, the other is a picture of it. A column header has no
     # group heading beside it, so the two cannot both be "Backglass".
     "backglass": "manager.games.b2s",
+    "b2spro": "manager.games.b2spro",
 }
 
 
@@ -942,11 +943,11 @@ TABLE_COLUMNS = [
 
 # The kinds `resolve_for_table` answers for, one file per table. A game's folder holds the
 # rest - a PUP pack belongs to the game and has no per-table answer.
-TABLE_ASSET_KEYS = ("backglass", "ini", "script", "pov", "scv", "nix")
+TABLE_ASSET_KEYS = asset_resolver.PER_TABLE_KINDS
 
 
 def folder_asset_keys(library: Any) -> list[str]:
-    """The asset kinds a game's folder holds whole, which the six per-table kinds are not."""
+    """The asset kinds a game's folder holds whole, which the per-table kinds are not."""
     return [key for key in library.asset_keys() if key not in TABLE_ASSET_KEYS]
 
 
@@ -959,11 +960,11 @@ def table_asset_keys(library: Any) -> list[str]:
 def table_asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     """One column per asset kind, for the tables grid, saying *whose* file answers.
 
-    Not the games grid's tick. Six kinds resolve per table - `.directb2s`, `.ini`, `.vbs`,
-    `.pov`, `.scv`, `.nix` - so the honest answer here has three values, not two: this
-    table's own file, the game's, or none. `conventions.md`: a binary fact is a tick, a
-    fact with more answers is a shaped circle, and these carry the media map's own
-    marks because it is the same question about a different file.
+    Not the games grid's tick. These kinds resolve per table, so the honest answer here
+    has three values, not two: this table's own file, the game's, or none.
+    `conventions.md`: a binary fact is a tick, a fact with more answers is a shaped
+    circle, and these carry the media map's own marks because it is the same question
+    about a different file.
 
     The games grid reports these from a folder scan, so a game whose only `.directb2s`
     is named for one table reads "has one" while its sibling launches without a
@@ -1112,7 +1113,7 @@ def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, 
                           or row.get("reference") or ""),
              # Whose file answers for this table, in the media map's own words - the
              # cell holds the word and the mark is drawn from it, the way media cells
-             # do. Six kinds resolve per table; the rest belong to the folder.
+             # do. Only the per-table kinds; the rest belong to the folder.
              **{f"asset_{key}": _resolved_word((row.get("assets") or {}).get(key))
                 for key in TABLE_ASSET_KEYS},
              "rom_state": _rom_state(row),

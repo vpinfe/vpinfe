@@ -27,6 +27,7 @@ YOU = t("manager.media_ownership.you")
 UNKNOWN = t("word.unknown")
 RECORDED = t("manager.media_ownership.recorded")
 BACKGLASS_FILE = t("manager.media_ownership.backglass_file")
+B2SPRO_FILE = t("manager.media_ownership.b2spro_file")
 
 
 def source_name(origin: str) -> str:
@@ -43,6 +44,8 @@ def source_name(origin: str) -> str:
         return RECORDED
     if origin == asset_origin.BACKGLASS_FILE:
         return BACKGLASS_FILE
+    if origin == asset_origin.B2SPRO_FILE:
+        return B2SPRO_FILE
     if origin == UNKNOWN.lower():
         return UNKNOWN
     from common.online import sources
@@ -60,7 +63,7 @@ def source_names() -> list[str]:
     """Every source a file could report, for a filter that offers them all."""
     from common.online import sources
     return sorted({source.name for source in sources.catalogs()}
-                  | {YOU, UNKNOWN, RECORDED, BACKGLASS_FILE})
+                  | {YOU, UNKNOWN, RECORDED, BACKGLASS_FILE, B2SPRO_FILE})
 
 
 # One .vpx owns it; the game owns it; something else is standing in; nothing is here.

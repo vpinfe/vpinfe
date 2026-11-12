@@ -17,7 +17,7 @@ from common.games import info_codec, info_files, table_files
 from common.games.asset_registry import (
     is_readme,  # noqa: F401  (one matcher, import and export)
 )
-from common.games.asset_resolver import resolve_for_table
+from common.games.asset_resolver import VPX_ASSET_KINDS, resolve_for_table
 from common.games.game_metadata import VPINFE_SECTION, vpinfe_section
 from common.games.info_file import ASSETS_KEY
 from common.games.info_migration import migrate, needs_migration
@@ -125,6 +125,11 @@ def mobile_settings_file(game_dir: Path, word: str, table: str | None = None) ->
         return None
 
 
+# A VPXZ is opened by Visual Pinball's standalone build, which has no B2S Pro Server to
+# read a `.b2spro` with.
+_BUNDLED_KINDS = tuple(kind for kind in VPX_ASSET_KINDS if kind.key != "b2spro")
+
+
 def bundle_paths(game_dir: Path, *, everything: bool = False, table: str | None = None,
                  settings: bool = True, mobile_word: str = "") -> Iterator[tuple[Path, str]]:
     """(absolute path, folder-relative arcname) for everything the export holds.
@@ -159,7 +164,8 @@ def bundle_paths(game_dir: Path, *, everything: bool = False, table: str | None 
     # table with its own .directb2s would ship the shadowed one too, and the far side
     # could never load it.
     resolved = resolve_for_table(chosen or "", game_dir.name,
-                                 [entry.name for entry in entries if entry.is_file()])
+                                 [entry.name for entry in entries if entry.is_file()],
+                                 _BUNDLED_KINDS)
     resolved_companions = {str(picked["file"]).lower()
                            for picked in resolved.values() if picked.get("file")}
     mobile = mobile_settings_file(game_dir, mobile_word, table)

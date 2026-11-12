@@ -147,7 +147,7 @@ def _origin(held: _Held) -> str:
     origin = str((held.row or {}).get("origin") or "")
     named = media_ownership.source_name(origin)
     generic = {media_ownership.YOU, media_ownership.UNKNOWN, media_ownership.RECORDED,
-               media_ownership.BACKGLASS_FILE}
+               media_ownership.BACKGLASS_FILE, media_ownership.B2SPRO_FILE}
     return "" if named in generic else named
 
 

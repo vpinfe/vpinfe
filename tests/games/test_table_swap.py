@@ -225,6 +225,18 @@ class CarryTests(SwapCase):
         self.assert_kept(OLD, "Cactus 1.1.directb2s", "Cactus 1.1.ini",
                                        "Cactus 1.1.pov")
 
+    def test_a_b2s_pro_backglass_is_carried_whichever_kind_of_release_arrives(self) -> None:
+        self.put("Cactus 1.1.B2SPro", b"pro")
+        for instead in (False, True):
+            ticked = {one["kind"]: one["carry"]
+                      for one in table_swap.plan(GAME_ID, "t1", instead=instead)["files"]}
+            self.assertTrue(ticked["b2spro"], instead)
+
+        self.swap(instead=True)
+
+        self.assertEqual((self.folder / "Cactus 1.2.B2SPro").read_bytes(), b"pro")
+        self.assertNotIn("Cactus 1.1.B2SPro", self.names())
+
     def test_a_file_named_for_the_folder_is_shared_and_stays(self) -> None:
         self.swap(carry=[])
 

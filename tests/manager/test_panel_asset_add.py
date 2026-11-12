@@ -26,7 +26,7 @@ class PanelAssetAddTests(unittest.TestCase):
             self.assertIs(_opens(kind), mediasource.open_folder_sources, kind)
 
     def test_a_file_vpx_finds_by_name_opens_the_slot_dialog(self) -> None:
-        for kind in ("backglass", "ini", "pov", "scv", "nix"):
+        for kind in ("backglass", "b2spro", "ini", "pov", "scv", "nix"):
             self.assertIs(_opens(kind), mediasource.open_asset_sources, kind)
 
     def test_authors_notes_open_the_notes_dialog(self) -> None:

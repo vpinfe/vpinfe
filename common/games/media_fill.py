@@ -65,16 +65,17 @@ def fillable_kinds() -> set[str]:
 
 
 def _file_offers(game_id: str) -> bool:
-    """Whether the game has a backglass file that can be drawn."""
+    """Whether the game has a backglass file of either kind that can be drawn."""
     from common.games import backglass_ops
 
-    return backglass_ops.offer(game_id) is not None
+    return bool(backglass_ops.unpicked(game_id))
 
 
 def _file_draws(game_id: str) -> None:
     from common.games import backglass_ops
 
-    backglass_ops.place_picture(game_id)
+    kind = backglass_ops.unpicked(game_id) or backglass_ops.KIND
+    backglass_ops.place_picture(game_id, kind=kind)
 
 
 # A kind a game's own file can supply: whether it has one, and putting its picture in the

@@ -19,8 +19,8 @@ ALT_COLOR_FOLDERS = ("serum", "vni")
 MUSIC_FOLDER = "music"
 
 # Kinds a bare file at the top of the folder can be, beyond media and rule sheets.
-_ROOT_KINDS = frozenset({"backglass", "ini", "patch", "script", "pov", "scv", "nix",
-                         "altcolor_serum", "altcolor_vni"})
+_ROOT_KINDS = frozenset({"backglass", "b2spro", "ini", "patch", "script", "pov", "scv",
+                         "nix", "altcolor_serum", "altcolor_vni"})
 
 
 def _recognized_in_root(name: str) -> bool:

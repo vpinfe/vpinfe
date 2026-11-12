@@ -28,6 +28,11 @@ def _png(size: tuple[int, int], color: tuple[int, ...]) -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
+def _size(path: Path) -> tuple[int, int]:
+    with Image.open(path) as image:
+        return image.size
+
+
 def _directb2s(*, size: tuple[int, int] = (40, 30), lamps: bool = True,
                header: str = "", scoreview: tuple[int, int] | None = None) -> bytes:
     bulb = ('<Bulb Parent="Backglass" ID="1" Name="" RomID="1" RomIDType="1" '
@@ -452,3 +457,95 @@ class BackglassFileAsPicture(BackglassRoutes):
             self.assertTrue(media_fill.start_update())
 
         self.assertEqual(["sweep", "update"], order)
+
+    def _b2spro(self, **drawn) -> None:
+        (self.folder / "t1.b2spro").write_bytes(_directb2s(**drawn))
+        directb2s_parser._facts.clear()
+
+    def _offers(self) -> dict:
+        response = self.client.get(f"/games/{GAME_ID}/tables/t1/media/backglass/detail")
+        self.assertEqual(200, response.status_code, response.text)
+        found = response.json()
+        return {"backglass": found["backglass_file"], "b2spro": found["b2spro_file"]}
+
+    def test_a_b2spro_that_draws_another_picture_is_offered_beside_it(self) -> None:
+        self._settings()
+        self._b2spro(size=(90, 70))
+
+        offered = self._offers()
+
+        self.assertEqual(("t1.directb2s", "t1.b2spro"),
+                         (offered["backglass"]["file"], offered["b2spro"]["file"]))
+        picture = self.client.get(f"/games/{GAME_ID}/assets/backglass/picture",
+                                  params={"path": offered["b2spro"]["path"]})
+        self.assertEqual((90, 70), self._drawn(picture))
+
+    def test_a_b2spro_that_draws_the_same_picture_is_offered_once(self) -> None:
+        self._settings()
+        self._b2spro(scoreview=(24, 8), header='  <ProjectGUID Value="another" />\n')
+
+        offered = self._offers()
+
+        self.assertEqual("t1.directb2s", offered["backglass"]["file"])
+        self.assertIsNone(offered["b2spro"])
+
+    def test_a_table_with_only_a_b2spro_is_offered_it(self) -> None:
+        self._settings()
+        self._b2spro(size=(90, 70))
+        (self.folder / "t1.directb2s").unlink()
+        (self.folder / f"{FOLDER}.directb2s").unlink()
+
+        offered = self._offers()
+
+        self.assertIsNone(offered["backglass"])
+        self.assertEqual("t1.b2spro", offered["b2spro"]["file"])
+
+    def test_the_picture_drawn_from_the_b2spro_is_redrawn_from_it_alone(self) -> None:
+        self._settings()
+        self._b2spro(size=(90, 70))
+        response = self.client.post(f"/games/{GAME_ID}/media/backglass/from-file",
+                                    json={"table": "t1", "asset_kind": "b2spro"})
+        self.assertEqual(200, response.status_code, response.text)
+        path, source = self._placed()
+        self.assertEqual(asset_origin.B2SPRO_FILE, source.get("host"))
+        self.assertEqual((90, 70), _size(path))
+
+        self._changed()
+        self.assertEqual(0, backglass_ops.redraw(GAME_ID))
+        self._b2spro(size=(100, 80))
+        self.assertEqual(1, backglass_ops.redraw(GAME_ID))
+
+        path, source = self._placed()
+        self.assertEqual((100, 80), _size(path))
+        self.assertEqual((asset_origin.B2SPRO_FILE, file_md5(path)),
+                         (source.get("host"), source.get("hash")))
+
+    def test_removing_the_b2spro_it_was_drawn_from_redraws_it_from_the_one_now_read(self) -> None:
+        self._settings()
+        self._b2spro(size=(90, 70))
+        (self.folder / f"{FOLDER}.b2spro").write_bytes(_directb2s(size=(100, 80)))
+        self.client.post(f"/games/{GAME_ID}/media/backglass/from-file",
+                         json={"table": "t1", "asset_kind": "b2spro"})
+
+        response = self.client.delete(f"/games/{GAME_ID}/assets", params={"path": "t1.b2spro"})
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual((100, 80), _size(self._placed()[0]))
+
+    def test_a_kind_that_draws_no_backglass_is_refused(self) -> None:
+        self._settings()
+
+        response = self.client.post(f"/games/{GAME_ID}/media/backglass/from-file",
+                                    json={"table": "t1", "asset_kind": "ini"})
+
+        self.assertEqual(422, response.status_code, response.text)
+        self.assertFalse(self._placed()[0].exists())
+
+    def test_a_b2spro_says_what_it_holds(self) -> None:
+        self._b2spro()
+
+        glass = self._detail("t1.b2spro")["backglass"]
+
+        self.assertEqual(("Pat Maker", "exmpl_l1", 4),
+                         (glass["author"], glass["rom"], glass["players"]))
+

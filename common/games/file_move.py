@@ -31,7 +31,7 @@ from common.backups import media as backups_media
 from common.backups.copies import REASON_DELETE, REASON_MOVE, REASON_REPLACE
 from common.failures import why
 from common.games import game_lens, info_files, media_ops, media_placement, table_lens
-from common.games.asset_registry import spec_for
+from common.games.asset_registry import BACKGLASS_FILES, spec_for
 from common.games.asset_resolver import VPX_ASSET_KINDS
 from common.games.game import Game
 from common.games.game_repository import game_to_row
@@ -393,10 +393,10 @@ def _finish(game_id: str, game_dir: Path, family: str, kind: str, run: _Run,
 
 def _reread(game_id: str, game_dir: Path, family: str, kind: str) -> None:
     media_ops.reread(game_dir)
-    if family == ASSET and kind == "backglass":
+    if family == ASSET and kind in BACKGLASS_FILES:
         from common.games import asset_ops
 
-        asset_ops.refresh_backglass(game_id)
+        asset_ops.refresh_backglass(game_id, kind)
 
 
 def _blocked(run: _Run, exc: Exception) -> service_errors.ServiceError:

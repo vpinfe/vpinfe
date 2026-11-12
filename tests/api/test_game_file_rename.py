@@ -475,6 +475,15 @@ class RenamingATable(GameFileChanges):
         for name in ("Other.vpx", "Other.ini", "Other.directb2s", f"medias/{self.picture}"):
             self.assertFalse((self.folder / name).exists(), name)
 
+    def test_a_b2s_pro_backglass_goes_with_its_table(self) -> None:
+        (self.folder / "Other.B2SPro").write_bytes(b"pro")
+
+        response = self._rename("Other.vpx", "New.vpx", resolve=["fix"])
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual(b"pro", (self.folder / "New.B2SPro").read_bytes())
+        self.assertFalse((self.folder / "Other.B2SPro").exists())
+
     def test_what_the_game_records_about_the_carried_files_goes_with_them(self) -> None:
         self._rename("Other.vpx", "New.vpx", resolve=["fix"])
 

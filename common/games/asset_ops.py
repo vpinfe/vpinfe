@@ -12,7 +12,12 @@ from pathlib import Path
 from common import service_errors
 from common.atomic_write import staged_for
 from common.games import asset_lens, game_lens, media_ops, media_placement, table_lens
-from common.games.asset_registry import is_readme, spec_for
+from common.games.asset_registry import (
+    BACKGLASS_FILES,
+    backglass_file_kind,
+    is_readme,
+    spec_for,
+)
 from common.games.asset_resolver import ROMS_FOLDER, VPX_ASSET_KINDS, AssetKind
 from common.games.game import Game
 from common.games.game_repository import game_to_row
@@ -112,23 +117,20 @@ def _settle_order(game_id: str) -> None:
     backglass_order.settle(game_id)
 
 
-def refresh_backglass(game_id: str) -> None:
-    """The game's backglass files changed under it: draw their picture again and settle
-    the tables for the order the files now call for."""
+def refresh_backglass(game_id: str, kind: str = "backglass") -> None:
+    """The game's backglass files of `kind` changed under it: draw their picture again,
+    and where they are the kind that places an order, settle the tables for the order the
+    files now call for."""
     _redraw_picture(game_id)
-    _settle_order(game_id)
-
-
-def is_backglass(path: Path) -> bool:
-    return any(kind.key == "backglass" and kind.extension == path.suffix.lower()
-               for kind in VPX_ASSET_KINDS)
-
-
-def settle_if_backglass(game_id: str, path: Path) -> None:
-    """`_settle_order`, where `path` is a backglass file that has just been written or
-    removed."""
-    if is_backglass(path):
+    if kind == "backglass":
         _settle_order(game_id)
+
+
+def refresh_if_backglass(game_id: str, *paths: Path) -> None:
+    """`refresh_backglass` where one of `paths` is a backglass file of either kind."""
+    kinds = {backglass_file_kind(path) for path in paths} - {""}
+    if kinds:
+        refresh_backglass(game_id, "backglass" if "backglass" in kinds else kinds.pop())
 
 
 def place_file(game_id: str, kind: str, table_id: str, source: Path,
@@ -153,8 +155,8 @@ def place_file(game_id: str, kind: str, table_id: str, source: Path,
             if other != target.name:
                 (game_dir / other).unlink()
     media_placement.record_origin(game_dir, target)
-    if found_kind.key == "backglass":
-        refresh_backglass(game_id)
+    if found_kind.key in BACKGLASS_FILES:
+        refresh_backglass(game_id, found_kind.key)
     return {"written": target.name, "displaced": going}
 
 
@@ -170,7 +172,7 @@ def remove(game_id: str, path: str) -> dict:
         shutil.rmtree(found)
     elif found.suffix.lower() in _EXTENSIONS and found.is_file():
         found.unlink()
-        settle_if_backglass(game_id, found)
+        refresh_if_backglass(game_id, found)
     elif found.is_file() and found.parent.relative_to(root).as_posix().lower() == ROMS_FOLDER:
         found.unlink()
     elif found.is_file() and found.parent == root and is_readme(found.name):
@@ -181,5 +183,5 @@ def remove(game_id: str, path: str) -> dict:
     return {"removed": [path]}
 
 
-__all__ = ["displaced", "is_backglass", "kind_or_refuse", "place_file", "placements",
-           "refresh_backglass", "remove", "settle_if_backglass"]
+__all__ = ["displaced", "kind_or_refuse", "place_file", "placements",
+           "refresh_backglass", "refresh_if_backglass", "remove"]

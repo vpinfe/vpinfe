@@ -1064,10 +1064,11 @@ class ApiClient:
                           {"source": source, "vps_id": vps_id, "size": size,
                            "table": table_id or ""})
 
-    def draw_backglass_picture(self, game_id: str, table_id: str) -> dict:
-        """Draw the backglass file's picture into the slot."""
+    def draw_backglass_picture(self, game_id: str, table_id: str, kind: str = "") -> dict:
+        """Draw the picture of the backglass file of `kind` into the slot, the backglass
+        file where it is empty."""
         return self._post(f"/games/{game_id}/media/backglass/from-file",
-                          {"table": table_id or ""})
+                          {"table": table_id or "", "asset_kind": kind or "backglass"})
 
     def file_move_state(self, game_id: str, family: str, kind: str) -> dict:
         """What a move of the game's file would start from: the game's file, each table's

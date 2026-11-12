@@ -63,9 +63,9 @@ class WhichSlotsRecordTests(unittest.TestCase):
                  "version": "v1"}
         with mock.patch.object(mediasource._Slot, "open", autospec=True) as opened:
             mediasource.open_sources(context, "backglass", "Backglass", lambda: None,
-                                     backglass_file=offer)
+                                     backglass_files=[offer])
             mediasource.open_sources(context, "backglass", "Backglass", lambda: None,
-                                     "medias/bg.png", backglass_file=offer)
+                                     "medias/bg.png", backglass_files=[offer])
             mediasource.open_sources(context, "backglass", "Backglass", lambda: None)
 
         empty, filled, none = (call.args[0] for call in opened.call_args_list)
@@ -77,7 +77,7 @@ class WhichSlotsRecordTests(unittest.TestCase):
         context = {"library": _library([]), "game_id": "g1", "game": {}, "lens": ""}
         slot = mediasource._Slot(context, "backglass", "Backglass", lambda: None,
                                  mediasource._media(context["library"], "backglass"),
-                                 backglass_file={"path": "a.directb2s"})
+                                 backglass_files=[{"path": "a.directb2s"}])
 
         slot.picked("backglass")
         self.assertEqual(slot.chosen_extension, ".png")

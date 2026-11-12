@@ -283,6 +283,13 @@ tests = [
   "tests/theming/test_sign_in_drive.py",
 ]
 
+# The count of lines naming Visual Pinball outside apps/, which reads these folders as text
+# and imports nothing from them.
+[[area]]
+floor = true
+paths = ["common/*", "httpapi/*", "manager/*", "frontend/*"]
+tests = ["tests/apps/test_vpx_surface.py"]
+
 # Anything that boots the app: a change anywhere in it adds a Manager drive, a grid drive and
 # the wizard's. `floor` adds these tests without accounting for the file, so a module nothing
 # else reaches still selects the whole suite.

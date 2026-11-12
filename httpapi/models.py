@@ -2883,6 +2883,7 @@ class MediaDetail(ApiModel):
     # null when nothing would be.
     after_remove: str | None = None
     backglass_file: BackglassFileOffer | None = None
+    b2spro_file: BackglassFileOffer | None = None
     links: MediaEntryLinks
 
 
@@ -3074,10 +3075,12 @@ class MediaImport(ApiModel):
 
 
 class MediaFromFile(ApiModel):
-    """Which table the backglass file's picture should serve. An empty `table` means the
-    folder's shared name, which every table in it resolves."""
+    """Which table the backglass file's picture should serve, and which kind of backglass
+    file it is drawn from. An empty `table` means the folder's shared name, which every
+    table in it resolves."""
 
     table: str = ""
+    asset_kind: Literal["backglass", "b2spro"] = "backglass"
 
 
 class CatalogOption(ApiModel):

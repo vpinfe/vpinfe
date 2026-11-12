@@ -62,6 +62,9 @@ ASSET_SPECS = (
               required_to_launch=True),
     AssetSpec("game_info", "description", (), True, False, True),
     AssetSpec("backglass", "wallpaper", (".directb2s",), True, False, True),
+    # B2S Pro's own backglass file, which its server prefers to the backglass above of the
+    # same name. A kind of its own: a game can hold both.
+    AssetSpec("b2spro", "wallpaper", (".b2spro",), True, False, True),
     AssetSpec("ini", "tune", (".ini",), True, False, True),
     # A patch is a delta against one exact base table, not an installable artifact.
     # requires_game is doing real work here: applying it without the right base
@@ -231,6 +234,17 @@ _MEDIA_KEYWORDS: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
 def spec_for(kind: str) -> AssetSpec:
     """Return the AssetSpec for a kind key, raising KeyError if unknown."""
     return _SPECS_BY_KIND[kind]
+
+
+# The kinds of file that draw a backglass picture, first the one drawn from where nobody
+# picks.
+BACKGLASS_FILES = ("backglass", "b2spro")
+
+
+def backglass_file_kind(path: str | Path) -> str:
+    """Which of `BACKGLASS_FILES` the file is, by its extension, or "" for neither."""
+    suffix = Path(path).suffix.lower()
+    return next((kind for kind in BACKGLASS_FILES if suffix in spec_for(kind).extensions), "")
 
 
 def classify_bare_extension(filename: str) -> AssetSpec | None:

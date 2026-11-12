@@ -157,7 +157,7 @@ def _restore_file(one: Copy, place: str, path: Path) -> Restored:
     if place == PLACE_TABLE and (record := table_entry.beside(path)) is not None:
         MetaConfig(str(info_files.info_path_of(game))).restore_table(record)
     media_ops.reread(game_dir)
-    asset_ops.settle_if_backglass(held.game_id, target)
+    asset_ops.refresh_if_backglass(held.game_id, target)
     return Restored(one, _kept(_kept_copy(str(replaced) if replaced else None, place)))
 
 

@@ -312,7 +312,7 @@ def media_acts(library: Any, files: list[File], state: dict[str, Any],
             detail = {}
         return await mediasource.open_sources(
             context, one.kind, one.label, done, str(detail.get("path") or one.path),
-            backglass_file=detail.get("backglass_file"), place=place, page=one.page)
+            backglass_files=mediasource.backglass_files(detail), place=place, page=one.page)
 
     @on_page
     async def add_or_replace() -> None:

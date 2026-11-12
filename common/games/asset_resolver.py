@@ -33,8 +33,11 @@ class AssetKind:
 # ini does. `pintable.cpp` falls back to `<folder>.vbs` when `<table>.vbs` is not there;
 # saying otherwise here reads a folder-named script as absent while VPX is running it.
 # `nix` is not folder-named on the assumption that Nixie matches `.pov`; its lookup has not been
-# read, so this is the line to change if it falls back as `.scv` does.
-_PER_TABLE = (("backglass", True), ("ini", True), ("script", True),
+# read, so this is the line to change if it falls back as `.scv` does. B2S Pro Server also
+# tries the table's name cut after its first ")", which is the folder's name for a folder
+# named `Name (Manufacturer Year)`, so `b2spro` falls back as the backglass does. It skips
+# that step only when exact filename matching is switched on.
+_PER_TABLE = (("backglass", True), ("b2spro", True), ("ini", True), ("script", True),
               ("pov", False), ("scv", True), ("nix", False))
 
 VPX_ASSET_KINDS = tuple(

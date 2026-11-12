@@ -458,11 +458,14 @@ def _analyze_entries(
             assets.append(DetectedAsset(kind, spec_for(kind).label, (e,), size=e.size,
                                         detail=_basename(e.arcname)))
 
-    # 2. Backglass
+    # 2. Backglass, and B2S Pro's
+    backglasses = {extension: kind for kind in ("backglass", "b2spro")
+                   for extension in spec_for(kind).extensions}
     for e in list(unclaimed()):
-        if _suffix(e.arcname) == ".directb2s":
+        kind = backglasses.get(_suffix(e.arcname), "")
+        if kind:
             claimed.add(e.path)
-            assets.append(DetectedAsset("backglass", spec_for("backglass").label, (e,),
+            assets.append(DetectedAsset(kind, spec_for(kind).label, (e,),
                                         size=e.size, detail=_basename(e.arcname)))
 
     # Subtree claimers run before loose-file claimers so files inside a pack are not grabbed loose.

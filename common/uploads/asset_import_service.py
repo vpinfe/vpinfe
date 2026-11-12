@@ -282,7 +282,7 @@ def _plan_asset(asset: DetectedAsset, base: Path, vpx_stem: str, rom_name: str,
         return PlannedItem(asset, str(base / f"{stem}.directb2s"), "replace_b2s")
     if kind == "ini":
         return PlannedItem(asset, str(base / f"{stem}.ini"), "copy")
-    if kind in ("script", "pov", "scv", "nix"):
+    if kind in ("b2spro", "script", "pov", "scv", "nix"):
         return PlannedItem(asset, str(base / f"{stem}{own.suffix.lower()}"), "copy")
     # Which folder each of these lands in is asked of the registry, not repeated here:
     # an import from another frontend puts the same things in the same places, and two
@@ -492,9 +492,9 @@ def _swapping(items: list[PlannedItem], blocked: list[BlockedItem], analysis: An
                     and one.asset.kind in asset_resolver.PER_TABLE_KINDS)], refused
 
 
-# What is named for one table's file and nothing else: the table's own backglass, settings,
-# script, point of view, score view and NIX file.
-SIDECAR_KINDS = ("backglass", "ini", "script", "pov", "scv", "nix")
+# What is named for one table's file and nothing else: the table's own backglass and B2S
+# Pro backglass, settings, script, point of view, score view and NIX file.
+SIDECAR_KINDS = ("backglass", "b2spro", "ini", "script", "pov", "scv", "nix")
 
 
 def tables_to_choose(base: Path) -> tuple[dict, ...]:

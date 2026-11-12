@@ -58,8 +58,8 @@ from common.uploads import working_folder
 
 logger = logging.getLogger("vpinfe.common.games.table_swap")
 
-CARRY_UPDATE = ("ini", "backglass", "pov", "scv", "nix")
-CARRY_INSTEAD = ("backglass", "scv", "nix")
+CARRY_UPDATE = ("ini", "backglass", "b2spro", "pov", "scv", "nix")
+CARRY_INSTEAD = ("backglass", "b2spro", "scv", "nix")
 
 _NAMED_FOR_TABLE = (asset_resolver.RESOLUTION_DEDICATED, asset_resolver.RESOLUTION_SUPERSEDED)
 _FOLDER_FALLBACK = frozenset(kind.key for kind in _PER_TABLE_KINDS

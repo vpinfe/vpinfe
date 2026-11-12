@@ -454,8 +454,8 @@ class Library:
         self.forget_media(game_id)
         return result
 
-    def draw_backglass_picture(self, game_id: str, table_id: str) -> dict:
-        result = self._client.draw_backglass_picture(game_id, table_id)
+    def draw_backglass_picture(self, game_id: str, table_id: str, kind: str = "") -> dict:
+        result = self._client.draw_backglass_picture(game_id, table_id, kind)
         self.forget_media(game_id)
         return result
 

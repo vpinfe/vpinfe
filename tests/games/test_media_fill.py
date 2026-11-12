@@ -561,6 +561,16 @@ class BackglassFileTests(_Library):
         recorded = asset_origin.sources(self.folder)[f"medias/{self.backglass}"]
         self.assertEqual(recorded["host"], asset_origin.BACKGLASS_FILE)
 
+    def test_a_game_with_only_a_b2spro_gets_its_backglass_from_it(self) -> None:
+        self.glass.rename(self.folder / f"{FOLDER}.b2spro")
+        directb2s_parser._facts.clear()
+        self.sources_off()
+
+        media_fill.fill([self.folder])
+
+        recorded = asset_origin.sources(self.folder)[f"medias/{self.backglass}"]
+        self.assertEqual(recorded["host"], asset_origin.B2SPRO_FILE)
+
     def test_the_slot_the_file_filled_is_not_fetched_online(self) -> None:
         media_fill.fill([self.folder])
 

@@ -64,9 +64,9 @@ class RowTests(unittest.TestCase):
     def test_a_slot_says_what_it_holds_now(self) -> None:
         self.assertEqual([record.holds(_row("wheel", source=source))
                           for source in (None, "vpinmediadb", "user", "unknown", "capture",
-                                       "backglass_file")],
+                                       "backglass_file", "b2spro_file")],
                          ["Missing", "VPinMediaDB", "Yours", "Yours", "Recorded",
-                          "Backglass File"])
+                          "DirectB2S File", "B2S Pro File"])
 
     def test_audio_starts_as_the_devices_sound_and_a_dimmed_kind_never_ticks(self) -> None:
         kinds = ["playfield_video", "topper", "audio"]
