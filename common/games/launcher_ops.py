@@ -33,7 +33,7 @@ from common.apps.contract import (
 from common.config import config_schema, path_state
 from common.games import game_repository, launchers, library_folders, tables
 from common.games.table_identity import find_table_by_id
-from common.host import bundled_libraries, launch_state
+from common.host import bundled_libraries, command_line, launch_state
 from common.i18n import t
 from common.launcher_path import resolve_launcher_path
 from common.runtime import jobs, shutdown
@@ -87,6 +87,7 @@ def _described(launcher: launchers.Launcher) -> dict[str, Any]:
                     "min": f.minimum, "max": f.maximum,
                     **_standing_words(launcher.app, f, standing.get(f.key))}
                    for f in launcher.fields()],
+        "command_line": command_line.shown(launcher),
     }
 
 

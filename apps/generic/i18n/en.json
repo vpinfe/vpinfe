@@ -1,3 +1,4 @@
 {
+  "field.args.description": "Quoted as a shell would. The entry goes at {{table}} or {{key}}, otherwise last.",
   "name": "Generic"
 }

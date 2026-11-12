@@ -14,7 +14,6 @@ its own app.
 
 from __future__ import annotations
 
-import shlex
 from collections.abc import Mapping
 from typing import Any
 
@@ -26,7 +25,8 @@ from common.apps.contract import (
     Field,
     Kinds,
     Session,
-    fill_tokens,
+    arguments,
+    places_entry,
 )
 
 # A wheel, a video and a backglass are as true of an emulator or a video game as of a
@@ -51,18 +51,9 @@ FIELDS: tuple[Field, ...] = (
 
 class GenericLaunch:
     def command(self, entry: Entry, settings: Mapping[str, Any]) -> list[str]:
-        """Substitution happens per argument, after the split. A path with a space in it
-        breaks or injects when it is put into a string that is then split.
-
-        An argument a substitution emptied is dropped rather than passed along as a bare
-        "": a keyed entry has no table, and handing a program an empty argument is not
-        the same as not handing it one.
-        """
-        args = shlex.split(str(settings.get("args") or ""))
-        placed = [fill_tokens(arg, {"table": entry.table, "key": entry.key})
-                  for arg in args]
-        kept = [arg for arg in placed if arg]
-        if placed == args:
+        """The entry goes where `{table}` or `{key}` puts it, and last otherwise."""
+        kept = arguments(entry, settings)
+        if not places_entry(settings):
             target = entry.table or entry.key
             if target:
                 kept.append(target)

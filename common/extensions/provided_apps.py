@@ -17,11 +17,8 @@ parse and does not is worse than one that says it cannot.
 from __future__ import annotations
 
 import logging
-import shlex
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
-
-from common import tokens
 
 if TYPE_CHECKING:
     from common.apps.contract import App, Entry, Session
@@ -70,17 +67,10 @@ def _entry_as_data(entry: Entry) -> dict:
 
 
 def _generic_command(entry: Entry, settings: Mapping[str, Any]) -> list[str]:
-    """What a launcher runs when its extension did not say. Deliberately the generic
-    app's rule, because that is the answer somebody already reads in the settings help."""
-    args = shlex.split(str(settings.get("args") or ""))
-    placed = [tokens.fill(one, {"table": entry.table, "key": entry.key})
-              for one in args]
-    kept = [one for one in placed if one]
-    if placed == args:
-        target = entry.table or entry.key
-        if target:
-            kept.append(target)
-    return [str(settings.get("bin_path") or ""), *kept]
+    """What a launcher runs when its extension did not say: the generic app's command."""
+    from apps.generic import GenericLaunch
+
+    return GenericLaunch().command(entry, settings)
 
 
 def build(name: str, described: dict) -> App:

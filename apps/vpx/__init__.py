@@ -30,6 +30,7 @@ COMPANION_SUFFIXES: tuple[str, ...] = (".ini", ".vbs", ".directb2s", ".b2spro", 
 FIELDS: tuple[Field, ...] = (
     Field("bin_path", path="exe"),
     Field("ini_path", path="file", suffixes=(".ini",)),
+    Field("args", taken=("-ini", "-play")),
     Field("launch_env", type="text", lines=3),
     Field("log_delete_on_start", type="bool", default="false"),
 )

@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,14 @@ from common.games.tables import (
     table_entries,
     table_names,
 )
-from common.host import bundled_libraries, commands, key_simulator, launch_state, table_commands
+from common.host import (
+    bundled_libraries,
+    command_line,
+    commands,
+    key_simulator,
+    launch_state,
+    table_commands,
+)
 from common.host.vpx_log import delete_vpinball_log_on_start_if_configured
 from common.i18n import t
 from common.launcher_path import resolve_launcher_path
@@ -158,6 +166,18 @@ def _binary_of(launcher: launchers.Launcher | None) -> str:
         raise LaunchUnavailableError(t("said.program_not_there",
                                        launcher_name=launcher.display_name, path=resolved))
     return str(resolved)
+
+
+def _arguments_of(launcher: launchers.Launcher | None) -> None:
+    """Refuses Arguments that cannot be read, before anything runs. Saving refuses the
+    same, so what reaches here was written by hand or names an extension now off."""
+    if launcher is None or not any(one.key == "args" for one in launcher.fields()):
+        return
+    problem = apps.arguments_problem(launcher.app, str(launcher.value("args") or ""))
+    if problem:
+        logger.warning("%s: Arguments refused: %s", launcher.display_name, problem)
+        raise LaunchUnavailableError(t("said.arguments_refused",
+                                       launcher_name=launcher.display_name, problem=problem))
 
 
 def _resolve_entry(game: Game, named: str | None) -> tuple[str, dict]:
@@ -407,7 +427,9 @@ def check_launchable(game: Game, ini_config: ConfigStore,
     _reference_is_reachable(game, entry)
     if launch_state.current().launching:
         raise LaunchBusyError(t("error.launch.already_launching"))
-    _binary_of(_launcher_for(table_id, entry)[0])
+    launcher = _launcher_for(table_id, entry)[0]
+    _binary_of(launcher)
+    _arguments_of(launcher)
     return _path_of(game, entry) or tables.entry_native_key(entry)
 
 
@@ -469,6 +491,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
     rom = em_scores.key_of(game, entry)
     launcher, asked_for = _launcher_for(table_id, entry)
     binary = _binary_of(launcher)
+    _arguments_of(launcher)
     # _binary_of refuses a launcher that is missing or cannot run, so there is one here.
     assert launcher is not None
     if asked_for and asked_for != launcher.launcher_id:
@@ -516,8 +539,9 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                 game_id=game_identity.game_id(game) or None,
                 controls=None if capturing else _controls_of(launcher, binary))
             folder = _capture_folder() if capturing else None
-            cmd, marker = _plan(playing, binary, launcher, capture=folder,
-                                record_sound=record_sound, record_view=record_view)
+            cmd, marker = _plan(replace(playing, names=dict(around.values)), binary,
+                                launcher, capture=folder, record_sound=record_sound,
+                                record_view=record_view)
             if not capturing:
                 before, _ = game_play_service.parse_score_from_nvram(
                     game, rom, initials="", entry=entry)
@@ -525,7 +549,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                         "game_id": game_identity.game_id(game), "source": source,
                         "up": [player.as_payload() for player in up],
                         "private": _is_private(game)}
-            logger.info("Launching: %s", cmd)
+            logger.info("Launching: %s", command_line.readable(cmd))
             process = popen(
                 cmd,
                 stdout=subprocess.PIPE,

@@ -17,12 +17,13 @@ are in `i18n/<language>.json` beside it, found by what the app declares: `name`,
 
 from __future__ import annotations
 
+import shlex
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-# How an app fills `{name}` in an argument a person wrote: the one token syntax.
-from common.tokens import fill as fill_tokens  # noqa: F401
+from common import tokens
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,9 @@ class Field:
     suffixes: tuple[str, ...] = ()
     # Commonly set for one table rather than for all of them, so offered first there.
     per_table: bool = False
+    # Arguments the app's own command already gives, refused where a person types them.
+    # Why, for each, is `field.<key>.taken.<the word without its dashes>`.
+    taken: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,35 @@ class Entry:
     table: str = ""
     # The app's own native handle - a ROM name, a store id. Empty for a file-backed entry.
     key: str = ""
+    # What each `{name}` in a launcher's Arguments stands for in this launch. Empty where
+    # nothing is launching, and `table` and `key` then come from the fields above.
+    names: Mapping[str, str] = field(default_factory=dict, compare=False, hash=False)
+
+
+def words(text: str) -> list[str]:
+    """What is typed, split at spaces outside quotation marks. On Windows a backslash is
+    part of a path, not an escape. Raises ValueError for a quotation mark never closed."""
+    lexer = shlex.shlex(text, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    if sys.platform == "win32":
+        lexer.escape = ""
+    return list(lexer)
+
+
+def arguments(entry: Entry, settings: Mapping[str, Any]) -> list[str]:
+    """A launcher's Arguments, split by `words`, each name filled in for this entry. An
+    argument a name leaves empty is dropped. Raises `tokens.UnknownTokenError` for a name
+    a table's commands are not offered, and ValueError for a quotation mark never closed."""
+    values = {"table": entry.table, "key": entry.key, **entry.names}
+    filled = (tokens.resolve(one, values, context=tokens.TABLE)
+              for one in words(str(settings.get("args") or "")))
+    return [one for one in filled if one]
+
+
+def places_entry(settings: Mapping[str, Any]) -> bool:
+    """Whether a launcher's Arguments say where the entry goes, with `{table}` or `{key}`."""
+    return bool({"table", "key"} & set(tokens.TOKEN.findall(str(settings.get("args") or ""))))
 
 
 # --- claim ------------------------------------------------------------------------

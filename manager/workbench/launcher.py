@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from collections.abc import Callable
 from functools import partial
@@ -9,7 +10,7 @@ from typing import Any
 
 from nicegui import run, ui
 
-from common import tokens
+from common import apps, tokens
 from common.failures import why
 from common.i18n import t
 from manager.backups import backup_rows
@@ -206,6 +207,10 @@ async def _launcher_details(context: dict[str, Any]) -> None:
     is_default = context.get("defaults", {}).get(launcher["app"]) == launcher["launcher_id"]
     refused_default = _why_not_the_default(launcher)
 
+    @ui.refreshable
+    def command_line() -> None:
+        _command_line(launcher.get("command_line"))
+
     async def put(changes: dict[str, Any]) -> str:
         """Empty when it saved, else why it did not."""
         try:
@@ -218,6 +223,17 @@ async def _launcher_details(context: dict[str, Any]) -> None:
             again = context["state"].get(after)
             if callable(again):
                 await again()
+        if "settings" in changes:
+            # Built where the launcher runs, so it is read back rather than worked out here.
+            try:
+                fresh = await offload.io(library.launchers)
+            except Exception:  # noqa: BLE001 - it saved; the old Command Line would be wrong
+                logger.exception("Could not read back what %s runs", launcher["display_name"])
+                fresh = {}
+            launcher["command_line"] = next(
+                (one.get("command_line") for one in fresh.get("launchers") or []
+                 if one.get("launcher_id") == launcher["launcher_id"]), None)
+            command_line.refresh()
         return ""
 
     @on_page
@@ -275,6 +291,9 @@ async def _launcher_details(context: dict[str, Any]) -> None:
             return await write(settings={**launcher["settings"], key: value})
         return save
 
+    async def save_args(text: str) -> str:
+        return await put({"settings": {**launcher["settings"], "args": text}})
+
     entries: list[tuple[Any, Any]] = [
         (HEADING, t("manager.workbench.this_launcher")),
         (t("word.name"), panel.field(launcher["display_name"], rename,
@@ -305,20 +324,50 @@ async def _launcher_details(context: dict[str, Any]) -> None:
     for field in launcher.get("fields") or []:
         if field["key"] == COMMANDS_FROM:
             entries.append((HEADING, t("manager.workbench.commands")))
-        entries.append((field["label"],
-                        settings_page.control_for(
-                            launchers_page.standing_option(field, launcher["app_name"]),
-                            launcher["settings"].get(field["key"]),
-                            save_field(field["key"]),
-                            check=(launcher.get("checks") or {}).get(field["key"]),
-                            browse=library.folders)))
+        if field["key"] == "args":
+            # Refused where it is typed rather than in a toast, and on opening for one a
+            # launch would refuse.
+            typed = str(launcher["settings"].get("args") or "")
+            refused = apps.arguments_problem(launcher["app"], typed)
+            control = panel.field(typed, save_args, refuses=True,
+                                  on_control=partial(_refusing, refused) if refused else None)
+        else:
+            control = settings_page.control_for(
+                launchers_page.standing_option(field, launcher["app_name"]),
+                launcher["settings"].get(field["key"]),
+                save_field(field["key"]),
+                check=(launcher.get("checks") or {}).get(field["key"]),
+                browse=library.folders)
+        entries.append((field["label"], control))
         if field.get("description"):
             entries.append(panel.note(field["description"]))
+        if field["key"] == "args":
+            commands_help.add_to(entries, tokens.TABLE, after=False,
+                                 note=t("launcher.args.names_note"))
+            entries.append((t("launcher.command_line"), command_line))
         # Once, under the pair, rather than beside each of them.
         if field["key"] == "on_table_exit":
             commands_help.add_to(entries, tokens.TABLE)
     with ui.column().classes("gap-0 manager-form"):
         _rows(ui, entries)
+
+
+def _refusing(said: str, control: Any) -> None:
+    control.props["error"] = True
+    control.props["error-message"] = said
+
+
+def _command_line(pieces: list[dict[str, Any]] | None) -> None:
+    """What the launcher runs, with the launcher's own Arguments marked. Nothing while a
+    launch would refuse them."""
+    if pieces is None:
+        ui.element("div")  # the grid's cell: without it every row after this one shifts
+        return
+    joined = " ".join(
+        f'<span class="manager-option--yours">{html.escape(one["text"])}</span>'
+        if one.get("yours") else html.escape(one["text"]) for one in pieces)
+    with ui.column().classes("manager-options w-full min-w-0 gap-0"):
+        ui.html(joined, sanitize=False, tag="div").classes("manager-option")
 
 
 def _app_keeps_settings(context: dict[str, Any]) -> bool:

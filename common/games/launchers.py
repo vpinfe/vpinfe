@@ -300,8 +300,9 @@ def _apart_from_tables(item: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _refuse_bad_launchers(items: list[dict[str, Any]], held: list[dict[str, Any]]) -> None:
-    """A write that names an app this install lacks, a name another launcher has, or
-    switches off a launcher whose tables nothing could play is refused by name.
+    """A write that names an app this install lacks, a name another launcher has, Arguments
+    that cannot be read, or switches off a launcher whose tables nothing could play is
+    refused by name.
 
     Only items that are new or changed apart from their tables are asked: a launcher whose
     extension was switched off since it was written would otherwise block every other write,
@@ -323,6 +324,11 @@ def _refuse_bad_launchers(items: list[dict[str, Any]], held: list[dict[str, Any]
                if launcher_id != item.get("id")):
             raise config_schema.ConfigListError(t("error.launchers.name_taken", name=name))
         before = kept.get(item.get("id"))
+        typed = str((item.get("settings") or {}).get("args") or "")
+        if typed != str(((before or {}).get("settings") or {}).get("args") or ""):
+            problem = apps.arguments_problem(app_id, typed)
+            if problem:
+                raise config_schema.ConfigListError(problem)
         if before is not None and before.get("enabled") and not item.get("enabled"):
             from common.games import launcher_ops
 

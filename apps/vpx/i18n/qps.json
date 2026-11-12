@@ -191,6 +191,8 @@
   "field.Topper.TopperDisplay.help": "Ţĥè ɱöñîţöř îţ öþèñš öñ, ƀý ţĥè ñàɱè Ṽîšûàŀ Þîñƀàŀŀ ĝîṽèš îţ",
   "field.Topper.TopperFullScreen.help": "Ŵîñđöŵèđ, öř ƒîŀŀîñĝ ţĥè đîšþŀàý",
   "field.Topper.TopperOutput.help": "Ŵĥèţĥèř ţĥîš ŵîñđöŵ àþþèàřš, öñ îţš öŵñ öř îñšîđè ţĥè þŀàýƒîèŀđ",
+  "field.args.taken.ini": "-îñî çöɱèš ƒřöɱ Šèţţîñĝš Ƒîŀè",
+  "field.args.taken.play": "-þŀàý îš àđđèđ ƒöř ýöû",
   "field.bin_path.description": "Ţĥè Ṽîšûàŀ Þîñƀàŀŀ èẋèçûţàƀŀè ţĥîš ŀàûñçĥèř řûñš",
   "field.ini_path.description": "Ţĥè ṼÞîñƀàŀŀẊ.îñî ţĥîš ŀàûñçĥèř šţàřţš ţàƀŀèš ŵîţĥ, àñđ ţĥè öñè îţš šèţţîñĝš ĥèřè çĥàñĝè",
   "field.ini_path.label": "Šèţţîñĝš Ƒîŀè",

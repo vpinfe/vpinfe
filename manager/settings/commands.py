@@ -19,11 +19,14 @@ from common.i18n import t
 from manager.kit import panel
 
 
-def add_to(entries: list[Any], context: str) -> None:
-    """Put the names a command in this context may use under the fields they apply to."""
-    available = tokens.offered(context, after=True)
+def add_to(entries: list[Any], context: str, *, after: bool = True,
+           note: str = "") -> None:
+    """Put the names a command in this context may use under the fields they apply to.
+    Without `after`, only the names known before the table starts."""
+    available = tokens.offered(context, after=after)
     if not available:
         return
+    note = note or t("manager.commands.names_note")
 
     def rows() -> None:
         with ui.element("div").classes("manager-token-list"):
@@ -38,7 +41,7 @@ def add_to(entries: list[Any], context: str) -> None:
         with panel.disclosure(t("manager.commands.names_title", count=len(available))) \
                 .classes("manager-tokens"):
             with ui.column().classes("gap-1 pt-1"):
-                ui.label(t("manager.commands.names_note")).classes("manager-help")
+                ui.label(note).classes("manager-help")
                 rows()
 
     entries.append((panel.ASIDE, draw))

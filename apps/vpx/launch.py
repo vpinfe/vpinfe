@@ -11,6 +11,7 @@ from common.apps.contract import (
     SESSION_CHILD_WITH_READINESS,
     Entry,
     Session,
+    arguments,
 )
 
 from .config import own_file
@@ -37,10 +38,10 @@ class VPXLaunch:
     on macOS what a person picks is a `.app` directory, and VPX is inside it."""
 
     def command(self, entry: Entry, settings: Mapping[str, Any]) -> list[str]:
-        """`-play <table>` is guaranteed last, and there is only ever one `-ini`.
-
-        VPX accepts a single `-ini` and silently drops a second, which would make us the
-        one who lost the setting without saying so.
+        """`-play <table>` is last and the Settings File is the only `-ini`, so long as the
+        launcher's Arguments, which go between the two, hold neither: a save and a launch
+        refuse both (`Field.taken`). VPX takes the last `-ini` it is given, so
+        a second would quietly replace the Settings File.
         """
         bin_path = str(settings.get("bin_path") or "")
         cmd = [bin_path]
@@ -49,6 +50,7 @@ class VPXLaunch:
         if named and not _is_own(named, bin_path):
             cmd.extend(["-ini", named])
 
+        cmd.extend(arguments(entry, settings))
         cmd.extend(["-play", str(entry.table)])
         return cmd
 

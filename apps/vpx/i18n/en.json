@@ -191,6 +191,8 @@
   "field.Topper.TopperDisplay.help": "The monitor it opens on, by the name Visual Pinball gives it",
   "field.Topper.TopperFullScreen.help": "Windowed, or filling the display",
   "field.Topper.TopperOutput.help": "Whether this window appears, on its own or inside the playfield",
+  "field.args.taken.ini": "-ini comes from Settings File",
+  "field.args.taken.play": "-play is added for you",
   "field.bin_path.description": "The Visual Pinball executable this launcher runs",
   "field.ini_path.description": "The VPinballX.ini this launcher starts tables with, and the one its settings here change",
   "field.ini_path.label": "Settings File",

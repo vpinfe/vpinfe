@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from common import i18n
+from common import i18n, tokens
 from common.config.labels import ACRONYMS, field_label
 
 from .contract import (
@@ -33,14 +33,16 @@ from .contract import (
     PlayRecord,
     Plays,
     Session,
+    words,
 )
 
 __all__ = [
     "App", "Availability", "Buttons", "Claim", "ConfigGroup", "Entry", "Field", "Heading",
     "Kinds", "OWN_FIELDS", "Pair", "Parsed", "Pause", "PlayRecord", "Plays", "Session",
-    "all_apps", "app_for", "app_name", "default_app", "field_blank", "field_help",
+    "all_apps", "app_for", "app_name", "arguments_problem", "default_app", "field_blank",
+    "field_help",
     "field_words", "get", "group_words", "heading_words", "launcher_fields", "pair_words",
-    "strip_suffix", "table_suffixes", "vps_formats",
+    "strip_suffix", "table_suffixes", "taken_word", "vps_formats",
 ]
 
 # What every launcher has, whatever app it wraps. Commands to run around a table are
@@ -186,6 +188,29 @@ def field_words(app_id: str, field: Field) -> dict[str, str]:
                                   set_name=named_set), ""
     return {"label": label, "label_key": label_key,
             "description": leaf("description", field.description, "")[0]}
+
+
+def taken_word(word: str) -> str:
+    """An option as a program reads it, in any case and after `-` or `/`: `-Play` is
+    `play`. A field's `taken` words are refused, and named in its catalog, by this."""
+    return word.lstrip("-/").lower()
+
+
+def arguments_problem(app_id: str, text: str) -> str:
+    """What is wrong with a launcher's Arguments, in a person's words, or "" for nothing."""
+    try:
+        typed = words(text)
+    except ValueError:
+        return i18n.t("capture.command.quote")
+    unknown = tokens.unknown_names(text, context=tokens.TABLE)
+    if unknown:
+        return i18n.t("capture.command.unknown", token=unknown[0])
+    declared = next((one for one in launcher_fields(app_id) or () if one.key == "args"), None)
+    taken = {taken_word(word) for word in (declared.taken if declared else ())}
+    for word in typed:
+        if word[:1] in "-/" and taken_word(word) in taken:
+            return i18n.t(f"app.{app_id}.field.args.taken.{taken_word(word)}")
+    return ""
 
 
 def field_help(app_id: str, field: Field) -> str:

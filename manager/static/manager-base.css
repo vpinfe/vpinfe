@@ -4504,8 +4504,9 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-units { margin-left: 12px; }
 .manager-units .q-btn { min-width: 36px; font-size: var(--fs-caption); }
 
-/* The command line a window starts with, one option to a line. A line breaks after a
-   comma where it must, and inside a word only when one is longer than the box. */
+/* A command line: the one a window starts with, one option to a line, or the one a
+   launcher runs. A line breaks after a comma where it must, and inside a word only when
+   one is longer than the box. */
 .manager-options {
   border: 1px solid var(--line-soft); border-radius: 4px; padding: 8px 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
