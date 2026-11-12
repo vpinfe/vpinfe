@@ -694,7 +694,9 @@ def _table_entries(table: dict[str, Any],
             (HEADING, game_tables.FILE),
             (t("manager.workbench.filename"), table.get("filename") or "-"),
             *_file_facts(table),
-            (t("manager.workbench.hash"), table.get("file_hash") or "-"),
+            (t("manager.workbench.hash"),
+             panel.copyable_value(digest, t("manager.workbench.copy_hash"))
+             if (digest := str(table.get("file_hash") or "")) else "-"),
             *_made_from(table, context),
         ]
     entries += _outside(links)

@@ -224,7 +224,9 @@ def _draw_share(draft: Draft) -> None:
             _copy(t("manager.support.share.copy_markdown"), summary,
                   t("manager.support.share.copy_markdown_hint")))),
         panel.note(t("manager.support.share.markdown_help")),
-        (panel.READ, (t("manager.support.share.checksum"), made.checksum)),
+        (panel.READ, (t("manager.support.share.checksum"),
+                      panel.copyable_value(made.checksum,
+                                           t("manager.support.share.copy_checksum")))),
     ])
 
 

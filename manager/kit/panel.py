@@ -1365,13 +1365,16 @@ def path_ends(control: ui.input) -> None:
     ui.run_javascript(f"window.managerPathEnd && managerPathEnd('{native_id(control)}')")
 
 
-def _copy_button(browser_text: str, text: Callable[[], str]) -> ui.button:
-    """A Copy path button. `browser_text` is the JavaScript expression for the text, read
-    in the browser at the click, which is the only moment the browser will copy."""
+def _copy_button(browser_text: str, text: Callable[[], str],
+                 hint: str = "") -> ui.button:
+    """A Copy button, Copy Path unless `hint` names something else. `browser_text` is the
+    JavaScript expression for the text, read in the browser at the click, which is the
+    only moment the browser will copy."""
     from manager.kit import clipboard
 
-    button = ui.button(icon=verbs.COPY).props("flat round dense").tooltip(t("word.copy_path"))
-    button.props["aria-label"] = t("word.copy_path")
+    hint = hint or t("word.copy_path")
+    button = ui.button(icon=verbs.COPY).props("flat round dense").tooltip(hint)
+    button.props["aria-label"] = hint
     button.on("click", lambda event: clipboard.copied(bool(event.args), text()),
               js_handler=clipboard.COPY_JS % browser_text)
     return button
@@ -1385,9 +1388,20 @@ def copy_path(control: ui.input) -> ui.button:
     return button
 
 
-def copy_text(path: str) -> ui.button:
+def copy_text(path: str, hint: str = "") -> ui.button:
     """Copy path after a path drawn as text."""
-    return _copy_button(json.dumps(path), lambda: path)
+    return _copy_button(json.dumps(path), lambda: path, hint)
+
+
+def copyable_value(text: str, hint: str) -> Callable[[], None]:
+    """A `facts` value that is a long string read off the screen by copying it, a hash
+    or a checksum: cut at the end of the line, whole as its tooltip, Copy after it. `hint`
+    names what is copied. The caller draws a missing value as plain text instead."""
+    def draw() -> None:
+        with ui.row().classes("items-center gap-1 no-wrap min-w-0 max-w-full"):
+            ui.label(text).classes("manager-fact-value truncate min-w-0").tooltip(text)
+            copy_text(text, hint).classes("shrink-0")
+    return draw
 
 
 def path_buttons(control: ui.input, browsed: Callable[[], Any], tip: str = "") -> None:

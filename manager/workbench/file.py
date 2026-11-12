@@ -285,7 +285,8 @@ def _asset_details(context: dict[str, Any], detail: dict[str, Any],
         owner: dict[str, Any] = next((one for one in context["tables"]
                       if one.get("id") == context["row"].get("table")), {})
         if digest := str(owner.get("vbs_hash") or ""):
-            facts.append((t("manager.workbench.script_hash"), digest))
+            facts.append((t("manager.workbench.script_hash"),
+                          panel.copyable_value(digest, t("manager.workbench.copy_hash"))))
     if context["kind"] in file_acts.ROM_FILES:
         names = rom_acts.users_of(context["row"], context["tables"])
         if names:
