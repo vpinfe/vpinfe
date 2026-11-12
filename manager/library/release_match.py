@@ -66,18 +66,21 @@ async def ask(yours: Yours, listed: list[dict[str, Any]], *, bound: str,
     chosen = {"id": bound}
     rows: dict[str, tuple[ui.element, ui.element]] = {}
 
-    with frame.opened(t(words["title"], name=yours.name), wide=True,
-                      ignore_outside_click=True, classes="manager-dialog--pick") as box:
+    with frame.opened(t(words["title"], name=yours.name), size="wide",
+                      tall=True, ignore_outside_click=True) as box:
         if place:
-            ui.label(place).classes("manager-help px-3")
-        panel.facts(ui, [(panel.HEADING, t("manager.release_match.yours")),
-                         (panel.FULL, lambda: _yours_row(yours))])
-        panel.facts(ui, [(panel.HEADING, t(words["heading"]))])
-        with ui.row().classes("items-center gap-3 w-full no-wrap px-3 pb-2"):
-            with ui.element("div").classes("grow min-w-0"):
-                search = frame.field(placeholder=t(words["filter"]))
-            count = ui.label("").classes("manager-help manager-pick-count")
-        listing = ui.column().classes("w-full gap-0 manager-source-list manager-pick-list px-3")
+            ui.label(place).classes("manager-help")
+        with frame.band(t("manager.release_match.yours")):
+            pass
+        with frame.well():
+            _yours_row(yours)
+        with frame.band(t(words["heading"])):
+            count = ui.label("").classes("manager-band-count")
+        with frame.well(scrolls=True):
+            with ui.row().classes("manager-well-head no-wrap"):
+                with ui.element("div").classes("grow min-w-0"):
+                    search = frame.field(placeholder=t(words["filter"]))
+            listing = ui.column().classes("w-full gap-0 manager-well-rows")
         with frame.footer():
             if bound:
                 frame.aside(t("manager.vps_match.clear_match"), lambda: box.submit(""),

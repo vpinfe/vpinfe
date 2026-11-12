@@ -128,7 +128,7 @@ async def confirm_details(differs: list[dict[str, Any]]) -> list[str]:
     """
     chosen = {str(item.get("field") or ""): True for item in differs}
 
-    with frame.opened(t("manager.workbench.new_entry_question"), wide=True,
+    with frame.opened(t("manager.workbench.new_entry_question"), size="wide",
                       ignore_outside_click=True) as box:
         for new in (False, True):
             rows = [one for one in differs if bool(one.get("new")) is new]
@@ -136,7 +136,7 @@ async def confirm_details(differs: list[dict[str, Any]]) -> list[str]:
                 continue
             panel.facts(ui, [(panel.HEADING, t("manager.workbench.details_new") if new
                               else t("manager.workbench.details_changed"))])
-            with ui.column().classes("w-full gap-0 px-3"):
+            with ui.column().classes("w-full gap-0"):
                 for item in rows:
                     _detail_choice(item, chosen)
         with frame.footer():

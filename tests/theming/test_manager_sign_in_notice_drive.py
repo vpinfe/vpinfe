@@ -22,11 +22,11 @@ from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk, clicked
 
-DIALOG = ".manager-confirm"
+DIALOG = ".manager-dialog--question"
 SHOW_BUTTON = f"{DIALOG} .manager-dialog-footer button:not(.manager-dialog-aside)"
 SECURITY = "/manager?view=settings&page=vpinfe.security"
 SUMMARY = ".manager-summary"
-LIST = ".manager-signed-in-card"
+LIST = ".manager-dialog--large"
 NOTHING_SIGNED_IN = json.dumps(t("manager.security.none"))
 TEXT_OF = "(() => { const el = document.querySelector(%s); return el ? el.innerText : null; })()"
 SIGN_OUT_WORD = json.dumps(t("manager.security.sign_out"))
@@ -34,15 +34,15 @@ SIGN_OUT_WORD = json.dumps(t("manager.security.sign_out"))
 NAMED = "el.innerText.trim().split('\\n').pop() === %s"
 WAITING = ("[...document.querySelectorAll('.manager-fact-label')]"
            f".some(el => el.innerText.trim() === {json.dumps(t('manager.security.waiting'))})")
-SIGN_OUT_BUTTON = ("[...document.querySelectorAll('.manager-signed-in-card "
+SIGN_OUT_BUTTON = ("[...document.querySelectorAll('.manager-dialog--large "
                    ".manager-dialog-footer button')]"
                    f".find(el => {NAMED % SIGN_OUT_WORD})")
 SIGN_OUT_ENABLED = (f"(() => {{ const b = {SIGN_OUT_BUTTON}; return !!b && "
                     "b.getAttribute('aria-disabled') !== 'true' && !b.disabled; })()")
 SIGN_OUT_ALL_WORD = json.dumps(t("manager.security.sign_out_all"))
-SIGN_OUT_ALL_ASIDE = ("[...document.querySelectorAll('.manager-signed-in-card button')]"
+SIGN_OUT_ALL_ASIDE = ("[...document.querySelectorAll('.manager-dialog--large button')]"
                       f".find(el => {NAMED % SIGN_OUT_ALL_WORD})")
-SIGN_OUT_ALL_CONFIRM = ("[...document.querySelectorAll('.manager-confirm button')]"
+SIGN_OUT_ALL_CONFIRM = ("[...document.querySelectorAll('.manager-dialog--question button')]"
                         f".find(el => {NAMED % SIGN_OUT_ALL_WORD})")
 # The pinned checkbox column draws every row a second time, in its own container.
 ROWS = f"{LIST} .ag-center-cols-container .ag-row"

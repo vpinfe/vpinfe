@@ -12,6 +12,26 @@
 
 /* Rules rather than values, so they belong with neither palette. */
 
+/* The dialog kit's fixed values: the one place a tweak to every dialog is made. The colors are
+   the mode's own surfaces, lines and washes, so Synthwave, Dark and Light each follow with no
+   change to the palette. */
+:root {
+  --dialog-inset: 12px;
+  --dialog-gap: 10px;
+  --well-ground: var(--surface-2);
+  --well-edge: var(--line);
+  --well-radius: 8px;
+  --band-ground: var(--surface-lift);
+  --list-stripe: var(--wash-hover);
+  --list-rule: var(--line-soft);
+  --rule-in-well: var(--line);
+  --dialog-question: 460px;
+  --dialog-form: 520px;
+  --dialog-wide: 680px;
+  --dialog-large: 920px;
+  --dialog-tall: min(86vh, 780px);
+}
+
 /* Both engines: pseudo-elements for WebKit and Blink, properties for Firefox. */
 * {
   scrollbar-width: thin;
@@ -1117,39 +1137,115 @@ body::before {
 /* In the filter, the stars are a picture of a value and not a control. */
 .manager-filter-row .manager-star { cursor: pointer; margin-right: -1px; }
 
-/* One confirmation, wherever something cannot be undone. Narrow enough to read in one
-   line of sight, and the named files are quiet and breakable - a path is looked at, not
-   read. */
-.manager-confirm { min-width: 320px; max-width: 460px; }
-/* The panels' ground, so a field, an action or a heading on it looks as it does there. */
+/* The frame owns a dialog's side margin, its width and its look; a module draws only what the
+   dialog holds. The card keeps its 4px of padding and takes the inset on top of it, and the
+   title rule and the footer rule break out by the inset so they run the width of the card.
+   Four widths, plus the text editor's full screen; `tall` is a dialog whose list scrolls at
+   one height. */
 .manager-dialog.q-card {
   background: var(--surface-work); border: 1px solid var(--line); border-radius: 10px;
-  padding: 16px 4px 14px; width: min(520px, 92vw); max-width: none;
+  padding: 16px calc(4px + var(--dialog-inset)) 14px; gap: var(--dialog-gap);
+  width: min(var(--dialog-form), 92vw); max-width: none;
 }
-.manager-dialog--wide.q-card { width: min(680px, 94vw); }
-.manager-dialog.manager-dialog--series.q-card {
-  height: min(86vh, 900px); display: flex; flex-direction: column;
+.manager-dialog--question.q-card { width: min(var(--dialog-question), 92vw); }
+.manager-dialog--wide.q-card { width: min(var(--dialog-wide), 94vw); }
+.manager-dialog--large.q-card { width: min(var(--dialog-large), 94vw); }
+.manager-dialog--tall.q-card { height: var(--dialog-tall); display: flex; flex-direction: column; }
+.manager-dialog--full.q-card {
+  width: 100%; height: 100%; max-height: none; border-radius: 0;
+  display: flex; flex-direction: column;
 }
-.manager-dialog.manager-backups-card.q-card {
-  width: min(900px, 94vw); height: min(70vh, 380px); display: flex; flex-direction: column;
+/* A dialog's own facts take the card's margin and add none. */
+.manager-dialog .manager-facts { padding: 0; }
+/* The column between the title and the footer, where a dialog's list or panels scroll. */
+/* The phone sheets draw their own card, not the frame's. */
+.manager-confirm { min-width: 320px; max-width: 460px; }
+.manager-dialog-body {
+  display: flex; flex-direction: column; gap: var(--dialog-gap);
+  width: 100%; min-height: 0; flex: 1 1 auto;
 }
-.manager-dialog.manager-signed-in-card.q-card {
-  width: min(1000px, 94vw); height: min(70vh, 420px); display: flex; flex-direction: column;
+/* A list beside a pane, level at the top and the bottom. */
+.manager-dialog-body--split {
+  display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 14px;
+  height: min(60vh, 560px); flex: 0 0 auto;
 }
-/* With no copies the message sits in the middle of the height the dialog opened at. */
-.manager-backups-none:not(.hidden) { flex: 1 1 auto; width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; }
-/* A picker is one height whatever its list holds or its filter leaves; the list scrolls. */
-.manager-dialog.manager-dialog--pick.q-card {
-  height: min(86vh, 780px); display: flex; flex-direction: column;
+@media (max-width: 720px) {
+  .manager-dialog-body--split {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    height: min(76vh, 640px);
+  }
+  .manager-dialog-body--split > .manager-pane { order: -1; overflow: visible; }
 }
-/* A program's settings from a table or a selection: the search stays put, the list scrolls,
-   and Done sits at the foot. Wide enough for a label, its control and its help. */
-.manager-dialog.manager-dialog--settings.q-card {
-  width: min(900px, 94vw); height: min(86vh, 900px); display: flex; flex-direction: column;
+.manager-dialog-title {
+  font-size: var(--fs-body); font-weight: 600; color: var(--ink); line-height: 1.35;
+  word-break: break-word;
 }
-/* The areas beside the settings, as a launcher's rail draws them. On a narrow screen they
-   run along the top instead, since a column there leaves the settings no room. */
-.manager-dialog-sections { margin-top: 0; --rail-w: 148px; }
+/* The rule runs the width of the card, so it is the card's, not a page's title. */
+.manager-dialog > .manager-dialog-title {
+  align-self: stretch; margin-inline: calc(-1 * var(--dialog-inset));
+  padding: 0 var(--dialog-inset) 10px; border-bottom: 1px solid var(--line);
+}
+.manager-dialog-footer {
+  justify-content: flex-end; gap: 8px; align-self: stretch;
+  margin: 2px calc(-1 * var(--dialog-inset)) 0; padding: 12px var(--dialog-inset) 0;
+  border-top: 1px solid var(--line);
+}
+.manager-dialog-footer > .manager-dialog-aside { margin-right: auto; }
+.manager-dialog-footer .q-btn .q-icon { font-size: var(--icon-button); }
+/* A heading over what follows, its count or one quiet act on the same line. */
+.manager-band {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; align-self: stretch;
+  background: var(--band-ground); border: 1px solid var(--well-edge);
+  border-radius: var(--well-radius); padding: 6px 10px; flex: 0 0 auto;
+}
+.manager-band > .manager-band-name { margin: 0; padding: 0; border: 0; grid-column: auto; }
+.manager-band-trailing { white-space: nowrap; }
+.manager-band-count { font-size: var(--fs-caption); color: var(--ink-3); }
+/* The bordered panel a list, or settings beside one, sits in. A row inside it has no box of its
+   own: a rule under it, a stripe on every other one, the picked one outlined on all four sides.
+   The stripe is the hover wash, because the grid stripe is the panel's own ground in two modes. */
+.manager-well {
+  display: flex; flex-direction: column; gap: 0; align-self: stretch;
+  background: var(--well-ground); border: 1px solid var(--well-edge);
+  border-radius: var(--well-radius); padding: 4px; min-width: 0; min-height: 0;
+}
+.manager-well:not(.manager-well--scrolls) { flex: 0 0 auto; }
+.manager-well--scrolls { flex: 1 1 auto; overflow: hidden; }
+.manager-well--scrolls > .manager-well-rows { flex: 1 1 auto; max-height: none; }
+.manager-well .manager-source-row {
+  border: 1px solid transparent; border-bottom-color: var(--list-rule); border-radius: 0;
+}
+.manager-well .manager-source-row:nth-child(even of .manager-source-row) { background: var(--list-stripe); }
+.manager-well .manager-source-row--pick:hover { background: var(--accent-wash); }
+.manager-well .manager-source-row.manager-source-row--chosen {
+  border-color: var(--accent); background: var(--accent-wash-on);
+}
+/* The rows under a panel's search scroll; the search stays put. */
+.manager-well-rows { overflow-y: auto; scrollbar-gutter: stable; max-height: min(48vh, 440px); min-height: 0; }
+.manager-matched-here { color: var(--positive); font-size: var(--fs-caption); font-weight: 600; white-space: nowrap; }
+/* A search or a filter at the top of the panel it filters. */
+.manager-well-head {
+  display: flex; align-items: center; gap: 8px; padding: 4px 4px 8px;
+  border-bottom: 1px solid var(--list-rule); flex: 0 0 auto;
+}
+/* The panel's soft rule is lost on its darker ground. */
+.manager-well .manager-fact-heading { border-top-color: var(--rule-in-well); }
+.manager-well .manager-facts { padding: 0 6px; }
+/* What a picked file or entry is compared with, beside the list. */
+.manager-pane {
+  background: var(--band-ground); border: 1px solid var(--well-edge);
+  border-radius: var(--well-radius); padding: 12px; min-width: 0; overflow-y: auto;
+}
+.manager-dialog-tabs { background: var(--band-ground); border-bottom: 1px solid var(--line); }
+/* Choosing tables for a game's file: the list scrolls inside the panel. */
+.manager-dialog-sections { margin-top: 0; --rail-w: 148px; flex: 1 1 auto; width: 100%; }
+/* The page is the panel the rail stands beside: its own margin from the rail and the edges, and
+   whatever it holds takes the height the dialog leaves, so a long page scrolls inside it. */
+.manager-dialog-sections .manager-section-work {
+  display: flex; flex-direction: column; min-width: 0;
+  padding: var(--dialog-gap) var(--dialog-inset) 4px;
+}
+.manager-dialog-sections .manager-section-work > * { flex: 1 1 auto; min-height: 0; }
 @media (max-width: 640px) {
   .manager-dialog-sections {
     grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
@@ -1161,19 +1257,13 @@ body::before {
   .manager-dialog-sections .manager-section-work { grid-column: 1; grid-row: 2; }
 }
 .manager-dialog--series .manager-series-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* Choosing tables for a game's file: one height whatever the game's tables, the list scrolls. */
-.manager-dialog.manager-dialog--moves.q-card {
-  width: min(520px, 94vw); height: min(86vh, 540px); display: flex; flex-direction: column;
-}
-.manager-dialog--moves .manager-moves-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* With no copies the message sits in the middle of the height the dialog opened at. */
+.manager-backups-none:not(.hidden) { flex: 1 1 auto; width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; }
+.manager-moves-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .manager-moves-row { padding: 4px 0; align-items: flex-start; }
 .manager-moves-row .q-checkbox { flex: none; width: 100%; }
 .manager-moves-lines { margin-top: -4px; padding-bottom: 4px; }
 .manager-move-warn { color: var(--warm); }
-.manager-dialog.manager-dialog--full.q-card {
-  width: 100%; height: 100%; max-height: none; border-radius: 0;
-  display: flex; flex-direction: column;
-}
 .manager-field-row > .manager-fact-edit { flex: 1 1 auto; min-width: 0; }
 /* Reset sits against the control it undoes, and is drawn only where the value is
    changed, so it never waits behind a hover. */
@@ -1228,16 +1318,6 @@ body::before {
 /* One width for every joiner, so the second box starts at the same place whether the pair
    is joined by a comma or an x. */
 .manager-field-part .manager-cell-join { flex: none; width: 1.25em; text-align: center; }
-.manager-dialog-title {
-  font-size: var(--fs-body); font-weight: 600; color: var(--ink); line-height: 1.35;
-  padding: 0 12px 6px; word-break: break-word;
-}
-.manager-dialog-footer { justify-content: flex-end; gap: 8px; width: 100%; padding: 14px 12px 0; }
-.manager-dialog-footer > .manager-dialog-aside { margin-right: auto; }
-.manager-dialog-footer .q-btn .q-icon { font-size: var(--icon-button); }
-.manager-dialog.manager-confirm.q-card { width: min(460px, 92vw); }
-.manager-dialog .manager-confirm-line { padding: 0 12px; }
-.manager-pick-list > .manager-source-row:nth-child(even) { background: var(--grid-stripe); }
 
 /* The question is a sentence and takes sentence case. It used to wear `.manager-card-title`,
    which is the section-heading treatment - uppercase, tracked, accent - so every dialog
@@ -2268,30 +2348,20 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
 .manager-link-out--mark > :first-child { overflow: visible; min-width: auto; }
 .manager-link-out--mark .q-icon { font-size: var(--icon-row); }
 
-/* A wizard's card has a height, not a ceiling. The body scrolls; the footer is outside
-   the scroll, under a rule. */
-.manager-dialog.manager-wizard-card.q-card {
-  width: min(680px, 94vw); height: min(620px, 90vh);
-  display: flex; flex-direction: column; padding: 18px 12px 14px;
-}
-/* Setup's steps draw a picture beside a list, and the list is lost below a picture that
-   stacks. */
-.manager-dialog.manager-wizard-card.manager-wizard-card--roomy.q-card {
-  width: min(840px, 96vw); height: min(740px, 96vh);
-}
-/* `stretch`, because the card's own `align-items` is flex-start and a scroll area
+/* A wizard drawn as a page has no card, so it takes the card's inset itself. */
+.manager-wizard-page { padding-inline: var(--dialog-inset); }
+
+/* A wizard's body scrolls; the footer is outside the scroll, under the frame's rule.
+   `stretch`, because the card's own `align-items` is flex-start and a scroll area
    would shrink to its content. */
 .manager-wizard-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; align-self: stretch;
   scrollbar-gutter: stable;
 }
-.manager-wizard-card .manager-dialog-footer {
-  border-top: 1px solid var(--line-soft); margin-top: 8px;
-}
 /* Inspect Everything is a page of log lines, which needs the room. `:has` widens the
    card only while that view is drawn. */
 .manager-dialog.manager-wizard-card.q-card:has(.support-inspect) {
-  width: min(960px, 96vw);
+  width: min(var(--dialog-large), 96vw);
 }
 .support-lines { max-width: 100%; overflow-x: hidden; }
 /* Wrapped, because a line held to one row hides what a long path replaced. */
@@ -2319,17 +2389,17 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
 .manager-wizard-wait:empty { display: none; }
 /* No title bar: the title is the step's question and the lead is its one sentence of why. */
 .manager-dialog-title.manager-wizard-title {
-  font-size: var(--fs-title); line-height: 1.3; padding: 2px 12px 14px;
+  font-size: var(--fs-title); line-height: 1.3; padding: 2px 0 14px;
 }
 .manager-wizard-title:focus { outline: none; }
 .manager-wizard-lead {
   font-size: var(--fs-body); color: var(--ink-2); line-height: 1.5; max-width: 34rem;
-  padding: 0 12px; margin: -8px 0 14px;
+  margin: -8px 0 14px;
 }
 
 /* The step row. A name takes its color from its segment, except a done one, which is a
    `manager-link` and keeps its own. */
-.manager-wizard-steps { display: flex; gap: 6px; padding: 0 12px 18px; }
+.manager-wizard-steps { display: flex; gap: 6px; padding: 0 0 18px; }
 .manager-wizard-step {
   flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px;
   font-size: var(--fs-caption); color: var(--ink-3);
@@ -2944,14 +3014,6 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
   box-shadow: var(--shadow-drag);
 }
 
-/* The import confirmation. Wider than a confirm because every row carries four facts,
-   and capped so a bundle of forty does not become a page. */
-.manager-import-card {
-  width: 680px; max-width: 92vw;
-  /* Bounded, and the body scrolls inside it: a step with a long summary
-     used to push its own buttons off a short window. */
-  max-height: 86vh; display: flex; flex-direction: column;
-}
 .manager-import-rows { max-height: 46vh; overflow-y: auto; }
 .manager-import-row { padding: 4px 6px; border-radius: 4px; }
 .manager-import-rows > .manager-import-row:nth-child(even) { background: var(--grid-stripe); }
@@ -4338,7 +4400,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 
 /* --- where a file can come from --------------------------------------- */
 
-.manager-dialog.manager-sources-card.q-card { width: min(920px, 94vw); max-height: 92vh; gap: 6px; }
 /* A row that navigates rather than acting: the whole thing is the target, so it says
    so on hover instead of hiding a click behind a label. Separate from --line, which a
    folder is and which is also a row with no picture in it. */
@@ -4368,11 +4429,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-source-row--chosen {
   border-color: var(--accent); background: var(--accent-wash-on);
 }
-/* The stripe above is more specific than the rule before it, so on an even row the
-   chosen fill would lose to it and only the border would say which one is picked. */
-.manager-pick-list > .manager-source-row.manager-source-row--chosen {
-  background: var(--accent-wash-on);
-}
 /* Offered and already true, so not a choice: shown, with its check. */
 .manager-source-row--held { opacity: 0.55; }
 /* A mod under the release it is based on. One step however deep: a deeper chain
@@ -4389,7 +4445,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 .manager-pick-slot { width: 25px; display: inline-flex; justify-content: center; }
 .manager-pick-mark { color: var(--accent); font-size: var(--icon-mark); }
-.manager-pick-count { min-width: 64px; text-align: right; white-space: nowrap; }
 /* The one decision every way in feeds, so it sits above them rather than inside one.
    Set off by a rule, because it is a different kind of thing from a tab. */
 .manager-destination {
@@ -4419,11 +4474,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 /* The list and the pane beside it, one height for every tab. The lists inside take what is
    left and scroll. */
-.manager-sources-body {
-  display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 14px;
-  width: 100%; padding: 0 12px; height: min(60vh, 560px); min-height: 0;
-}
-.manager-sources-body > .manager-sources-panels { height: 100%; min-width: 0; }
+.manager-dialog-body--split > .manager-sources-panels { height: 100%; min-width: 0; }
 .manager-sources-card .q-tab__label { white-space: nowrap; }
 /* A list never shrinks past a few rows: with the copy-or-keep choice above it, the panel
    scrolls rather than letting the list run under the drop zone below it. */
@@ -4431,8 +4482,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-source-fill { flex: 1 1 auto; min-height: 14rem; flex-wrap: nowrap; }
 /* Quasar paints its own ground on panels and on the tab bar. Left alone it is a pale
    slab in the middle of a dark dialog. */
-.manager-sources-panels, .manager-sources-panels .q-tab-panel,
-.manager-sources-card .q-tabs { background: transparent; }
+.manager-sources-panels, .manager-sources-panels .q-tab-panel { background: transparent; }
 .manager-sources-panels .q-tab-panel { padding: 8px 0; }
 /* Five sources have to fit without a scroll arrow: an arrow on a tab bar means the
    ways of doing this are hidden behind a control nobody looks for. */
@@ -4661,7 +4711,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   background: var(--surface-sunken); border: 1px solid var(--line);
 }
 .manager-picker-note { width: 100%; max-width: none; padding: 6px 4px 0; border-top: 1px solid var(--line); margin-top: 4px; }
-.manager-dialog-footer--ruled { margin-top: 12px; border-top: 1px solid var(--line); }
 /* A path drawn as text: right to left so a long one gives up its start to the ellipsis and
    the end stays read; the whole path is the tooltip. */
 .manager-path-text { max-width: 100%; }
@@ -5309,14 +5358,13 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
 
 /* The preset dialog. The changes area is sized for both settings and the note, so the
    dialog keeps the height it opened at whichever preset is picked. */
-.manager-presets.q-card { width: min(560px, 94vw); }
-.manager-presets-choices { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 0 12px; }
+.manager-presets-choices { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .manager-presets-pick { display: flex; align-items: center; gap: 10px; padding: 10px 12px; width: 100%; }
 .manager-presets-radio { flex: none; color: var(--ink-3); font-size: var(--icon-mark); }
 .manager-source-row--chosen > .manager-presets-radio { color: var(--accent); }
-.manager-presets-heading { margin-top: 14px; padding: 0 12px; color: var(--accent); font-weight: 600; }
+.manager-presets-heading { margin-top: 14px; color: var(--accent); font-weight: 600; }
 .manager-presets-changes {
-  min-height: 236px; display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 0; width: 100%;
+  min-height: 236px; display: flex; flex-direction: column; gap: 8px; padding: 6px 0 0; width: 100%;
 }
 .manager-presets-change {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 2px 12px;
@@ -5381,13 +5429,8 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
 .manager-source-row--dim { opacity: 0.45; pointer-events: none; }
 .manager-picker-note { padding-bottom: 2px; }
 
-/* The source picker is drawn as bands and panels, not loose controls: a ruled title, a
-   shaded tab bar, the list as one bordered panel, and the pane beside it as another with
-   a rule between what it holds. */
-.manager-sources-card .manager-dialog-title {
-  border-bottom: 1px solid var(--line); padding-bottom: 10px; align-self: stretch;
-}
-.manager-sources-card .q-tabs { background: var(--surface-lift); border-bottom: 1px solid var(--line); }
+/* The source picker's lists and what it holds beside them; the title, tab bar, pane and
+   footer are the frame's. */
 /* The list and the pane share one top and one bottom edge. */
 .manager-sources-card .manager-sources-panels .q-tab-panel { padding-top: 0; padding-bottom: 0; }
 .manager-sources-card .manager-source-list,
@@ -5423,9 +5466,6 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
   padding: 6px 10px; justify-content: space-between;
 }
 .manager-source-head .manager-fact-heading { border-top: 0; margin: 0; padding: 0; }
-.manager-sources-card .manager-pane {
-  background: var(--surface-lift); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
-}
 .manager-sources-card .manager-pair-label { font-weight: 600; }
 .manager-sources-card .manager-pair-cell ~ .manager-pair-cell {
   border-top: 1px solid var(--line-soft); padding-top: 10px;
@@ -5444,11 +5484,6 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
 
 /* On a narrow screen the pane is one compact row above the list: Now, an arrow, New. */
 @media (max-width: 720px) {
-  .manager-sources-body {
-    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
-    height: min(76vh, 640px);
-  }
-  .manager-sources-body > .manager-pane { order: -1; overflow: visible; }
   .manager-pair, .manager-pair--side { flex-direction: row; align-items: center; }
   .manager-pair-arrow { display: block; }
   .manager-pair-cell { flex: 1 1 0; min-width: 0; }

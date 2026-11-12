@@ -602,7 +602,7 @@ async def ask_name(title: str, answer: str, names: list[str],
 
     with frame.opened(title, ignore_outside_click=True) as box:
         if place:
-            ui.label(place).classes("manager-help px-3")
+            ui.label(place).classes("manager-help")
         panel.facts(ui, [(t("word.name"), draw("name", named, placeholder))]
                     + [(one["label"], asked_field(one)) for one in asked or ()]
                     + (chosen.rows() if chosen is not None else []))
@@ -653,8 +653,8 @@ async def copy_dialog(library: Library, state: dict[str, Any],
             t("manager.launchers.copy_title", name=launchers[0]["display_name"])
             if len(launchers) == 1
             else t("manager.launchers.copy_title_many", count=len(launchers))) as box:
-        ui.label(t("manager.launchers.copy_note")).classes("manager-help px-3")
-        with ui.column().classes("gap-1 px-3"):
+        ui.label(t("manager.launchers.copy_note")).classes("manager-help")
+        with ui.column().classes("gap-1"):
             for one in reachable:
                 name = str(one.get("display_name") or one.get("device_id"))
                 ui.checkbox(name, on_change=lambda e, d=one: (
@@ -662,7 +662,7 @@ async def copy_dialog(library: Library, state: dict[str, Any],
                     else picked.discard(str(d.get("device_id"))))) \
                     .props("dense")
             also = ui.checkbox(t("manager.launchers.copy_usage")).props("dense")
-        ui.label(t("manager.launchers.copy_diverge")).classes("manager-help px-3")
+        ui.label(t("manager.launchers.copy_diverge")).classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(None))
             frame.answer(t("word.copy"), lambda: box.submit(True), icon=verbs.COPY)

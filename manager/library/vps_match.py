@@ -50,14 +50,26 @@ async def ask(library: Any, game: dict[str, Any], place: str = "",
               if scanned and scanned != bound else {})
 
     with dialog.opened(t("manager.vps_match.match_named", name=str(game.get("name") or "")),
-                       wide=True, ignore_outside_click=True) as box:
+                       size="wide", ignore_outside_click=True) as box:
         if place:
-            ui.label(place).classes("manager-help px-3")
+            ui.label(place).classes("manager-help")
 
         field: dict[str, Any] = {}
-
-        def search_row() -> None:
-            with ui.row().classes("items-center gap-2 w-full no-wrap"):
+        if entry or behind:
+            with dialog.band(t("manager.vps_match.matched_to")):
+                pass
+            with dialog.well():
+                if entry:
+                    entry_row(entry)
+                if behind:
+                    guessed = not (game.get("discovered") or {}).get("vps_matched_by")
+                    _own_pick(behind, cleared=not entry, guessed=guessed,
+                              back=lambda: box.submit(""))
+        with dialog.band(t("manager.vps_match.find_another" if entry or behind
+                           else "manager.vps_match.title")):
+            field["count"] = ui.label("").classes("manager-band-count")
+        with dialog.well():
+            with ui.row().classes("manager-well-head no-wrap"):
                 with ui.element("div").classes("manager-fact-edit grow"):
                     field["box"] = ui.input(value=_seed(game)) \
                         .props("dense borderless clearable debounce=0 autofocus") \
@@ -65,22 +77,7 @@ async def ask(library: Any, game: dict[str, Any], place: str = "",
                 ui.button(t("manager.vps_match.search"), icon=verbs.SEARCH,
                           on_click=lambda: look()).props("flat dense no-caps size=sm") \
                     .classes("manager-action shrink-0")
-            field["count"] = ui.label("").classes("manager-help manager-vps-count")
-
-        entries: list[tuple[Any, Any]] = []
-        if entry or behind:
-            entries.append((panel.HEADING, t("manager.vps_match.matched_to")))
-        if entry:
-            entries.append((panel.FULL, lambda: entry_row(entry)))
-        if behind:
-            guessed = not (game.get("discovered") or {}).get("vps_matched_by")
-            entries.append((panel.FULL, lambda: _own_pick(
-                behind, cleared=not entry, guessed=guessed, back=lambda: box.submit(""))))
-        entries.append((panel.HEADING, t("manager.vps_match.find_another" if entry or behind
-                                         else "manager.vps_match.title")))
-        entries.append((panel.FULL, search_row))
-        panel.facts(ui, entries)
-        found = ui.column().classes("w-full gap-0 manager-source-list manager-pick-list px-3")
+            found = ui.column().classes("w-full gap-0 manager-well-rows")
 
         with dialog.footer():
             if entry:
@@ -202,7 +199,7 @@ def entry_row(row: dict[str, Any], *, pick: Callable[[], None] | None = None,
     def end() -> None:
         with ui.row().classes("items-center gap-2 no-wrap shrink-0"):
             if bound:
-                panel.state(t("word.current"), "on")()
+                ui.label(t("manager.vps_match.matched_here")).classes("manager-matched-here")
             if trailing is not None:
                 with ui.element("div").on("click.stop", lambda: None):
                     trailing()

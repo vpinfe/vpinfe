@@ -118,10 +118,10 @@ async def _ask_entry(title: str, label: str, help_line: str,
             return
         box.submit(True)
 
-    with frame.opened(title, classes="manager-confirm", ignore_outside_click=True) as box:
+    with frame.opened(title, size="question", ignore_outside_click=True) as box:
         panel.facts(ui, [(label, lambda: fields.update(
             value=frame.field(name=label, room=True)))])
-        ui.label(help_line).classes("manager-help px-3")
+        ui.label(help_line).classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(False))
             go = frame.answer(t("manager.encrypted.add"), keep, icon=verbs.ADD)
@@ -147,7 +147,7 @@ async def _ask_certificate(library: Library, certfile: str,
         if cert and key:
             box.submit((cert, key))
 
-    with frame.opened(t("manager.encrypted.certificate_title"), wide=True,
+    with frame.opened(t("manager.encrypted.certificate_title"), size="wide",
                       ignore_outside_click=True) as box:
         panel.facts(ui, [
             (t("manager.encrypted.certificate_file"),
@@ -158,7 +158,7 @@ async def _ask_certificate(library: Library, certfile: str,
              lambda: fields.update(key=frame.field(
                  keyfile, browse=browse, name=t("manager.encrypted.key_file"), room=True))),
         ])
-        ui.label(t("manager.encrypted.certificate_hint")).classes("manager-help px-3")
+        ui.label(t("manager.encrypted.certificate_hint")).classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(None))
             go = frame.answer(t("manager.encrypted.use_certificate"), keep, icon=verbs.CHOOSE)

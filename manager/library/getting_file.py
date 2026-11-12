@@ -36,8 +36,8 @@ def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
     """Ask for the file that takes `table_id`'s place. `page` is where the release is
     fetched from; without one the dialog only takes the file. `on_done` runs once the
     import has been read back."""
-    with frame.opened(title or t("manager.getting_file.title"), wide=True) as dialog:
-        card = ui.column().classes("gap-2 w-full px-3")
+    with frame.opened(title or t("manager.getting_file.title"), size="wide") as dialog:
+        card = ui.column().classes("gap-2 w-full")
         with card:
             if page:
                 with ui.row().classes("items-center gap-2"):

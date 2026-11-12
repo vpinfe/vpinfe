@@ -1,9 +1,12 @@
-"""Every Manager dialog is made by `manager/kit/dialog.py`, so they all share one design."""
+"""Protects: (e) behaves the same on every screen. Every Manager dialog is made by
+`manager/kit/dialog.py` and sets no side margin, width or card style of its own, so they
+all share one design."""
 
 from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import unittest
 
 from tests.support import trees
@@ -113,7 +116,72 @@ def _typed_dialogs_that_close_on_a_click(path: pathlib.Path) -> list[int]:
     return sorted(lines)
 
 
+OPTIONS = {"size", "tall", "persistent", "ignore_outside_click", "classes"}
+SIZES = {"question", "form", "wide", "large", "full"}
+
+# A class a dialog may carry beside the frame's own is a hook a rule reaches it by, never a
+# look. A need the parts do not meet becomes a new part in `dialog.py`.
+HOOKS = {"manager-wizard-card", "manager-dialog--series", "manager-sources-card",
+         "manager-import-card"}
+
+# A side margin on a dialog's content, which is the frame's to set.
+SIDE_MARGIN = re.compile(r"(?<![\w-])(?:px|mx)-\d")
+WIDTH_STYLE = re.compile(r"(?<![\w-])(?:min-|max-)?width\s*:")
+
+
+def _words(node: ast.expr | None) -> set[str] | None:
+    """The strings `node` can be: a constant, or the two of a conditional. None where it is
+    computed, which a reader cannot check."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return set(node.value.split())
+    if isinstance(node, ast.IfExp):
+        one, other = _words(node.body), _words(node.orelse)
+        return None if one is None or other is None else one | other
+    return None
+
+
+def _opens(item: ast.withitem) -> ast.Call | None:
+    call = item.context_expr
+    if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "opened"):
+        return call
+    return None
+
+
+def _opened(path: pathlib.Path) -> list[tuple[ast.Call, ast.With]]:
+    """Each `with <x>.opened(...)` in `path`, as its call and the block it opens."""
+    return [(call, block) for block in ast.walk(trees.tree_for(path))
+            if isinstance(block, ast.With)
+            for item in block.items if (call := _opens(item)) is not None]
+
+
+def _strings(nodes: list[ast.stmt]) -> list[tuple[int, str]]:
+    return [(one.lineno, one.value) for root in nodes for one in ast.walk(root)
+            if isinstance(one, ast.Constant) and isinstance(one.value, str)]
+
+
 class DialogsAreDrawnByTheFrame(unittest.TestCase):
+    def test_a_dialog_asks_the_frame_for_a_size_and_nothing_else(self) -> None:
+        wrong: list[str] = []
+        for path in sorted(MANAGER.rglob("*.py")):
+            for call, _block in _opened(path):
+                where = f"{path.name}:{call.lineno}"
+                for key in call.keywords:
+                    if key.arg not in OPTIONS:
+                        wrong.append(f"{where} says {key.arg}=")
+                    elif key.arg == "size" and not (_words(key.value) or {"?"}) <= SIZES:
+                        wrong.append(f"{where} asks for a size the frame does not have")
+                    elif key.arg == "classes" and not (_words(key.value) or {"?"}) <= HOOKS:
+                        wrong.append(f"{where} gives the card a class that is not a hook")
+        self.assertEqual([], wrong)
+
+    def test_a_dialog_sets_no_side_margin_or_width_of_its_own(self) -> None:
+        wrong = [f"{path.name}:{line} {text!r}" for path in sorted(MANAGER.rglob("*.py"))
+                 for _call, block in _opened(path)
+                 for line, text in _strings(block.body)
+                 if SIDE_MARGIN.search(text) or WIDTH_STYLE.search(text)]
+        self.assertEqual([], wrong)
+
     def test_no_dialog_is_drawn_by_hand(self) -> None:
         by_hand = sorted(path.name for path in MANAGER.rglob("*.py")
                          if path.name != FRAME

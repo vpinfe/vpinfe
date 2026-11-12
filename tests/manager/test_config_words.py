@@ -9,7 +9,6 @@ either way.
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from common.i18n import t
@@ -49,17 +48,17 @@ class ClearHintTests(unittest.TestCase):
         said = all_settings._clear_hint(
             {"fallback_scope": "launcher", "fallback": "0"}, _Bool, "Visual Pinball X")
 
-        self.assertEqual(said, "Back to Off - The Launcher")
+        self.assertEqual(said, "Reset to Off, the launcher's value")
 
     def test_whose_is_said_in_the_scope_words(self) -> None:
         said = all_settings._clear_hint(
             {"fallback_scope": "folder", "fallback": "1"}, _Choice, "Visual Pinball X")
 
-        self.assertEqual(said, "Back to Floating - This Game")
+        self.assertEqual(said, "Reset to Floating, the game's value")
 
     def test_with_nothing_under_it_the_program_answers(self) -> None:
         self.assertEqual(all_settings._clear_hint({}, _Bool, "Visual Pinball X"),
-                         "Back to On - Visual Pinball X's default")
+                         "Reset to On")
 
     def test_a_default_with_no_value_names_only_whose(self) -> None:
         class _Text:
@@ -68,7 +67,7 @@ class ClearHintTests(unittest.TestCase):
             default = ""
 
         self.assertEqual(all_settings._clear_hint({}, _Text, "Visual Pinball X"),
-                         "Back to Visual Pinball X's default")
+                         "Reset to Visual Pinball X's default")
 
     def test_a_blank_that_has_a_word_goes_back_to_the_authors_setting(self) -> None:
         class _ViewMode(_Choice):
@@ -79,7 +78,7 @@ class ClearHintTests(unittest.TestCase):
                             ({"fallback_scope": "folder", "fallback": ""}, "This Game")):
             with self.subTest(whose=whose):
                 self.assertEqual(all_settings._clear_hint(held, _ViewMode, "Visual Pinball X"),
-                                 "Back to the author's setting")
+                                 "Reset to the author's setting")
 
 
 class SwitchedOffTests(unittest.TestCase):
@@ -130,43 +129,12 @@ class MarkTests(unittest.TestCase):
 
 
 class WhoseValueTests(unittest.TestCase):
-    """What hovering a value says."""
+    def test_a_value_a_narrower_level_answers_over_says_so_on_the_row(self) -> None:
+        with patch.object(panel, "state") as chip:
+            all_settings._config_mark(
+                {"set_here": True, "in_effect": False, "scope": "entry"}, "launcher", _Bool)
 
-    def whose(self, **held: object) -> str:
-        return all_settings._whose_value(held, _Bool, "Visual Pinball X")
-
-    def test_nobody_set_it(self) -> None:
-        self.assertEqual(self.whose(), "Visual Pinball X's default")
-
-    def test_set_to_something_else_says_what_it_changed_from(self) -> None:
-        self.assertEqual(self.whose(set_here=True, in_effect=True, scope="launcher",
-                                    value="0"),
-                         "Changed from On - Visual Pinball X's default")
-
-    def test_set_to_what_it_would_be_anyway_is_the_default_s(self) -> None:
-        """In the file, but nothing was changed, so the hover says what the row says."""
-        for value in ("1", "1.0"):
-            with self.subTest(value=value):
-                self.assertEqual(self.whose(set_here=True, in_effect=True,
-                                            scope="launcher", value=value),
-                                 "Visual Pinball X's default")
-
-    def test_changed_from_another_scope_s_value_names_that_scope(self) -> None:
-        self.assertEqual(self.whose(set_here=True, in_effect=True, scope="folder", value="0",
-                                    fallback_scope="launcher", fallback="1"),
-                         "Changed from On - The Launcher")
-
-    def test_followed_from_another_scope(self) -> None:
-        self.assertEqual(self.whose(scope="launcher", value="0"), "The Launcher")
-
-    def test_left_empty_says_what_its_blank_word_means(self) -> None:
-        field = SimpleNamespace(type="int", choices=(), default="", key="Player.PlayfieldWidth",
-                                blank="Auto", left_empty="From the screen")
-        whose = all_settings._whose_value
-
-        self.assertEqual(whose({"value": ""}, field, "Visual Pinball X"), "From the screen")
-        self.assertEqual(whose({"scope": "launcher", "value": "1920"}, field,
-                               "Visual Pinball X"), "The Launcher")
+        self.assertEqual(chip.call_args.args[0], "This Table has its own")
 
     def test_no_word_on_screen_is_the_wire_s(self) -> None:
         said = " ".join(all_settings.CAME_FROM.values()).lower()

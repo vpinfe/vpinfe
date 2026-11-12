@@ -14,7 +14,7 @@ from tests.support.stylesheet import declarations
 
 class AWizardHoldsOneSize(unittest.TestCase):
     def test_the_card_has_a_height_of_its_own_not_only_a_ceiling(self) -> None:
-        card = declarations(".manager-wizard-card.q-card")
+        card = declarations(".manager-dialog--tall.q-card")
         self.assertIn("height", card)
         self.assertEqual("flex", card.get("display"))
         self.assertEqual("column", card.get("flex-direction"))

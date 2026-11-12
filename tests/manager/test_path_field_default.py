@@ -178,13 +178,11 @@ class APathsHover(unittest.TestCase):
         holder = _drawn("", saved, browse=AsyncMock(), default=DEFAULT, whose="VPinFE's default")
         self.assertEqual(self._hover(holder).text, f"{DEFAULT}\nVPinFE's default")
 
-    def test_a_changed_path_says_what_it_changed_from(self) -> None:
+    def test_a_changed_path_says_only_the_path(self) -> None:
         saved: list[str] = []
         holder = _drawn(OTHER, saved, browse=AsyncMock(), default=DEFAULT,
                         whose="VPinFE's default")
-        said_here = self._hover(holder).text
-        self.assertTrue(said_here.startswith(OTHER + "\n"), said_here)
-        self.assertIn(DEFAULT, said_here)
+        self.assertEqual(self._hover(holder).text, OTHER)
 
     def test_an_empty_field_with_nothing_to_say_draws_no_tooltip(self) -> None:
         saved: list[str] = []

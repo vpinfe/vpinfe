@@ -56,10 +56,10 @@ async def pair(client: Any, device_name: str) -> bool:
         box.submit(True)
 
     with frame.opened(t("manager.pairing.title", device=device_name),
-                      classes="manager-confirm", ignore_outside_click=True) as box:
-        ui.label(t("manager.pairing.line", device=device_name)).classes("manager-help px-3")
+                      size="question", ignore_outside_click=True) as box:
+        ui.label(t("manager.pairing.line", device=device_name)).classes("manager-help")
         code = frame.field(placeholder=t("manager.confirm.code"))
-        problem = ui.label("").classes("manager-help text-negative px-3")
+        problem = ui.label("").classes("manager-help text-negative")
         with frame.footer():
             frame.aside(t("manager.pairing.paste"), lambda: box.submit(PASTE),
                         icon=verbs.COPY)
@@ -77,8 +77,8 @@ async def paste(client: Any, device_name: str) -> bool:
     """Pair with a token made on that install's Security page, for a device with no
     screen to show a code on."""
     with frame.opened(t("manager.pairing.paste_title", device=device_name),
-                      classes="manager-confirm", ignore_outside_click=True) as box:
-        ui.label(t("manager.pairing.paste_line", device=device_name)).classes("manager-help px-3")
+                      size="question", ignore_outside_click=True) as box:
+        ui.label(t("manager.pairing.paste_line", device=device_name)).classes("manager-help")
         secret = frame.field(placeholder=t("manager.pairing.token"))
         with frame.footer():
             frame.cancel(lambda: box.submit(False))

@@ -635,12 +635,9 @@ async def _every(context: dict[str, Any], inner: dict[str, Any], title: str) -> 
     shown = {"key": ALL}
     areas: list[tuple[str, str]] = []
 
-    with frame.opened(title, classes="manager-dialog--settings") as dialog:
-        with ui.element("div").classes("w-full grow min-h-0 manager-sections "
-                                       "manager-dialog-sections"):
-            rail = ui.element("div").classes("min-h-0 manager-section-rail")
-            with ui.element("div").classes("min-w-0 manager-section-work"):
-                body = ui.column().classes("w-full min-h-0 gap-0 no-wrap px-3")
+    with frame.opened(title, size="large", tall=True) as dialog:
+        with frame.sections() as (rail, work), work:
+            body = ui.column().classes("w-full min-h-0 gap-0 no-wrap")
 
         def draw_rail() -> None:
             rail.clear()
@@ -657,7 +654,7 @@ async def _every(context: dict[str, Any], inner: dict[str, Any], title: str) -> 
         async def redraw() -> None:
             every.pop("config_values", None)
             every["scrolls"] = shown["key"] == ALL
-            body.classes(replace="w-full min-h-0 gap-0 no-wrap px-3 " + (
+            body.classes(replace="nicegui-column w-full min-h-0 gap-0 no-wrap " + (
                 "overflow-hidden" if every["scrolls"] else "overflow-auto"))
             body.clear()
             with body:

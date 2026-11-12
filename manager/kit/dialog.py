@@ -40,11 +40,18 @@ class Dialog(ui.dialog):
         return answered
 
 
+SIZES = ("question", "form", "wide", "large", "full")
+
+
 @contextmanager
-def opened(title: str, *, wide: bool = False, full: bool = False,
+def opened(title: str, *, size: str = "form", tall: bool = False,
            persistent: bool = False, ignore_outside_click: bool = False,
            classes: str = "") -> Iterator[Dialog]:
     """Draw the dialog's contents inside; the caller awaits the dialog it yields.
+
+    `size` is one of `SIZES`: a question, a form, a wide form, a large list, or the whole
+    screen. `tall` fixes the height, for a list that scrolls inside it. The frame draws the
+    side margin, the title rule and the footer rule, so a module sets none of them.
 
     A title of "" draws none, for a dialog whose title changes as it goes.
 
@@ -52,17 +59,77 @@ def opened(title: str, *, wide: bool = False, full: bool = False,
     input takes `ignore_outside_click` instead, so Escape still cancels. `persistent` is
     for a run in progress or an answer that cannot be left unsaid.
     """
+    if size not in SIZES:
+        raise ValueError(f"a dialog is one of {SIZES}, not {size!r}")
     props = " ".join(p for p in ("persistent" if persistent else "",
                                  "no-backdrop-dismiss" if ignore_outside_click else "",
-                                 "maximized" if full else "") if p)
+                                 "maximized" if size == "full" else "") if p)
     dialog = made().props(props)
     with dialog, ui.card().classes(" ".join(("manager-dialog",
-                                             "manager-dialog--wide" if wide else "",
-                                             "manager-dialog--full" if full else "",
+                                             "" if size == "form" else f"manager-dialog--{size}",
+                                             "manager-dialog--tall" if tall else "",
                                              classes)).strip()):
         if title:
             ui.label(title).classes("manager-dialog-title")
         yield dialog
+
+
+@contextmanager
+def band(name: str, trailing: str = "") -> Iterator[ui.row]:
+    """A heading over what follows, with its count or one quiet act at the right.
+
+    `trailing` is a count or a short word; a control goes inside the context instead.
+    """
+    with ui.row().classes("manager-band"):
+        ui.label(name).classes("manager-fact-heading manager-band-name")
+        if trailing:
+            ui.label(trailing).classes("manager-band-trailing manager-band-count")
+        with ui.row().classes("manager-band-trailing items-center gap-1") as holder:
+            yield holder
+        if not holder.default_slot.children:
+            holder.delete()
+
+
+@contextmanager
+def well(*, scrolls: bool = False) -> Iterator[ui.column]:
+    """The bordered panel a list sits in. A `scrolls` well takes the height left by the
+    dialog's `tall`; its `manager-well-rows` column scrolls and what is above it stays put."""
+    with ui.column().classes("manager-well" + (" manager-well--scrolls" if scrolls else "")) as box:
+        yield box
+
+
+@contextmanager
+def pane() -> Iterator[ui.column]:
+    """What a picked entry is compared with, beside the list. Goes inside `body(split=True)`."""
+    with ui.column().classes("manager-pane gap-2") as box:
+        yield box
+
+
+@contextmanager
+def body(*, split: bool = False) -> Iterator[ui.element]:
+    """The column between the title and the footer. `split` lays a list and a `pane`
+    side by side, level at the top and the bottom, and stacks them on a narrow screen."""
+    with ui.element("div").classes("manager-dialog-body"
+                                   + (" manager-dialog-body--split" if split else "")) as box:
+        yield box
+
+
+@contextmanager
+def sections() -> Iterator[tuple[ui.element, ui.element]]:
+    """A rail of areas with the open area's page beside it, for a dialog that is one subject
+    in several parts. Yields the rail and the page; the page takes the height `tall` leaves
+    and scrolls what does not fit, and keeps its own margin from the rail."""
+    with ui.element("div").classes("manager-sections manager-dialog-sections"):
+        rail = ui.element("div").classes("manager-section-rail")
+        work = ui.element("div").classes("manager-section-work")
+        yield rail, work
+
+
+def tabs(on_change: Callable[[Any], Any] | None = None) -> ui.tabs:
+    """The strip over a dialog's panels: put `ui.tab`s in it, then `ui.tab_panels`."""
+    strip = ui.tabs(on_change=on_change).props("dense align=left no-caps") \
+        .classes("manager-dialog-tabs w-full")
+    return strip
 
 
 def on_escape(box: Dialog, act: Callable[[], Any]) -> None:

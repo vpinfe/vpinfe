@@ -199,15 +199,15 @@ async def ask(slots: list[Slot]) -> dict[str, list[str]] | None:
         choices[row_id] = value
         settle()
 
-    with frame.opened(title(slots), classes="manager-dialog--moves") as box:
-        with ui.column().classes("w-full gap-1 px-3"):
+    with frame.opened(title(slots), tall=True) as box:
+        with ui.column().classes("w-full gap-1"):
             for one in slots:
                 with ui.row().classes("items-center gap-2 no-wrap"):
                     ui.label(", ".join(one.state["game"]["files"])) \
                         .classes("manager-confirm-line min-w-0")
                     media_ownership.badge_for(media_ownership.GAME)
-        ui.label(t("word.used_by")).classes("manager-fact-heading px-3")
-        with ui.column().classes("w-full gap-0 px-3 manager-moves-list"):
+        ui.label(t("word.used_by")).classes("manager-fact-heading")
+        with ui.column().classes("w-full gap-0 manager-moves-list"):
             for row in slots[0].rows:
                 row_id = row["id"]
                 with ui.row().classes("w-full items-start gap-2 no-wrap manager-moves-row"):

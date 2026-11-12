@@ -496,6 +496,18 @@ def range_words(low: Any, high: Any) -> str:
     return ""
 
 
+def range_short(low: Any, high: Any) -> str:
+    """What a number may be, to end a setting's help line. Nothing when it is unbounded."""
+    low, high = _bound(low), _bound(high)
+    if low and high:
+        return t("manager.settings.range_short", low=low, high=high)
+    if low:
+        return t("manager.settings.short_min", low=low)
+    if high:
+        return t("manager.settings.short_max", high=high)
+    return ""
+
+
 def _range_hint(option: dict) -> str:
     """The tooltip, unless the row already says its range beneath the control."""
     return "" if option.get("range_beneath") else range_words(option.get("min"), option.get("max"))

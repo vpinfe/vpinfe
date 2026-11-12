@@ -26,9 +26,9 @@ async def ask(current: str, *, title: str, label: str, hint: str = "", place: st
 
     with frame.opened(title, ignore_outside_click=True) as box:
         if place:
-            ui.label(place).classes("manager-help px-3")
+            ui.label(place).classes("manager-help")
         if hint:
-            ui.label(hint).classes("manager-help px-3")
+            ui.label(hint).classes("manager-help")
         panel.facts(ui, [(label, lambda: held.update(field=frame.field(current)))])
         with frame.footer():
             frame.leave(box, walking)

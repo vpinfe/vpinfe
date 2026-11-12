@@ -198,7 +198,7 @@ async def _asking(calls: Calls, wait: Any, buttons: Any, work: Awaitable[Any]) -
 async def _watch_slow(calls: Calls, wait: Any, buttons: Any, shown: dict[str, Any]) -> None:
     await asyncio.sleep(POLL_SECONDS)
     shown["held"] = _hold(buttons)
-    with wait, ui.column().classes("w-full gap-1 px-3 pt-2") as block:
+    with wait, ui.column().classes("w-full gap-1 pt-2") as block:
         shown["bar"] = ui.linear_progress(show_value=False).props("indeterminate") \
             .classes("w-full")
         shown["said"] = ui.label(t("manager.ext_action.working")).classes("manager-help")
@@ -678,7 +678,7 @@ def _acts(acts: list[dict[str, Any]], go: Callable[[str], Any]) -> None:
     """An act is `{key, label}`; the flow draws no icon of its own, so this carries the
     same one the wizard's own confirm does for the same reason.
     """
-    with ui.row().classes("gap-2 px-3 mb-2"):
+    with ui.row().classes("gap-2 mb-2"):
         for act in acts:
             key = str(act.get("key") or "")
             label = str(act.get("label") or key)
@@ -768,8 +768,8 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
     opened = False
     current_key = ""
 
-    card = "manager-wizard-card manager-wizard-card--roomy" if roomy else "manager-wizard-card"
-    with frame.opened("", ignore_outside_click=True, classes=card) as dialog:
+    with frame.opened("", size="large" if roomy else "wide", tall=True,
+                      ignore_outside_click=True, classes="manager-wizard-card") as dialog:
         track = ui.element("div").classes("w-full")
         with ui.element("div").classes("manager-wizard-scroll") as scroll:
             crest = ui.element("div").classes("manager-wizard-crest")
@@ -842,7 +842,7 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
                     _step_row(list(found["steps"]), current_key, _goto)
             with body:
                 if place:
-                    ui.label(place).classes("manager-help px-3")
+                    ui.label(place).classes("manager-help")
                 if found.get("help"):
                     ui.label(str(found["help"])).classes("manager-wizard-lead")
                 if summary:
@@ -862,7 +862,7 @@ async def open_dialog(*, label: str, calls: Calls, under: str, mark: bool = Fals
                 if found.get("after"):
                     found["after"](walk.values)
                 if not found.get("ready", True):
-                    ui.label(str(found.get("reason") or "")).classes("manager-help px-3")
+                    ui.label(str(found.get("reason") or "")).classes("manager-help")
             foot()
             # held keeps insertion order, so its first entry is the step's first field.
             first = next(iter(held.values()), None)
@@ -1029,7 +1029,7 @@ async def open_page(*, label: str, calls: Calls, under: str, step: str | None = 
                 _lines(list(found.get("notes") or []),
                       t("manager.ext_action.worth_knowing") if summary else "")
                 if not found.get("ready", True):
-                    ui.label(str(found.get("reason") or "")).classes("manager-help px-3")
+                    ui.label(str(found.get("reason") or "")).classes("manager-help")
             with buttons:
                 if walk.history:
                     frame.quiet(t("word.back"), _back, icon=verbs.BACK)
@@ -1145,9 +1145,9 @@ def _worded(said: Any) -> tuple[str, str]:
 
 def _line(text: str, detail: str, to: str = "") -> None:
     if not to:
-        panel.line(text, hint=detail, classes="manager-help px-3")
+        panel.line(text, hint=detail, classes="manager-help")
         return
-    with ui.element("div").classes("manager-help px-3"):
+    with ui.element("div").classes("manager-help"):
         panel.link_out(text, to=to, hint=detail, rel="noopener noreferrer")()
 
 
@@ -1182,7 +1182,7 @@ async def _watch(poll: Callable[[str], Awaitable[dict]], job_id: str, *, body: A
     _WATCHED.setdefault(ui.context.client, set()).add(job_id)
     body.clear()
     buttons.clear()
-    with body, ui.column().classes("w-full gap-1 px-3"):
+    with body, ui.column().classes("w-full gap-1"):
         bar = ui.linear_progress(value=0, show_value=False).classes("w-full")
         said = ui.label(t("manager.ext_action.working")).classes("manager-help")
     stop = None
@@ -1213,7 +1213,7 @@ def _finished(body: Any, buttons: Any, close: Callable[[], Any] | None, answer: 
     buttons.clear()
     with body:
         said = str(answer.get("message") or t("word.done"))
-        ui.label(said).classes("manager-help px-3")
+        ui.label(said).classes("manager-help")
         facts = [(one[0], one[1]) for one in (answer.get("summary") or [])]
         if facts:
             panel.facts(ui, facts)
@@ -1261,7 +1261,7 @@ def _show_all(job: dict, group: str) -> None:
     found = report_groups.groups(job).get(group)
     if found is None or len(found.game_ids) <= report_groups.SHOW_ALL_OVER:
         return
-    with ui.row().classes("px-3"):
+    with ui.row():
         panel.link(t("manager.report.show_all", count=len(found.game_ids)),
                    to=report_groups.tables_address(str(job.get("id") or ""), group),
                    window=report_groups.MANAGER_WINDOW)()
@@ -1278,7 +1278,7 @@ def report(body: Any, job: dict, under: str, *, limit: int | None = 20) -> None:
     with body:
         if job.get("state") == "failed":
             ui.label(str(job.get("error") or t("manager.ext_action.not_finish"))) \
-                .classes("manager-help px-3")
+                .classes("manager-help")
             return
         result = job.get("result") or {}
         compared = list(result.get("against") or [])
@@ -1300,10 +1300,10 @@ def report(body: Any, job: dict, under: str, *, limit: int | None = 20) -> None:
             for row in held[:limit]:
                 name = row.get("name") or row.get("key")
                 ui.label(t("manager.ext_action.matched", name=name, how=row["how"])
-                         if row.get("how") else str(name)).classes("manager-help px-3")
+                         if row.get("how") else str(name)).classes("manager-help")
             if limit is not None and len(held) > limit:
                 ui.label(t("manager.ext_action.more",
-                        count=len(held) - limit)).classes("manager-help px-3")
+                        count=len(held) - limit)).classes("manager-help")
             _show_all(job, report_groups.ALREADY_HERE)
         missed = [row for row in (result.get("rows") or []) if row.get("error")]
         if missed:
@@ -1315,4 +1315,4 @@ def report(body: Any, job: dict, under: str, *, limit: int | None = 20) -> None:
                         error=error), detail)
             if limit is not None and len(missed) > limit:
                 ui.label(t("manager.ext_action.more",
-                        count=len(missed) - limit)).classes("manager-help px-3")
+                        count=len(missed) - limit)).classes("manager-help")

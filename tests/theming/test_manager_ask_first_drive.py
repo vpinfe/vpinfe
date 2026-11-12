@@ -19,7 +19,7 @@ from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk
 
-DIALOG = ".manager-confirm"
+DIALOG = ".manager-dialog--question"
 BUTTON = f"{DIALOG} .manager-dialog-footer button"
 DECLINE, CLOSE, APPROVE = 0, 1, 2
 ROW = ".manager-need--static"

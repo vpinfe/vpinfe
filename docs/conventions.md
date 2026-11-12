@@ -1142,8 +1142,28 @@ no icon, and on an icon name `verbs.py` does not declare.
   run in progress or an answer that cannot be left unsaid. A dialog that does something
   other than close when Escape leaves it registers that with `dialog.on_escape`, which
   needs `ignore_outside_click` too, since a `persistent` dialog fires no Escape event.
-- **`wide=True`** for a list or rows of several facts, **`full=True`** for an editor with
-  a toolbar of its own.
+- **A dialog opens at one of five sizes and says which**: `size="question"` (460 px: a
+  sentence and its buttons), `"form"` (520, the default: fields), `"wide"` (680: rows of
+  several facts, a list, a check list), `"large"` (920: a list beside a pane, or tabs) and
+  `"full"` for an editor with a toolbar of its own. `tall=True` fixes the height at
+  `min(86vh, 780px)`, for a list that scrolls inside the card.
+- **The frame owns the side margin, the title rule and the footer rule.** A module sets no
+  `px-`/`mx-` utility and no width inside a dialog, and gives the card no class except a hook
+  a rule reaches it by (`manager-wizard-card`, `manager-dialog--series`).
+- **A list sits in a well**: `dialog.band(name)` is the heading over it, with a count or one
+  quiet act at the right, and `dialog.well()` is the bordered panel. A row in a well has no
+  box of its own: a rule under it, a stripe on every other one, and the picked one outlined
+  on all four sides. A search or filter at the top of the list is a `manager-well-head`
+  inside the well, so it reads as filtering what is under it; the rows are a
+  `manager-well-rows` column, which scrolls while the search stays put.
+- **A list beside what a picked entry is compared with** is `dialog.body(split=True)`
+  holding a well and a `dialog.pane()`; narrow, the pane stacks above the list. **Panels of
+  one subject under tabs** are `dialog.tabs()`. **One subject in several areas, with a rail
+  beside the open one** is `dialog.sections()`: the page keeps its own margin from the rail
+  and scrolls what does not fit.
+- **A need the parts do not meet becomes a new part in `dialog.py`**, never a style in the
+  module. `tests/invariants/test_dialogs_are_drawn_by_the_frame.py` fails on a size or card
+  class the frame does not know and on a side margin or width inside a dialog.
 - **A wizard keeps its frame and redraws its body and footer at each step**: Back where
   there is history, Cancel where there is not, Next, and the act's own verb on the last
   step. It draws its own title, since the title changes. Its size, its step row, its
@@ -1162,10 +1182,11 @@ remote's sheets are the exceptions, because neither asks anything.
 
 ### A wizard is one size on every step
 
-- **The card is `manager-wizard-card`, with a height of its own that no step changes.**
+- **The card is `manager-wizard-card`, `tall`, with a height that no step changes.**
   A frame that fits each step moves the footer from one to the next, under a pointer that
   was on it a moment ago. The height gives way only to a short window. The body scrolls
-  inside the card; the footer is pinned under a rule.
+  inside the card; the footer is pinned under a rule. A wizard with pictures to choose from
+  is Large, any other Wide.
 - **The title is the step's question at the title size, and `help` is the one sentence of
   why under it** (`manager-wizard-lead`). The frame has no title bar, so nothing else says
   what is being asked.

@@ -40,11 +40,11 @@ COLUMNS = [
                        help=grid_module.NO_HELP),
     grid_module.column("access", t("manager.security.col_access"), 90,
                        help=t("manager.security.col_access.help")),
-    grid_module.column("created", t("manager.security.col_first_seen"), 130,
+    grid_module.column("created", t("manager.security.col_first_seen"), 118,
                        help=t("manager.security.col_first_seen.help"),
                        tooltipField="created_at",
                        **{":valueFormatter": "params => (params.data || {}).created_day || ''"}),
-    grid_module.column("last_used", t("manager.security.col_last_used"), 160,
+    grid_module.column("last_used", t("manager.security.col_last_used"), 138,
                        help=t("manager.security.col_last_used.help"), **when.cell("last_used")),
 ]
 
@@ -127,8 +127,8 @@ async def open_list(library: Library, sessions: list[dict[str, Any]], mine: str,
     changed: list[bool] = []
 
     with frame.opened(t("manager.security.signed_in"),
-                      classes="manager-signed-in-card") as box:
-        with ui.element("div").classes("w-full grow min-h-0 flex flex-col px-3"):
+                      size="large", tall=True) as box:
+        with ui.element("div").classes("w-full grow min-h-0 flex flex-col"):
             table: ui.aggrid = grid_module.build(
                 COLUMNS, built, SCOPE,
                 on_select_rows=lambda picked: go.set_enabled(bool(picked)),

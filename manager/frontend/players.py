@@ -445,7 +445,7 @@ async def add_guest(library: Library, state: dict[str, Any],
         held["initials"] = _initials_field()
 
     with frame.opened(t("manager.players.add_guest"), ignore_outside_click=True) as box:
-        ui.label(t("manager.players.guest_forgotten")).classes("manager-help px-3")
+        ui.label(t("manager.players.guest_forgotten")).classes("manager-help")
         panel.facts(ui, [(t("manager.players.use_card"), card_row),
                          (t("manager.players.just_initials"), initials_row)])
         with frame.footer():
@@ -1155,12 +1155,12 @@ async def _share_on(context: dict[str, Any], account: dict[str, Any], service: s
     title = (t("manager.players.share_consent_title", id=user_id, service=service) if user_id
              else t("manager.players.share_consent_plain", service=service))
     with frame.opened(title, ignore_outside_click=True) as box:
-        ui.label(t("manager.players.share_consent_heading")).classes("manager-help px-3")
-        with ui.column().classes("gap-1 px-3"):
+        ui.label(t("manager.players.share_consent_heading")).classes("manager-help")
+        with ui.column().classes("gap-1"):
             for line in account.get("consent") or []:
                 ui.label(f"• {line}").classes("manager-help")
         ui.label(t("manager.players.consent_note", service=service)) \
-            .classes("manager-help px-3")
+            .classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(False))
             frame.answer(t("manager.players.share"), lambda: box.submit(True),

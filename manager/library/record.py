@@ -450,13 +450,13 @@ async def _dialog(library: Any, named: list[Target], title: str,
             return
         box.submit(confirmed(request(), plan))
 
-    with frame.opened(title, wide=True, ignore_outside_click=True) as box:
+    with frame.opened(title, size="wide", ignore_outside_click=True) as box:
         if running:
             with ui.element("div").classes("manager-attention w-full"):
                 ui.icon("error_outline").classes("manager-attention-icon")
                 ui.label(t("manager.record.table_running")) \
                     .classes("manager-attention-line")
-        body = ui.column().classes("w-full gap-0 px-3")
+        body = ui.column().classes("w-full gap-0")
         with frame.footer():
             keep = frame.aside(t("manager.record.save_defaults"), save_defaults,
                                icon=verbs.SAVE)
@@ -867,15 +867,15 @@ async def review(library: Any, then: Callable[[], Any],
         draw()
         ui.run_javascript(f"document.getElementById('c{body.id}')?.scrollTo(0, 0)")
 
-    with frame.opened("", wide=True, ignore_outside_click=True,
+    with frame.opened("", size="wide", tall=many, ignore_outside_click=True,
                       classes="manager-dialog--series" if many else "") as box:
         title = ui.label("").classes("manager-dialog-title")
         if many:
-            with ui.row().classes("w-full items-center gap-3 no-wrap px-3 pb-2"):
+            with ui.row().classes("w-full items-center gap-3 no-wrap pb-2"):
                 bar = ui.linear_progress(value=0, show_value=False).props("rounded") \
                     .classes("grow")
                 place = ui.label("").classes("manager-help whitespace-nowrap shrink-0")
-        body = ui.column().classes("w-full gap-2 px-3 no-wrap manager-series-body")
+        body = ui.column().classes("w-full gap-2 no-wrap manager-series-body")
         with frame.footer():
             stop = frame.quiet(t("manager.record.stop"), lambda: box.submit(True),
                                icon=verbs.STOP)

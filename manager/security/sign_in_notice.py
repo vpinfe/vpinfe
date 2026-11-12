@@ -113,13 +113,13 @@ def _show(code: sign_in.Confirm, closed: set[str]) -> ui.dialog:
 
     with frame.opened(t("manager.security.pair_code" if pairing
                         else "manager.security.confirm_code"),
-                      classes="manager-confirm", ignore_outside_click=True) as sheet:
-        ui.label(_for_code(code)).classes("manager-help text-center px-3")
+                      size="question", ignore_outside_click=True) as sheet:
+        ui.label(_for_code(code)).classes("manager-help text-center")
         ui.label(code.code).classes("manager-digits w-full")
         ui.label(t("manager.security.code_good", count=sign_in.CODE_SECONDS // 60)) \
-            .classes("manager-help text-center px-3")
+            .classes("manager-help text-center")
         ui.label(_lasts("pair" if pairing else "confirm")) \
-            .classes("manager-help text-center px-3")
+            .classes("manager-help text-center")
         with frame.footer():
             frame.answer(t("word.close"), close, icon=verbs.CLOSE) \
                 .tooltip(t("manager.security.code_close_hint"))
@@ -136,15 +136,15 @@ def _ask(request: sign_in.Request) -> ui.dialog:
     who = _who(request.agent, request.place or request.address)
     with frame.opened(t("manager.security.signin_title") if shown
                       else t("manager.security.wants", who=who),
-                      classes="manager-confirm", persistent=not shown,
+                      size="question", persistent=not shown,
                       ignore_outside_click=shown) as sheet:
         if shown:
             ui.label(t("manager.security.for_browser", who=who)) \
-                .classes("manager-help text-center px-3")
+                .classes("manager-help text-center")
             ui.label(request.code).classes("manager-digits w-full")
             ui.label(t("manager.security.code_good", count=sign_in.CODE_SECONDS // 60)) \
-                .classes("manager-help text-center px-3")
-            ui.label(_lasts("sign_in")).classes("manager-help text-center px-3")
+                .classes("manager-help text-center")
+            ui.label(_lasts("sign_in")).classes("manager-help text-center")
             with frame.footer():
                 frame.answer(t("word.close"), lambda: signer.dismiss(request.id),
                              icon=verbs.CLOSE).tooltip(t("manager.security.close_hint"))
@@ -164,10 +164,10 @@ def _approve(ask: approvals.Ask) -> ui.dialog:
     asks = approvals.instance()
     change = "\n".join(part for part in (" ".join((ask.method, ask.path)), ask.body) if part)
     with frame.opened(t("manager.security.asks", program=ask.token_name),
-                      classes="manager-confirm", ignore_outside_click=True) as sheet:
-        ui.label(change).classes("manager-need-change px-3").props("tabindex=0")
+                      size="question", ignore_outside_click=True) as sheet:
+        ui.label(change).classes("manager-need-change").props("tabindex=0")
         ui.label(t("manager.security.asks_lapse", count=max(1, asks.seconds_left(ask) // 60))) \
-            .classes("manager-help px-3")
+            .classes("manager-help")
         with frame.footer():
             frame.aside(t("manager.needs.decline"), lambda: asks.decline(ask.id),
                         icon=verbs.IGNORE).tooltip(t("manager.needs.decline.help"))

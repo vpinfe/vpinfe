@@ -171,7 +171,7 @@ async def ask(library: Library, rows: list[dict[str, Any]],
             (t(GROUP_WORDS[YOURS]), draw(YOURS)),
             (t(GROUP_WORDS[AUTOMATIC]), draw(AUTOMATIC)),
         ])
-        held["total"] = ui.label("").classes("manager-help px-3")
+        held["total"] = ui.label("").classes("manager-help")
         with frame.footer():
             frame.cancel(box.close)
             held["delete"] = frame.answer(t("word.delete"), go, icon=verbs.DELETE, danger=True)

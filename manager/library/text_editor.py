@@ -157,7 +157,7 @@ def drop_all(state: dict[str, Any]) -> None:
 
 def show_whole(label: str, text: str) -> None:
     """A file that is not edited, read whole in the full dialog."""
-    with frame.opened("", full=True) as dialog:
+    with frame.opened("", size="full") as dialog:
         with ui.row().classes("items-center gap-2 w-full no-wrap"):
             ui.label(label).classes("manager-dialog-title")
             ui.space()
@@ -263,7 +263,7 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
         held.touch()
 
     def enlarge() -> None:
-        with frame.opened("", full=True) as dialog:
+        with frame.opened("", size="full") as dialog:
             with ui.row().classes("items-center gap-2 w-full no-wrap"):
                 with ui.column().classes("gap-0 min-w-0"):
                     ui.label(label).classes("manager-dialog-title")

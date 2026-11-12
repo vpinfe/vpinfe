@@ -207,12 +207,12 @@ async def pick_path(list_entries: Callable[..., dict], start: str = "", *,
         if "button" in choose:
             choose["button"].set_enabled(enabled)
 
-    with frame.opened(title or t(_TITLE[kind]), wide=True,
+    with frame.opened(title or t(_TITLE[kind]), size="wide",
                       ignore_outside_click=True) as box:
         browser = draw_browser(first, list_entries, kind=kind, suffixes=suffixes,
                                take=box.submit, on_ready=ready, lead=lead, empty=empty,
                                notes=notes, saving=saving)
-        with frame.footer().classes("manager-dialog-footer--ruled"):
+        with frame.footer():
             if browser.can_name:
                 frame.aside(t("manager.folder_picker.new_folder"), browser.start_naming,
                             icon=verbs.NEW_FOLDER)

@@ -77,14 +77,14 @@ async def ask(question: str, *, detail: str | Sequence[str] = "",
 
     Enter presses the confirm unless the question is `danger`.
     """
-    with frame.opened(question, classes="manager-confirm") as box:
+    with frame.opened(question, size="question") as box:
         for said in [detail] if isinstance(detail, str) else detail:
             if said:
-                ui.label(said).classes("manager-help px-3")
+                ui.label(said).classes("manager-help")
         for line in lines:
             ui.label(line).classes("manager-confirm-line")
         if option is not None:
-            ui.checkbox(option.label).props("dense").classes("px-3").bind_value(option, "on")
+            ui.checkbox(option.label).props("dense").bind_value(option, "on")
         with frame.footer():
             if also is not None:
                 label, act, drawing = also

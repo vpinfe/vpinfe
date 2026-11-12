@@ -714,9 +714,9 @@ async def metadata_folders(library: Library, state: dict[str, Any], which: str,
         await _metadata_action(library, state, redraw)("upgrade")
 
     with frame.opened(title) as box:
-        ui.label(intro).classes("manager-help px-3")
+        ui.label(intro).classes("manager-help")
         for name, why in _folder_lines(rows, _FOLDERS_MOST):
-            with ui.column().classes("gap-0 w-full px-3 py-1"):
+            with ui.column().classes("gap-0 w-full py-1"):
                 ui.label(name).classes("manager-setting")
                 if why:
                     ui.label(why).classes("manager-help")

@@ -166,24 +166,24 @@ async def _choose(found: dict[str, Any], name: str) -> list[str]:
     from_files = _from_files(found)
     with frame.opened(t("manager.media_fill.title", source=sources[0])
                       if len(sources) == 1 and not from_files
-                      else t("manager.media_fill.title_several"), wide=True) as box:
+                      else t("manager.media_fill.title_several"), size="wide") as box:
         ui.label(name or t("manager.media_fill.games", count=games)) \
-            .classes("manager-help px-3")
+            .classes("manager-help")
         with ui.grid(columns="minmax(0, 1fr) max-content max-content") \
-                .classes("w-full items-center gap-x-4 gap-y-1 px-3"):
+                .classes("w-full items-center gap-x-4 gap-y-1"):
             labels = media_label_map()
             for row in rows:
                 _kind_row(row, labels.get(str(row["kind"]), str(row["kind"])), chosen,
                           recount)
         if from_files:
             ui.label(t("manager.media_fill.from_files", count=from_files)) \
-                .classes("manager-help px-3")
+                .classes("manager-help")
         for line in _unmatched(games, unmatched):
-            ui.label(line).classes("manager-help px-3")
+            ui.label(line).classes("manager-help")
         if found.get("unreachable"):
             ui.label(t("manager.media_fill.unreachable",
                        sources=", ".join(found["unreachable"]))) \
-                .classes("manager-help px-3")
+                .classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit([]))
             go = frame.answer(t("manager.media_fill.get", count=total()),

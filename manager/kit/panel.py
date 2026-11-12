@@ -669,8 +669,7 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
         parts["row"].classes(
             add="manager-field-row--held" if changed else "manager-field-row--default",
             remove="manager-field-row--default" if changed else "manager-field-row--held")
-        tip.say(t("manager.workbench.changed_from", value=default, whose=whose)
-                if changed and marked else whose)
+        tip.say("" if changed and marked else whose)
         if not marked or parts.get("changed") is changed:
             return
         parts["changed"] = changed
@@ -684,8 +683,7 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
 
             with parts["end"]:
                 icon_action(t("word.reset"), back, icon=verbs.RESET,
-                            hint=t("manager.workbench.back_to", value=default,
-                                   whose=whose))()
+                            hint=t("manager.workbench.reset_to", value=default))()
 
     async def leave(control: ui.input, text: str) -> None:
         if marks:

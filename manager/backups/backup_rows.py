@@ -172,12 +172,12 @@ async def open_for(library: Library, subject_kind: str, subject_id: str, name: s
     seek = next((str(one["subject_name"]) for one in built if one.get("subject_name")), name)
 
     with frame.opened(t("manager.backups.title", name=name),
-                      classes="manager-backups-card") as box:
-        with ui.row().classes("w-full items-center justify-between no-wrap px-3 -mt-2"):
+                      size="large", tall=True) as box:
+        with ui.row().classes("w-full items-center justify-between no-wrap -mt-2"):
             ui.label(place).classes("manager-help")
             frame.quiet(t("manager.backups.open_in"), lambda: _open_in_backups(seek),
                         icon=verbs.GO)
-        with ui.element("div").classes("w-full grow min-h-0 flex flex-col px-3") as body:
+        with ui.element("div").classes("w-full grow min-h-0 flex flex-col") as body:
             table: ui.aggrid = grid_module.build(
                 COLUMNS, built, SCOPE,
                 on_select_rows=lambda picked: go.set_enabled(bool(picked) and not hint),
@@ -185,7 +185,7 @@ async def open_for(library: Library, subject_kind: str, subject_id: str, name: s
                 on_header_context=lambda col_id: header(col_id))
             menu: ui.context_menu = ui.context_menu()
         empty = ui.label(_none_said(found)).classes(
-            "manager-help manager-backups-none px-3")
+            "manager-help manager-backups-none")
 
         def show(now: list[dict[str, Any]]) -> None:
             empty.set_text(_none_said(now))

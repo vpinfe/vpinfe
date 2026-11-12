@@ -69,9 +69,9 @@ async def _enrol(library: Library) -> bool:
             return
         box.submit(True)
 
-    with frame.opened(t("manager.authenticator.title"), classes="manager-confirm",
+    with frame.opened(t("manager.authenticator.title"), size="question",
                       ignore_outside_click=True) as box:
-        ui.label(t("manager.authenticator.line")).classes("manager-help px-3")
+        ui.label(t("manager.authenticator.line")).classes("manager-help")
         if art:
             ui.html(art).classes("manager-qr").props("aria-hidden=true")
         entered: dict[str, Any] = {}

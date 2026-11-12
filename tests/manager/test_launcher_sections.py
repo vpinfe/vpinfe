@@ -749,7 +749,8 @@ class ClearTests(unittest.IsolatedAsyncioTestCase):
     def test_its_hover_says_what_it_goes_back_to(self) -> None:
         icon_action, _ = self._drawn(self.SET)
 
-        self.assertEqual(icon_action.call_args.kwargs["hint"], "Back to Floating - The Launcher")
+        self.assertEqual(icon_action.call_args.kwargs["hint"],
+                         "Reset to Floating, the launcher's value")
         self.assertTrue(icon_action.call_args.kwargs["enabled"])
 
     def test_while_a_table_is_playing_it_is_off_and_says_why(self) -> None:
@@ -770,7 +771,8 @@ class ClearTests(unittest.IsolatedAsyncioTestCase):
         icon_action, _ = self._drawn({**self.SET, "value": "2"})
 
         self.assertEqual(icon_action.call_args.args, (t("word.reset"), self.wipe))
-        self.assertEqual(icon_action.call_args.kwargs["hint"], "Back to Floating - The Launcher")
+        self.assertEqual(icon_action.call_args.kwargs["hint"],
+                         "Reset to Floating, the launcher's value")
 
     async def test_each_row_s_clear_empties_its_own_key(self) -> None:
         library = Mock()
@@ -881,11 +883,6 @@ class PairTests(unittest.IsolatedAsyncioTestCase):
                               self.APP, joiner="×", clear=AsyncMock())()
         return ui, icon_action
 
-    @property
-    def _changed(self) -> str:
-        return t("manager.workbench.changed_link",
-                 whose=t("manager.workbench.app_default", app=self.APP))
-
     def _part(self, field: SimpleNamespace, said: str) -> str:
         return t("manager.workbench.part_said", label=field.label, said=said)
 
@@ -948,21 +945,14 @@ class PairTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(dot.set_visibility.call_args.args, (shown,))
 
-    def test_its_hover_says_whose_once_where_both_agree(self) -> None:
-        ui, _ = self._drawn(self.SET, self.SET)
-
-        self.assertEqual(ui.tooltip.return_value.text, self._changed)
-
-    def test_its_hover_says_whose_each_is_where_they_differ(self) -> None:
+    def test_the_row_opens_no_hover_of_its_own(self) -> None:
         ui, _ = self._drawn(self.SET, self.UNSET)
 
-        self.assertEqual(ui.tooltip.return_value.text, "\n".join((
-            self._part(self.WIDTH, self._changed),
-            self._part(self.HEIGHT, t("manager.workbench.app_default", app=self.APP)))))
+        ui.tooltip.assert_not_called()
 
     def test_clear_s_hover_names_the_number_it_clears_where_it_is_one(self) -> None:
-        back = t("manager.workbench.back_link",
-                 whose=t("manager.workbench.app_default", app=self.APP))
+        back = t("manager.workbench.reset_to",
+                 value=t("manager.workbench.app_default", app=self.APP))
 
         _, one = self._drawn(self.SET, self.UNSET)
         _, both = self._drawn(self.SET, self.SET)

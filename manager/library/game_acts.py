@@ -221,7 +221,7 @@ async def _rate(games: list[dict[str, Any]], rate: Rate) -> None:
         stars.draw(chosen["value"] or 0, choose)()
 
     with frame.opened(t("manager.games.rate_game_s", count=len(games))) as box:
-        with ui.row().classes("px-3"):
+        with ui.row():
             draw()
         with frame.footer():
             frame.cancel(box.close)

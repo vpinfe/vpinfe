@@ -609,7 +609,7 @@ async def ask_details(suggested: str, take: Callable[[str, str], Awaitable[None]
 
     with frame.opened(t("manager.backups.back_up_title"), ignore_outside_click=True) as box:
         if place:
-            ui.label(place).classes("manager-help px-3")
+            ui.label(place).classes("manager-help")
         panel.facts(ui, [(t("manager.backups.name"), lambda: _name_input(wanted, held)),
                          (t("manager.backups.note"), lambda: _note_input(wanted, held))])
         with frame.footer():

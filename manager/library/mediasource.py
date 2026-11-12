@@ -417,19 +417,18 @@ class _Sources:
 
     def open(self) -> ui.dialog:
         """Show the dialog and answer it: a walk awaits it, which resolves when it closes."""
-        with frame.opened(self.title(), classes="manager-sources-card") as box:
+        with frame.opened(self.title(), size="large", classes="manager-sources-card") as box:
             self.dialog = box
             card = ui.context.slot.parent
             if self.walk_place:
-                ui.label(self.walk_place).classes("manager-help px-3")
+                ui.label(self.walk_place).classes("manager-help")
             self.before()
 
             # Ordered by how far the file has to travel: this library, the machine
             # VPinFE runs on, then the internet.
             host = _host_name(self.library)
             merged = self.merged = acting.browser_is_here()
-            with ui.tabs().props("dense no-caps align=left inline-label") \
-                    .classes("w-full px-3") as tabs:
+            with frame.tabs().props("inline-label") as tabs:
                 if self.backglass:
                     ui.tab("backglass", label=t("manager.mediasource.backglass_file"),
                            icon=verbs.FROM_BACKGLASS_FILE)
@@ -458,7 +457,7 @@ class _Sources:
             record_body: ui.column | None = None
             backglass_body: ui.column | None = None
             first = self.first or "host"
-            with ui.element("div").classes("manager-sources-body"):
+            with frame.body(split=True):
                 with ui.tab_panels(tabs, value=first).classes("manager-sources-panels"):
                     if self.backglass:
                         with ui.tab_panel("backglass"):
@@ -486,7 +485,7 @@ class _Sources:
                 self.pane.draw()
                 with self.pane.extra:
                     self.choices()
-            with frame.footer().classes("manager-dialog-footer--ruled"):
+            with frame.footer():
                 if self.walk_place:
                     frame.leave(box, True)
                 else:
@@ -1668,7 +1667,7 @@ class _Library(_ManyFiles):
         if self.find is None:
             return
         words, go = self.find
-        link = ui.label(words).classes("manager-link cursor-pointer px-3")
+        link = ui.label(words).classes("manager-link cursor-pointer")
         link.on("click", lambda: self._leave(go))
 
     async def _leave(self, go: Callable[[], Any]) -> None:

@@ -620,12 +620,12 @@ async def _pick_one(title: str, collections: list[dict[str, Any]],
     chosen: dict[str, str] = {"name": ""}
     ordered = sorted(collections, key=lambda one: str(one.get("name") or "").casefold())
     with frame.opened(title, ignore_outside_click=True) as box:
-        with ui.element("div").classes("w-full px-3"):
+        with ui.element("div").classes("w-full"):
             find = frame.field(placeholder=t("manager.adds.find_collection"))
-        with ui.element("div").classes("w-full px-3 mt-2 manager-source-list "
-                                       "manager-collection-pick") as held_at:
-            listing = ui.column().classes("w-full gap-1 manager-pick-list")
-        with ui.element("div").classes("px-3 mt-1"):
+        with frame.well() as held_at:
+            held_at.classes("manager-collection-pick")
+            listing = ui.column().classes("w-full gap-0 manager-well-rows")
+        with ui.element("div").classes("mt-1"):
             panel.action(t("manager.adds.new_collection"), lambda: box.submit(_NEW),
                          icon=verbs.CREATE,
                          hint=t("manager.adds.new_collection.help"))()

@@ -1058,15 +1058,15 @@ async def _share_with(state: dict[str, Any], identity: dict[str, Any],
         with body:
             if not can_share:
                 ui.label(t("manager.remote.share_needs_initials")) \
-                    .classes("manager-help px-3")
+                    .classes("manager-help")
             else:
                 ui.label(t("manager.players.share_consent_heading")) \
-                    .classes("manager-help px-3")
-                with ui.column().classes("gap-1 px-3"):
+                    .classes("manager-help")
+                with ui.column().classes("gap-1"):
                     for line in account.get("consent") or []:
                         ui.label(f"• {line}").classes("manager-help")
                 ui.label(t("manager.players.consent_note", service=service)) \
-                    .classes("manager-help px-3")
+                    .classes("manager-help")
         with buttons:
             frame.cancel(lambda: box.submit(False))
             if can_share:

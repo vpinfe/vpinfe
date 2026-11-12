@@ -183,7 +183,7 @@ async def _which(found: list[dict[str, Any]],
     """Which device. One that did not answer stays in the list, dimmed, with its address
     and why, and can be asked again."""
     with frame.opened(t("manager.send_to_device.send_device")) as box:
-        rows = ui.column().classes("gap-2 px-3")
+        rows = ui.column().classes("gap-2")
 
         @on_page
         async def again(device: dict[str, Any]) -> None:

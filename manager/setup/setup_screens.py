@@ -162,9 +162,9 @@ async def _ask_which(launcher_id: str, standing: displays.Standing, here: Any,
                      parts: list[str]) -> None:
     """Visual Pinball's file already puts these screens somewhere else. Setup is not held
     up: Escape, or Leave as Is, leaves the file as it is."""
-    with frame.opened(t("manager.setup.screens.apart"), classes="manager-confirm") as box:
+    with frame.opened(t("manager.setup.screens.apart"), size="question") as box:
         ui.label(t("manager.setup.screens.apart_detail", parts=vpx_displays.named(parts))) \
-            .classes("manager-help px-3")
+            .classes("manager-help")
         with frame.footer():
             frame.quiet(t("manager.setup.screens.keep_vp"), lambda: box.submit(False),
                         icon=verbs.CANCEL)

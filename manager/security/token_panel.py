@@ -69,10 +69,10 @@ def entries(rows: list[dict[str, Any]], make: Callable[[], Any],
 
 async def _shown_once(name: str, secret: str) -> None:
     """The secret, and the one chance to copy it."""
-    with frame.opened(t("manager.tokens.made_title", name=name), wide=True,
+    with frame.opened(t("manager.tokens.made_title", name=name), size="wide",
                       ignore_outside_click=True) as box:
-        ui.label(t("manager.tokens.made_line")).classes("manager-help px-3")
-        with ui.element("div").classes("w-full px-3"):
+        ui.label(t("manager.tokens.made_line")).classes("manager-help")
+        with ui.element("div").classes("w-full"):
             shown = ui.input(value=secret).props("outlined readonly dense") \
                 .classes("w-full manager-log")
             shown.props["aria-label"] = t("manager.tokens.secret")
@@ -112,7 +112,7 @@ async def _ask_new() -> tuple[str, str, bool] | None:
             return
         box.submit((name, held["access"], bool(fields["power"].value)))
 
-    with frame.opened(t("manager.tokens.new_title"), classes="manager-confirm",
+    with frame.opened(t("manager.tokens.new_title"), size="question",
                       ignore_outside_click=True) as box:
         panel.facts(ui, [
             (t("manager.tokens.name"),

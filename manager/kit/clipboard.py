@@ -46,9 +46,9 @@ def copied(done: bool, text: str) -> None:
 
 
 def _show_to_copy(text: str) -> None:
-    with frame.opened(t("manager.about.clipboard_blocked"), wide=True) as box:
-        ui.label(t("manager.about.manual_copy")).classes("manager-help px-3")
-        with ui.element("div").classes("w-full px-3"):
+    with frame.opened(t("manager.about.clipboard_blocked"), size="wide") as box:
+        ui.label(t("manager.about.manual_copy")).classes("manager-help")
+        with ui.element("div").classes("w-full"):
             ui.textarea(value=text).props("outlined readonly rows=18") \
                 .classes("w-full manager-log")
         with frame.footer():

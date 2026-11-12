@@ -32,13 +32,13 @@ def chips(words: Sequence[str]) -> Callable[[], None]:
 
 async def _ask(title: str, lines: Sequence[str], answer: str, *,
                rows: Sequence[tuple[Any, ...]] = (), closing: str = "") -> bool:
-    with frame.opened(title, classes="manager-confirm") as box:
+    with frame.opened(title, size="question") as box:
         for line in lines:
-            ui.label(line).classes("manager-help px-3")
+            ui.label(line).classes("manager-help")
         if rows:
             panel.facts(ui, rows)
         if closing:
-            ui.label(closing).classes("manager-help px-3")
+            ui.label(closing).classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(False))
             frame.answer(answer, lambda: box.submit(True), icon=verbs.ACCEPT)

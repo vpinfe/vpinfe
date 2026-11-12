@@ -181,7 +181,7 @@ async def choose(launcher_id: str | None, refill: Callable[[], Any]) -> None:
         ui.notify(t("said.settings_unreadable"), caption=why(exc), type="negative")
         return
     picked: list[Preset | None] = [matching(now)]
-    with dialog.opened(t("manager.presets.title"), classes="manager-presets") as box:
+    with dialog.opened(t("manager.presets.title")) as box:
         group = ui.column().classes("manager-presets-choices")
         group.props("role=radiogroup")
         group.props["aria-label"] = t("manager.presets.title")

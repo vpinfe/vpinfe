@@ -423,7 +423,6 @@ tests/invariants/test_config_conventions.py
 tests/invariants/test_copy_full_stops.py
 tests/invariants/test_copy_stays_where_the_rewrite_left_it.py
 tests/invariants/test_deprecations.py
-tests/invariants/test_dialogs_are_drawn_by_the_frame.py
 tests/invariants/test_docs_config_reference.py
 tests/invariants/test_docs_references.py
 tests/invariants/test_docstrings_carry_the_conclusion.py

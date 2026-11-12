@@ -206,12 +206,12 @@ def _rules_rows(reading: Reading, refill: Callable[[], None],
 
 
 def _show_line(found: placement.Offer, compositor: str) -> None:
-    with frame.opened(t("manager.placement.line_title"), wide=True) as box:
+    with frame.opened(t("manager.placement.line_title"), size="wide") as box:
         ui.label(t("manager.placement.line.help", compositor=compositor,
                    config=str(found.config) if found.config else
                    t("manager.placement.your_config", compositor=compositor))) \
-            .classes("manager-help px-3")
-        with ui.element("div").classes("w-full px-3"):
+            .classes("manager-help")
+        with ui.element("div").classes("w-full"):
             ui.textarea(value=found.line).props("outlined readonly rows=2") \
                 .classes("w-full manager-log")
         with frame.footer():

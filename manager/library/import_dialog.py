@@ -143,7 +143,7 @@ async def _pick(library: Any, reason: str, offered: list[dict[str, Any]],
     with frame.opened(t("manager.import_dialog.place_title")) as picker:
         if reason:
             # The refusal leads, because it is the reason they are being asked at all.
-            ui.label(reason).classes("manager-help px-3")
+            ui.label(reason).classes("manager-help")
         panel.facts(ui, [(t("word.library_folder"), panel.select(
             {str(one.get("location_id") or ""): str(one.get("name") or one.get("path") or "")
              for one in offered},
@@ -151,7 +151,7 @@ async def _pick(library: Any, reason: str, offered: list[dict[str, Any]],
         if offer_remember:
             # Offered here rather than only in Settings, because this is the moment
             # somebody knows whether they want to be asked again.
-            with ui.element("div").classes("px-3"):
+            with ui.element("div"):
                 ui.checkbox(t("manager.import_dialog.remember"),
                             on_change=lambda e: holds.__setitem__("stop_asking",
                                                                   bool(e.value))) \
@@ -224,22 +224,22 @@ async def open_for(library: Any, upload_id: str, plan: dict[str, Any], *,
     if swapping is not None:
         swapping.settle(plan)
 
-    with frame.opened("", wide=True, ignore_outside_click=True,
+    with frame.opened("", size="wide", ignore_outside_click=True,
                       classes="manager-import-card") as dialog:
         heading = ui.label("").classes("manager-dialog-title")
         if new_folder:
             ui.label(t("manager.import_dialog.folder_note")) \
-                .classes("manager-help px-3")
+                .classes("manager-help")
             _folder_row(library, named, plan)
         elif not sheet.single() and source:
             ui.label(t("manager.drop_sheet.from_pack", source=source, count=file_count)
                      if file_count > 1 else t("manager.import_dialog.from", source=source)) \
-                .classes("manager-help px-3")
-        choice_box = ui.column().classes("gap-2 w-full px-3") if swapping else None
-        table_box = ui.column().classes("gap-2 w-full px-3")
-        rows = ui.column().classes("gap-0 w-full manager-import-rows px-3")
+                .classes("manager-help")
+        choice_box = ui.column().classes("gap-2 w-full") if swapping else None
+        table_box = ui.column().classes("gap-2 w-full")
+        rows = ui.column().classes("gap-0 w-full manager-import-rows")
         freeze, thaw = drop_sheet.hold_scroll(rows, ui.run_javascript)
-        notice_box = ui.column().classes("gap-0 w-full px-3")
+        notice_box = ui.column().classes("gap-0 w-full")
         if release is not None:
             _release_row(release)
 
@@ -711,7 +711,7 @@ async def _match(library: Any, named: dict[str, Any], field: Any) -> None:
     holds = {"id": next(iter(offered), "")}
     with frame.opened(t("manager.import_dialog.one")) as picker:
         ui.label(t("manager.import_dialog.pick_note")) \
-            .classes("manager-help px-3")
+            .classes("manager-help")
         panel.facts(ui, [(t("word.game"), panel.select(
             offered, holds["id"], lambda e: holds.__setitem__("id", str(e.value or ""))))])
         with frame.footer():

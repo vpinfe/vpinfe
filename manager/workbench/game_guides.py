@@ -42,7 +42,7 @@ async def _guides_block(context: dict[str, Any]) -> None:
     shown, hidden = _guides(context)
     with ui.column().classes("gap-0 manager-form w-full"):
         if not sheet and not shown:
-            ui.label(t("manager.workbench.no_guides")).classes("manager-help px-3")
+            ui.label(t("manager.workbench.no_guides")).classes("manager-help")
         if sheet:
             _guide_row(media_label_map().get("rule_sheet", "rule_sheet"),
                        art.media(context["game_id"], "rule_sheet",
@@ -57,7 +57,7 @@ async def _guides_block(context: dict[str, Any]) -> None:
                     .classes("manager-disclosure-rows pt-2"):
                 for one in hidden:
                     _guide_row(*guide_words(one), act=_guide_act(context, one))
-        with ui.element("div").classes("manager-slot-actions px-3"):
+        with ui.element("div").classes("manager-slot-actions"):
             panel.action(t("manager.workbench.add_guide"),
                          lambda: _add_guide(context), icon=verbs.ADD,
                          hint=panel.NO_HINT)()

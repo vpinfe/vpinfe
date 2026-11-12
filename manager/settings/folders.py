@@ -615,7 +615,7 @@ async def _duplicates(block: Folders, folder: Folder) -> None:
             block.redraw()
 
     with frame.opened(t("manager.folders.duplicates_title", path=folder.path)) as box:
-        ui.label(t("manager.workbench.shadowed_intro")).classes("manager-help px-3")
+        ui.label(t("manager.workbench.shadowed_intro")).classes("manager-help")
         draw_copies(copies, adopt)
         with frame.footer():
             frame.cancel(box.close, t("word.close"))

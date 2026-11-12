@@ -44,7 +44,7 @@ async def open_for(job_id: str) -> None:
     except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
         ui.notify(t("manager.jobs.report_unavailable"), caption=why(exc), type="negative")
         return
-    with frame.opened("", wide=True, classes="manager-wizard-card") as dialog:
+    with frame.opened("", size="wide", tall=True, classes="manager-wizard-card") as dialog:
         with ui.element("div").classes("manager-wizard-scroll"):
             ui.label(jobs_list.named(job)) \
                 .classes("manager-dialog-title manager-wizard-title")

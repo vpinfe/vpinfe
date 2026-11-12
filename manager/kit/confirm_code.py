@@ -85,8 +85,8 @@ async def ask() -> bool:
         code.value = ""
 
     with frame.opened(t("manager.confirm.title", device=device),
-                      classes="manager-confirm", ignore_outside_click=True) as box:
-        said = ui.label(line_text()).classes("manager-help px-3")
+                      size="question", ignore_outside_click=True) as box:
+        said = ui.label(line_text()).classes("manager-help")
         typed: dict[str, Any] = {}
         panel.facts(ui, [(t("manager.confirm.code"), lambda: typed.update(
             code=frame.field(name=t("manager.confirm.code"), room=True)))])

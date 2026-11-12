@@ -105,7 +105,7 @@ async def add_mobile() -> dict[str, Any] | None:
                     [(t("word.name"), draw("name")),
                      (t("manager.devices.address"), draw("address")),
                      (t("manager.devices.port"), draw("port"))])
-        ui.label(t("manager.devices.add_mobile.help")).classes("manager-help px-3")
+        ui.label(t("manager.devices.add_mobile.help")).classes("manager-help")
         with frame.footer():
             frame.cancel(lambda: box.submit(None))
             go = frame.answer(t("word.add"), keep, icon=verbs.ADD)

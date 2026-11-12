@@ -211,25 +211,25 @@ async def _choose(files: list[tuple[str, str]], plan: dict[str, Any],
         said_here = {t("error.media_convert.no_ffmpeg")} if needs_ffmpeg(current) else set()
         if blocked:
             said_here.add(blocked)
-            ui.label(blocked).classes("manager-help px-3")
+            ui.label(blocked).classes("manager-help")
         skipped, reasons = left_out(current, frozenset(said_here))
         with ui.grid(columns="max-content minmax(0, 1fr)") \
-                .classes("w-full items-start gap-x-4 gap-y-3 px-3"):
+                .classes("w-full items-start gap-x-4 gap-y-3"):
             for choice in current["options"]:
                 _draw_choice(choice, current["choices"], picked)
         if skipped:
             ui.label(t("manager.media_convert.left_out", count=skipped)) \
                 .classes("manager-confirm-line")
             if reasons:
-                ui.label(reasons).classes("manager-help px-3")
+                ui.label(reasons).classes("manager-help")
         if needs_ffmpeg(current):
-            with ui.row().classes("items-center gap-2 px-3"):
+            with ui.row().classes("items-center gap-2"):
                 ui.label(t("manager.media_convert.no_ffmpeg")).classes("manager-help")
                 frame.quiet(t("manager.media_convert.open_tools"),
                             lambda: ui.navigate.to(settings.address_for("tools")),
                             icon=verbs.GO)
 
-    with frame.opened(t("manager.media_convert.ask", count=len(files)), wide=True) as box:
+    with frame.opened(t("manager.media_convert.ask", count=len(files)), size="wide") as box:
         body()
         with frame.footer():
             frame.cancel(lambda: box.submit(None))

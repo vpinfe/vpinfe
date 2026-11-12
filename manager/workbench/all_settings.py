@@ -148,6 +148,9 @@ def _config_mark(held: dict, scope: str, field: Any) -> Callable[[], None] | Non
     """The word beside a value, where it is an exception: a scope other than this one and
     All Tables. Set here is the dot's to say (`_marked`)."""
     came = held.get("scope") or ""
+    if held.get("set_here") and not held.get("in_effect", True) \
+            and came in CAME_FROM and came != scope:
+        return panel.state(t("manager.workbench.override", whose=t(CAME_FROM[came])), "off")
     if not held.get("set_here") and came not in ("", scope, "launcher"):
         return panel.state(t(CAME_FROM.get(came, "manager.workbench.inherited")), "off")
     return None
@@ -188,9 +191,9 @@ def _marked(parts: Sequence[Part], app_name: str,
             back: Callable[[Sequence[str]], str] | None = None) -> Callable[[], None]:
     """One value, or a pair with `joiner` between them, as `(control, held, field)`. A
     value at the default is drawn quiet and unmarked. Where this scope sets any of them
-    to something else, a dot comes before it, whose each is on hover, and `clear` after
-    the control. Each draw adds to `redraws` what brings the dot, the hover and Reset up to
-    each `held` without drawing the controls again. `on_leave` runs when focus leaves the
+    to something else, a dot comes before it and `clear` after the control. Each draw adds
+    to `redraws` what brings the dot and Reset up to each `held` without drawing the
+    controls again. `on_leave` runs when focus leaves the
     line. Where `again` hands back the parts as they are now, `regrow` gets, under the
     field's key, what draws this line's controls again.
 
@@ -200,22 +203,15 @@ def _marked(parts: Sequence[Part], app_name: str,
     """
     def draw() -> None:
         dot: Any = None
-        hover_tip: Any = None
-        whose: Any = None
 
         def controls() -> None:
-            nonlocal dot, hover_tip, whose
+            nonlocal dot
             dot = ui.element("span").classes(
                 "manager-mark manager-mark--full manager-named-mark")
             if len(parts) == 1:
                 parts[0][0]()
             else:
                 _pair(parts, joiner)
-            hover_tip = getattr(parts[0][0], "hover_tip", None) if len(parts) == 1 else None
-            whose = None
-            if hover_tip is None:
-                whose = ui.tooltip("")
-                whose.props('anchor="bottom left" self="top left"')
 
         with ui.row().classes("items-center gap-1 no-wrap manager-field-line") as line:
             line.props["data-setting"] = parts[0][2].key
@@ -235,13 +231,6 @@ def _marked(parts: Sequence[Part], app_name: str,
             row.classes(add="manager-field-row--held" if changed else "manager-field-row--default",
                         remove="manager-field-row--default" if changed
                         else "manager-field-row--held")
-            said = _each_said(
-                [(field, _whose_value(held, field, app_name)) for _, held, field in parts],
-                len(parts))
-            if hover_tip is not None:
-                hover_tip.say(said)
-            elif whose is not None:
-                whose.text = said
             end.clear()
             if clear is not None and (changed or matching):
                 hint = _each_said([(field, _clear_hint(held, field, app_name))
@@ -296,24 +285,31 @@ def _each_said(said: Sequence[tuple[Any, str]], of: int) -> str:
                      for field, words in said)
 
 
-def _whose_value(held: dict, field: Any, app_name: str) -> str:
-    whose = t(CAME_FROM.get(held.get("scope") or "", "manager.workbench.inherited"))
-    if held.get("set_here") and not held.get("in_effect", True):
-        if said := _said_value(field, held.get("value") or ""):
-            return t("manager.workbench.override_value", whose=whose, value=said)
-        return t("manager.workbench.override", whose=whose)
-    if held.get("set_here"):
-        value, follows = _follows(held, field, app_name)
-        if not _changed(held, field):
-            return follows
-        if value:
-            return t("manager.workbench.changed_from", value=value, whose=follows)
-        return t("manager.workbench.changed_link", whose=follows)
-    if held.get("scope"):
-        return whose
-    if not held.get("value") and (said := getattr(field, "left_empty", "")):
-        return str(said)
-    return t("manager.workbench.app_default", app=app_name)
+def _facts(field: Any) -> str:
+    """What a setting may be and what it is without a value, for the end of its help line:
+    `0 to 2, default 1`. Nothing for a setting that has neither."""
+    range_said = ""
+    if getattr(field, "type", "") in TYPED:
+        range_said = settings_page.range_short(getattr(field, "minimum", None),
+                                               getattr(field, "maximum", None))
+    default = _said_value(field, str(field.default or "")) if field.default else ""
+    if range_said and default:
+        return t("manager.workbench.help_range_default", range=range_said, value=default)
+    if default:
+        return t("manager.workbench.help_default", value=default)
+    return range_said
+
+
+def _with_facts(said: str, facts: str) -> str:
+    """The help line with `facts` closing it as a sentence of its own."""
+    if not facts:
+        return said
+    said = said.rstrip()
+    if not said:
+        return t("manager.workbench.help_facts_only", facts=facts)
+    if said[-1] not in ".!?":
+        said += "."
+    return t("manager.workbench.help_facts", said=said, facts=facts)
 
 
 def _same_value(field: Any, one: str, other: str) -> bool:
@@ -346,14 +342,6 @@ def _leaves(held: dict, field: Any) -> str:
     return str(field.default or "")
 
 
-def _follows(held: dict, field: Any, app_name: str) -> tuple[str, str]:
-    """`_leaves` as somebody reads it, and whose it is."""
-    where = held.get("fallback_scope") or ""
-    whose = (t(CAME_FROM.get(where, "manager.workbench.inherited")) if where
-             else t("manager.workbench.app_default", app=app_name))
-    return _said_value(field, _leaves(held, field)), whose
-
-
 def _scope_word(where: str) -> str:
     """Whose value a scope falls back to, as a tag: Default where the program picks it."""
     return {"launcher": t("manager.workbench.launcher"), "folder": t("word.game"),
@@ -365,16 +353,16 @@ def _matches(held: dict, field: Any) -> bool:
     return bool(held.get("set_here")) and not held.get("varies") and not _changed(held, field)
 
 
-def _same_mark(held: dict, field: Any, app_name: str) -> Callable[[], None] | None:
-    """The quiet note on a value this scope holds that matches what it would follow, with
-    whose that is on hover: it stays until it is reset."""
+def _same_mark(held: dict, field: Any) -> Callable[[], None] | None:
+    """The quiet note on a value this scope holds that matches what it would follow: it
+    stays until it is reset."""
     if not _matches(held, field):
         return None
     where = held.get("fallback_scope") or ""
     word = t({"launcher": "manager.workbench.matches_launcher",
               "folder": "manager.workbench.matches_game"}.get(
                   where, "manager.workbench.matches_default"))
-    return panel.state(word, "off", hint=_follows(held, field, app_name)[1])
+    return panel.state(word, "off")
 
 
 def _default_tag(held: dict, field: Any, option: dict[str, Any]) -> dict[str, str]:
@@ -399,14 +387,29 @@ def _changed(held: dict, field: Any) -> bool:
     return not _same_value(field, str(held.get("value") or ""), _leaves(held, field))
 
 
+# Whose value a reset goes back to, as the end of "Reset to 1, the launcher's value".
+RESETS_TO = {
+    "launcher": "manager.workbench.reset_launcher",
+    "folder": "manager.workbench.reset_game",
+    "entry": "manager.workbench.reset_table",
+}
+
+
 def _clear_hint(held: dict, field: Any, app_name: str) -> str:
-    """What resetting it will leave in force, and whose value that is."""
-    value, whose = _follows(held, field, app_name)
+    """What resetting it will leave in force: the value, and whose it is where another
+    level's."""
+    where = held.get("fallback_scope") or ""
+    value = _said_value(field, _leaves(held, field))
     if value and not _leaves(held, field) and getattr(field, "blank", ""):
-        return t("manager.workbench.back_link_author")
+        return t("manager.workbench.reset_author")
+    if where in RESETS_TO:
+        whose = t(RESETS_TO[where])
+        if value:
+            return t("manager.workbench.reset_to_from", value=value, whose=whose)
+        return t("manager.workbench.reset_to", value=whose)
     if value:
-        return t("manager.workbench.back_to", value=value, whose=whose)
-    return t("manager.workbench.back_link", whose=whose)
+        return t("manager.workbench.reset_to", value=value)
+    return t("manager.workbench.reset_to", value=t("manager.workbench.app_default", app=app_name))
 
 
 def _beside(mark_of: Callable[[], Callable[[], None] | None], held: dict, field: Any,
@@ -834,6 +837,7 @@ async def _setting_entries(context: dict[str, Any],
     def part(field: Any) -> Part:
         held = rows.setdefault(field.key, dict(values.get(field.key) or {}))
         option = _as_option(field)
+        option["range_beneath"] = True
         if tags := _default_tag(held, field, option):
             option["tags"] = tags
         reported = getattr(field, "reported", ())
@@ -849,7 +853,7 @@ async def _setting_entries(context: dict[str, Any],
                                 by_value=bool(context.get("by_value"))),
                         *(None if held.get("varies")
                           else _mark_for(held, scope, field, offered(field))
-                          or _same_mark(held, field, app_name)
+                          or _same_mark(held, field)
                           for _, held, field in parts))
 
     entries: list[tuple[Any, Any]] = []
@@ -898,10 +902,12 @@ async def _setting_entries(context: dict[str, Any],
                 paired=[(held, one) for _, held, one in parts[1:]])))
             if pair:
                 said = pair.note
+                facts = _each_said([(one, _facts(one)) for one in members], len(members))
             else:
                 said = (getattr(field, "help", "") if curated else "") or field.description
-            if said:
-                entries.append(panel.note(said))
+                facts = _facts(field)
+            if said or facts:
+                entries.append(panel.note(_with_facts(said, facts)))
         entries.extend((after or {}).get(title, ()))
     return entries
 
