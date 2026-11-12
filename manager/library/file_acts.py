@@ -241,6 +241,41 @@ async def _noted_after(after: After, game_id: str) -> None:
     await after([game_id])
 
 
+def _match_verb(library: Any, matchable: list[File], inventory: str,
+                after: After) -> panel.Verb | None:
+    """Match to VPS..., a walk over the files whose game is matched, each visited with its
+    match chosen. Dimmed, with why, while none of the games is."""
+    if not matchable:
+        return None
+    ready = [one for one in matchable if one.game.get("vps_id")]
+    by_id = {one.id: one for one in ready}
+
+    async def ask(row: dict[str, Any], place: str) -> Any:
+        from manager.workbench import game_match
+
+        one = by_id[str(row["id"])]
+        return await game_match.ask_a_record(
+            {"library": library, "game": one.game, "game_id": one.game_id},
+            listed_as(one.kind, inventory).listed_as, one.label, one.path,
+            str(one.row.get("matched_to") or ""), place if len(ready) > 1 else "")
+
+    async def write(row: dict[str, Any], answer: Any) -> None:
+        one = by_id[str(row["id"])]
+        await run.io_bound(library.set_asset_source, one.game_id, one.path, str(answer))
+
+    @on_page
+    async def matched() -> None:
+        changed = await walks.each([one.row for one in ready], ask, write,
+                                   t("manager.workbench.save_failed"))
+        if changed:
+            await after(_games_of(ready))
+
+    if not ready:
+        return panel.Verb(t("manager.games.match_vps"), None,
+                          hint=t("manager.workbench.files_unmatched"))
+    return panel.Verb(t("manager.games.match_vps"), matched)
+
+
 # --- media ------------------------------------------------------------------------
 
 
@@ -300,29 +335,6 @@ def media_acts(library: Any, files: list[File], state: dict[str, Any],
                            only=missing or sorted({one.kind for one in applies}))
 
     @on_page
-    async def matched() -> None:
-        ready = [one for one in matchable if one.game.get("vps_id")]
-        by_id = {one.id: one for one in ready}
-
-        async def ask(row: dict[str, Any], place: str) -> Any:
-            from manager.workbench import game_match
-
-            one = by_id[str(row["id"])]
-            return await game_match.ask_a_record(
-                {"library": library, "game": one.game, "game_id": one.game_id},
-                listed_as(one.kind, vps_kinds.MEDIA).listed_as, one.label, one.path,
-                str(one.row.get("matched_to") or ""), place if len(ready) > 1 else "")
-
-        async def write(row: dict[str, Any], answer: Any) -> None:
-            one = by_id[str(row["id"])]
-            await run.io_bound(library.set_asset_source, one.game_id, one.path, str(answer))
-
-        changed = await walks.each([one.row for one in ready], ask, write,
-                                   t("manager.workbench.save_failed"))
-        if changed:
-            await after(_games_of(ready))
-
-    @on_page
     async def turn(way: str) -> None:
         await media_rotate.ask(rows, way, state, partial(after, _games_of(files)))
 
@@ -368,11 +380,8 @@ def media_acts(library: Any, files: list[File], state: dict[str, Any],
         offered.append(panel.Verb(t("manager.media_fill.get_missing"), get_missing))
     if recordable and (recording := recorder.verb(library, record)):
         offered.append(recording)
-    if matchable:
-        waiting = not any(one.game.get("vps_id") for one in matchable)
-        offered.append(panel.Verb(t("manager.games.match_vps"), None if waiting else matched,
-                                  hint=t("manager.workbench.files_unmatched") if waiting
-                                  else ""))
+    if matching := _match_verb(library, matchable, vps_kinds.MEDIA, after):
+        offered.append(matching)
     if len(files) > 1 and media_rotate.turnable(rows):
         offered.append(panel.Verb(t("manager.media_rotate.rotate"), choices=tuple(
             (t(word), partial(turn, way)) for way, word in media_rotate.MENU)))
@@ -415,6 +424,8 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
                and one.table and one.tier == media_ownership.TABLE]
     taken = {one.id for one in scripts}
     removable = [one for one in files if one.present and one.path and one.id not in taken]
+    matchable = [one for one in files if one.present and one.path
+                 and listed_as(one.kind, vps_kinds.ASSET) is not None]
 
     async def open_slot(one: File, done: Callable[[], Awaitable[Any]], place: str) -> Any:
         context = {"library": library, "game_id": one.game_id, "lens": one.table,
@@ -503,6 +514,8 @@ def asset_acts(library: Any, files: list[File], state: dict[str, Any],
         offered.append(panel.Verb(t("manager.files.add"), add_roms))
         if len(roms) == 1 and len(files) == 1:
             offered.append(panel.Verb(t("manager.files.replace"), replace_rom))
+    if matching := _match_verb(library, matchable, vps_kinds.ASSET, after):
+        offered.append(matching)
     offered.extend(file_move.verbs_for(library, files, core.ASSET, after))
     if removable:
         offered.append(panel.Verb(t("word.remove"), remove, danger=True))

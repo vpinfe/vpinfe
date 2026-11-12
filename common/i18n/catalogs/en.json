@@ -5100,6 +5100,7 @@
   "manager.workbench.match_vps": "Match to VPS…",
   "manager.workbench.match_vps.help": "Opens a search to match this game to VPS",
   "manager.workbench.match_release.help": "Opens a search to match this table to a VPS release",
+  "manager.workbench.match_auto.help": "Matched because the file is named exactly as this VPS file",
   "manager.workbench.matched": "Matched to {told}",
   "manager.workbench.delisted_file": "Matched to a file the spreadsheet no longer lists",
   "manager.workbench.matched_file": "Matched to a published file",
@@ -6649,6 +6650,11 @@
     "one": "1 table matched to its VPS release",
     "other": "{count:n} tables matched to their VPS releases"
   },
+  "said.job_tied_roms": {
+    "one": "1 ROM matched to its VPS file",
+    "other": "{count:n} ROMs matched to their VPS files"
+  },
+  "said.job_tied_both": "{tables}, {roms}",
   "said.job_auto_matched": "{changed:n} matched, {unmatched:n} still unmatched",
   "said.job_info_upgraded": "{upgraded:n} upgraded, {current:n} already current, {failed:n} failed",
   "said.job_info_restored": "{restored:n} restored, {failed:n} failed",

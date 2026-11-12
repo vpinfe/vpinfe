@@ -836,7 +836,8 @@ def set_table_source(game: Game, filename: str, vps_file_id: str) -> dict[str, A
 
 def set_asset_source(game: Game, path: str, vps_file_id: str) -> dict[str, Any]:
     """Record that somebody says the file at this path is that VPS record, or take it
-    back. The assets ledger's twin of `set_table_source`.
+    back, which is kept as the person's answer so a sweep does not match the file again.
+    The assets ledger's twin of `set_table_source`.
 
     No `host_item_id`: that rule governs what a caller may assert over HTTP, and a
     person pointing at a record is not claiming to know which of its files they hold.
@@ -857,13 +858,8 @@ def set_asset_source(game: Game, path: str, vps_file_id: str) -> dict[str, Any]:
     else:
         # Unbinding takes back the claim and nothing else - the host that placed the
         # file and the hash it published are facts about the file, not about the match.
-        ties.untie(source)
-    if source:
-        entry[SOURCE_KEY] = source
-    else:
-        # A line with no source is the person's own and the next scan lists it again,
-        # so dropping it here and keeping an empty one come to the same file.
-        entries.pop(key, None)
+        ties.decline(source)
+    entry[SOURCE_KEY] = source
 
     persist_game_meta(game, config)
     game.meta_config = config

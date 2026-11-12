@@ -26,7 +26,7 @@ from common.i18n import t
 from manager.backups import backup_rows
 from manager.devices import send_to_device
 from manager.extensions import ext_verbs
-from manager.kit import confirm, game_tables, offload, panel, stars, undo, verbs
+from manager.kit import confirm, game_tables, offload, panel, stars, undo, verbs, walks
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
 from manager.library import collection_adds, getting_file, media_fill, vps_match
@@ -369,6 +369,51 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
 
         undo.offer(said, put_back)
 
+    games_by_id = {str(one.get("id")): one for one in library.games}
+    matched_to_vps = [item for item in targets
+                      if (games_by_id.get(item.game_id) or {}).get("vps_id")]
+
+    @on_page
+    async def match_releases() -> None:
+        """Each selected table of a matched game in the release picker, one at a time. The
+        picker opens on the table's own release, so a matched table can be kept (Skip),
+        changed or cleared."""
+        from manager.workbench import game_match
+
+        by_row = {id(item.table): item for item in matched_to_vps}
+        held: dict[str, list[dict[str, Any]]] = {}
+        changed: list[str] = []
+
+        async def ask(row: dict[str, Any], place: str) -> Any:
+            item = by_row[id(row)]
+            try:
+                if item.game_id not in held:
+                    held[item.game_id] = await offload.io(library.tables_for, item.game_id)
+            except Exception as error:
+                ui.notify(t("manager.vps_match.set_failed"), caption=why(error), type="negative")
+                return walks.SKIPPED
+            table = next((one for one in held[item.game_id] if str(one.get("id")) == item.id),
+                         None)
+            if table is None:
+                return walks.SKIPPED
+            context = {"library": library, "game": games_by_id[item.game_id],
+                       "game_id": item.game_id}
+            return await game_match.ask_a_release(
+                context, table, place if len(matched_to_vps) > 1 else "")
+
+        async def write(row: dict[str, Any], answer: Any) -> None:
+            item = by_row[id(row)]
+            await run.io_bound(library.set_table_source, item.game_id, item.id, str(answer))
+            changed.append(item.game_id)
+
+        try:
+            await walks.each([item.table for item in matched_to_vps], ask, write,
+                             t("manager.vps_match.set_failed"))
+        finally:
+            if changed:
+                await after(games_of([item for item in matched_to_vps
+                                      if item.game_id in changed]), False)
+
     @on_page
     async def extract() -> None:
         applies = [item for item in targets if not game_tables.runs_its_own_script(item.table)]
@@ -514,6 +559,10 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
     if any(hidden):
         offered.append(panel.Verb(t("manager.games.unhide"), partial(hide, False),
                                   group=DETAILS))
+    offered.append(panel.Verb(
+        t("manager.games.match_vps"), match_releases if matched_to_vps else None,
+        hint="" if matched_to_vps else t("manager.workbench.releases_unmatched"),
+        group=DETAILS))
     if not all(game_tables.runs_its_own_script(item.table) for item in targets):
         offered.append(panel.Verb(t("manager.games.extract_script"), extract, group=FILES))
     if any(game_tables.can_swap(item.table) for item in targets):

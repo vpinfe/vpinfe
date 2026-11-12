@@ -15,7 +15,7 @@ from nicegui import run, ui
 
 from common.config import path_state
 from common.failures import why
-from common.games import asset_registry
+from common.games import asset_registry, identity_claims
 from common.games import file_move as moved_files
 from common.games.asset_resolver import VPX_ASSET_KINDS
 from common.i18n import t
@@ -240,12 +240,17 @@ def _asset_said(context: dict[str, Any], tier: str) -> str:
     return ""
 
 
-def _match_row(said: str) -> None:
-    """Which VPS record the file is, or that none has been said."""
+def _match_row(said: str, auto: bool = False) -> None:
+    """Which VPS record the file is, or that none has been said. `auto` draws the chip for
+    a match VPinFE made from the file's name."""
     with ui.row().classes("items-center gap-1 no-wrap w-full"):
         if said:
             ui.icon(verbs.MATCH).classes("manager-have")
             ui.label(said).classes("truncate")
+            if auto:
+                ui.label(t("manager.game_tables.auto_matched")) \
+                    .tooltip(t("manager.workbench.match_auto.help")) \
+                    .classes("manager-tier manager-tier--on")
         else:
             ui.icon("link_off").classes("manager-help")
             ui.label(t("manager.workbench.not_matched")).classes("manager-help truncate")
@@ -318,7 +323,7 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
             if glass and not glass["damaged"]:
                 _backglass_chips(glass)
         if listed:
-            _match_row(matched)
+            _match_row(matched, row.get("matched_by") == identity_claims.EXACT)
         if glass and glass["damaged"]:
             _alert(t("manager.backglass.damaged"), None)()
         said = _asset_said(context, tier)

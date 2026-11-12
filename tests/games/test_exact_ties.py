@@ -1,4 +1,8 @@
-"""Ties VPinFE makes itself: a file whose authors and version name exactly one release."""
+"""Protects: (a) a person's match or clear on a file is never overwritten by a sweep.
+
+Ties VPinFE makes itself: a table whose authors and version name exactly one release, and a
+ROM zip named exactly as one ROM of its game.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ from typing import Any
 from unittest.mock import patch
 
 from common.games import exact_ties, identity_claims, ties
-from common.games.game_metadata import set_table_source, table_source
+from common.games.game_metadata import set_asset_source, set_table_source, table_source
 from common.runtime import jobs as job_registry
 from tests.support.library import TempTree, fake_game, write_game
 from tests.support.saved import saved_record
@@ -34,6 +38,12 @@ CATALOG = [{
         {"id": "rel_future", "version": "4.0", "tableFormat": "FP", "authors": ["Fay"]},
         {"id": "rel_team", "version": "5.0", "authors": ["VPinWorkshop", "Gus"]},
         {"id": "rel_nobody", "version": "6.0"},
+    ],
+    "romFiles": [
+        {"id": "rom_one", "version": "ss_l7"},
+        {"id": "rom_two", "version": "ss_l8"},
+        {"id": "rom_dup_a", "version": "ss_dup"},
+        {"id": "rom_dup_b", "version": "SS_DUP.zip"},
     ],
 }]
 
@@ -86,7 +96,7 @@ class ExactReleaseTests(unittest.TestCase):
         self.assertEqual("", self._find("4.0", ["Fay"]))
 
 
-class TieTheLibraryTests(TempTree):
+class _Library(TempTree):
     def setUp(self) -> None:
         super().setUp()
         job_registry.reset_for_tests()
@@ -114,6 +124,8 @@ class TieTheLibraryTests(TempTree):
         written = saved_record(self.folder / f"{FOLDER}.info")
         return written["tables"][table_id]
 
+
+class TieTheLibraryTests(_Library):
     def test_a_sure_table_is_tied_and_records_the_version_listed(self) -> None:
         self.assertEqual(1, exact_ties.tie_library())
 
@@ -182,7 +194,7 @@ class TieTheLibraryTests(TempTree):
             self.assertEqual(0, exact_ties.tie_library())
 
     def test_one_game_failing_does_not_stop_the_rest(self) -> None:
-        with patch("common.games.exact_ties.tie_game", side_effect=[OSError("busy"), 1]):
+        with patch("common.games.exact_ties.tie_game", side_effect=[OSError("busy"), (1, 0)]):
             with patch("common.games.exact_ties.all_games",
                        return_value=[self.game, self.game]), \
                     self.assertLogs("vpinfe.common.games.exact_ties", level="WARNING"):
@@ -288,6 +300,84 @@ class TieTests(unittest.TestCase):
         self.assertTrue(ties.declined(declined))
         self.assertFalse(ties.declined({"vps_file_id": "r", "confirmed_by": "user"}))
         self.assertFalse(ties.declined({}))
+
+
+ROM_ONE = "pinmame/roms/ss_l7.zip"
+
+
+class TieTheRomsTests(_Library):
+    """A ROM zip is tied by its name, in the same pass as the tables."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for name in ("ss_l7.zip", "SS_L8.ZIP", "ss_dup.zip", "other.zip", "ss_l7.nv"):
+            rom = self.folder / "pinmame" / "roms" / name
+            rom.parent.mkdir(parents=True, exist_ok=True)
+            rom.write_bytes(b"rom")
+
+    def _ledger(self) -> dict:
+        written = saved_record(self.folder / f"{FOLDER}.info")
+        return {key: entry.get("source") for key, entry in written.get("assets", {}).items()}
+
+    def test_a_zip_named_as_one_vps_rom_is_tied_with_the_tables(self) -> None:
+        self.assertEqual(3, exact_ties.tie_library())
+
+        ledger = self._ledger()
+        self.assertEqual({"vps_file_id": "rom_one", "confirmed_by": identity_claims.EXACT,
+                          "vps_version": "ss_l7"}, ledger[ROM_ONE])
+        self.assertEqual("rom_two", ledger["pinmame/roms/SS_L8.ZIP"]["vps_file_id"])
+
+    def test_a_name_two_vps_roms_share_or_none_lists_is_left_for_a_person(self) -> None:
+        exact_ties.tie_library()
+
+        self.assertNotIn("pinmame/roms/ss_dup.zip", self._ledger())
+        self.assertNotIn("pinmame/roms/other.zip", self._ledger())
+        self.assertNotIn("pinmame/roms/ss_l7.nv", self._ledger())
+
+    def test_a_rom_a_person_matched_is_not_changed(self) -> None:
+        set_asset_source(self.game, ROM_ONE, "rom_two")
+
+        exact_ties.tie_library()
+
+        self.assertEqual({"vps_file_id": "rom_two", "confirmed_by": identity_claims.USER,
+                          "vps_version": "ss_l8"}, self._ledger()[ROM_ONE])
+
+    def test_a_rom_a_person_took_the_match_back_from_is_not_tied_again(self) -> None:
+        exact_ties.tie_library()
+        self.game.meta_config = saved_record(self.folder / f"{FOLDER}.info")
+        set_asset_source(self.game, ROM_ONE, "")
+
+        self.assertEqual(0, exact_ties.tie_library())
+        self.assertEqual({"vps_file_id": "", "confirmed_by": identity_claims.USER},
+                         self._ledger()[ROM_ONE])
+
+    def test_two_zips_whose_names_differ_only_in_case_are_left_for_a_person(self) -> None:
+        (self.folder / "pinmame" / "roms" / "SS_L7.zip").write_bytes(b"rom")
+        names = {path.name for path in (self.folder / "pinmame" / "roms").iterdir()}
+        if "SS_L7.zip" not in names or "ss_l7.zip" not in names:
+            self.skipTest("this file system keeps one file for both names")
+
+        exact_ties.tie_library()
+
+        self.assertNotIn(ROM_ONE, self._ledger())
+
+    def test_a_ledger_entry_that_is_not_a_record_is_replaced_by_the_tie(self) -> None:
+        info = copy.deepcopy(self.info)
+        info["assets"] = {ROM_ONE: None}
+        self.game.meta_config = info
+        (self.folder / f"{FOLDER}.info").write_text(json.dumps(info))
+
+        exact_ties.tie_library()
+
+        self.assertEqual("rom_one", self._ledger()[ROM_ONE]["vps_file_id"])
+
+    def test_the_job_says_how_many_tables_and_roms_it_tied(self) -> None:
+        exact_ties.tie_library()
+
+        [job] = [one for one in job_registry.recent()
+                 if one.kind == job_registry.KIND_LIBRARY_SCAN]
+        self.assertEqual("1 table matched to its VPS release, "
+                         "2 ROMs matched to their VPS files", job.detail)
 
 
 if __name__ == "__main__":

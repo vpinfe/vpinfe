@@ -55,7 +55,7 @@ ROM_KIND = "rom"
 # these has to ask which shape it got.
 _ABSENT = {"binding": "none", "present": False, "table": "", "table_file": "",
            "file": None, "path": None, "origin": None, "matched_to": None,
-           "serves": None}
+           "matched_by": None, "serves": None}
 
 _BY_BINDING = {asset_resolver.BINDING_DEDICATED: "table",
                asset_resolver.BINDING_SHARED: "game",
@@ -130,6 +130,7 @@ def _pack_row(game_id: str, row: dict, kind: str, game_dir: Path, pack: str, tab
             "binding": "game", "present": True, "file": Path(pack).name, "path": pack,
             "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
             "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+            "matched_by": asset_origin.basis_of(recorded, game_dir, path) or None,
             "serves": tables}
 
 
@@ -170,7 +171,8 @@ def _held(item: dict, kind: str, base: dict, game_dir: Path, tables: list[dict],
             "file": item["file"],
             "path": asset_origin.path_of(game_dir, path) or None,
             "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
-            "matched_to": asset_origin.match_of(recorded, game_dir, path) or None}
+            "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+            "matched_by": asset_origin.basis_of(recorded, game_dir, path) or None}
 
 
 def rom_users(game: Any) -> dict[str, list[str]]:
@@ -209,6 +211,7 @@ def _rom_rows(game_id: str, row: dict, game: Any, game_dir: Path, recorded: dict
                       "path": asset_origin.path_of(game_dir, path) or None,
                       "origin": asset_origin.origin_of(hosts, game_dir, path) or None,
                       "matched_to": asset_origin.match_of(recorded, game_dir, path) or None,
+                      "matched_by": asset_origin.basis_of(recorded, game_dir, path) or None,
                       "serves": len(users), "users": users,
                       "size_bytes": os.path.getsize(path)})
     return found

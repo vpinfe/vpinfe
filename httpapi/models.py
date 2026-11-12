@@ -2202,6 +2202,8 @@ class AssetSlot(ApiModel):
     path: str | None = None
     origin: str | None = None
     matched_to: str | None = None
+    # Who said so: `user`, `declared`, `construction` or `exact`. Null where `matched_to` is.
+    matched_by: str | None = None
     # The ids of the tables that read this file. Set on a ROM row, where one folder holds
     # several files and each is wanted by some tables and not others; empty elsewhere.
     users: list[str] = Field(default_factory=list)

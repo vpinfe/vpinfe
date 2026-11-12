@@ -91,6 +91,7 @@ AREA_OF = {module: area for area, modules in AREAS.items() for module in modules
 UPWARD = {
     ("games", "all_settings"),
     ("file_acts", "game_match"),
+    ("game_acts", "game_match"),
     ("launchers", "all_settings"),
     ("ext_row", "core"),
 }

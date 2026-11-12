@@ -80,7 +80,7 @@ def compare() -> bool:
     if tied is None:
         return False
     if tied:
-        logger.info("Tied %s tables to the one release that fits them", tied)
+        logger.info("Tied %s files to the one VPS record that fits them", tied)
     try:
         library_ops.recount_vps_state()
     except Exception:

@@ -266,7 +266,6 @@ tests/games/test_directb2s_displays.py
 tests/games/test_directb2s_parser.py
 tests/games/test_dmd_frame.py
 tests/games/test_em_scores.py
-tests/games/test_exact_ties.py
 tests/games/test_file_move.py
 tests/games/test_game_identity.py
 tests/games/test_game_metadata.py

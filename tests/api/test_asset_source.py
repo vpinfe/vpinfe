@@ -17,6 +17,7 @@ from unittest.mock import patch
 from starlette.testclient import TestClient
 
 import httpapi
+from common.games import asset_origin
 from common.games.game_metadata import set_asset_source
 from common.games.info_file import INFO_SCHEMA
 from tests.support.library import TempTree, fake_game, write_game
@@ -103,15 +104,26 @@ class AssetSourceTests(TempTree):
         self._bind(BACKGLASS, "")
 
         self.assertEqual(self._ledger()[BACKGLASS]["source"],
-                         {"host": "vpinmediadb", "hash": "d41d8c"})
+                         {"host": "vpinmediadb", "hash": "d41d8c",
+                          "vps_file_id": "", "confirmed_by": "user"})
 
-    def test_unbinding_a_file_nothing_else_knew_leaves_no_entry(self) -> None:
-        """An entry holding nothing would read as "examined, found nothing", which is
-        a state only a matcher can produce."""
+    def test_unbinding_is_kept_as_the_persons_answer_so_a_sweep_leaves_the_file(self) -> None:
         self._bind("medias/wheel.png", RECORD)
         self._bind("medias/wheel.png", "")
 
-        self.assertNotIn("medias/wheel.png", self._ledger())
+        self.assertEqual({"vps_file_id": "", "confirmed_by": "user"},
+                         self._ledger()["medias/wheel.png"]["source"])
+
+    def test_a_file_row_says_who_matched_it_and_nobody_where_it_is_not(self) -> None:
+        folder = str(self.folder)
+        path = self.folder / BACKGLASS
+        self._bind(BACKGLASS, RECORD)
+        self.assertEqual("user", asset_origin.basis_of(
+            asset_origin.sources(folder), folder, path))
+
+        self._bind(BACKGLASS, "")
+        self.assertEqual("", asset_origin.basis_of(
+            asset_origin.sources(folder), folder, path))
 
     def test_a_windows_path_keys_the_same_entry(self) -> None:
         """The ledger is forward-slashed wherever it was written, so the same file sent

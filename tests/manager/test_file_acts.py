@@ -108,8 +108,8 @@ class AssetFiles(unittest.TestCase):
         made = _asset_acts(_asset("a"))
 
         self.assertEqual([one.label for one in made],
-                         [t("manager.files.replace"), t("manager.file_move.choose"),
-                          t("word.remove")])
+                         [t("manager.files.replace"), t("manager.games.match_vps"),
+                          t("manager.file_move.choose"), t("word.remove")])
         self.assertTrue(made[-1].danger)
 
     def test_a_kind_without_acts_has_no_menu(self) -> None:
@@ -125,7 +125,8 @@ class AssetFiles(unittest.TestCase):
     def test_a_loose_asset_can_be_removed_but_not_placed(self) -> None:
         made = _asset_acts(_asset("a", binding="orphaned"))
 
-        self.assertEqual([one.label for one in made], [t("word.remove")])
+        self.assertEqual([one.label for one in made],
+                         [t("manager.games.match_vps"), t("word.remove")])
 
 
 class HeldFiles(unittest.TestCase):

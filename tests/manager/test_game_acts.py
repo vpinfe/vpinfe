@@ -147,20 +147,21 @@ class ForATable(unittest.TestCase):
     def test_a_table_that_is_not_the_default_can_be_made_it(self) -> None:
         verbs = _acts(_table("a"), _table("a"), _table("b", default=True))
 
-        self.assertEqual(["Make Default", "Hide", "Extract Script"], _labels(verbs))
+        self.assertEqual(["Make Default", "Hide", "Match to VPS…", "Extract Script"],
+                         _labels(verbs))
 
     def test_the_default_of_several_can_be_locked_and_not_made_the_default(self) -> None:
         one = _table("a", default=True)
         verbs = _acts(one, one, _table("b"))
 
         self.assertNotIn("Make Default", _labels(verbs))
-        self.assertEqual(["Hide", "Extract Script"], _labels(verbs)[1:])
-        self.assertEqual(3, len(verbs))
+        self.assertEqual(["Hide", "Match to VPS…", "Extract Script"], _labels(verbs)[1:])
+        self.assertEqual(4, len(verbs))
 
     def test_a_hidden_table_offers_to_unhide_and_cannot_be_made_the_default(self) -> None:
         verbs = _acts(_table("a", hidden=True))
 
-        self.assertEqual(["Unhide", "Extract Script"], _labels(verbs))
+        self.assertEqual(["Unhide", "Match to VPS…", "Extract Script"], _labels(verbs))
 
     def test_a_missing_table_can_be_forgotten_as_a_danger(self) -> None:
         verbs = _acts(_table("a", available=False, absent_since="2026-10-01"),
@@ -220,6 +221,129 @@ class HidingSeveralTables(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([("afm", "a", True), ("afm", "a", False)],
                          [call.args for call in library.set_table_hidden.call_args_list])
+
+
+class MatchingReleases(unittest.IsolatedAsyncioTestCase):
+    def _library(self) -> MagicMock:
+        library = _library(_game("afm", vps_id="v1"), _game("medusa"), _game("pz", vps_id="v2"))
+        library.tables_for.side_effect = lambda game_id: [
+            _table("a", game_id, source={"vps_file_id": "bound"}), _table("b", game_id),
+            _table("p", game_id)]
+        return library
+
+    async def walk(self, library: Any, tables: list[dict[str, Any]],
+                   answers: list[Any]) -> list[tuple[str, str]]:
+        """Run the verb with the picker answering from `answers`; what it was shown, as
+        (table id, position)."""
+        shown: list[tuple[str, str]] = []
+        after = AsyncMock()
+
+        async def inline(call, *args):
+            return call(*args)
+
+        async def picker(_context, table, place=""):
+            shown.append((str(table["id"]), place))
+            return answers.pop(0)
+
+        with patch.object(game_acts.run, "io_bound", inline), \
+                patch("manager.workbench.game_match.ask_a_release", picker), \
+                patch.object(game_acts.ui, "notify"):
+            verbs = game_acts.table_acts(
+                library, [game_acts.Target(one["game_id"], "G", one, tables) for one in tables],
+                after, {}, None)
+            match = next(one for one in verbs if one.label == "Match to VPS…")
+            with _PAGE:
+                assert match.run is not None
+                await match.run()
+        self.after = after
+        return shown
+
+    def test_it_is_dimmed_with_a_reason_where_no_selected_game_is_matched(self) -> None:
+        verbs = _several(_table("m", "medusa"), library=self._library())
+        match = next(one for one in verbs if one.label == "Match to VPS…")
+
+        self.assertIsNone(match.run)
+        self.assertTrue(match.hint)
+
+    async def test_tables_of_unmatched_games_are_left_out_and_the_rest_are_numbered(self) -> None:
+        tables = [_table("a"), _table("b", "medusa"), _table("p", "pz")]
+
+        shown = await self.walk(self._library(), tables, [None, None])
+
+        self.assertEqual([("a", "1 of 2"), ("p", "2 of 2")], shown)
+
+    async def test_a_matched_table_is_shown_with_the_match_it_holds(self) -> None:
+        library = self._library()
+        seen: list[Any] = []
+
+        async def inline(call, *args):
+            return call(*args)
+
+        async def picker(_context, table, place=""):
+            seen.append(table["source"])
+            return None
+
+        with patch.object(game_acts.run, "io_bound", inline), \
+                patch("manager.workbench.game_match.ask_a_release", picker):
+            verbs = game_acts.table_acts(
+                library, [game_acts.Target("afm", "G", _table("a"), [_table("a")])],
+                _after, {}, None)
+            match = next(one for one in verbs if one.label == "Match to VPS…")
+            with _PAGE:
+                assert match.run is not None
+                await match.run()
+
+        self.assertEqual([{"vps_file_id": "bound"}], seen)
+
+    async def test_skip_writes_nothing_and_an_answer_or_a_clear_is_written(self) -> None:
+        library = self._library()
+        tables = [_table("a"), _table("b"), _table("p", "pz")]
+
+        await self.walk(library, tables, [None, "new", ""])
+
+        self.assertEqual([("afm", "b", "new"), ("pz", "p", "")],
+                         [call.args for call in library.set_table_source.call_args_list])
+        self.after.assert_awaited_once_with(["afm", "pz"], False)
+
+    async def test_stop_ends_the_walk_and_leaves_the_rest(self) -> None:
+        library = self._library()
+        tables = [_table("a"), _table("b"), _table("p", "pz")]
+
+        shown = await self.walk(library, tables, ["new", game_acts.walks.STOPPED])
+
+        self.assertEqual(["a", "b"], [one for one, _place in shown])
+        self.assertEqual([("afm", "a", "new")],
+                         [call.args for call in library.set_table_source.call_args_list])
+
+    async def test_one_matched_table_is_shown_without_a_position(self) -> None:
+        shown = await self.walk(self._library(), [_table("a"), _table("b", "medusa")], [None])
+
+        self.assertEqual([("a", "")], shown)
+
+    async def test_a_game_whose_tables_cannot_be_read_is_skipped_and_the_rest_are_put_right(
+            self) -> None:
+        library = self._library()
+        listed = library.tables_for.side_effect
+
+        def tables_for(game_id: str) -> Any:
+            if game_id == "pz":
+                raise OSError("gone")
+            return listed(game_id)
+
+        library.tables_for.side_effect = tables_for
+        tables = [_table("a"), _table("p", "pz")]
+
+        shown = await self.walk(library, tables, ["new"])
+
+        self.assertEqual([("a", "1 of 2")], shown)
+        self.assertEqual([("afm", "a", "new")],
+                         [call.args for call in library.set_table_source.call_args_list])
+        self.after.assert_awaited_once_with(["afm"], False)
+
+    async def test_a_walk_with_nothing_written_puts_nothing_right(self) -> None:
+        await self.walk(self._library(), [_table("a")], [None])
+
+        self.after.assert_not_awaited()
 
 
 class DeletingGamesFromDisk(unittest.IsolatedAsyncioTestCase):

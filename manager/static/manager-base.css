@@ -4225,7 +4225,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .manager-source-row--entry .manager-help {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 
 /* The one picked, which is a different fact from the one under the pointer: accent is

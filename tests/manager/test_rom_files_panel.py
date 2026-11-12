@@ -104,11 +104,13 @@ class TheActsOnRomFiles(unittest.TestCase):
         self.assertTrue(file_acts.asset_has_acts(_rom("tom_13.zip", ["t1"])))
 
     def test_one_file_can_be_added_to_replaced_or_removed(self) -> None:
-        self.assertEqual([t("manager.files.add"), t("manager.files.replace"), t("word.remove")],
+        self.assertEqual([t("manager.files.add"), t("manager.files.replace"),
+                          t("manager.games.match_vps"), t("word.remove")],
                          self._labels([_rom("tom_13.zip", ["t1"])]))
 
     def test_several_files_can_be_added_to_or_removed_but_not_replaced(self) -> None:
-        self.assertEqual([t("manager.files.add"), t("word.remove")],
+        self.assertEqual([t("manager.files.add"), t("manager.games.match_vps"),
+                          t("word.remove")],
                          self._labels([_rom("tom_13.zip", ["t1"]), _rom("tom_10.zip", [])]))
 
     def test_the_file_panel_offers_replace_and_remove(self) -> None:

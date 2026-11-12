@@ -5100,6 +5100,7 @@
   "manager.workbench.match_vps": "Ḿàţçĥ ţö ṼÞŠ…",
   "manager.workbench.match_vps.help": "Öþèñš à šèàřçĥ ţö ɱàţçĥ ţĥîš ĝàɱè ţö ṼÞŠ",
   "manager.workbench.match_release.help": "Öþèñš à šèàřçĥ ţö ɱàţçĥ ţĥîš ţàƀŀè ţö à ṼÞŠ řèŀèàšè",
+  "manager.workbench.match_auto.help": "Ḿàţçĥèđ ƀèçàûšè ţĥè ƒîŀè îš ñàɱèđ èẋàçţŀý àš ţĥîš ṼÞŠ ƒîŀè",
   "manager.workbench.matched": "Ḿàţçĥèđ ţö {told}",
   "manager.workbench.delisted_file": "Ḿàţçĥèđ ţö à ƒîŀè ţĥè šþřèàđšĥèèţ ñö ŀöñĝèř ŀîšţš",
   "manager.workbench.matched_file": "Ḿàţçĥèđ ţö à þûƀŀîšĥèđ ƒîŀè",
@@ -6649,6 +6650,11 @@
     "one": "1 ţàƀŀè ɱàţçĥèđ ţö îţš ṼÞŠ řèŀèàšè",
     "other": "{count:n} ţàƀŀèš ɱàţçĥèđ ţö ţĥèîř ṼÞŠ řèŀèàšèš"
   },
+  "said.job_tied_roms": {
+    "one": "1 ŘÖḾ ɱàţçĥèđ ţö îţš ṼÞŠ ƒîŀè",
+    "other": "{count:n} ŘÖḾš ɱàţçĥèđ ţö ţĥèîř ṼÞŠ ƒîŀèš"
+  },
+  "said.job_tied_both": "{tables}, {roms}",
   "said.job_auto_matched": "{changed:n} ɱàţçĥèđ, {unmatched:n} šţîŀŀ ûñɱàţçĥèđ",
   "said.job_info_upgraded": "{upgraded:n} ûþĝřàđèđ, {current:n} àŀřèàđý çûřřèñţ, {failed:n} ƒàîŀèđ",
   "said.job_info_restored": "{restored:n} řèšţöřèđ, {failed:n} ƒàîŀèđ",

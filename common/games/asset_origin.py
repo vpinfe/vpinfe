@@ -78,6 +78,15 @@ def match_of(recorded: dict[str, dict], game_dir: str | Path,
     return str(source.get("vps_file_id", "") or "")
 
 
+def basis_of(recorded: dict[str, dict], game_dir: str | Path,
+             path: Path | None) -> str:
+    """Who said this file is the record it is matched to (`confirmed_by`), or "" where it
+    is matched to nothing."""
+    if path is None or not match_of(recorded, game_dir, path):
+        return ""
+    return str((recorded.get(_key(Path(game_dir), path)) or {}).get("confirmed_by", "") or "")
+
+
 def path_of(game_dir: str | Path, path: Path | None) -> str:
     """The ledger's key for a file, which is how anything addresses one."""
     return "" if path is None else _key(Path(game_dir), path)

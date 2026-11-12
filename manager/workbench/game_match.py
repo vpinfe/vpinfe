@@ -131,8 +131,9 @@ async def ask_a_record(context: dict[str, Any], listed_as: str, label: str, path
     records, empty, reason = await _listed_by_vps(
         context, t("manager.workbench.kind_unlisted", kind=label), listed_as)
     name = Path(path).name or path
+    game = str(context["game"].get("name") or "") or name
     return await release_match.ask(
-        release_match.Yours(name=name, file=name, facts=label, glyph="inventory_2"),
+        release_match.Yours(name=game, file=name, facts=label, glyph="inventory_2"),
         records, bound=bound, empty=empty, reason=reason, place=place, files=True)
 
 
@@ -155,18 +156,24 @@ async def _listed_by_vps(context: dict[str, Any], none_listed: str,
     return [], none_listed if held else t("manager.workbench.no_vps_data"), ""
 
 
+async def ask_a_release(context: dict[str, Any], table: dict[str, Any],
+                        place: str = "") -> Any:
+    """The release the person picked for this table, "" to take the binding back, or what
+    leaving answers: nothing, or in a walk (`place` is its position) Skip and Stop."""
+    bound = str((table.get("source") or {}).get("vps_file_id") or "")
+    releases, empty, reason = await _listed_by_vps(
+        context, t("manager.workbench.tables_unlisted"))
+    return await release_match.ask(
+        _yours(table), releases, bound=bound,
+        formats=[str(one) for one in table.get("vps_formats") or []],
+        empty=empty, reason=reason, place=place)
+
+
 @on_page
 async def _pick_a_release(context: dict[str, Any], table: dict[str, Any]) -> None:
     """Bind this table to one of the entry's builds, or take the binding back."""
     library = context["library"]
-    bound = str((table.get("source") or {}).get("vps_file_id") or "")
-    releases, empty, reason = await _listed_by_vps(
-        context, t("manager.workbench.tables_unlisted"))
-
-    picked = await release_match.ask(
-        _yours(table), releases, bound=bound,
-        formats=[str(one) for one in table.get("vps_formats") or []],
-        empty=empty, reason=reason)
+    picked = await ask_a_release(context, table)
     if picked is None:
         return
     await _write(context, library.set_table_source, context["game_id"],
