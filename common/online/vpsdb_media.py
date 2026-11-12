@@ -11,7 +11,7 @@ from pathlib import Path
 import requests
 
 from common.atomic_write import staged_for
-from common.games import asset_origin
+from common.games import asset_origin, media_placement
 from common.games.game import Game
 from common.games.info_file import MetaConfig
 from common.media.media_specs import default_media_path
@@ -137,6 +137,29 @@ class VPSMediaDownloader:
         self.playfieldvideoresolution = playfieldvideoresolution
         self.update_downloaded = update_downloaded
 
+    def new_file(self, game_dir: str, kind: str) -> Path:
+        """Where art the game has none of goes: the game folder's tier, named as every other
+        placement of this kind is. A file already on disk is found by its own path, so only
+        what is missing takes this name."""
+        extension = default_media_path(game_dir, kind, self.playfieldvariant).suffix
+        folder = Path(game_dir)
+        return folder / "medias" / media_placement.target_name(
+            self._slot(kind), folder.name, extension, game_dir=folder)
+
+    def _slot(self, kind: str) -> str:
+        return "playfield_fss" if kind == "playfield" and self.playfieldvariant == "fss" else kind
+
+    def held_file(self, game_dir: str, kind: str) -> str | None:
+        """A file the game already has for this kind, at its own tier or the shared default,
+        in any spelling. The caller may know no path for it, as when a folder is first
+        associated, and a second file beside it would hide it."""
+        folder = Path(game_dir)
+        for stem in (folder.name, media_placement.FIXED):
+            found = media_placement.held(folder, self._slot(kind), stem, self.playfieldvariant)
+            if found is not None:
+                return str(found)
+        return None
+
     def file_exists(self, path: str | None) -> bool:
         return bool(path and os.path.exists(path))
 
@@ -217,7 +240,9 @@ class VPSMediaDownloader:
         def process(kind: str, metadata: dict | None, key: str, filename: str | None) -> None:
             if kinds is not None and kind not in kinds:
                 return
-            default_filename = str(default_media_path(game_dir, kind, self.playfieldvariant))
+            if not self.file_exists(filename):
+                filename = self.held_file(game_dir, kind)
+            default_filename = str(self.new_file(game_dir, kind))
             on_disk = filename if filename and self.file_exists(filename) else default_filename
             held = recorded.get(asset_origin.path_of(game_dir, Path(on_disk))) or {}
             ours = str(held.get("host", "") or "") == PUBLISHER

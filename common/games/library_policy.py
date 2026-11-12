@@ -20,6 +20,9 @@ SECTION = "library"
 
 KEYS = ("hidden_media_kinds", "hidden_asset_kinds", "hidden_sources", "hidden_checks")
 
+# The choices of how a new file of a kind is spelled. Not in KEYS: those are lists.
+NAME_KEYS = ("flyer_name", "instruction_card_name")
+
 
 def _as_list(raw: Any) -> list[str]:
     """However the value arrives - a list, or the comma string a parser holds."""
@@ -56,6 +59,25 @@ class LibraryPolicy:
             config.set_value(SECTION, key, _as_list(value))
             config.save()
             return self.get(key)
+
+
+def media_token(kind: str, values: Mapping[str, Any] | None = None) -> str | None:
+    """The token a new file of this kind is spelled with, for the kinds that have a choice
+    and None for the rest. `values` is the policy as the API answers it, and this
+    install's own where left out. An unknown or missing choice is the default."""
+    from common.media.media_specs import NAMED_TOKENS
+
+    tokens = NAMED_TOKENS.get(kind)
+    if tokens is None:
+        return None
+    held = values if values is not None else _config_values()
+    chosen = str(held.get(f"{kind}_name") or "").strip()
+    return tokens.get(chosen) or next(iter(tokens.values()))
+
+
+def _config_values() -> dict[str, Any]:
+    config = get_library_policy()._config()
+    return {key: config.value(SECTION, key) for key in NAME_KEYS}
 
 
 def kept_kinds(values: Mapping[str, Any] | None = None) -> dict[str, set[str]]:

@@ -315,7 +315,7 @@ class BoundsTests(PutAssetCase):
         landed = self.games.put_media("g1", "flyer", self._picture("two.png"),
                                       table_stem="Attack v2", page=2)
 
-        self.assertEqual(landed, "(Flyer 2) Attack v2.png")
+        self.assertEqual(landed, "(GameInfo 2) Attack v2.png")
 
     def test_a_page_added_to_a_downloaded_flyer_is_written_at_the_fixed_name(self) -> None:
         (self.game / "medias").mkdir()
@@ -328,7 +328,7 @@ class BoundsTests(PutAssetCase):
     def test_with_no_page_one_the_first_file_is_page_one(self) -> None:
         landed = self.games.put_media("g1", "flyer", self._picture("three.png"), page=3)
 
-        self.assertEqual(landed, f"(Flyer) {self.game.name}.png")
+        self.assertEqual(landed, f"(GameInfo) {self.game.name}.png")
 
     def test_a_page_past_the_next_one_is_refused(self) -> None:
         self.games.put_media("g1", "flyer", self._picture("one.png"))
@@ -345,7 +345,7 @@ class BoundsTests(PutAssetCase):
                                  replace=False, page=2)
         landed = self.games.put_media("g1", "flyer", self._picture("three.png"),
                                       replace=False, page=3)
-        self.assertEqual(landed, f"(Flyer 3) {self.game.name}.png")
+        self.assertEqual(landed, f"(GameInfo 3) {self.game.name}.png")
 
     def test_a_kind_without_pages_refuses_one(self) -> None:
         with self.assertRaises(ValueError):

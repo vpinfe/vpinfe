@@ -45,6 +45,25 @@ def _kind_label(kind: str) -> str:
     return t(f"asset.kind.{kind}.label")
 
 
+def _blocked_label(one: dict[str, Any]) -> str:
+    """A refused file named by what it is: a media kind by its own word, not "Media"."""
+    media = str(one.get("media_kind") or "")
+    return t(f"media.kind.{media}.label") if media else _kind_label(str(one.get("kind") or ""))
+
+
+def _refused(blocked: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
+    """`(family, names, reason)` with one line for each family and reason, so a cause that
+    stops three files in a section is said once and not three times."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for one in blocked:
+        family = _family(str(one.get("kind") or ""))
+        names = grouped.setdefault((family, str(one.get("reason") or "")), [])
+        label = _blocked_label(one)
+        if label not in names:
+            names.append(label)
+    return [(family, ", ".join(names), reason) for (family, reason), names in grouped.items()]
+
+
 class Sheet:
     """The plan on screen and the answers given to it."""
 
@@ -182,10 +201,8 @@ class Sheet:
         for one in self.plan.get("unclaimed") or ():
             first = (one.get("choices") or [{}])[0]
             into(_family(str(first.get("kind") or "media"))).unclaimed.append(one)
-        for one in self.plan.get("blocked") or ():
-            kind = str(one.get("kind") or "")
-            into(_family(kind)).refused.append(
-                {"name": _kind_label(kind), "reason": str(one.get("reason") or "")})
+        for family, name, reason in _refused(self.plan.get("blocked") or []):
+            into(family).refused.append({"name": name, "reason": reason})
         for one in self.plan.get("left_out") or ():
             into("media" if one.get("reason_key") == "arrival.left_out.doesnt_fit" else "with") \
                 .refused.append({"name": str(one.get("name") or ""),
@@ -194,8 +211,7 @@ class Sheet:
 
     def refusals(self) -> list[str]:
         """What the plan refused, a line each, for a drop that has nothing else to show."""
-        found = [(_kind_label(str(one.get("kind") or "")), str(one.get("reason") or ""))
-                 for one in self.plan.get("blocked") or ()]
+        found = [(name, reason) for _, name, reason in _refused(self.plan.get("blocked") or [])]
         found += [(str(one.get("name") or ""), str(one.get("reason") or ""))
                   for one in self.plan.get("left_out") or ()]
         return [t("manager.drop_sheet.refusal", name=name, reason=reason)

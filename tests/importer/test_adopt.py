@@ -140,7 +140,7 @@ class ImportTests(AdoptCase):
 
         taxi = self.library / "Taxi (Williams 1988)" / "medias"
         landed = sorted(one.name for one in taxi.iterdir())
-        for part in ("(RealDMD)", "(RealColorDMD)", "(InstructionCard)", "(Flyer)"):
+        for part in ("(RealDMD)", "(RealColorDMD)", "(GameHelp)", "(GameInfo)"):
             self.assertTrue(any(one.startswith(part) for one in landed),
                             (part, landed))
 
@@ -371,8 +371,8 @@ class ImportTests(AdoptCase):
             "Doom01.png": ("GameHelp", b"the card")})
 
         self.assertEqual(row["media"], 2)
-        self.assertTrue(any(one.startswith("(Flyer)") for one in landed), landed)
-        self.assertTrue(any(one.startswith("(InstructionCard)") for one in landed), landed)
+        self.assertTrue(any(one.startswith("(GameInfo)") for one in landed), landed)
+        self.assertTrue(any(one.startswith("(GameHelp)") for one in landed), landed)
 
     def test_a_popper_help_set_becomes_pages_in_order_whatever_order_the_folder_lists(
             self) -> None:
@@ -382,7 +382,7 @@ class ImportTests(AdoptCase):
             "Doom.png": ("GameHelp", b"page one")})
 
         self.assertEqual(row["media"], 3)
-        self.assertEqual(self._pages_of("Doom", "InstructionCard"),
+        self.assertEqual(self._pages_of("Doom", "GameHelp"),
                          [b"page one", b"page two", b"page three"], landed)
 
     def test_a_flyer_with_front_inside2_and_back_lands_as_pages_one_to_three(self) -> None:
@@ -392,7 +392,7 @@ class ImportTests(AdoptCase):
             "Doom front.png": ("Flyer Images/Front", b"the front")})
 
         self.assertEqual(row["media"], 3)
-        self.assertEqual(self._pages_of("Doom", "Flyer"),
+        self.assertEqual(self._pages_of("Doom", "GameInfo"),
                          [b"the front", b"inside two", b"the back"], landed)
 
     def test_numbered_cards_compare_as_numbers_so_ten_comes_last(self) -> None:
@@ -401,7 +401,7 @@ class ImportTests(AdoptCase):
             "Doom.png": ("Instruction Cards", b"one"),
             "Doom 2.png": ("Instruction Cards", b"two")})
 
-        self.assertEqual(self._pages_of("Doom", "InstructionCard"), [b"one", b"two", b"ten"])
+        self.assertEqual(self._pages_of("Doom", "GameHelp"), [b"one", b"two", b"ten"])
 
     def test_a_second_build_adds_no_pages_to_a_flyer_the_first_build_made(self) -> None:
         row, _landed = self._brought("pinballx", "Doom", {
@@ -410,7 +410,7 @@ class ImportTests(AdoptCase):
         self._filled(row, {"Doom.png": ("Flyer Images/Front", b"second"),
                            "Doom back.png": ("Flyer Images/Back", b"second's back")})
 
-        self.assertEqual(self._pages_of("Doom", "Flyer"), [b"first"])
+        self.assertEqual(self._pages_of("Doom", "GameInfo"), [b"first"])
 
     def test_a_kind_with_no_first_page_gets_all_of_the_pages_a_second_build_has(self) -> None:
         row, _landed = self._brought("pinballx", "Doom", {
@@ -419,8 +419,8 @@ class ImportTests(AdoptCase):
         self._filled(row, {"Doom.png": ("Instruction Cards", b"card one"),
                            "Doom 2.png": ("Instruction Cards", b"card two")})
 
-        self.assertEqual(self._pages_of("Doom", "InstructionCard"), [b"card one", b"card two"])
-        self.assertEqual(self._pages_of("Doom", "Flyer"), [b"first"])
+        self.assertEqual(self._pages_of("Doom", "GameHelp"), [b"card one", b"card two"])
+        self.assertEqual(self._pages_of("Doom", "GameInfo"), [b"first"])
 
     def test_a_page_core_refuses_does_not_stop_the_pages_after_it(self) -> None:
         row, _landed = self._brought("pinballx", "Doom", {
@@ -428,7 +428,7 @@ class ImportTests(AdoptCase):
             "Doom i.png": ("Flyer Images/Inside1", b"inside"),
             "Doom b.png": ("Flyer Images/Back", b"back")})
 
-        self.assertEqual(self._pages_of("Doom", "Flyer"), [b"inside", b"back"])
+        self.assertEqual(self._pages_of("Doom", "GameInfo"), [b"inside", b"back"])
         self.assertEqual(row["skipped_media"], ["Flyer Images/Front"])
 
     def test_a_real_dmd_video_lands_in_its_own_slot_and_an_f4v_is_named(self) -> None:
@@ -474,7 +474,7 @@ class ImportTests(AdoptCase):
         self.assertEqual(counts[0], counts[1])
         self.assertEqual(counts[2], 0)
         flyers = [one for one in (self.library / "Taxi (Williams 1988)" / "medias").iterdir()
-                  if one.name.startswith("(Flyer")]
+                  if one.name.startswith("(GameInfo")]
         self.assertEqual(len(flyers), 2)
         self.assertEqual(plan.expected(self._planned("")[1])["media"], counts[0])
 

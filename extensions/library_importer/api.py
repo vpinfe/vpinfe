@@ -1170,6 +1170,8 @@ def build(ctx: Any) -> None:
             return ctx.t("wizard.summary.left_behind_pages", folder=folder, count=count)
         if why == "videos":
             return ctx.t("wizard.summary.left_behind_videos", folder=folder, count=count)
+        if why == "off":
+            return ctx.t("wizard.summary.left_behind_off", folder=folder, count=count)
         return ctx.t("wizard.summary.left_behind_folder", folder=folder, count=count)
 
     def _choice_rows(reader: ModuleType, library: SourceLibrary, made: Plan,
@@ -1285,7 +1287,8 @@ def build(ctx: Any) -> None:
         rows.append([ctx.t("wizard.summary.imported")])
         rows += [[ctx.t(f"count.{key}"), str(counts[key])] for key in plan_for.COUNTS]
         if any(source.key == "media" and source.active for source in made.sources):
-            left = mapping.left_behind(library.source_id, games, ctx.games.kinds())
+            left = mapping.left_behind(library.source_id, games, ctx.games.kinds(),
+                                       off=ctx.games.switched_off_kinds())
             if left:
                 rows.append([ctx.t("wizard.summary.left_behind"),
                              ", ".join(_left_behind(folder, why, count)

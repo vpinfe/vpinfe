@@ -140,6 +140,7 @@
   "wizard.summary.imported": "What Is Imported",
   "wizard.summary.left_behind": "Files Not Imported",
   "wizard.summary.left_behind_folder": "{folder} ({count:n})",
+  "wizard.summary.left_behind_off": "{folder}, switched off in Settings ({count:n})",
   "wizard.summary.left_behind_pages": "{folder}, later pages ({count:n})",
   "wizard.summary.left_behind_videos": "{folder} videos ({count:n})",
   "wizard.summary.confirm": {

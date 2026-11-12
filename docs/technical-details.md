@@ -62,6 +62,8 @@ Runtime state written by VPinFE, not shown as a setting.
 | `hidden_asset_kinds` | list |  | Kinds of supporting file this library does not collect - an all-EM library has no ROMs. A table that will not launch still says so. |
 | `hidden_sources` | list |  | Online sources VPinFE does not search for files |
 | `hidden_checks` | list |  | Library checks that stay quiet. A check left on reports every table it finds a gap in. |
+| `flyer_name` | choice (visual_pinball, vpinfe) | `visual_pinball` | A new flyer is named this. Visual Pinball's is what other frontends look for. |
+| `instruction_card_name` | choice (visual_pinball, vpinfe) | `visual_pinball` | Name for a new instruction card. Visual Pinball's is what other frontends use. |
 
 ### `extensions`
 
@@ -152,7 +154,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `match_new_games` | bool | `true` | When you add a game, finds it on the Virtual Pinball Spreadsheet by its folder name and fills in its title, maker, year, type and themes |
 | `update_game_details` | bool | `false` | When a newer spreadsheet downloads, copies its changes to the title, maker, year, type, themes and guides of your matched games. Your own edits stay. |
 | `get_media_for_new_games` | bool | `true` | When you add a game, downloads the media it is missing once it is matched, and takes its backglass picture from its backglass file. Never replaces your media. |
-| `update_downloaded_media` | bool | `true` | Once a day, replaces media VPinFE downloaded when VPinMediaDB has a newer version. Never touches media you added or changed. |
+| `update_downloaded_media` | bool | `true` | Once a day, replaces media from VPinMediaDB when it has a newer version. Never touches your own media. |
 | `ask_where_new_games_go` | bool | `true` | On, adding a game asks which folder it goes to. Off, it goes to the folder marked for them. |
 | `new_games_location` | string |  | The folder a new game is created in. Set from the library's folders. |
 | `download_spreadsheet` | choice (never, daily, weekly, monthly) | `daily` | Downloads the latest copy on this schedule. Matching, game details and new VPS releases all read it. |

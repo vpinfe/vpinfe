@@ -240,18 +240,62 @@ class RemoteVocabularyTests(unittest.TestCase):
                                     playfieldvideoresolution="1k")
             with mock.patch.object(dl, "download_media_file") as fetch:
                 dl.download_media_for_game(game, "vps-1", kinds=kinds)
-            return {Path(call.args[2]).name for call in fetch.call_args_list}
+            folder = f" {Path(tmp).name}"
+            return {Path(call.args[2]).name.replace(folder, "")
+                    for call in fetch.call_args_list}
 
     def test_every_kind_the_manifest_offers_is_fetched(self) -> None:
         self.assertEqual(
             self._fetched(),
-            {"bg.png", "dmd.png", "wheel.png", "cab.png", "flyer.png", "audio.mp3",
-             "realdmd.png", "realdmd-color.png", "table.png", "dmd.mp4", "table.mp4"},
+            {"(Backglass).png", "(DMD).png", "(Wheel).png", "(Cabinet).png", "(GameInfo).png",
+             "(Audio).mp3", "(RealDMD).png", "(RealColorDMD).png", "(Playfield).png",
+             "(DMD).mp4", "(Playfield).mp4"},
         )
+
+    def test_new_art_takes_the_names_the_library_chose(self) -> None:
+        from common.games import library_policy
+
+        with mock.patch.object(library_policy, "_config_values",
+                               return_value={"flyer_name": "vpinfe"}):
+            self.assertIn("(Flyer).png", self._fetched({"flyer"}))
+
+    def test_a_file_already_at_its_short_name_is_not_given_a_second_one(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Cactus Canyon (Bally 1998)"
+            (root / "medias").mkdir(parents=True)
+            (root / "medias" / "wheel.png").write_bytes(b"old")
+            dl = VPSMediaDownloader(
+                {"vps-1": {"wheel": "https://example.invalid/wheel.png",
+                           "wheel_md5": "new"}},
+                playfieldvariant="table", playfieldresolution="1k",
+                playfieldvideoresolution="1k", update_downloaded=True)
+            with mock.patch.object(dl, "download_media_file") as fetch:
+                dl.download_media_for_game(_game_at(root), "vps-1", kinds={"wheel"})
+
+            fetch.assert_not_called()
+            self.assertEqual(sorted(p.name for p in (root / "medias").iterdir()), ["wheel.png"])
+
+    def test_a_file_in_any_spelling_is_found_when_the_game_knows_no_paths(self) -> None:
+        for held in ("wheel.png", "(Wheel) Cactus Canyon (Bally 1998).jpg"):
+            with self.subTest(held=held), TemporaryDirectory() as tmp:
+                root = Path(tmp) / "Cactus Canyon (Bally 1998)"
+                (root / "medias").mkdir(parents=True)
+                (root / "medias" / held).write_bytes(b"old")
+                dl = VPSMediaDownloader(
+                    {"vps-1": {"wheel": "https://example.invalid/wheel.png",
+                               "wheel_md5": "new"}},
+                    playfieldvariant="table", playfieldresolution="1k",
+                    playfieldvideoresolution="1k")
+                with mock.patch.object(dl, "download_media_file") as fetch:
+                    dl.download_media_for_game(fake_game(root, root.name), "vps-1",
+                                               kinds={"wheel"})
+
+                fetch.assert_not_called()
+                self.assertEqual([p.name for p in (root / "medias").iterdir()], [held])
 
     def test_a_kind_left_out_is_never_fetched(self) -> None:
         self.assertEqual(self._fetched({"wheel", "playfield"}),
-                         {"wheel.png", "table.png"})
+                         {"(Wheel).png", "(Playfield).png"})
 
     def test_the_match_download_asks_for_the_kinds_the_library_keeps(self) -> None:
         from common.online.vpsdb import VPSdb

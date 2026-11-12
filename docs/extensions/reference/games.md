@@ -31,12 +31,20 @@ below.
 
 `ctx.games.kinds() -> tuple[str, ...]`.
 
-Every media kind this build stores.  It is the vocabulary an importer maps onto, so the
-importer need not hard-code a list that would go stale.
+The media kinds this library collects: every kind this build stores that Settings > Library >
+Media has not switched off.  It is the vocabulary an importer maps onto, so the importer need
+not hard-code a list that would go stale.  A folder of a switched-off kind is left behind.
 
 ```python
 wanted = [kind for kind in ("wheel", "backglass", "flyer") if kind in ctx.games.kinds()]
 ```
+
+### `ctx.games.switched_off_kinds`
+
+`ctx.games.switched_off_kinds() -> tuple[str, ...]`.
+
+The media kinds this build stores that Settings > Library > Media has switched off.  An importer
+that leaves a folder of one of these behind can say it was switched off rather than unrecognized.
 
 ### `ctx.games.existing`
 
@@ -273,7 +281,7 @@ flyer or instruction card beside the page 1 the slot shows, up to one past the l
 ctx.games.put_media(game_id, "wheel", "/data/old/Taxi.png", replace=False)
 ```
 
-Raises `ValueError` for a kind that is not in `ctx.games.kinds()`, `FileExistsError` as above,
+Raises `ValueError` for a kind this build does not store (a switched-off kind is still taken by name), `FileExistsError` as above,
 and `ContractError` outside the declared folders.
 
 ### `ctx.games.reaches`

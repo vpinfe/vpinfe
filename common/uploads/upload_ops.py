@@ -310,7 +310,8 @@ def _choice_of(plan: ImportPlan) -> dict | None:
 
 
 def _blocked(plan: ImportPlan) -> list[dict]:
-    return [{"kind": one.asset.kind, "reason": one.reason} for one in plan.blocked]
+    return [{"kind": one.asset.kind, "media_kind": one.asset.media_kind, "reason": one.reason}
+            for one in plan.blocked]
 
 
 def _session_dir(upload_id: str) -> Path:

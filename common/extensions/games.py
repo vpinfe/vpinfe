@@ -98,12 +98,24 @@ class ExtensionGames(Offered):
     # -- reading --------------------------------------------------------------
 
     def kinds(self) -> tuple[str, ...]:
-        """Every media kind this build stores. The vocabulary an importer maps onto, and
-        the reason it does not have to hard-code a list that would go stale."""
+        """The media kinds this library collects: every kind this build stores that is not
+        switched off. The vocabulary an importer maps onto, and the reason it does not have
+        to hard-code a list that would go stale."""
+        self._needs(GAMES_READ)
+        from common.games import library_policy
+        from common.media.media_specs import MEDIA_SPECS
+
+        kept = library_policy.kept_kinds()["media"]
+        return tuple(spec.kind for spec in MEDIA_SPECS if spec.kind in kept)
+
+    def switched_off_kinds(self) -> tuple[str, ...]:
+        """The media kinds this build stores that the library has switched off. `put_media`
+        still takes one by name; only what an importer brings on its own leaves them out."""
         self._needs(GAMES_READ)
         from common.media.media_specs import MEDIA_SPECS
 
-        return tuple(spec.kind for spec in MEDIA_SPECS)
+        kept = set(self.kinds())
+        return tuple(spec.kind for spec in MEDIA_SPECS if spec.kind not in kept)
 
     def existing(self) -> list[dict]:
         """Every game already here, in the little an importer needs to recognize one.
@@ -449,8 +461,9 @@ class ExtensionGames(Offered):
         """
         self._needs(GAMES_WRITE)
         from common.games import library_folders, media_placement
+        from common.media.media_specs import MEDIA_SPECS
 
-        if kind not in self.kinds():
+        if kind not in {spec.kind for spec in MEDIA_SPECS}:
             raise ValueError(t("error.games.kind_not_found", kind=kind))
         source = self._source(path)
         game_dir = library_folders.writable_game_folder(self.folder(game_id))

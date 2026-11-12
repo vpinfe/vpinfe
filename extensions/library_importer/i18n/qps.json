@@ -140,6 +140,7 @@
   "wizard.summary.imported": "Ŵĥàţ Îš Îɱþöřţèđ",
   "wizard.summary.left_behind": "Ƒîŀèš Ñöţ Îɱþöřţèđ",
   "wizard.summary.left_behind_folder": "{folder} ({count:n})",
+  "wizard.summary.left_behind_off": "{folder}, šŵîţçĥèđ öƒƒ îñ Šèţţîñĝš ({count:n})",
   "wizard.summary.left_behind_pages": "{folder}, ŀàţèř þàĝèš ({count:n})",
   "wizard.summary.left_behind_videos": "{folder} ṽîđèöš ({count:n})",
   "wizard.summary.confirm": {

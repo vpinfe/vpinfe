@@ -13,10 +13,11 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import mock
 
-from common.games import media_lookup, media_placement
+from common.games import library_policy, media_lookup, media_placement
 from common.games.asset_registry import match_media_kind
 from common.games.media_placement import FIXED, UnplaceableError
 from common.media.media_specs import (
+    NAMED_TOKENS,
     SpecName,
     resolve_media_entries,
     resolve_media_pages,
@@ -26,6 +27,16 @@ from common.media.media_specs import (
 
 FOLDER = "Doom (Bally 1994)"
 TABLE = "Doom (Bally 1994) 1.2"
+
+
+def _writes_vpinfes_names(case: unittest.TestCase) -> None:
+    """These cases are about pages, so they pin the library to one spelling; which
+    spelling a library chooses is test_media_names."""
+    patch = mock.patch.object(
+        library_policy, "media_token",
+        side_effect=lambda kind, values=None: NAMED_TOKENS.get(kind, {}).get("vpinfe"))
+    patch.start()
+    case.addCleanup(patch.stop)
 
 
 def _pages(medias, root=(), stem=TABLE, folder=FOLDER):
@@ -151,6 +162,9 @@ class ReadingTests(unittest.TestCase):
 
 
 class NamingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        _writes_vpinfes_names(self)
+
     def test_a_page_is_read_back_with_its_number(self) -> None:
         self.assertEqual(spec_named(f"(Flyer 2) {FOLDER}.png"), SpecName("flyer", FOLDER, 2))
         self.assertEqual(spec_named(f"(RuleCard 12) {FOLDER}.jpg"),
@@ -185,6 +199,7 @@ class NamingTests(unittest.TestCase):
 
 class OnDiskTests(unittest.TestCase):
     def setUp(self) -> None:
+        _writes_vpinfes_names(self)
         self._dir = TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
         self.root = Path(self._dir.name) / FOLDER

@@ -157,6 +157,13 @@ class MediaTests(unittest.TestCase):
         self.assertEqual(mapping.left_behind("pinballx", games, KINDS),
                          {("Flyer Images/Back", ""): 1, ("Real DMD Videos", ""): 2})
 
+    def test_a_folder_of_a_switched_off_kind_says_so(self) -> None:
+        game = self._with("Flyer Images/Back", "Real DMD Videos")
+
+        found = mapping.left_behind("pinballx", [game], KINDS, off=("flyer",))
+
+        self.assertEqual(found, {("Flyer Images/Back", "off"): 1, ("Real DMD Videos", ""): 1})
+
     def test_a_shared_file_listed_for_two_systems_is_one_file_left_behind(self) -> None:
         item = SourceMedia(source_kind="Flyer Images/Back", path="/m/Back/Taxi.png",
                            shared=True)

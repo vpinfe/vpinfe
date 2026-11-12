@@ -447,6 +447,14 @@ def media_filename_map(playfield_variant: str = "table") -> dict[str, str]:
     return {spec.kind: spec.filename(playfield_variant) for spec in MEDIA_SPECS}
 
 
+# The kinds whose first file can be spelled two ways, and the token each library choice
+# writes. The choice is the library setting `<kind>_name`; the first is the default.
+NAMED_TOKENS: dict[str, dict[str, str]] = {
+    "flyer": {"visual_pinball": "(GameInfo)", "vpinfe": "(Flyer)"},
+    "instruction_card": {"visual_pinball": "(GameHelp)", "vpinfe": "(InstructionCard)"},
+}
+
+
 def media_label_map() -> dict[str, str]:
     """Kind to the name a person reads for it."""
     return {spec.kind: spec.label for spec in MEDIA_SPECS}

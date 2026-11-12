@@ -3491,7 +3491,7 @@ input.manager-path-input { padding-right: 0.6ch; }
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(var(--kind-rows), auto);
-  grid-template-columns: repeat(2, minmax(0, 15rem));
+  grid-template-columns: repeat(2, minmax(0, 19rem));
   column-gap: 2.5rem;
   row-gap: 8px;
 }
@@ -3499,6 +3499,15 @@ input.manager-path-input { padding-right: 0.6ch; }
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   min-width: 0;
 }
+/* The label gives way first, so the name and the switch keep their place. */
+.manager-kind > .manager-fact-label { flex: 1 1 auto; min-width: 0; }
+.manager-kind-name {
+  font: 11.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.manager-kind .manager-fact-edit { flex: 0 0 auto; }
+.manager-kind .manager-edit-select { min-width: 9.5rem; width: 9.5rem; }
 /* A switch is as wide as the switch. As a grid item it stretched to the value column and
    the whole line toggled it. */
 .manager-fact-switch { justify-self: start; }

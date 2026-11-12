@@ -27,10 +27,11 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from common.games import info_files
+from common.games import info_files, library_policy
 from common.i18n import t
 from common.media.media_specs import (
     MEDIA_SPECS,
+    NAMED_TOKENS,
     MediaSpec,
     convertible_family,
     fixed_page_name,
@@ -70,16 +71,39 @@ def _name(spec: MediaSpec, token: str | None, stem: str, page: int, extension: s
     return f"{page_token(token or '', page)} {stem}{extension}"
 
 
+def _token_held(game_dir: Path, kind: str, stem: str, page: int) -> str | None:
+    """The token that already spells this kind at this tier, for the kinds with a choice:
+    this page's first file, else page 1's. None where there is none, or where the file is
+    spelled in a token we do not write."""
+    allowed = NAMED_TOKENS.get(kind, {}).values()
+    for number in dict.fromkeys((page, 1)):
+        first = next(_members(game_dir, kind, stem, number), None)
+        if first is not None:
+            return first[1] if first[1] in allowed else None
+    return None
+
+
+def _token_for(kind: str, stem: str, page: int, game_dir: Path | None) -> str | None:
+    """What a file is written under: the spelling already there, then the library's choice,
+    then the kind's own token."""
+    if kind not in NAMED_TOKENS or stem == FIXED:
+        return None
+    held = _token_held(game_dir, kind, stem, page) if game_dir is not None else None
+    return held or library_policy.media_token(kind)
+
+
 def target_name(kind: str, stem: str, extension: str, page: int = 1, *,
-                unsupported: bool = False) -> str:
+                unsupported: bool = False, game_dir: Path | str | None = None) -> str:
     """The filename that puts this kind at this stem's tier.
 
     With `unsupported` the extension may be one the kind's family can be converted from: a
     file kept as it arrived under the name it would have had.
 
-    Always the spec token, never an alias: aliases exist so a file someone else named
-    still resolves, and writing one would be recommending a spelling we do not. `page`
-    is the number the name carries, and only a kind with pages takes one past 1.
+    Never an alias a kind has no choice of: aliases exist so a file someone else named
+    still resolves, and writing one would be recommending a spelling we do not. A flyer
+    or an instruction card takes the library's choice of name, unless `game_dir` already
+    holds one at this tier, whose spelling it keeps. `page` is the number the name
+    carries, and only a kind with pages takes one past 1.
     """
     spec = _spec_of(kind)
     if not spec.token:
@@ -92,7 +116,8 @@ def target_name(kind: str, stem: str, extension: str, page: int = 1, *,
         raise UnplaceableError(t("error.games.no_pages", slot=spec.label))
     if stem == FIXED and not spec.pages:
         raise RuntimeError(f"{kind} is not written at the shared default")
-    return _name(spec, spec.token, stem, page, extension)
+    token = _token_for(kind, stem, page, Path(game_dir) if game_dir is not None else None)
+    return _name(spec, token or spec.token, stem, page, extension)
 
 
 def _names_in(folder: Path) -> dict[str, str]:
@@ -129,6 +154,12 @@ def _family_at_tier(game_dir: Path, kind: str, stem: str, page: int = 1,
     extension. `(Flyer 2)` is not in page 1's family: each page has its own."""
     for path, _token, _extension in _members(game_dir, kind, stem, page, variant):
         yield path
+
+
+def held(game_dir: str | Path, kind: str, stem: str, variant: str = "table") -> Path | None:
+    """The file serving page 1 of this kind at this stem's tier, in whatever spelling and
+    extension it has, or None."""
+    return next(_family_at_tier(Path(game_dir), kind, stem, 1, variant), None)
 
 
 def _present(game_dir: Path, kind: str, stem: str, variant: str = "table") -> list[int]:
@@ -277,7 +308,8 @@ def place(game_dir: str | Path, kind: str, stem: str, source: str | Path,
     game_dir = Path(game_dir)
     source = Path(source)
     number = _number_for(game_dir, kind, stem, page)
-    name = target_name(kind, stem, source.suffix, number, unsupported=unsupported)
+    name = target_name(kind, stem, source.suffix, number, unsupported=unsupported,
+                       game_dir=game_dir)
     medias = game_dir / "medias"
     displaced = [] if unsupported else list(_family_at_tier(game_dir, kind, stem, number))
     keep_displaced(game_dir, displaced)

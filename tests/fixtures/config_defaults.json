@@ -91,10 +91,12 @@
     "tutorial": "key:KeyT"
   },
   "library": {
+    "flyer_name": "visual_pinball",
     "hidden_asset_kinds": "",
     "hidden_checks": "",
     "hidden_media_kinds": "",
-    "hidden_sources": ""
+    "hidden_sources": "",
+    "instruction_card_name": "visual_pinball"
   },
   "logger": {
     "level": "debug",

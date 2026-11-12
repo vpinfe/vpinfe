@@ -1426,7 +1426,12 @@ columns and rows, the coverage card with its percentage, and the table panel's A
 with the count in its header. A gap in a kind nobody collects is not a gap.
 
 - **The API serves every kind either way.** A theme asking for a topper still gets one, and
-  the files stay on disk. Only what the Manager shows follows the setting.
+  the files stay on disk. Only what the Manager shows follows the setting, and what an
+  import brings in: a drop and the library importer skip a switched-off kind and name it
+  once in what they report. A file sent to `put_media` by name is still taken.
+- **The Media page shows each kind's file name beside its switch**, and a switched-off kind
+  keeps its name choice. Flyer and Instruction Card take a picker for it (`flyer_name`,
+  `instruction_card_name`); the other kinds have one name and show it.
 - **`table` has no switch**, and a table that will not launch still says so on the panel's
   Will run row, whatever is switched off.
 - **A new surface joins the list** in

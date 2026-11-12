@@ -300,7 +300,8 @@ def _placement(game_dir: Path, kind: str, spec: MediaSpec, table_id: str, stem: 
     suffix = spec.family[0]
     going = media_placement.displaced(game_dir, kind, stem, suffix)
     return {"table": table_id, "label": label,
-            "base": media_placement.target_name(kind, stem, suffix)[:-len(suffix)],
+            "base": media_placement.target_name(kind, stem, suffix,
+                                                game_dir=game_dir)[:-len(suffix)],
             # `as_posix`, never `str`: a relative path on the wire is forward-slashed
             # whatever host built it. `str(WindowsPath)` gave clients "medias\\bg.png" on
             # Windows and "medias/bg.png" everywhere else, for the same library.

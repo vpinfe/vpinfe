@@ -65,9 +65,9 @@ class PlacementTests(unittest.TestCase):
         self.assertEqual(self._medias(), ["(Backglass) MyGame.jpg"])
 
     def test_a_file_under_another_token_is_displaced_and_replaced(self) -> None:
-        for kind, token, alias in (("flyer", "(Flyer)", "(GameInfo)"),
-                                   ("instruction_card", "(InstructionCard)", "(RuleCard)"),
-                                   ("instruction_card", "(InstructionCard)", "(GameHelp)")):
+        for kind, token, alias in (("flyer", "(GameInfo)", "(GameInfo)"),
+                                   ("instruction_card", "(GameHelp)", "(RuleCard)"),
+                                   ("instruction_card", "(GameHelp)", "(GameHelp)")):
             with self.subTest(alias=alias):
                 old = self.root / "medias" / f"{alias} {BUILD}.png"
                 old.write_bytes(b"old")

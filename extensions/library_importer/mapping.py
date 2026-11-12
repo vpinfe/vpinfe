@@ -225,20 +225,23 @@ def unmapped_kinds(source_id: str, game: SourceGame, known: tuple[str, ...],
 
 
 def left_behind(source_id: str, games: list[SourceGame], known: tuple[str, ...],
-                wheels_as: str = WHEELS) -> dict[tuple[str, str], int]:
+                wheels_as: str = WHEELS, off: tuple[str, ...] = ()
+                ) -> dict[tuple[str, str], int]:
     """Files that are not placed, counted by (source folder, why) across `games`.
 
-    `why` is "" for a folder we have no slot for, and `pages` or `videos` as `held_back`
-    gives them. A shared folder is read once per system, so a file is counted once
-    however many systems list it.
+    `why` is "" for a folder we have no slot for, `off` for a folder of a kind the library
+    has switched off, and `pages` or `videos` as `held_back` gives them. A shared folder is
+    read once per system, so a file is counted once however many systems list it.
     """
     seen: set[str] = set()
     counts: dict[tuple[str, str], int] = {}
     for game in games:
         holds_logos = _holds_logos(source_id, game)
-        unplaced = [(item.source_kind, item.path, "") for item in game.media
-                    if _moving_form(_kind_of(source_id, item, wheels_as, holds_logos),
-                                    item.path) not in known]
+        unplaced = []
+        for item in game.media:
+            kind = _moving_form(_kind_of(source_id, item, wheels_as, holds_logos), item.path)
+            if kind not in known:
+                unplaced.append((item.source_kind, item.path, "off" if kind in off else ""))
         for folder, path, why in [*unplaced, *held_back(source_id, game, known, wheels_as)]:
             if path in seen:
                 continue

@@ -26,6 +26,7 @@ from common.games import (
     info_codec,
     info_files,
     library_folders,
+    library_policy,
     media_placement,
     table_files,
     table_swap,
@@ -302,6 +303,8 @@ def _plan_asset(asset: DetectedAsset, base: Path, vpx_stem: str, rom_name: str,
         return PlannedItem(asset, str(base / _patched_vpx_name(asset, base, vpx_stem)),
                            "apply_patch")
     if kind == "media":
+        if asset.media_kind not in library_policy.kept_kinds()["media"]:
+            return BlockedItem(asset, t("error.uploads.kind_switched_off"))
         return _plan_media(asset, base, media_stem, asset.page or 1)
     return BlockedItem(asset, t("error.uploads.cannot_import_kind"))
 
@@ -378,7 +381,8 @@ def _plan_media(asset: DetectedAsset, base: Path, stem: str = "", page: int = 1)
     stem = stem or base.name
     where = media_placement.page_stem(base, asset.media_kind, stem, stem, page)
     name = media_placement.target_name(asset.media_kind, where, suffix, page,
-                                       unsupported=bool(convert and convert.as_is))
+                                       unsupported=bool(convert and convert.as_is),
+                                       game_dir=base)
     return PlannedItem(asset, str(base / "medias" / name), "replace_media",
                        stem=where, page=page)
 

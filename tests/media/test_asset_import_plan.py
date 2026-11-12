@@ -73,6 +73,35 @@ class ImportPlanTests(unittest.TestCase):
             self.assertIn("media", blocked_reasons(plan))
 
 
+class SwitchedOffKindTests(unittest.TestCase):
+    """A kind the library switched off is not imported, and the refusal is one line."""
+
+    def _plan(self, kept: set[str]):
+        from tempfile import TemporaryDirectory
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        game_dir = Path(tmp.name) / "Foo (Bar 1999)"
+        game_dir.mkdir()
+        zip_path = Path(tmp.name) / "art.zip"
+        make_zip(zip_path, ["(Flyer) Foo.png", "(Topper) Foo.png", "(Wheel) Foo.png"])
+        with mock.patch("common.games.library_policy.kept_kinds",
+                        return_value={"media": kept, "asset": set()}):
+            return build_import_plan(analyze_path(zip_path), game_dir=game_dir)
+
+    def test_a_switched_off_kind_is_refused_with_its_own_name(self):
+        plan = self._plan({"wheel"})
+
+        self.assertEqual([one.asset.media_kind for one in plan.items], ["wheel"])
+        self.assertEqual(sorted(one.asset.media_kind for one in plan.blocked), ["flyer", "topper"])
+        self.assertEqual({one.reason for one in plan.blocked},
+                         {t("error.uploads.kind_switched_off")})
+
+    def test_a_kind_that_is_kept_is_planned(self):
+        plan = self._plan({"wheel", "flyer", "topper"})
+
+        self.assertEqual(plan.blocked, ())
+
+
 class AddTablePlanTests(unittest.TestCase):
     """A table dropped on a game to join the tables it has, not to replace one."""
 

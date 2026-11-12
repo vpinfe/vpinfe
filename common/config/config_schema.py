@@ -409,6 +409,20 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
         ),
         ConfigOption("hidden_sources", type="list", default=""),
         ConfigOption("hidden_checks", type="list", default=""),
+        # The name a new flyer or instruction card is given: Visual Pinball's, which
+        # other frontends read, or VPinFE's own. Only the first file at a place takes it.
+        ConfigOption(
+            "flyer_name",
+            type="choice",
+            default="visual_pinball",
+            choices=("visual_pinball", "vpinfe"),
+        ),
+        ConfigOption(
+            "instruction_card_name",
+            type="choice",
+            default="visual_pinball",
+            choices=("visual_pinball", "vpinfe"),
+        ),
     ),
     # Extensions switched off, by name, so empty means every installed one runs and one
     # installed later arrives on. The Extensions page draws a switch per extension.

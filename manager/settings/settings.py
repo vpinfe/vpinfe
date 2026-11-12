@@ -41,7 +41,7 @@ from common.host import (
     tools,
 )
 from common.i18n import t
-from common.media.media_specs import media_label_map
+from common.media.media_specs import MEDIA_SPECS, NAMED_TOKENS, VIDEO_FAMILY, media_label_map
 from common.online import theme_source_checks as online_checks
 from common.settings import feature_checks
 from common.vpinfe_version import get_version
@@ -89,7 +89,7 @@ logger = logging.getLogger("vpinfe.manager.settings.settings")
 # "Virtual Pinball Spreadsheet" ellipses at the pane's width.
 RAIL_PX = 230
 
-KINDS_NOTE = t("manager.settings.kinds_note")
+KINDS_NOTE = (t("manager.settings.kinds_note"), t("manager.settings.kinds_names_note"))
 ASSETS_NOTE = t("manager.settings.assets_note")
 
 # Every source that ships is listed, switched off included: "why is that catalog not
@@ -632,9 +632,9 @@ def _then(save: Callable[[Any], Any],
     return saved
 
 
-def _kind_page(library: Library, refill: Callable[[], None] | None, note: str,
-               section: str, key: str, items: Callable[[Any], dict[str, str]],
-               columns: bool = False) -> None:
+def _kind_page(library: Library, refill: Callable[[], None] | None,
+               note: str | tuple[str, ...], section: str, key: str,
+               items: Callable[[Any], dict[str, str]], columns: bool = False) -> None:
     """A switch per thing, over one list in the config.
 
     Not a schema page. What it switches is a *list*, and the switches themselves come
@@ -656,12 +656,19 @@ def _listed(value: Any) -> set[str]:
 
 KindSwitch = tuple[str, str, Callable[[], None]]
 
+# What a column page draws beside a switch, given the policy as read and the write that
+# stores a change to it. The answer draws the cell for one kind, or is None for a kind that
+# has nothing to say.
+Aside = Callable[[dict[str, Any], Callable[[dict], Any]],
+                 Callable[[str], Callable[[], None] | None]]
+
 
 async def _fill_kinds(library: Library, refill: Callable[[], None] | None, body: Any,
-                      note: str, section: str, key: str,
+                      note: str | tuple[str, ...], section: str, key: str,
                       items: Callable[[Any], dict[str, str]],
                       columns: bool = False,
                       arrange: Callable[[list[KindSwitch]], list[tuple[Any, Any]]] | None = None,
+                      aside: Aside | None = None,
                       ) -> list:
     """The switches, drawn into `body` - or returned when `body` is None, for a page that
     orders them among its own settings rather than beside them.
@@ -674,7 +681,7 @@ async def _fill_kinds(library: Library, refill: Callable[[], None] | None, body:
 
     `arrange` is handed each switch as (name, label, draw), in the order `items` gave
     them, and answers the entries to draw in place of the name-ordered rows. An empty
-    `note` draws no line over them.
+    `note` draws no line over them, and a tuple draws a line for each.
 
     The `manager` section holds this install's own list; every other is the library's."""
     device = section == "manager"
@@ -718,14 +725,17 @@ async def _fill_kinds(library: Library, refill: Callable[[], None] | None, body:
     def flipper(name: str) -> Callable[[Any], Any]:
         return lambda event: flip(name, bool(event.value))
 
-    entries: list[tuple[Any, Any]] = [panel.lede(note)] if note else []
+    lines = (note,) if isinstance(note, str) else note
+    entries: list[tuple[Any, Any]] = [panel.lede(line) for line in lines if line]
+    beside = aside(policy, write) if aside is not None else None
     ordered = sorted(known.items(), key=lambda pair: pair[1])
     if arrange is not None:
         entries += arrange([(name, label, panel.switch(name in on, flipper(name)))
                             for name, label in known.items()])
     elif columns:
         entries.append((panel.FULL, lambda: _kind_columns(
-            [(label, panel.switch(name in on, flipper(name))) for name, label in ordered])))
+            [(label, panel.switch(name in on, flipper(name)), beside(name) if beside else None)
+             for name, label in ordered])))
     else:
         for name, label in ordered:
             entries.append((label, panel.switch(name in on, flipper(name))))
@@ -736,15 +746,87 @@ async def _fill_kinds(library: Library, refill: Callable[[], None] | None, body:
     return entries
 
 
-def _kind_columns(rows: list[tuple[str, Callable[[], None]]]) -> None:
-    """A label and its switch per cell, filled down the first column and on into the
-    second."""
+def _kind_columns(rows: list[tuple[str, Callable[[], None], Callable[[], None] | None]]
+                  ) -> None:
+    """A label, what goes beside the switch, and the switch per cell, filled down the
+    first column and on into the second."""
     with ui.element("div").classes("manager-kinds") \
             .style(f"--kind-rows: {(len(rows) + 1) // 2}"):
-        for label, draw in rows:
+        for label, draw, beside in rows:
             with ui.element("div").classes("manager-kind"):
                 ui.label(label).classes("manager-fact-label")
+                if beside is not None:
+                    beside()
                 draw()
+
+
+def _media_names(policy: dict[str, Any], write: Callable[[dict], Any],
+                 ) -> Callable[[str], Callable[[], None] | None]:
+    """Each media kind's file name beside its switch. Flyer and Instruction Card take a
+    picker, since a new file of either can be spelled Visual Pinball's way or VPinFE's; the
+    rest have one name and show it."""
+    specs = {spec.kind: spec for spec in MEDIA_SPECS}
+
+    def shares_a_picture(kind: str) -> bool:
+        spec = specs[kind]
+        return spec.family == VIDEO_FAMILY and any(
+            other.token == spec.token and other.family != VIDEO_FAMILY
+            for other in specs.values())
+
+    def named(kind: str) -> Callable[[], None] | None:
+        spec = specs.get(kind)
+        if spec is None or not spec.token:
+            return None
+        if kind in NAMED_TOKENS:
+            return _name_picker(kind, policy, write)
+        token = spec.token
+        if kind in NO_VISUAL_PINBALL_NAME:
+            tip = t("manager.settings.kind_name_unlisted", token=token)
+        elif shares_a_picture(kind):
+            tip = t("manager.settings.kind_name_video", token=token)
+        else:
+            tip = t("manager.settings.kind_name", token=token)
+
+        def draw() -> None:
+            ui.label(token).classes("manager-kind-name").tooltip(tip)
+
+        return draw
+
+    return named
+
+
+# The kinds Visual Pinball's file layout says nothing about, so another frontend may not
+# show a file named this way.
+NO_VISUAL_PINBALL_NAME = frozenset({"cab", "logo", "playfield_fss", "rule_sheet"})
+
+
+def _name_picker(kind: str, policy: dict[str, Any], write: Callable[[dict], Any],
+                 ) -> Callable[[], None]:
+    """The two spellings of a kind's new files, each saying who it suits."""
+    key = f"{kind}_name"
+    tokens = NAMED_TOKENS[kind]
+    first = next(iter(tokens))
+    says = {
+        tokens["visual_pinball"]: t("manager.settings.name_visual_pinball"),
+        tokens["vpinfe"]: t("manager.settings.name_vpinfe"),
+    }
+
+    @on_page
+    async def choose(event: Any) -> None:
+        before = policy.get(key)
+        if str(event.value) == str(before or first):
+            return
+        policy[key] = str(event.value)
+        try:
+            await run.io_bound(write, {key: str(event.value)})
+        except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+            policy[key] = before
+            event.sender.set_value(before or first)
+            ui.notify(t("manager.settings.save_failed"), caption=why(exc), type="negative")
+
+    current = str(policy.get(key) or first)
+    return panel.select(dict(tokens), current if current in tokens else first, choose,
+                        describes=says)
 
 
 async def _kind_rows(library: Library, refill: Callable[[], None] | None,
@@ -755,7 +837,7 @@ async def _kind_rows(library: Library, refill: Callable[[], None] | None,
         return []
     note, section, name, items = found
     return await _fill_kinds(library, refill, None, note, section, name, items,
-                             page in TWO_COLUMNS, ARRANGED.get(page))
+                             page in TWO_COLUMNS, ARRANGED.get(page), BESIDE.get(page))
 
 
 async def _spreadsheet_check(library: Library, refill: Callable[[], None],
@@ -1047,7 +1129,8 @@ def page_head(key: str, findings: Sequence[Callable[[], None]] = ()) -> None:
 # rendering lives on this side of that line.
 # key -> (note, config section, config key, what to switch). Each list stores what is
 # off, so a kind or a source added in a later version arrives switched on.
-KIND_PAGES: dict[str, tuple[str, str, str, Callable[[Any], dict[str, str]]]] = {
+KIND_PAGES: dict[str, tuple[str | tuple[str, ...], str, str,
+                            Callable[[Any], dict[str, str]]]] = {
     "media_kinds": (KINDS_NOTE, "", "hidden_media_kinds",
                     lambda _: dict(media_label_map())),
     "asset_kinds": (ASSETS_NOTE, "", "hidden_asset_kinds",
@@ -1127,6 +1210,9 @@ def _sources_arranged(switches: list[KindSwitch]) -> list[tuple[Any, Any]]:
 # registry -> how its switches are laid out, where that is not one name-ordered list.
 ARRANGED: dict[str, Callable[[list[KindSwitch]], list[tuple[Any, Any]]]] = {
     "library_checks": _checks_arranged, "media_sources": _sources_arranged}
+
+# registry -> what is drawn beside each switch, for the column pages.
+BESIDE: dict[str, Aside] = {"media_kinds": _media_names}
 
 
 async def _folders_page(library: Library, redraw: Callable[[], None],
