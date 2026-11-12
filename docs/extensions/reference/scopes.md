@@ -20,13 +20,13 @@ method on it needs the Confirm.
 The manifest's `tiers` lists `protected` when the extension uses it.  A list, page, panel
 group, action, verb or router at a tier it does not list, or at one that does not exist, fails
 when it is declared, and an act marked `@tier(...)` at one is refused when it is called.
-Library and Protected say nothing to whoever installs it: accepting covers both.  Core serves the
+Library and Protected say nothing to whoever installs it: trusting covers both.  Core serves the
 extension's settings, accounts and job stop at Library, whatever the manifest says.
 
 Play is different, because a Remote pass belongs to somebody who is not the Owner.  The manifest's
 `play` names each surface a Remote can open, as `router`, `action:<key>`, `list:<key>`,
 `page:<key>`, `group:<subject>` or `verb:<subject>:<key>`.  The install page shows the list as
-"A Remote Can Open" before the Owner accepts.  A surface put at Play that `play` does not name fails
+"A Remote Can Open" before the Owner trusts it.  A surface put at Play that `play` does not name fails
 when it is declared, and an act marked `@tier(PLAY)` on a surface that is not Play is refused when it
 is called.  An update that adds a surface asks the Owner again, and only about the one added.
 

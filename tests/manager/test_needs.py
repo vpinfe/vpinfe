@@ -972,11 +972,20 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
         theme, extension = needs.unaccepted_rows(
             {"themes": [self.THEME], "extensions": [self.EXTENSION]})
 
-        self.assertEqual(t("manager.needs.unaccepted", name="My Theme"), theme.label)
-        self.assertEqual(t("manager.needs.unaccepted", name="Tool"), extension.label)
+        self.assertEqual(t("manager.needs.untrusted", name="My Theme"), theme.label)
+        self.assertEqual(t("manager.needs.untrusted", name="Tool"), extension.label)
         self.assertEqual("themes", theme.opens.view)
         self.assertEqual("settings", extension.opens.view)
-        self.assertEqual(t("manager.needs.unaccepted.tip"), theme.tip)
+        self.assertEqual(t("manager.needs.untrusted.tip"), theme.tip)
+
+    def test_two_themes_are_one_row_and_an_extension_still_has_its_own(self):
+        rows = needs.unaccepted_rows({"themes": [self.THEME, {"key": "Other", "name": "Other"}],
+                                      "extensions": [self.EXTENSION]})
+
+        self.assertEqual(["unaccepted:themes", "unaccepted:ext:tool"], keys(rows))
+        self.assertEqual(t("manager.needs.untrusted_themes", count=2), rows[0].label)
+        self.assertEqual("themes", rows[0].opens.view)
+        self.assertFalse(needs.can_set_aside("unaccepted:themes"))
 
     def test_a_row_cannot_be_set_aside(self):
         self.assertFalse(needs.can_set_aside("unaccepted:theme:Mine"))
@@ -1009,7 +1018,7 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
         library = self.library(unaccepted_themes=failing)
 
         self.assertIn("unaccepted", library._read_watched()["unread"])
-        self.assertIn(t("manager.needs.unread_unaccepted"), needs.collect(
+        self.assertIn(t("manager.needs.unread_untrusted"), needs.collect(
             FakeLibrary(watched={"unread": ["unaccepted"]}), {})[0].tip)
 
     def library(self, **replaced):

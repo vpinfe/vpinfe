@@ -405,7 +405,7 @@ class ThemeRegistry:
         source = str(theme_data.get("source") or "")
         stock = theme_sources.is_stock(source)
         if not accepted.theme_accepted(theme_key, source, stock=stock):
-            raise ThemeNotAcceptedError(t("error.themes.not_accepted", key=theme_key))
+            raise ThemeNotAcceptedError(t("error.themes.not_trusted", key=theme_key))
         manifest = theme_data["manifest"]
         base_url = self._base_url(theme_data["registry_info"])
         ref = self._ref(theme_data["registry_info"])

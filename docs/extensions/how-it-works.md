@@ -5,7 +5,7 @@ collects those ideas, so that each is in one place.  Every section says which le
 first.  For the exact shape of a call, see the [Reference](reference.md).
 
 - [What core draws and what you supply](#what-core-draws-and-what-you-supply)
-- [One process, so accepting is trusting](#one-process-so-accepting-is-trusting)
+- [One process, so trusting it is a decision](#one-process-so-trusting-it-is-a-decision)
 - [The Unofficial mark](#the-unofficial-mark)
 - [Scopes and tiers](#scopes-and-tiers)
 - [Private games never leave](#private-games-never-leave)
@@ -40,7 +40,7 @@ It also means there is nothing to style.  A thing that does not fit one of the d
 a page of its own, reached by a link (see
 [a page of your own](cookbook.md#17-a-page-of-your-own)).
 
-## One process, so accepting is trusting
+## One process, so trusting it is a decision
 
 First met in [lesson 10](tutorial.md#lesson-10-shipping-it).
 
@@ -49,12 +49,12 @@ VPinFE.  Whatever Python in that process can do, the extension can do: open a fi
 start a program.
 
 That is why putting a folder in `extensions/` is a decision, and why VPinFE asks an owner to
-accept an extension and does not ask an extension to prove itself.  Everything the extension
+trust an extension and does not ask an extension to prove itself.  Everything the extension
 declares, its scopes and capabilities, is a statement it makes about itself, for the person who
 installs it to read.  Core holds the calls that go through `ctx` to what is declared, and the
 rest is trust.  See [scopes and tiers](#scopes-and-tiers) for what is held and what is not.
 
-What an extension declares may not be what it does.  The list a person reads when they accept
+What an extension declares may not be what it does.  The list a person reads when they trust it
 is the author's word, VPinFE cannot check it against the code, and an extension that declares
 little can still do a lot.  Run only extensions you trust, and treat the list as a claim to
 weigh and not as a limit that holds.
@@ -71,9 +71,9 @@ VPinFE tells a person which extensions it did not ship.  An extension VPinFE shi
 VPinPlay or the library importer, carries no mark.  Every other extension is marked Unofficial,
 including one in the extensions folder that has the name of one VPinFE ships:
 
-- **Before it runs.**  A prompt, "Run an Unofficial Extension?", and a row under Needs You on
-  Overview while it waits.  Until an owner accepts it, it does not start.
-- **In Settings, under Extensions.**  A chip beside its name, Not Accepted until accepted and
+- **Before it runs.**  A prompt, "Trust an Unofficial Extension?", and a row under Needs You on
+  Overview while it waits.  Until an owner trusts it, it does not start.
+- **In Settings, under Extensions.**  A chip beside its name, Not Trusted until trusted and
   Unofficial after, and the page's list of what it reaches reads "Reported Capabilities".  The
   page lists the author, the version, the source and the folder it was found in above it.  The
   chip's tooltip says "Not included with VPinFE.  Extensions can run programs on this device."
@@ -85,28 +85,28 @@ including one in the extensions folder that has the name of one VPinFE ships:
   game's or a table's menu, over a group it adds to a game's panel and over its rows in Needs
   You.  The chip carries it too.  A link that leaves keeps its arrow and takes no shield.
 
-What accepting is kept in:
+What trusting is kept in:
 
 - **A list of its own.**  `accepted.json` in the config folder, readable by the user VPinFE runs
   as and no one else.  It is not `vpinfe.json`, so a settings write, a restored backup or a hand
-  edit of the settings cannot accept anything.
+  edit of the settings cannot trust anything.
 - **Per extension, by what it said it used.**  An update from the same folder that declares the
-  same access runs without asking again.  One that declares more stops, and the prompt, "Accept
+  same access runs without asking again.  One that declares more stops, and the prompt, "Trust
   New Access for “{Extension}”?", names only what is new.
 - **A replacement waits.**  An extension in the folder named like one VPinFE ships does not take
-  its place until it is accepted.  The built-in keeps running meanwhile, and after the owner
-  accepts, the replacement starts at the next restart.
-- **Never carried over.**  Extensions are new, so nothing is accepted on upgrade.
+  its place until it is trusted.  The built-in keeps running meanwhile, and after the owner
+  trusts it, the replacement starts at the next restart.
+- **Never carried over.**  Extensions are new, so nothing is trusted on upgrade.
 
 A theme works the same way, by the address it came from: a theme from the VPinFE Theme List needs
 nothing, and one from another source or found in the themes folder is Unofficial and the frontend
-plays the default theme until it is accepted.  A theme installed before this existed counts as
-accepted.
+plays the default theme until it is trusted.  A theme installed before this existed counts as
+trusted.
 
 An extension author does not do anything for it: the mark and the prompt come from core, and an
 extension cannot remove, move or restyle them.  Write the README as if the prompt were there,
 because the person reading it will be.  `--check-extension` loads the extension without asking,
-because it exists to look at one that is not accepted.
+because it exists to look at one that is not trusted.
 
 ## Scopes and tiers
 

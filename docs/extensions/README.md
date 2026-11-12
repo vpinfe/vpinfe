@@ -59,7 +59,7 @@ nothing, and it exits with 1 when something would not pass.
   empty folder in ten lessons: settings, a list, a menu of actions, a dialog, a pane and a group
   on a game's panel. Each lesson says what you will have, shows it, and says what core did.
 - **[How it works](how-it-works.md)** for the ideas the lessons keep returning to: what core draws,
-  what accepting an extension means, scopes, Private games and what a restart is for.
+  what trusting an extension means, scopes, Private games and what a restart is for.
 - **[Good extensions](good-extensions.md)** for the habits that make an extension feel like
   part of VPinFE, ending in a list to go through before you give one to anybody.
 - **The [Cookbook](cookbook.md)** once you know what you want. Each recipe is a small complete

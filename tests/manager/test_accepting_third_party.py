@@ -57,7 +57,7 @@ class TheMarkOnATheme(unittest.TestCase):
         self.assertFalse(themes.stopped(theme))
 
     def test_the_words_are_the_ones_the_catalog_keeps(self) -> None:
-        self.assertEqual(themes.TRUST.word(themes.UNACCEPTED), "Not Accepted")
+        self.assertEqual(themes.TRUST.word(themes.UNACCEPTED), "Not Trusted")
         self.assertEqual(themes.TRUST.word(themes.UNOFFICIAL), "Unofficial")
 
     def test_the_row_carries_it_for_the_grid(self) -> None:
@@ -86,15 +86,15 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(title, "Install an Unofficial Theme?")
         self.assertEqual(lines[0], "Mine comes from https://git.example.net/t.json, "
                                    "not the VPinFE Theme List.")
-        self.assertEqual(answer, "Accept and Install")
+        self.assertEqual(answer, "Trust and Install")
         self.assertEqual(kept["closing"], "Install it only if you trust where it came from.")
 
     async def test_using_one_already_here_does_not_say_install(self) -> None:
         title, lines, answer, kept = await self.asked(
             accept.theme("Mine", source="https://git.example.net/t.json"))
 
-        self.assertEqual(title, "Use an Unofficial Theme?")
-        self.assertEqual(answer, "Accept")
+        self.assertEqual(title, "Trust an Unofficial Theme?")
+        self.assertEqual(answer, "Trust")
         self.assertNotIn("nstall", kept["closing"])
 
     async def test_a_theme_found_in_the_folder_says_so(self) -> None:
@@ -118,7 +118,7 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
         title, lines, _answer, kept = await self.asked(
             accept.extension("Tool", "1.0.0", uses=["Read Your Library"], **self.OWN))
 
-        self.assertEqual(title, "Run an Unofficial Extension?")
+        self.assertEqual(title, "Trust an Unofficial Extension?")
         self.assertIn("isn't from VPinFE", lines[0])
         self.assertEqual(kept["rows"][-1][0], "Reported Capabilities")
         self.assertEqual(kept["closing"], "Run it only if you trust where it came from.")

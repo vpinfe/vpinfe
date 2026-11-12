@@ -44,7 +44,7 @@ you want, and carry on.
 | 7 | [Adding a score](#lesson-7-adding-a-score) | A dialog with a check |
 | 8 | [The detail pane](#lesson-8-the-detail-pane) | Facts, a field you can change, `save` |
 | 9 | [A group on a game's panel](#lesson-9-a-group-on-a-games-panel) | The best score on a game, and a reaction to a game ending |
-| 10 | [Shipping it](#lesson-10-shipping-it) | A version, the platforms, what accepting it asks of an owner |
+| 10 | [Shipping it](#lesson-10-shipping-it) | A version, the platforms, what trusting it asks of an owner |
 
 ## Lesson 0: Before you start
 
@@ -122,7 +122,7 @@ written for.
 ```
 
 The `name` is how VPinFE tells it from every other extension, and it has to be the folder's name
-too.  `author` and `source` are required: the person who installs it sees both before accepting,
+too.  `author` and `source` are required: the person who installs it sees both before trusting it,
 and `source` is a repository address that they can open and read.  `home` and `picture` are
 optional.  `requires_platform` is a promise about the shape of the calls you are about to make.
 
@@ -156,9 +156,9 @@ here.  Nothing in `__init__.py` is a sentence a person reads.
 ### See it
 
 Restart VPinFE.  Open Settings, then Extensions, then Example Scores.  The extension is not
-running yet: VPinFE did not ship it, so it waits for you to accept it.  Press Accept, read the
-prompt, and accept.  The page then shows the name, the version and the description, and one
-switch, Enabled.  The switch is on.  Accepting an extension you wrote
+running yet: VPinFE did not ship it, so it waits for you to trust it.  Press Trust, read the
+prompt, and trust it.  The page then shows the name, the version and the description, and one
+switch, Enabled.  The switch is on.  Trusting an extension you wrote
 yourself is the same step a person takes with yours.
 
 Without starting VPinFE you can ask what it would make of the folder:
@@ -195,7 +195,7 @@ the name back, and switch the extension off and on again to load it.
 - **It drew the page.**  You wrote a name and a description.  The page, the switch and the version
   line are core's.  See [what core draws and what you supply](how-it-works.md#what-core-draws-and-what-you-supply).
 - **It ran your code inside VPinFE.**  There is no separate process, so there is no sandbox:
-  loading an extension is trusting it.  See [one process](how-it-works.md#one-process-so-accepting-is-trusting).
+  loading an extension is trusting it.  See [one process](how-it-works.md#one-process-so-trusting-it-is-a-decision).
 - **It found the words.**  A catalog key is the extension's name, a dot, and the key you chose, so
   yours cannot collide with another's.  See [words and languages](how-it-works.md#words-and-languages).
 
@@ -1196,11 +1196,11 @@ catalog.  Put it back.
   `owner/repo` with a link, and the folder it was found in.  See [scopes and tiers](how-it-works.md#scopes-and-tiers).
 - **It ran the extension in VPinFE's own process.**  An extension is Python code on the device
   it is installed on, which is why putting a folder in `extensions/` is a decision a person makes.
-  See [one process, so accepting is trusting](how-it-works.md#one-process-so-accepting-is-trusting).
+  See [one process, so trusting it is a decision](how-it-works.md#one-process-so-trusting-it-is-a-decision).
 - **It marked the extension Unofficial.**  An extension VPinFE did not ship is marked Unofficial and
-  stays stopped until the owner accepts it.  Its list of what it asks for is headed "Reported
+  stays stopped until the owner trusts it.  Its list of what it asks for is headed "Reported
   Capabilities", because the manifest is the extension's own word.  An update that asks for more stops
-  again until the owner accepts the new access.  See
+  again until the owner trusts the new access.  See
   [the Unofficial mark](how-it-works.md#the-unofficial-mark).
 
 ### If it does not show

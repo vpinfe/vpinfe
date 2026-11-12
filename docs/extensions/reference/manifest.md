@@ -122,16 +122,16 @@ table is ignored.
 | `name` | yes | none | 2 to 40 characters: `a-z`, `0-9` and `_`, starting with a letter. Matches the directory |
 | `requires_platform` | yes | none | The platform ABI it was built against. This build offers `1`. Any other number is refused |
 | `display_name` | no | empty | A product name, shown as written in every language. Left out, it is `name` in its own `i18n/`, and then the extension's `name` |
-| `version` | yes | none | The extension's own version, starting with a number, such as `1.2.0`, at most 40 characters with no spaces. Shown and compared to the version a person accepted, never otherwise interpreted |
-| `author` | yes | none | Who made it, one line of 1 to 60 characters, with no control or direction-changing characters. Shown under the name in the page header and in the accept prompt |
-| `source` | yes | none | Where its code is kept: an `https` repository address of the form `host/owner/repo`, at most 300 characters, with no `@` in the host. A trailing `.git` or slash is tolerated. The page shows it as `owner/repo` for github.com, `host/owner/repo` elsewhere, as a link, so a person can read what they are about to accept |
+| `version` | yes | none | The extension's own version, starting with a number, such as `1.2.0`, at most 40 characters with no spaces. Shown and compared to the version a person trusted, never otherwise interpreted |
+| `author` | yes | none | Who made it, one line of 1 to 60 characters, with no control or direction-changing characters. Shown under the name in the page header and in the trust prompt |
+| `source` | yes | none | Where its code is kept: an `https` repository address of the form `host/owner/repo`, at most 300 characters, with no `@` in the host. A trailing `.git` or slash is tolerated. The page shows it as `owner/repo` for github.com, `host/owner/repo` elsewhere, as a link, so a person can read what they are about to trust |
 | `home` | no | none | A web page about it, `http` or `https`, at most 300 characters. Shown as its own row, separate from Source, even when the address is the same |
-| `picture` | no | none | A path inside its own folder to a `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif` or `.bmp` file of at most 8 MB, written with `/` between folders. Drawn in the page header once the person has accepted the extension, never before, and never in the accept prompt |
+| `picture` | no | none | A path inside its own folder to a `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif` or `.bmp` file of at most 8 MB, written with `/` between folders. Drawn in the page header once the person has trusted the extension, never before, and never in the trust prompt |
 | `description` | no | empty | One line, shown beside it. Left out, it is `description` in its own `i18n/` |
 | `scopes` | no | none | Core scopes it asks to use, such as `games:read`. See [Scopes and the gate](scopes.md#scopes-and-the-gate) |
 | `capabilities` | no | none | What it asks of the device. See [Scopes and the gate](scopes.md#scopes-and-the-gate) |
 | `tiers` | no | none | `protected`, when something it serves asks for the Confirm. Something at a tier it does not list is refused. `play` is not listed here: see `play` below. See [Scopes and the gate](scopes.md#scopes-and-the-gate) |
-| `play` | no | none | The surfaces a Remote can open, each by name: `router`, `action:<key>`, `list:<key>`, `page:<key>`, `group:<subject>` or `verb:<subject>:<key>`. Whoever installs it is shown the list before accepting, and a surface put at Play that is not listed fails when it is declared, and a name listed that it never puts at Play fails the load. See [Scopes and the gate](scopes.md#scopes-and-the-gate) |
+| `play` | no | none | The surfaces a Remote can open, each by name: `router`, `action:<key>`, `list:<key>`, `page:<key>`, `group:<subject>` or `verb:<subject>:<key>`. Whoever installs it is shown the list before trusting it, and a surface put at Play that is not listed fails when it is declared, and a name listed that it never puts at Play fails the load. See [Scopes and the gate](scopes.md#scopes-and-the-gate) |
 | `requires_features` | no | none | Install features it needs: `library`, `frontend`, `devices`, `overview` |
 | `platforms` | no | every one | `linux`, `windows`, `macos`, or a Linux distribution's `ID` from `/etc/os-release`, such as `vpinos`.  It runs where any of them matches.  Empty means every one |
 | `events` | no | none | Event names it publishes, without its namespace |
@@ -156,11 +156,11 @@ reason names the distribution: "It does not run on Ubuntu".
 
 ### What the page shows of it
 
-An extension that VPinFE did not ship is marked Unofficial beside its name, and Not Accepted until
-the owner accepts it.  Its page header shows the author and version under the name, and the page
+An extension that VPinFE did not ship is marked Unofficial beside its name, and Not Trusted until
+the owner trusts it.  Its page header shows the author and version under the name, and the page
 lists Home, Source and Folder Path (where the folder is, with a Copy Path button), then Reported
 Capabilities: the scopes, capabilities and surfaces from the manifest, in words.  A line under it
-says they are reported by the extension's author and VPinFE can't check them.  The accept prompt
+says they are reported by the extension's author and VPinFE can't check them.  The trust prompt
 lists Author, Version, Source and Folder Path, then Reported Capabilities.  Extensions that ship
 with VPinFE have the author `VPinFE` and the source `https://github.com/vpinfe/vpinfe`, a logo as
 the picture and no Folder Path.

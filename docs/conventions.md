@@ -1060,7 +1060,7 @@ anywhere but `panel.py`, and the nav rail in `page.py`.
   carries a tooltip. Dialogs are no exception: the confirm verb takes its icon and Cancel
   takes `close`. Menu items take none.
 - **One icon per verb, from `manager/kit/verbs.py`.** A verb that means what another means
-  takes that one's drawing: Accept, Done, Choose and Keep all draw `check`, and Cancel,
+  takes that one's drawing: Trust, Done, Choose and Keep all draw `check`, and Cancel,
   Close, Skip and Discard all draw `close`, because they are the same act in different
   words. The label is what tells them apart.
 - **A verb nothing draws falls back by what it does** - open `open_in_new`, change `edit`,

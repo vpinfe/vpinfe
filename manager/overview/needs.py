@@ -30,8 +30,9 @@ REVIEW, RETRY, FOLDERS = "review", "retry", "folders"
 EXTENSION = "ext:"
 
 # The rows for a theme or an extension waiting to be accepted, keyed `unaccepted:theme:<key>`
-# and `unaccepted:ext:<name>`. They are about this install and cannot be set aside:
-# whatever is stopped stays so until the Owner accepts it or removes it.
+# and `unaccepted:ext:<name>`; two or more themes share `unaccepted:themes`. They are about
+# this install and cannot be set aside: whatever is stopped stays so until the Owner
+# accepts it or removes it.
 UNACCEPTED = "unaccepted:"
 
 # A program's ask to make one change, keyed `asked:<id>`. It lapses on its own and is
@@ -223,7 +224,7 @@ def _unread(failed: Any) -> str:
             ("recordings", t("manager.needs.unread_recordings")),
             ("fill", t("manager.needs.unread_fill")),
             ("extensions", t("manager.needs.unread_extensions")),
-            ("unaccepted", t("manager.needs.unread_unaccepted")),
+            ("unaccepted", t("manager.needs.unread_untrusted")),
             ("leftovers", t("manager.needs.unread_leftovers")),
             ("media", t("manager.needs.unread_media")))
     return ", ".join(words for key, words in said if key in failed)
@@ -254,17 +255,25 @@ def unaccepted_rows(waiting: Mapping[str, Any]) -> list[Need]:
     from manager.extensions import ext_page
 
     out = []
-    for theme in waiting.get("themes") or ():
-        out.append(Need(f"{UNACCEPTED}theme:{theme['key']}",
-                        t("manager.needs.unaccepted", name=theme.get("name") or theme["key"]),
-                        t("manager.needs.unaccepted.tip"), WARM, verbs.LOCKED,
+    themes = list(waiting.get("themes") or ())
+    if len(themes) > 1:
+        out.append(Need(UNACCEPTED + "themes", t("manager.needs.untrusted_themes",
+                                                 count=len(themes)),
+                        t("manager.needs.untrusted_themes.tip"), WARM, verbs.LOCKED,
                         Opens("themes")))
+    else:
+        for theme in themes:
+            out.append(Need(f"{UNACCEPTED}theme:{theme['key']}",
+                            t("manager.needs.untrusted",
+                              name=theme.get("name") or theme["key"]),
+                            t("manager.needs.untrusted.tip"), WARM, verbs.LOCKED,
+                            Opens("themes")))
     for extension in waiting.get("extensions") or ():
         name = str(extension["name"])
         out.append(Need(f"{UNACCEPTED}ext:{name}",
-                        t("manager.needs.unaccepted",
+                        t("manager.needs.untrusted",
                           name=extension.get("display_name") or name),
-                        t("manager.needs.unaccepted.tip"), WARM, verbs.LOCKED,
+                        t("manager.needs.untrusted.tip"), WARM, verbs.LOCKED,
                         Opens("settings", keys={"settings_page": ext_page.key(name)})))
     return out
 

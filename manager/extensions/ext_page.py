@@ -122,9 +122,9 @@ def _origin_chip(extension: dict) -> Callable[[], None] | None:
     stopped = not trust.get("accepted")
     tip = t("manager.ext_page.unofficial_tip")
     if trust.get("origin") == accepted.REPLACES:
-        tip = "\n".join((tip, t("manager.accept.replaces",
+        tip = "\n".join((tip, t("manager.trust.replaces",
                                 name=extension.get("display_name") or "")))
-    return panel.state(t("manager.ext_page.not_accepted_chip" if stopped
+    return panel.state(t("manager.ext_page.not_trusted_chip" if stopped
                          else "manager.ext_page.unofficial_chip"),
                        "bad" if stopped else "warn", hint=tip, glyph=ext_mark.GLYPH)
 
@@ -189,9 +189,9 @@ def _reported_rows(extension: dict) -> list[tuple[Any, ...]]:
     _, remote = _remote_names([f"{PLAY_PREFIX}{one}" for one in extension.get("play") or []])
     entries: list[tuple[Any, ...]] = []
     if words:
-        entries.append((t("manager.accept.uses"), _chips(words)))
+        entries.append((t("manager.trust.uses"), _chips(words)))
     if remote:
-        entries.append((t("manager.accept.remote"), _chips(remote)))
+        entries.append((t("manager.trust.remote"), _chips(remote)))
     return [*entries, panel.note(t("manager.ext_page.reach_help"))] if entries else []
 
 
@@ -212,7 +212,7 @@ def _findings(extension: dict, open_this_device: Callable[[], None],
     if waiting.get("reason_key") == host.NOT_ACCEPTED:
         return [_unaccepted(extension, waiting, refill)]
     if waiting.get("reason_key") == host.STARTS_AT_RESTART:
-        return [_finding(t("manager.ext_page.replacement_accepted"),
+        return [_finding(t("manager.ext_page.replacement_trusted"),
                          t(host.STARTS_AT_RESTART))]
     if _cannot_run(extension):
         fix = panel.action(t("manager.ext_page.open_device"), open_this_device,
@@ -257,15 +257,15 @@ def _unaccepted(extension: dict, copy: dict, refill: Callable[[], None]
         try:
             await offload.io(ApiClient().accept_extension, name)
         except Exception as exc:  # noqa: BLE001
-            ui.notify(t("manager.ext_page.accept_failed"), caption=why(exc), type="negative")
+            ui.notify(t("manager.ext_page.trust_failed"), caption=why(exc), type="negative")
             return
         refill()
 
-    fix = panel.action(t("manager.accept.accept"), decide, icon=verbs.ACCEPT,
+    fix = panel.action(t("manager.trust.trust"), decide, icon=verbs.ACCEPT,
                        hint=t("manager.ext_page.accept_hint"))
     if own:
-        return _finding(t("manager.ext_page.not_accepted"),
-                        t("manager.ext_page.not_accepted_detail"), fix)
+        return _finding(t("manager.ext_page.not_trusted"),
+                        t("manager.ext_page.not_trusted_detail"), fix)
     return _finding(t("manager.ext_page.replacement_waiting"),
                     t("manager.ext_page.replacement_detail",
                       version=str(copy.get("version") or ""),

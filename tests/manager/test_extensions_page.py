@@ -346,7 +346,7 @@ class AboutTests(unittest.TestCase):
         page = Page({**IDENTIFIED, "scopes": ["games:read"], "capabilities": ["net:outbound"]})
 
         about = page.rows[:page.rows.index(i18n.t("manager.ext_page.enabled"))]
-        self.assertEqual(about[-1], i18n.t("manager.accept.uses"))
+        self.assertEqual(about[-1], i18n.t("manager.trust.uses"))
         self.assertEqual(page.labels("manager-tier", "manager-tier--on"),
                          [i18n.t("manager.ext_page.read_library"),
                           i18n.t("manager.ext_page.reach_internet")])
@@ -356,18 +356,18 @@ class AboutTests(unittest.TestCase):
         page = Page({**IDENTIFIED, "state": host.OFF, "enabled": False,
                      "scopes": ["games:read"]})
 
-        self.assertIn(i18n.t("manager.accept.uses"), page.rows)
+        self.assertIn(i18n.t("manager.trust.uses"), page.rows)
 
     def test_one_that_reports_nothing_draws_no_row_and_no_line(self) -> None:
         page = Page(IDENTIFIED)
 
-        self.assertNotIn(i18n.t("manager.accept.uses"), page.rows)
+        self.assertNotIn(i18n.t("manager.trust.uses"), page.rows)
         self.assertNotIn(i18n.t("manager.ext_page.reach_help"), page.labels("manager-help"))
 
     def test_what_a_remote_can_open_is_its_own_row(self) -> None:
         page = Page({**IDENTIFIED, "play": ["router"]})
 
-        self.assertIn(i18n.t("manager.accept.remote"), page.rows)
+        self.assertIn(i18n.t("manager.trust.remote"), page.rows)
 
     def test_one_with_no_manifest_draws_no_group(self) -> None:
         page = Page(RUNNING)
@@ -388,13 +388,13 @@ class IdentityHeaderTests(unittest.TestCase):
         page = Page({**IDENTIFIED, "trust": {"origin": "in_folder", "accepted": False,
                                               "folder": "found"}})
 
-        self.assertIn(i18n.t("manager.ext_page.not_accepted_chip"), _words(page))
+        self.assertIn(i18n.t("manager.ext_page.not_trusted_chip"), _words(page))
 
     def test_one_that_ships_draws_no_chip(self) -> None:
         words = _words(Page(SHIPPED_IDENTITY))
 
         self.assertNotIn(i18n.t("manager.ext_page.unofficial_chip"), words)
-        self.assertNotIn(i18n.t("manager.ext_page.not_accepted_chip"), words)
+        self.assertNotIn(i18n.t("manager.ext_page.not_trusted_chip"), words)
 
     def test_a_picture_is_drawn_only_once_it_is_to_be_shown(self) -> None:
         def images(found: dict) -> list[ui.image]:

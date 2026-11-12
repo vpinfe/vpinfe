@@ -503,7 +503,7 @@ def install(key: str) -> dict[str, Any]:
     offered_from = str((offered or {}).get("source") or "")
     if offered is not None and not accepted.theme_accepted(
             key, offered_from, stock=theme_sources.is_stock(offered_from)):
-        raise service_errors.RefusedError(t("error.themes.not_accepted", key=key))
+        raise service_errors.RefusedError(t("error.themes.not_trusted", key=key))
     try:
         theme_service.install_theme(registry, key)
     except ThemeRegistryError as exc:
@@ -542,7 +542,7 @@ def activate(key: str) -> dict[str, Any]:
     if not _readable().is_installed(key):
         raise service_errors.RefusedError(t("error.themes.not_installed", key=key))
     if not accepted.theme_runs(key):
-        raise service_errors.RefusedError(t("error.themes.not_accepted", key=key))
+        raise service_errors.RefusedError(t("error.themes.not_trusted", key=key))
     theme_service.set_active_theme(key)
     return {"active": theme_service.get_active_theme()}
 

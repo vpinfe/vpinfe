@@ -18,7 +18,7 @@ from manager.extensions import ext_mark
 from manager.kit import dialog as frame
 from manager.kit import panel, verbs
 
-__all__ = ["chips", "extension", "new_access", "theme"]
+__all__ = ["chips", "extension", "new_access", "theme", "themes"]
 
 
 def chips(words: Sequence[str]) -> Callable[[], None]:
@@ -48,9 +48,9 @@ async def _ask(title: str, lines: Sequence[str], answer: str, *,
 def _capability_rows(uses: Sequence[str], remote: Sequence[str]) -> list[tuple[Any, ...]]:
     rows: list[tuple[Any, ...]] = []
     if uses:
-        rows.append((t("manager.accept.uses"), chips(uses)))
+        rows.append((t("manager.trust.uses"), chips(uses)))
     if remote:
-        rows.append((t("manager.accept.remote"), chips(remote)))
+        rows.append((t("manager.trust.remote"), chips(remote)))
     return rows
 
 
@@ -58,15 +58,26 @@ async def theme(name: str, *, source: str = "", installing: bool = False) -> boo
     """Whether to let this theme run. `source` is where it comes from, empty for one found
     in the themes folder; `installing` is a theme not here yet, whose answer also installs
     it."""
-    where = (t("manager.accept.theme_from", name=name, source=source) if source
-             else t("manager.accept.theme_found", name=name))
+    where = (t("manager.trust.theme_from", name=name, source=source) if source
+             else t("manager.trust.theme_found", name=name))
     return await _ask(
-        t("manager.accept.theme_install_title" if installing
-          else "manager.accept.theme_use_title"),
-        [where, t("manager.accept.theme_risk")],
-        t("manager.accept.accept_install" if installing else "manager.accept.accept"),
-        closing=t("manager.accept.theme_install_trust" if installing
-                  else "manager.accept.theme_use_trust"))
+        t("manager.trust.theme_install_title" if installing
+          else "manager.trust.theme_trust_title"),
+        [where, t("manager.trust.theme_risk")],
+        t("manager.trust.trust_install" if installing else "manager.trust.trust"),
+        closing=t("manager.trust.theme_install_trust" if installing
+                  else "manager.trust.theme_use_trust"))
+
+
+async def themes(found: Sequence[tuple[str, str]]) -> bool:
+    """Whether to let all of these run, in one answer. Each is a name and where it comes
+    from, empty for one found in the themes folder."""
+    return await _ask(
+        t("manager.trust.themes_title", count=len(found)),
+        [t("manager.trust.themes_from"), t("manager.trust.themes_risk")],
+        t("manager.trust.trust_all"),
+        rows=[(name, source or t("manager.themes.in_folder")) for name, source in found],
+        closing=t("manager.trust.themes_trust"))
 
 
 async def extension(name: str, version: str, *, author: str, source: str, path: str,
@@ -75,11 +86,11 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
     """Whether to let this extension run. `uses` is what it says it uses, in words;
     `remote` is what a Remote can open; `replaces` names the built-in it stands in for,
     and `replaces_version` the one that comes with VPinFE."""
-    lines = [t("manager.accept.ext_body", name=name)]
+    lines = [t("manager.trust.ext_body", name=name)]
     if replaces:
-        lines.append(t("manager.accept.replaces_version", name=replaces,
+        lines.append(t("manager.trust.replaces_version", name=replaces,
                        version=replaces_version) if replaces_version
-                     else t("manager.accept.replaces", name=replaces))
+                     else t("manager.trust.replaces", name=replaces))
     rows: list[tuple[Any, ...]] = [(t("manager.ext_page.author"), author),
                                    (t("manager.ext_page.version_label"), version)]
     if source:
@@ -89,8 +100,8 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
     if path:
         rows.append((t("manager.ext_page.folder_path"), panel.path_value(path)))
     rows += _capability_rows(uses or [t("word.none")], remote)
-    return await _ask(t("manager.accept.ext_title"), lines, t("manager.accept.accept"),
-                      rows=rows, closing=t("manager.accept.ext_trust"))
+    return await _ask(t("manager.trust.ext_title"), lines, t("manager.trust.trust"),
+                      rows=rows, closing=t("manager.trust.ext_trust"))
 
 
 async def new_access(name: str, version: str, author: str, added: Sequence[str],
@@ -100,9 +111,9 @@ async def new_access(name: str, version: str, author: str, added: Sequence[str],
     is known. The author is shown again so an update says whose it is."""
     rows: list[tuple[Any, ...]] = [(t("manager.ext_page.author"), author)]
     if added or remote:
-        rows.append((t("manager.accept.new_capabilities"), chips([*added, *remote])))
-    body = (t("manager.accept.access_body", was=was, version=version) if was and was != version
-            else t("manager.accept.access_body_to", version=version))
-    return await _ask(t("manager.accept.access_title", name=name), [body],
-                      t("manager.accept.accept"), rows=rows,
-                      closing=t("manager.accept.access_stopped"))
+        rows.append((t("manager.trust.new_capabilities"), chips([*added, *remote])))
+    body = (t("manager.trust.access_body", was=was, version=version) if was and was != version
+            else t("manager.trust.access_body_to", version=version))
+    return await _ask(t("manager.trust.access_title", name=name), [body],
+                      t("manager.trust.trust"), rows=rows,
+                      closing=t("manager.trust.access_stopped"))

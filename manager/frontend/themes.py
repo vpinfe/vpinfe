@@ -68,8 +68,8 @@ UNACCEPTED, UNOFFICIAL = "unaccepted", "unofficial"
 TRUST = states.Table(
     covers=t("manager.themes.trust.help"),
     states=(
-        states.State(UNACCEPTED, t("manager.themes.not_accepted"),
-                     t("manager.themes.trust.not_accepted"), tone=states.BAD),
+        states.State(UNACCEPTED, t("manager.themes.not_trusted"),
+                     t("manager.themes.trust.not_trusted"), tone=states.BAD),
         states.State(UNOFFICIAL, t("manager.themes.unofficial"),
                      t("manager.themes.trust.unofficial"), tone=states.WARN)),
     blank=states.State("", t("manager.themes.trust.listed"),
@@ -89,14 +89,14 @@ COLUMNS: list[dict[str, Any]] = [
     grid.identifier("name", t("manager.themes.theme"), 320, subtitle="said",
                     help=t("manager.themes.theme.help"),
                     picture="preview", glyph=theme_card.GLYPH, frame=thumbnails.PREVIEW),
-    STATUS.column("status", t("word.status"), 160),
-    TRUST.column("trust", t("manager.themes.trust"), 140),
-    grid.column("updated", t("manager.themes.updated"), 150,
-                help=t("manager.themes.updated.help"), **when.cell("updated")),
-    grid.column("made_for", t("manager.themes.made_for"), 150,
+    grid.column("made_for", t("manager.themes.made_for"), 190,
                 help=t("manager.themes.made_for.help"),
                 **grid.choice_filter([{"value": key, "label": label}
                                       for key, label in MADE_FOR.items()])),
+    STATUS.column("status", t("word.status"), 160),
+    grid.column("updated", t("manager.themes.updated"), 150,
+                help=t("manager.themes.updated.help"), **when.cell("updated")),
+    TRUST.column("trust", t("manager.themes.trust"), 140),
     grid.column("author", t("word.author"), 140, help=t("manager.themes.author.help")),
     grid.column("registry", t("manager.themes.list"), 200,
                 help=t("manager.themes.list.help")),
@@ -104,7 +104,7 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.themes.repository.help")),
 ]
 _ALL = [one["field"] for one in COLUMNS]
-_SHOWN = ("name", "status", "trust", "updated", "made_for")
+_SHOWN = ("name", "made_for", "status", "updated", "trust")
 
 _QUIET = tuple(one for one in _SHOWN if one != "status")
 
@@ -229,6 +229,8 @@ async def _fill(library: Library, state: dict[str, Any],
         return
     with body:
         _finding(sources)
+        _waiting_notice(library, [one for one in found.get("themes") or [] if stopped(one)],
+                        redraw)
         with ui.row().classes("w-full items-center gap-2 px-3 py-2 mb-2 shrink-0 "
                               "manager-panel manager-grid-bar"):
             bar = panel.grid_bar()
@@ -470,7 +472,7 @@ def acts(library: Library, themes: list[dict[str, Any]],
     offered: list[panel.Verb] = []
     waiting = [one for one in themes if stopped(one)]
     if waiting:
-        offered.append(panel.Verb(t("manager.accept.accept"),
+        offered.append(panel.Verb(t("manager.trust.trust"),
                                   lambda: _accept(library, waiting[0], after),
                                   icon=verbs.ACCEPT, one=True))
     if absent:
@@ -602,18 +604,23 @@ async def _activate(library: Library, theme: dict[str, Any], again: Callable[[],
     await again()
 
 
+def _source_of(theme: dict[str, Any]) -> str:
+    """Where a theme comes from, empty for one found in the themes folder."""
+    trust = theme.get("trust") or {}
+    return "" if trust.get("origin") == accepted.IN_FOLDER else (
+        str(trust.get("source_name") or "") or repo_name(str(trust.get("source") or "")))
+
+
 async def _agreed(library: Library, theme: dict[str, Any], *, installing: bool) -> bool:
     """Ask whether this theme may run, and on a yes write the acceptance. False where the
     answer was no or the acceptance could not be written, which is said."""
-    trust = theme.get("trust") or {}
-    source = "" if trust.get("origin") == accepted.IN_FOLDER else (
-        str(trust.get("source_name") or "") or repo_name(str(trust.get("source") or "")))
-    if not await accept.theme(str(theme["name"]), source=source, installing=installing):
+    if not await accept.theme(str(theme["name"]), source=_source_of(theme),
+                              installing=installing):
         return False
     try:
         await run.io_bound(library.accept_theme, theme["key"])
     except Exception as exc:  # noqa: BLE001
-        ui.notify(t("manager.themes.accept_failed"), caption=why(exc), type="negative")
+        ui.notify(t("manager.themes.trust_failed"), caption=why(exc), type="negative")
         return False
     return True
 
@@ -621,8 +628,44 @@ async def _agreed(library: Library, theme: dict[str, Any], *, installing: bool) 
 @on_page
 async def _accept(library: Library, theme: dict[str, Any], again: Callable[[], Any]) -> None:
     if await _agreed(library, theme, installing=False):
-        ui.notify(t("manager.themes.accepted", name=theme["name"]), type="positive")
+        ui.notify(t("manager.themes.trusted", name=theme["name"]), type="positive")
         await again()
+
+
+@on_page
+async def _trust_all(library: Library, themes: list[dict[str, Any]],
+                     again: Callable[[], Any]) -> None:
+    """One question for all of them, then each in turn; one that fails says so and the
+    rest go on."""
+    if not await accept.themes([(str(one["name"]), _source_of(one)) for one in themes]):
+        return
+    done = 0
+    failed = Failures()
+    for theme in themes:
+        try:
+            await run.io_bound(library.accept_theme, theme["key"])
+        except Exception as exc:  # noqa: BLE001
+            failed.add(str(theme["name"]), why(exc))
+            continue
+        done += 1
+    failed.say("manager.themes.trust_failed_many")
+    if done:
+        ui.notify(t("manager.themes.trusted_many", count=done), type="positive")
+        again()
+
+
+def _waiting_notice(library: Library, waiting: list[dict[str, Any]],
+                    redraw: Callable[[], None]) -> None:
+    """Several themes stopped for want of trust, with the one answer that covers them. One
+    waiting is answered by its own Trust."""
+    if len(waiting) < 2:
+        return
+    with ui.row().classes("w-full items-center gap-2 px-3 py-2 mb-2 shrink-0 manager-panel"):
+        ui.label(t("manager.themes.waiting_trust", count=len(waiting))) \
+            .classes("manager-help text-warning")
+        panel.action(t("manager.themes.trust_all"),
+                     partial(_trust_all, library, waiting, redraw),
+                     icon=verbs.ACCEPT, hint=t("manager.themes.trust_all.help"))()
 
 
 @on_page
