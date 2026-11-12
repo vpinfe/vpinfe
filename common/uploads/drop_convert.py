@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
-import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
@@ -23,6 +22,7 @@ from common.games.media_files import SkipError
 from common.host import launch_state
 from common.i18n import t
 from common.runtime import shutdown
+from common.uploads import working_folder
 from common.uploads.asset_analyzer_service import (
     DetectedAsset,
     SourceEntry,
@@ -135,7 +135,7 @@ class Drop:
         """Every file to be converted, converted to a scratch folder: the files by their
         name in the drop, and what removes the folder. Raises where one cannot be
         converted, after removing it, and `StoppedError` where the person stopped it."""
-        scratch = Path(tempfile.mkdtemp(prefix="vpinfe_convert_"))
+        scratch = working_folder.make("convert-")
 
         def clean() -> None:
             shutil.rmtree(scratch, ignore_errors=True)

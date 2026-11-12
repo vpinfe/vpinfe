@@ -90,6 +90,20 @@ from common.security.http_client import OFFLINE as _OFFLINE  # noqa: E402
 
 os.environ.setdefault(_OFFLINE, "1")
 
+# Nor does an import work in a library folder of the machine's own: the working folder is
+# beside the library, which the suite has none of. Assigned, not a started patch, which any
+# test's `patch.stopall()` would lift. Kept for the tests of the folder itself.
+from common.uploads import working_folder as _working_folder  # noqa: E402
+
+REAL_WORKING_WHERE = _working_folder._where
+# One folder per temp root, named here and made only when an import first needs it: a process
+# a test spawns and kills never gets to run its exit handlers, so one made per import of this
+# file is left behind by each of them.
+_TEST_WORKING_DIR = str(Path(tempfile.gettempdir()) / "vpinfe-library")
+atexit.register(shutil.rmtree, _TEST_WORKING_DIR, ignore_errors=True)
+_working_folder._where = lambda: (  # type: ignore[assignment]
+    Path(_TEST_WORKING_DIR) / _working_folder.NAME, "the test library")
+
 # Nor against the machine's own VPinballX.ini, which an empty Settings File stands for:
 # a launcher-scope write would change it. Assigned, not a started patch, which any
 # test's `patch.stopall()` would lift.

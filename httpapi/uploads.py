@@ -8,7 +8,7 @@ file that was too big is 413, and a session nothing can be made of is 422.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
 from fastapi import APIRouter, Body, File, Form, Query, UploadFile
 from starlette.concurrency import run_in_threadpool
@@ -31,8 +31,9 @@ vps_router = APIRouter(prefix="/vps", tags=["vps"])
 
 
 @router.post("", summary="Begin an upload session", dependencies=[requires(scopes.UPLOADS_WRITE)])
-def begin_upload() -> models.UploadBegun:
-    return models.UploadBegun(**upload_ops.begin())
+def begin_upload(body: models.UploadBegin = Body(default_factory=models.UploadBegin)
+                 ) -> models.UploadBegun:
+    return models.UploadBegun(**upload_ops.begin(body.bytes))
 
 
 @router.post("/from_path", summary="Begin a session over a folder on this device",
@@ -66,6 +67,27 @@ async def add_upload_file(upload_id: str, relpath: str = Form(...),
     except upload_ops.UploadTooLargeError as exc:
         raise ApiError("payload_too_large", why(exc), status_code=413) from exc
     return models.FileStored(**stored)
+
+
+@router.put("/{upload_id}/file", summary="Stream a file into an upload session",
+            dependencies=[requires(scopes.UPLOADS_WRITE)])
+async def put_upload_file(upload_id: str, request: Request,
+                          relpath: str = Query(...)) -> models.FileStored:
+    """The request body is the file, as it is. Unlike the multipart route, nothing is
+    copied to the system temp folder on the way: it goes straight into the session's folder
+    beside the library, and `Content-Length` is checked against the room there first."""
+    declared = int(request.headers.get("content-length") or 0)
+    written = 0
+    try:
+        with ExitStack() as opened:
+            put = await run_in_threadpool(
+                opened.enter_context, upload_ops.file_writer(upload_id, relpath, declared))
+            async for chunk in request.stream():
+                written += len(chunk)
+                await run_in_threadpool(put, chunk)
+    except upload_ops.UploadTooLargeError as exc:
+        raise ApiError("payload_too_large", why(exc), status_code=413) from exc
+    return models.FileStored(bytes=written)
 
 
 @router.get("/{upload_id}/analysis", summary="Analyze an upload session",

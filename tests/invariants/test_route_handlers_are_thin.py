@@ -49,6 +49,9 @@ ALLOWED = {
     # Schedules the process to quit after the response is sent; doing it inline would take
     # the process down before the caller was told anything.
     "instance.py:perform_update",
+    # Reads the request body chunk by chunk as it arrives, which only the wire layer can do;
+    # the writing and the check for room are in `upload_ops`.
+    "uploads.py:put_upload_file",
 }
 
 

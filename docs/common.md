@@ -165,6 +165,7 @@ Depends on `common/host/`, `common/games/`, `common/extensions/` and `common/dev
 
 **`common/uploads/`** - getting files into the library.
 
+- `working_folder.py`: where an import keeps its files, a `.import-working` folder in the New Games Folder, so the work happens on the drive the import ends up on. It checks for room before an import starts, says a full drive in plain words, and never falls back to the system temp folder.
 - `upload_session_service.py`: an upload in progress. Files arrive in chunks into a session directory and every path is checked against it, so an upload naming `../` is refused rather than resolved.
 - `asset_analyzer_service.py`: what a zip, folder or loose file holds, worked out without extracting it.
 - `asset_import_service.py`: an analyzed drop becomes a plan, and only then files on disk - so an import that would overwrite something is declined rather than undone.

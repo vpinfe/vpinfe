@@ -280,9 +280,10 @@ the documented entry point is a plain 200. Both spellings work.
 | PUT | `/api/v1/games/{id}/default_table` | Which table the game offers first, `{"table": "<table id>"}`; empty clears the choice. A hidden table is refused |
 | POST | `/api/v1/games/{id}/tables/{table_id}/script` | Extract the table's script to a `<table>.vbs` beside it. **VPX then runs that instead of the one inside the .vpx.** Needs Visual Pinball on the device called, like `/launch`; `501` where there is none |
 | DELETE | `/api/v1/games/{id}/tables/{table_id}/script` | Remove the sidecar, putting the table back on its own script. `404` if there is none |
-| POST | `/api/v1/uploads` | Begin an upload session → `{"id": ...}` |
+| POST | `/api/v1/uploads` | Begin an upload session → `{"id": ...}`. The optional body `{"bytes": n}` is the size of what will be sent; where the drive holding the New Games Folder has no room for it twice over (the copy kept there, and the one the import writes into the library), the session is refused with `409` and the reason in plain words, and no session is made. The session's files are kept in a `.import-working` folder beside the library, never in the system temp folder |
 | POST | `/api/v1/uploads/from_path` | Begin a session over a file, a folder or an archive already on this device, `{"path": ...}`. Bounded like `/filesystem`, and needs both `uploads:write` and `filesystem:read`. Analysis, plan and import read it in place; the session's end never removes it, and nothing can be uploaded into it |
-| POST | `/api/v1/uploads/{id}/files` | Add a file (multipart: `relpath`, `file`) |
+| POST | `/api/v1/uploads/{id}/files` | Add a file (multipart: `relpath`, `file`). The server's multipart reader holds the upload in the system temp folder on the way, so a large file belongs on `PUT /uploads/{id}/file` |
+| PUT | `/api/v1/uploads/{id}/file?relpath=` | Add a file, the request body being the file as it is. It goes straight into the session's folder with nothing copied to the system temp folder, and `Content-Length`, where sent, is checked against the room there first: `409` with no room. `413` is the session passing its size limit while the file is written. A file that does not arrive whole is removed. Answers the bytes written, as `bytes` |
 | GET | `/api/v1/uploads/{id}` | Session summary → `{"file_count", "total_bytes"}` |
 | DELETE | `/api/v1/uploads/{id}` | Abort a session |
 | GET | `/api/v1/uploads/{id}/analysis` | Analyze what was uploaded |

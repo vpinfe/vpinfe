@@ -8,9 +8,10 @@ confirm, and it can only be answered on this side - a caller cannot see the inst
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import IO, Any
@@ -31,7 +32,7 @@ from common.i18n import t
 from common.media import sized_media
 from common.media.media_specs import CONVERTIBLE_IMAGE, IMAGE_FAMILY
 from common.runtime import jobs
-from common.uploads import arrival, drop_convert, upload_session_service
+from common.uploads import arrival, drop_convert, upload_session_service, working_folder
 from common.uploads.asset_analyzer_service import (
     AnalysisResult,
     DetectedAsset,
@@ -64,7 +65,8 @@ logger = logging.getLogger("vpinfe.common.uploads.upload_ops")
 
 __all__ = ["NothingImportableError", "PicksNeededError", "UnprocessableUploadError",
            "UploadTooLargeError",
-           "abort", "add_file", "analysis_of", "begin", "begin_from", "execute", "picture",
+           "abort", "add_file", "analysis_of", "begin", "begin_from", "execute", "file_writer",
+           "picture",
            "plan_for", "single_image", "start_import", "stop_import", "summary"]
 
 
@@ -329,8 +331,11 @@ def _vps_entry(vps_id: str) -> dict | None:
     return entry
 
 
-def begin() -> dict[str, Any]:
-    return {"id": upload_session_service.begin_session().upload_id}
+def begin(expected_bytes: int = 0) -> dict[str, Any]:
+    """A session to upload into. `expected_bytes` is what the sender is about to send:
+    refused here, with the reason, where the drive beside the library has no room for it."""
+    return {"id": upload_session_service.begin_session(
+        expected_bytes=max(0, expected_bytes)).upload_id}
 
 
 def begin_from(path: str) -> dict[str, Any]:
@@ -366,6 +371,20 @@ def abort(upload_id: str) -> None:
 def add_file(upload_id: str, relpath: str, stream: IO[bytes]) -> dict[str, Any]:
     try:
         return {"bytes": upload_session_service.store_file(upload_id, relpath, stream)}
+    except UnknownSessionError as exc:
+        raise service_errors.NotFoundError(why(exc)) from exc
+    except UnsafePathError as exc:
+        raise service_errors.RefusedError(why(exc)) from exc
+
+
+@contextlib.contextmanager
+def file_writer(upload_id: str, relpath: str, size: int = 0) -> Iterator[Callable[[bytes], None]]:
+    """What takes the chunks of one file, for a sender that streams it. `size` is what it
+    says it is sending, and a drive with no room for that refuses before any is written."""
+    try:
+        working_folder.ensure_room(max(0, size))
+        with upload_session_service.writer(upload_id, relpath) as put:
+            yield put
     except UnknownSessionError as exc:
         raise service_errors.NotFoundError(why(exc)) from exc
     except UnsafePathError as exc:
@@ -611,6 +630,8 @@ def _run(plan: ImportPlan, source: Path, declared: dict, upload_id: str,
             why(exc), details={"replaced_tables": exc.replaced}) from exc
     except (ValueError, FileNotFoundError) as exc:
         raise service_errors.RefusedError(why(exc)) from exc
+    except OSError as exc:
+        raise working_folder.out_of_room(exc) or exc from exc
     finally:
         clean()
     upload_session_service.cleanup_session(upload_id)

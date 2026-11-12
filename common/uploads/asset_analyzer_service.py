@@ -10,7 +10,6 @@ import fnmatch
 import logging
 import os
 import shutil
-import tempfile
 import zipfile
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
@@ -26,6 +25,7 @@ from common.games.asset_registry import (
 from common.host import tools
 from common.i18n import t
 from common.media.media_specs import IMAGE_FAMILY
+from common.uploads import working_folder
 from common.uploads.conversion import Conversion
 
 try:
@@ -227,7 +227,7 @@ class SevenZipSource:
         raw = self._raw_by_path[entry_path]
         dest.parent.mkdir(parents=True, exist_ok=True)
         # py7zr has no cheap per-member stream, so extract into a scratch dir and copy out.
-        with tempfile.TemporaryDirectory() as scratch:
+        with working_folder.scratch() as scratch:
             with py7zr.SevenZipFile(self._path, "r") as archive:
                 archive.extract(path=scratch, targets=[raw])
             extracted = Path(scratch) / raw
@@ -654,7 +654,7 @@ def _readme_preview(source: AssetSource, asset: DetectedAsset) -> str:
     if entry.size > _README_PREVIEW_BYTES or entry.arcname.lower().endswith(
             (*IMAGE_FAMILY, ".pdf")):
         return ""
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         dest = Path(scratch) / "readme"
         try:
             source.extract_member(entry.path, dest)
@@ -674,7 +674,7 @@ def _read_info_json(source: AssetSource, asset: DetectedAsset) -> dict | None:
     entry = asset.entries[0]
     if entry.size > _INFO_MAX_BYTES:
         return None
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         dest = Path(scratch) / "bundle.info"
         try:
             source.extract_member(entry.path, dest)

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import re
-import tempfile
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -43,7 +42,7 @@ from common.media.media_specs import (
     media_family,
     unsupported_named,
 )
-from common.uploads import picture_shape
+from common.uploads import picture_shape, working_folder
 from common.uploads.asset_analyzer_service import (
     AnalysisResult,
     AssetSource,
@@ -286,7 +285,7 @@ def _shape_of(source: AssetSource | None, entry: SourceEntry) -> Shape | None:
             key = None
     if key is not None and key in _SHAPES:
         return _SHAPES[key]
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         local = Path(scratch) / f"picture{_suffix(entry.arcname)}"
         try:
             source.extract_member(entry.path, local)
@@ -650,7 +649,7 @@ def _measured(arrival: Arrival, members: list[str]) -> None:
     if not wanted:
         return
     source, _listing, _error = open_listed(arrival.source_path)
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         try:
             for member in wanted:
                 entry = arrival.entries[member]

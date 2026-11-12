@@ -127,16 +127,17 @@ if (!window.__managerDnd) {
   }
 
   async function upload(files, say) {
-    const begin = await ask('/api/v1/uploads', {method: 'POST'});
+    const total = files.reduce((sum, item) => sum + item.file.size, 0);
+    const begin = await ask('/api/v1/uploads', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({bytes: total})});
     if (!begin.ok) throw await refused(begin);
     const uploadId = (await begin.json()).id;
     let done = 0;
     for (const item of files) {
-      const form = new FormData();
-      form.append('relpath', item.relpath);
-      form.append('file', item.file, item.file.name);
-      const said = await ask(`/api/v1/uploads/${uploadId}/files`,
-                             {method: 'POST', body: form});
+      const said = await ask(
+        `/api/v1/uploads/${uploadId}/file?relpath=${encodeURIComponent(item.relpath)}`,
+        {method: 'PUT', body: item.file});
       if (!said.ok) {
         const why = await refused(said);
         await ask(`/api/v1/uploads/${uploadId}`, {method: 'DELETE'}).catch(() => {});

@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import shutil
-import tempfile
 import zipfile
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -49,6 +48,7 @@ from common.i18n import t
 from common.ids import new_id
 from common.kept_copies import IMPORT, copy_aside
 from common.media.media_specs import PAGED_KINDS
+from common.uploads import working_folder
 from common.uploads.asset_analyzer_service import (
     AnalysisResult,
     AssetSource,
@@ -850,7 +850,7 @@ def _fill_gaps(incoming: dict, existing: dict) -> dict:
 def _incoming_info(source: AssetSource, asset: DetectedAsset) -> dict:
     import json
 
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         staged = Path(scratch) / "bundle.info"
         source.extract_member(asset.entries[0].path, staged)
         try:
@@ -963,7 +963,7 @@ def _swap_table(source: AssetSource, item: PlannedItem, base: Path) -> dict:
     game_id = table_swap.game_id_of(base)
     if not game_id:
         raise ValueError(t("error.games.swap_not_contained"))
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         staged = Path(scratch) / name
         source.extract_member(entry.path, staged)
         swapped = table_swap.replace(game_id, item.table_id, str(staged), carry=item.carry,
@@ -989,13 +989,9 @@ def _build_rom_zip(source: AssetSource, asset: DetectedAsset, dest: Path) -> Non
         for entry in asset.entries:
             if entry.is_dir:
                 continue
-            with tempfile.NamedTemporaryFile(delete=False) as handle:
-                scratch = Path(handle.name)
-            try:
+            with working_folder.scratch_file() as scratch:
                 source.extract_member(entry.path, scratch)
                 archive.write(scratch, arcname=_basename(entry.arcname))
-            finally:
-                scratch.unlink(missing_ok=True)
 
 
 def _extract_tree(source: AssetSource, asset: DetectedAsset, base_dir: Path) -> None:
@@ -1012,9 +1008,7 @@ def _import_media(source: AssetSource, item: PlannedItem, game_dir: Path,
     entry = item.asset.entries[0]
     convert = item.asset.convert
     suffix = convert.suffix if convert else PurePosixPath(entry.arcname).suffix
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
-        scratch = Path(handle.name)
-    try:
+    with working_folder.scratch_file(suffix) as scratch:
         if entry.arcname in converted:
             shutil.copyfile(converted[entry.arcname], scratch)
         else:
@@ -1023,8 +1017,6 @@ def _import_media(source: AssetSource, item: PlannedItem, game_dir: Path,
                                         item.stem or game_dir.name, scratch, item.page,
                                         unsupported=bool(convert and convert.as_is))
         media_placement.record_origin(game_dir, written)
-    finally:
-        scratch.unlink(missing_ok=True)
 
 
 def _record_patched_table(game_dir: Path, vpx: Path, base_file: str, base_hash: str) -> str:
@@ -1083,9 +1075,7 @@ def _apply_patch(source: AssetSource, asset: DetectedAsset, base: Path,
     if original is None:
         raise ValueError(t("error.uploads.no_table"))
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".dif") as tmp:
-        patch_tmp = Path(tmp.name)
-    try:
+    with working_folder.scratch_file(".dif") as patch_tmp:
         _extract_replace(source, asset.entries[0], patch_tmp)
         try:
             with open(original, "rb") as src, open(patch_tmp, "rb") as pat, \
@@ -1100,8 +1090,6 @@ def _apply_patch(source: AssetSource, asset: DetectedAsset, base: Path,
         logger.info("Patched %s -> %s (base sha256 %s)", original.name, dest.name,
                     base_hash[:16])
         return _record_patched_table(base, dest, original.name, base_hash)
-    finally:
-        patch_tmp.unlink(missing_ok=True)
 
 
 def _sha256(path: Path) -> str:

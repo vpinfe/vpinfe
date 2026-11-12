@@ -17,7 +17,6 @@ from __future__ import annotations
 import copy
 import logging
 import shutil
-import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +54,7 @@ from common.games.library_enrichment import read_one
 from common.games.tables import table_entries
 from common.host import launch_state
 from common.i18n import t
+from common.uploads import working_folder
 
 logger = logging.getLogger("vpinfe.common.games.table_swap")
 
@@ -365,7 +365,7 @@ def undo(game_id: str, table_id: str, copy_ids: Iterable[str],
     back = next((one for one in kept if apps.app_for(Path(one[1]).name) is not None), None)
     if back is None:
         raise service_errors.NotFoundError(t("error.backups.gone"))
-    with tempfile.TemporaryDirectory() as scratch:
+    with working_folder.scratch() as scratch:
         staged = Path(scratch) / Path(back[1]).name
         shutil.copy2(back[0], staged)
         done = replace(game_id, table_id, str(staged),

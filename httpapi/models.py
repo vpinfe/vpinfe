@@ -4049,6 +4049,12 @@ class LaunchAccepted(ApiModel):
 
 # --- Uploads ---------------------------------------------------------------
 
+class UploadBegin(ApiModel):
+    # What the sender is about to send, so a drive with no room refuses before the first
+    # byte. Left out, the room is checked per file.
+    bytes: int = 0
+
+
 class UploadBegun(ApiModel):
     id: str
 
