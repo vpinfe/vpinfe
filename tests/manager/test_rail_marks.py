@@ -21,6 +21,10 @@ def _job(state: str, *, at: float = SINCE + 5, kind: str = "import", problems: i
             "problems": problems, "stopped": stopped}
 
 
+def _finding(section: str, key: str, reason: str) -> SimpleNamespace:
+    return SimpleNamespace(section=section, key=key, reason=reason)
+
+
 class WhichJobsAreCounted(unittest.TestCase):
     def test_failed_and_done_with_errors_after_the_time_are_counted(self) -> None:
         found = [_job(jobs.FAILED), _job(jobs.DONE, problems=2)]
@@ -79,16 +83,21 @@ class WhatAClosedGroupShows(unittest.TestCase):
 
 class WhatAnEntryShows(unittest.TestCase):
     def test_the_findings_make_a_red_count_with_each_reason_once(self) -> None:
-        items = [SimpleNamespace(reason="No path"), SimpleNamespace(reason="No path"),
-                 SimpleNamespace(reason="")]
+        items = [_finding("paths", "tables", "No path"), _finding("paths", "media", "No path"),
+                 _finding("paths", "backups", "")]
 
         self.assertEqual(Mark(3, "No path", trouble=True), rail_marks.entry_mark(items, None))
+
+    def test_one_problem_needed_by_two_features_is_counted_once(self) -> None:
+        items = [_finding("folders", "", "No folder"), _finding("folders", "", "No folder")]
+
+        self.assertEqual(Mark(1, "No folder", trouble=True), rail_marks.entry_mark(items, None))
 
     def test_trouble_is_shown_over_a_warm_mark(self) -> None:
         warm = Mark(1, "Update waiting")
 
         self.assertEqual(Mark(1, "x", trouble=True),
-                         rail_marks.entry_mark([SimpleNamespace(reason="x")], warm))
+                         rail_marks.entry_mark([_finding("a", "b", "x")], warm))
         self.assertEqual(warm, rail_marks.entry_mark([], warm))
 
 

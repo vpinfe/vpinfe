@@ -20,11 +20,14 @@ class Mark:
 
 
 def trouble_mark(items: Iterable[Any]) -> Mark | None:
-    """Red, a count of the findings and their reasons once each."""
+    """Red, a count of the problems and their reasons once each. One setting two features
+    both need is one problem: the count is what the person has to fix."""
     found = list(items)
     if not found:
         return None
-    return Mark(len(found), " ".join(dict.fromkeys(one.reason for one in found if one.reason)),
+    problems = {(one.section, one.key, one.reason) for one in found}
+    return Mark(len(problems),
+                " ".join(dict.fromkeys(one.reason for one in found if one.reason)),
                 trouble=True)
 
 
