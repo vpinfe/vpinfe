@@ -4158,6 +4158,19 @@ class DropConvertSetting(ApiModel):
     options: list[DropConvertOption] = []
 
 
+class InfoMergeView(ApiModel):
+    """What an `.info` does here. Where `existing` is true the game already has details and
+    `mode` is one of `modes` for how the file is merged: `fill` adds what is blank, `facts`
+    also takes the file's facts and keeps this install's plays, `all` takes everything the
+    file holds. Where it is false the game has none: `facts` takes the file's facts, rating,
+    favorite and tags and leaves its plays behind, `all` takes the plays too. A file not
+    wanted is left out of `selected`, not given a mode."""
+
+    existing: bool = True
+    mode: Literal["fill", "facts", "all"] = "fill"
+    modes: list[Literal["fill", "facts", "all"]] = ["fill", "facts", "all"]
+
+
 class DropConvertView(ApiModel):
     """What the row of a file converted on the way in shows. `to` is the value chosen, or
     `asis`; `line` the summary of `settings`; `problem` why it cannot be converted at all."""
@@ -4221,6 +4234,9 @@ class PlanItem(ApiModel):
     # Set on a picture, sound or video the slot cannot read: what it can be made as, and the
     # one-line summary of the choices. Null on every other item.
     convert: DropConvertView | None = None
+    # Set on a `.info` file: the way it is merged into the details already on this disk, or
+    # what a first import takes, and the ways on offer. Null on every other item.
+    info: InfoMergeView | None = None
 
 
 class PlanTable(ApiModel):
@@ -4428,6 +4444,10 @@ class PlanRequest(ApiModel):
     # What each picture, sound and video the slot cannot read is made as. Left out, each is
     # converted as recommended.
     convert: DropConvertRequest = DropConvertRequest()
+    # How each `.info` of the drop is merged into the details already on disk, by its path
+    # inside the drop. One not named is filled where the game has details, with what is
+    # blank added and nothing replaced, and is taken as `facts` where it has none.
+    info_modes: dict[str, Literal["fill", "facts", "all"]] = {}
 
 
 class ImportRequest(PlanRequest):

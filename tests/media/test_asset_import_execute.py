@@ -73,6 +73,55 @@ class MergeInfoTests(unittest.TestCase):
         self.assertEqual(merged["Shared"]["x"], "local")
 
 
+class MergeModesTests(unittest.TestCase):
+    INCOMING = {"Info": {"VPSId": "new1", "Title": "New"},
+                "User": {"Rating": 8, "StartCount": 99, "Tags": ["fav"]},
+                "VPX": {"RunCount": 50},
+                "vpinfe": {"alt_title": "Cool"},
+                "tables": {"t": {"user": {"start_count": 99}}},
+                "CustomTool": {"a": 1}}
+    LOCAL = {"Info": {"VPSId": "old1", "Title": "Old"},
+             "User": {"Rating": 2, "StartCount": 7, "Tags": []},
+             "VPX": {"RunCount": 3},
+             "vpinfe": {"alt_title": "Mine"},
+             "tables": {"t": {"user": {"start_count": 7}}}}
+
+    def test_fill_replaces_nothing_the_game_has(self):
+        merged = merge_info(self.INCOMING, self.LOCAL, "fill")
+
+        self.assertEqual("old1", merged["Info"]["VPSId"])
+        self.assertEqual((2, 7), (merged["User"]["Rating"], merged["User"]["StartCount"]))
+        self.assertEqual(3, merged["VPX"]["RunCount"])
+        self.assertEqual("Mine", merged["vpinfe"]["alt_title"])
+
+    def test_facts_takes_the_info_and_keeps_the_plays(self):
+        merged = merge_info(self.INCOMING, self.LOCAL, "facts")
+
+        self.assertEqual({"VPSId": "new1", "Title": "New"}, merged["Info"])
+        self.assertEqual((2, 7), (merged["User"]["Rating"], merged["User"]["StartCount"]))
+        self.assertEqual(3, merged["VPX"]["RunCount"])
+        self.assertEqual("Mine", merged["vpinfe"]["alt_title"])
+
+    def test_all_takes_what_the_file_holds_but_not_this_disks_tables(self):
+        merged = merge_info(self.INCOMING, self.LOCAL, "all")
+
+        self.assertEqual("new1", merged["Info"]["VPSId"])
+        self.assertEqual((8, 99), (merged["User"]["Rating"], merged["User"]["StartCount"]))
+        self.assertEqual(50, merged["VPX"]["RunCount"])
+        self.assertEqual("Cool", merged["vpinfe"]["alt_title"])
+        self.assertEqual(self.LOCAL["tables"], merged["tables"])
+
+    def test_all_still_leaves_out_a_launcher_that_is_not_on_this_device(self):
+        merged = merge_info({"vpinfe": {"alt_launcher": "/nonexistent/vpx"}},
+                            {"vpinfe": {"alt_launcher": "mine"}}, "all")
+
+        self.assertEqual("mine", merged["vpinfe"]["alt_launcher"])
+
+    def test_a_mode_the_importer_does_not_know_is_refused(self):
+        with self.assertRaises(ValueError):
+            merge_info({}, {}, "replace")
+
+
 class GameInfoImportTests(unittest.TestCase):
     def _bundle(self, tmp, info: dict):
         import json
@@ -153,6 +202,88 @@ class GameInfoImportTests(unittest.TestCase):
                 self.assertEqual(kept["Info"], local["Info"])
                 self.assertEqual({key: kept["User"][key] for key in local["User"]}, local["User"])
                 self.assertFalse((game_dir / "Foo (Bar 1999).info.bak").exists())
+
+    def _import_into_existing(self, tmp, mode, incoming):
+        import json
+        from pathlib import Path
+        game_dir = Path(tmp) / "Foo (Bar 1999)"
+        game_dir.mkdir()
+        (game_dir / "Foo.vpx").write_bytes(b"x")
+        library_of(self)
+        info_path = game_dir / "Foo (Bar 1999).info"
+        info_path.write_text(json.dumps(
+            {"Info": {"VPSId": "local-id"}, "User": {"Rating": 3, "StartCount": 12}}))
+        zip_path = self._bundle(tmp, incoming)
+        plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
+        modes = {item.member: mode for item in plan.items if item.action == "write_info"}
+        execute_import_plan(plan, zip_path, info_modes=modes)
+        return saved_record(info_path), game_dir
+
+    def test_facts_takes_the_files_info_and_keeps_this_games_plays(self):
+        from tempfile import TemporaryDirectory
+        with mock.patch.object(asset_import_service, "refresh_game"), \
+                TemporaryDirectory() as tmp:
+            data, game_dir = self._import_into_existing(
+                tmp, "facts", {"Info": {"VPSId": "foreign-id"},
+                               "User": {"Rating": 5, "StartCount": 99}})
+
+            self.assertEqual("foreign-id", data["Info"]["VPSId"])
+            self.assertEqual(12, data["User"]["StartCount"])
+            self.assertEqual(1, len(list(game_dir.glob("Foo (Bar 1999).info.vpinfe-*-import"))))
+
+    def test_all_takes_the_files_plays_too_and_still_keeps_a_copy(self):
+        from tempfile import TemporaryDirectory
+        with mock.patch.object(asset_import_service, "refresh_game"), \
+                TemporaryDirectory() as tmp:
+            data, game_dir = self._import_into_existing(
+                tmp, "all", {"Info": {"VPSId": "foreign-id"},
+                             "User": {"Rating": 5, "StartCount": 99}})
+
+            self.assertEqual("foreign-id", data["Info"]["VPSId"])
+            self.assertEqual(99, data["User"]["StartCount"])
+            self.assertEqual(1, len(list(game_dir.glob("Foo (Bar 1999).info.vpinfe-*-import"))))
+
+    def test_a_tables_own_file_is_merged_not_replaced_and_gains_no_game_fields(self):
+        import json
+        import zipfile
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with mock.patch.object(asset_import_service, "refresh_game"), \
+                TemporaryDirectory() as tmp:
+            game_dir = Path(tmp) / "Foo (Bar 1999)"
+            game_dir.mkdir()
+            (game_dir / "Foo.vpx").write_bytes(b"x")
+            library_of(self)
+            table_file = game_dir / "Foo.info"
+            table_file.write_text(json.dumps(
+                {"User": {"StartCount": 12}, "VPX": {"RunCount": 3},
+                 "vpinfe": {"table": {"id": "mine"}}}))
+            zip_path = Path(tmp) / "bundle.zip"
+            with zipfile.ZipFile(zip_path, "w") as archive:
+                archive.writestr("Foo.vpx", b"x")
+                archive.writestr("Foo.info", json.dumps(
+                    {"User": {"StartCount": 99, "Rating": 8}, "VPX": {"RunCount": 50},
+                     "vpinfe": {"table": {"id": "theirs"}}}))
+            plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
+            item = next(one for one in plan.items if one.action == "write_info")
+            self.assertTrue(item.asset.own_table)
+
+            execute_import_plan(plan, zip_path)
+            filled = json.loads(table_file.read_text())
+
+            self.assertEqual(12, filled["User"]["StartCount"])
+            self.assertEqual(8, filled["User"]["Rating"])
+            self.assertEqual(3, filled["VPX"]["RunCount"])
+            self.assertEqual("mine", filled["vpinfe"]["table"]["id"])
+            self.assertNotIn("manifest", filled["vpinfe"])
+            self.assertEqual(1, len(list(game_dir.glob("Foo.info.vpinfe-*-import"))))
+
+            execute_import_plan(plan, zip_path, info_modes={item.member: "all"})
+            everything = json.loads(table_file.read_text())
+
+            self.assertEqual(99, everything["User"]["StartCount"])
+            self.assertEqual(50, everything["VPX"]["RunCount"])
+            self.assertEqual("mine", everything["vpinfe"]["table"]["id"])
 
     def test_a_2x_file_is_kept_as_it_was_before_an_import_rewrites_it(self):
         import json

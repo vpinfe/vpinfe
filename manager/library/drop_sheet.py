@@ -54,6 +54,7 @@ class Sheet:
         self.places: dict[str, dict[str, Any]] = {}
         self.left: set[str] = set()
         self.convert: dict[str, dict[str, str]] = {}
+        self.info_modes: dict[str, str] = {}
         self.open: set[str] = set()
         self.wait = True
         self.offered: dict[str, list[dict[str, Any]]] = {}
@@ -113,6 +114,8 @@ class Sheet:
         if self.convert or not self.wait:
             found["convert"] = {"rows": {member: dict(row) for member, row in
                                          self.convert.items()}, "wait": self.wait}
+        if self.info_modes:
+            found["info_modes"] = dict(self.info_modes)
         return found
 
     def view(self, member: str) -> dict[str, Any] | None:

@@ -1476,7 +1476,8 @@ class ApiClient:
                     page: int = 1, assignments: list[dict] | None = None,
                     picks: dict[str, str] | None = None,
                     new_game_dir_name: str | None = None,
-                    convert: dict | None = None) -> dict:
+                    convert: dict | None = None,
+                    info_modes: dict[str, str] | None = None) -> dict:
         """Where each of those files would go. Nothing is written by asking."""
         path = f"/uploads/{upload_id}/plan"
         _refuse_the_event_loop(path)
@@ -1498,6 +1499,8 @@ class ApiClient:
             body["new_game_dir_name"] = new_game_dir_name
         if convert:
             body["convert"] = convert
+        if info_modes:
+            body["info_modes"] = info_modes
         response = self._session.post(f"{self._base}{path}", json=body, timeout=_TIMEOUT)
         self._answered(response)
         return response.json()
@@ -1509,7 +1512,8 @@ class ApiClient:
                      table_id: str, scope: str, page: int, assignments: list[dict] | None,
                      picks: dict[str, str] | None, new_game_dir_name: str | None,
                      selected: list[int] | None, declared: dict | None,
-                     convert: dict | None) -> dict[str, Any]:
+                     convert: dict | None,
+                     info_modes: dict[str, str] | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "game_dir": game_dir, "rom_name": rom_name,
             "allow_new_game": allow_new_game, "vps_id": vps_id,
@@ -1532,6 +1536,8 @@ class ApiClient:
             body["declared"] = declared
         if convert:
             body["convert"] = convert
+        if info_modes:
+            body["info_modes"] = info_modes
         return body
 
     def upload_import(self, upload_id: str, *, game_dir: str = "", rom_name: str = "",
@@ -1545,7 +1551,8 @@ class ApiClient:
                       new_game_dir_name: str | None = None,
                       selected: list[int] | None = None,
                       declared: dict | None = None,
-                      convert: dict | None = None) -> dict:
+                      convert: dict | None = None,
+                      info_modes: dict[str, str] | None = None) -> dict:
         """Do it. `selected` left out means every item the plan offered."""
         path = f"/uploads/{upload_id}/import"
         _refuse_the_event_loop(path)
@@ -1555,7 +1562,7 @@ class ApiClient:
             asset_kind=asset_kind, add_table=add_table, replace_table=replace_table,
             carry=carry, instead=instead, table_id=table_id, scope=scope, page=page,
             assignments=assignments, picks=picks, new_game_dir_name=new_game_dir_name,
-            selected=selected, declared=declared, convert=convert)
+            selected=selected, declared=declared, convert=convert, info_modes=info_modes)
         response = self._session.post(f"{self._base}{path}", json=body,
                                       timeout=_IMPORT_TIMEOUT)
         self._answered(response)
@@ -1569,13 +1576,14 @@ class ApiClient:
         names = ("game_dir", "rom_name", "allow_new_game", "vps_id", "media_kind",
                  "location_id", "asset_kind", "add_table", "replace_table", "carry",
                  "instead", "table_id", "scope", "page", "assignments", "picks",
-                 "new_game_dir_name", "selected", "declared", "convert")
+                 "new_game_dir_name", "selected", "declared", "convert", "info_modes")
         defaults: dict[str, Any] = {
             "game_dir": "", "rom_name": "", "allow_new_game": False, "vps_id": "",
             "media_kind": "", "location_id": "", "asset_kind": "", "add_table": False,
             "replace_table": "", "carry": None, "instead": False, "table_id": "",
             "scope": "", "page": 1, "assignments": None, "picks": None,
-            "new_game_dir_name": None, "selected": None, "declared": None, "convert": None}
+            "new_game_dir_name": None, "selected": None, "declared": None, "convert": None,
+            "info_modes": None}
         body = self._import_body(**{name: asked.get(name, defaults[name]) for name in names})
         response = self._session.post(f"{self._base}{path}", json=body, timeout=_TIMEOUT)
         self._answered(response)

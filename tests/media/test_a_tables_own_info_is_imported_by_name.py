@@ -60,7 +60,9 @@ class ImportedByName(TestCase):
             own = json.loads((folder / "Cactus VR.info").read_text(encoding="utf-8"))
 
         self.assertEqual({"Cactus (Bally 1998).info", "Cactus VR.info"}, written)
-        self.assertEqual(3, own["User"]["StartCount"])
+        self.assertEqual("Cactus", own["Info"]["Title"])
+        self.assertNotIn("StartCount", own["User"])
+        self.assertEqual({"id": "b"}, own["vpinfe"]["table"])
 
     def test_a_table_file_already_there_is_copied_aside_first(self) -> None:
         with TemporaryDirectory() as tmp:

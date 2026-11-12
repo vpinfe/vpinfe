@@ -28,7 +28,7 @@ from common.media.media_specs import CONVERTIBLE_IMAGE, IMAGE_FAMILY, media_labe
 from manager.kit import art, candidates, game_tables, offload, panel, verbs
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import convert_row, drop_sheet, import_swap
+from manager.library import convert_row, drop_sheet, import_swap, info_row
 
 logger = logging.getLogger("vpinfe.manager.library.import_dialog")
 
@@ -559,6 +559,15 @@ def _sub_line(plan: dict[str, Any], item: dict[str, Any],
     return game_tables.JOIN.join(line)
 
 
+def _ticked_as(index: int, chosen: dict[int, bool],
+               redraw: Callable[[], Any]) -> Callable[[bool], Any]:
+    def set_ticked(value: bool) -> Any:
+        chosen[index] = value
+        return redraw()
+
+    return set_ticked
+
+
 def _draw_row(sheet: drop_sheet.Sheet, item: dict[str, Any], plan: dict[str, Any],
               chosen: dict[int, bool], single: bool, changed: Callable[[], Any],
               upload_id: str = "", goes_to: Callable[[], None] | None = None, *,
@@ -574,6 +583,7 @@ def _draw_row(sheet: drop_sheet.Sheet, item: dict[str, Any], plan: dict[str, Any
     view = sheet.view(member)
     with ui.row().classes("items-center gap-3 w-full manager-import-row"
                           + (" manager-convert-row" if view else " no-wrap")):
+        follows: list[Callable[[], None]] = []
         if not single:
             box = ui.checkbox(value=chosen[index]).props("dense")
             if progress.running:
@@ -581,6 +591,8 @@ def _draw_row(sheet: drop_sheet.Sheet, item: dict[str, Any], plan: dict[str, Any
 
             def picked() -> Any:
                 chosen[index] = bool(box.value)
+                for sync in follows:
+                    sync()
                 return changed()
 
             box.on_value_change(picked)
@@ -601,6 +613,12 @@ def _draw_row(sheet: drop_sheet.Sheet, item: dict[str, Any], plan: dict[str, Any
             goes_to()
         convert_row.draw(sheet, member, ticked=single or chosen.get(index, True),
                          progress=progress, replan=replan, redraw=redraw)
+        if not progress.running:
+            info_sync = info_row.draw(
+                sheet, item, is_ticked=lambda: single or chosen.get(index, True),
+                single=single, set_ticked=_ticked_as(index, chosen, redraw))
+            if info_sync:
+                follows.append(info_sync)
 
 
 def _folder_row(library: Any, named: dict[str, Any], plan: dict[str, Any]) -> None:

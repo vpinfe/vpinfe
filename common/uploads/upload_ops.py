@@ -40,11 +40,16 @@ from common.uploads.asset_analyzer_service import (
     session_source,
 )
 from common.uploads.asset_import_service import (
+    ALL,
+    FACTS,
+    FILL,
+    INFO_MODES,
     ImportPlan,
     PlannedItem,
     SwapKeptError,
     execute_import_plan,
     find_vps_entry,
+    first_mode,
     require_plain_rom,
     select_plan_items,
     vps_folder_name,
@@ -194,8 +199,20 @@ def _convert_of(drop: drop_convert.Drop | None, item: PlannedItem) -> dict | Non
     return drop.view_of(item.asset)
 
 
+def _info_of(plan: ImportPlan, item: PlannedItem, request: Mapping[str, Any]) -> dict | None:
+    """Offers what to do with an `.info`: how it merges into details already on this disk,
+    or, where there are none, what a first import takes (`facts`, or `all` with the plays)."""
+    if item.action != "write_info":
+        return None
+    asked = (request.get("info_modes") or {}).get(item.member)
+    if plan.new_game_dir_name or not Path(item.destination).exists():
+        return {"existing": False, "mode": first_mode(asked), "modes": [FACTS, ALL]}
+    return {"existing": True, "mode": asked or FILL, "modes": list(INFO_MODES)}
+
+
 def _plan_to_dict(plan: ImportPlan, found: arrival.Arrival | None = None,
-                  drop: drop_convert.Drop | None = None) -> dict:
+                  drop: drop_convert.Drop | None = None,
+                  request: Mapping[str, Any] | None = None) -> dict:
     views = [_convert_of(drop, item) for item in plan.items]
     return {
         "game_dir": plan.game_dir,
@@ -224,6 +241,7 @@ def _plan_to_dict(plan: ImportPlan, found: arrival.Arrival | None = None,
                 "basis": item.basis,
                 "extra": item.extra,
                 "convert": views[index],
+                "info": _info_of(plan, item, request or {}),
             }
             for index, item in enumerate(plan.items)
         ],
@@ -531,7 +549,7 @@ def plan_for(upload_id: str, request: dict[str, Any]) -> dict[str, Any]:
     vps_entry = _vps_entry(request.get("vps_id") or "")
     drop = _drop_for(upload_id, found, request)
     plan = _built_plan(found, request, require_picks=False, drop=drop)
-    return _plan_to_dict(_as_asked(plan, request, vps_entry, None), found, drop)
+    return _plan_to_dict(_as_asked(plan, request, vps_entry, None), found, drop, request)
 
 
 def _as_asked(plan: ImportPlan, request: dict[str, Any], vps_entry: dict | None,
@@ -574,7 +592,8 @@ def _declared_identities(declared: Mapping[str, Any] | None) -> dict:
 
 def _run(plan: ImportPlan, source: Path, declared: dict, upload_id: str,
          drop: drop_convert.Drop | None = None, said: drop_convert.Said | None = None,
-         halted: Callable[[], bool] | None = None) -> dict[str, Any]:
+         halted: Callable[[], bool] | None = None,
+         info_modes: Mapping[str, str] | None = None) -> dict[str, Any]:
     blocked = _blocked(plan)
     converted: Mapping[str, Path] = {}
     clean: Callable[[], None] = lambda: None  # noqa: E731
@@ -585,7 +604,8 @@ def _run(plan: ImportPlan, source: Path, declared: dict, upload_id: str,
     try:
         if halted is not None and halted():
             raise drop_convert.StoppedError
-        report = execute_import_plan(plan, source, declared=declared, converted=converted)
+        report = execute_import_plan(plan, source, declared=declared, converted=converted,
+                                      info_modes=info_modes)
     except SwapKeptError as exc:
         raise service_errors.RefusedError(
             why(exc), details={"replaced_tables": exc.replaced}) from exc
@@ -613,6 +633,7 @@ class _Prepared:
     identities: dict
     drop: drop_convert.Drop
     vps_entry: dict | None
+    info_modes: Mapping[str, str]
 
 
 def _prepared(upload_id: str, request: dict[str, Any],
@@ -639,14 +660,15 @@ def _prepared(upload_id: str, request: dict[str, Any],
     if not asked.items:
         raise NothingImportableError(t("error.uploads.nothing_importable"),
                                      details={"blocked": _blocked(asked)})
-    return _Prepared(found, asked, identities, drop, vps_entry)
+    return _Prepared(found, asked, identities, drop, vps_entry,
+                     request.get("info_modes") or {})
 
 
 def _finished(upload_id: str, ready: _Prepared, said: drop_convert.Said | None = None,
               halted: Callable[[], bool] | None = None) -> dict[str, Any]:
     found, plan = ready.found, ready.plan
     report = _run(plan, found.source_path, ready.identities, upload_id, ready.drop, said,
-                  halted)
+                  halted, ready.info_modes)
     held = set(_accounted(found))
     written = sorted({one.arcname for item in plan.items for one in item.asset.entries
                       if one.arcname in held})

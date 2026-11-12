@@ -27,7 +27,7 @@ UPLOADS_WRITE = "uploads:write"
 PLAN_KEYS = frozenset({"vps_id", "game_id", "rom_name", "allow_new_game", "media_kind",
                        "asset_kind", "location_id", "add_table", "new_game_dir_name",
                        "replace_table", "carry", "instead", "table_id", "scope",
-                       "page", "assignments", "picks", "convert"})
+                       "page", "assignments", "picks", "convert", "info_modes"})
 EXECUTE_KEYS = PLAN_KEYS | {"selected"}
 
 _TEXT = frozenset({"vps_id", "game_id", "rom_name", "media_kind", "asset_kind", "location_id",
@@ -135,6 +135,9 @@ class ExtensionUploads:
         elif key == "convert":
             self._typed_convert(value)
             return
+        elif key == "info_modes":
+            right = isinstance(value, dict) and all(
+                isinstance(k, str) and v in ("fill", "facts", "all") for k, v in value.items())
         elif key == "picks":
             right = isinstance(value, dict) and all(
                 isinstance(k, str) and isinstance(v, str) for k, v in value.items())

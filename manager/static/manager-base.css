@@ -2879,8 +2879,11 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
    drops under the text where the card narrows. The text column has to shrink - at its own
    width it would push the choice out of the card. */
 .manager-convert-text { flex: 1 1 0; min-width: 0; }
+.manager-convert-text > * { max-width: 100%; }
 .manager-convert-col { flex: 0 0 272px; min-width: 0; }
-@media (max-width: 640px) { .manager-convert-col { flex-basis: 100%; } }
+/* The choice for an info file names its answer in words, so it takes more room than a format. */
+.manager-convert-col.manager-info-col { flex-basis: 340px; }
+@media (max-width: 640px) { .manager-convert-col, .manager-convert-col.manager-info-col { flex-basis: 100%; } }
 
 /* The list of names a command can use, folded away because eleven rows between two
    settings is a wall. No card and no border: it is help under a control, and a box

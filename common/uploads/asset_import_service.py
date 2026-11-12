@@ -21,11 +21,14 @@ from common.failures import why
 from common.games import (
     asset_resolver,
     file_move,
+    game_identity,
     game_repository,
+    high_scores,
     info_codec,
     info_files,
     library_folders,
     media_placement,
+    table_files,
     table_swap,
 )
 from common.games.asset_registry import spec_for
@@ -39,7 +42,7 @@ from common.games.game_service import (
     sanitize_dir_name,
 )
 from common.games.identity_claims import DeclaredIdentity
-from common.games.info_file import VPINFE_SECTION, migration_backup_reason, record_of
+from common.games.info_file import GAME_ID_KEY, VPINFE_SECTION, migration_backup_reason, record_of
 from common.games.info_migration import needs_migration
 from common.games.tables import entry_filename, entry_for_filename, table_entries
 from common.i18n import t
@@ -698,6 +701,9 @@ def _moved(item: PlannedItem, old_base: str, new_base: Path) -> PlannedItem:
 # unmanaged section and be preserved forever.
 _MANAGED_INFO_SECTIONS = {"Info", "User", VPINFE_SECTION, "tables", "assets", "Medias"}
 _MACHINE_LOCAL_INFO_KEYS = {"alt_launcher", "plugin_profile"}
+_VPX_SECTION = "VPX"
+_PLAYED = frozenset({"LastRun", "StartCount", "RunTime", high_scores.KEY,
+                     high_scores.LEGACY_KEY})
 
 
 def _is_empty_value(value: object) -> bool:
@@ -722,17 +728,95 @@ def _resolves_locally(key: str, value: object) -> bool:
     return True
 
 
-def merge_info(incoming: dict, existing: dict) -> dict:
-    """Merge an imported .info into an existing one: fill gaps, never replace.
+FILL, FACTS, ALL = "fill", "facts", "all"
+INFO_MODES = (FILL, FACTS, ALL)
 
-    Info is adopted wholesale only when the existing game has no VPS association.
-    User and VPinFE fill empty fields (machine-specific overrides only if they resolve
-    locally). tables and assets always keep the local version: tables describes
-    the builds on THIS disk and carries decisions made here — what is hidden, what has
-    been patched, and later play stats — none of which an imported file can speak for.
-    assets records what we placed in THIS folder, so an imported list describes files
-    that are not here. Unknown sections are added when absent, never replaced.
+
+def merge_info(incoming: dict, existing: dict, mode: str = FILL) -> dict:
+    """Merge an imported .info into an existing one.
+
+    `fill` adds what is blank and replaces nothing. `facts` also takes the file's `Info`
+    (the VPS tie and the facts it carries) and leaves `User`, the VPX section and the rest
+    as they are. `all` also takes the file's `User` values, its VPinFE values and any
+    section it holds, the numbers a player counted included.
+
+    Whatever the mode, `tables` and `assets` keep the local version: they describe the
+    files on THIS disk and carry decisions made here.
     """
+    if mode not in INFO_MODES:
+        raise ValueError(mode)
+    merged = _fill_gaps(incoming, existing)
+    if mode == FILL:
+        return merged
+
+    if incoming.get("Info"):
+        merged["Info"] = incoming["Info"]
+    if mode == ALL:
+        user = {**(merged.get("User") or {}), **(incoming.get("User") or {})}
+        if user:
+            merged["User"] = user
+        local_vpinfe = dict(merged.get(VPINFE_SECTION) or {})
+        if "RunTime" in (incoming.get("User") or {}):
+            local_vpinfe.pop("run_time_seconds", None)
+        for key, value in (incoming.get(VPINFE_SECTION) or {}).items():
+            if key == GAME_ID_KEY:
+                continue
+            if key not in _MACHINE_LOCAL_INFO_KEYS or _resolves_locally(key, value):
+                local_vpinfe[key] = value
+        if local_vpinfe or VPINFE_SECTION in merged:
+            merged[VPINFE_SECTION] = local_vpinfe
+        for section, value in incoming.items():
+            if section not in _MANAGED_INFO_SECTIONS:
+                merged[section] = value
+    return merged
+
+
+def first_mode(mode: str | None) -> str:
+    """The choice a first import runs under: `all`, or else `facts`, which is also what
+    `fill` means on a game with nothing to fill."""
+    return ALL if mode == ALL else FACTS
+
+
+def _sender_said(incoming: dict, mode: str | None) -> dict:
+    """What the sender's file keeps once the choice is applied: `facts` leaves behind what
+    was played or counted on the sender's device, `all` leaves nothing. A launcher or
+    profile this device does not have is left behind under both."""
+    sender = dict(incoming)
+    if first_mode(mode) != ALL:
+        sender.pop(_VPX_SECTION, None)
+        if isinstance(incoming.get("User"), dict):
+            sender["User"] = {key: value for key, value in incoming["User"].items()
+                              if key not in _PLAYED}
+    if isinstance(incoming.get(VPINFE_SECTION), dict):
+        sender[VPINFE_SECTION] = {
+            key: value for key, value in incoming[VPINFE_SECTION].items()
+            if (key != "run_time_seconds" or first_mode(mode) == ALL)
+            and (key not in _MACHINE_LOCAL_INFO_KEYS or _resolves_locally(key, value))}
+    return sender
+
+
+def first_import(incoming: dict, mode: str | None = None,
+                 taken: Iterable[str] = ()) -> dict:
+    """The record a game starts from when a dropped `.info` arrives and the game has none.
+
+    The lists of the sender's tables and files are never taken: the game builds them from
+    this disk. The sender's `game_id` is kept unless a game here already holds it, in which
+    case the game is minted its own when it is next read.
+    """
+    record = _fill_gaps(_sender_said(incoming, mode), {})
+    sent = str((incoming.get(VPINFE_SECTION) or {}).get(GAME_ID_KEY) or "").strip()
+    if sent and sent not in set(taken):
+        record.setdefault(VPINFE_SECTION, {})[GAME_ID_KEY] = sent
+    return record
+
+
+def first_import_table(incoming: dict, mode: str | None = None) -> dict:
+    """A table's own file as a first import leaves it: as it came under `all`, and under
+    `facts` without the VPX section and the numbers a player counted."""
+    return _sender_said(incoming, mode)
+
+
+def _fill_gaps(incoming: dict, existing: dict) -> dict:
     merged = dict(existing)
 
     for section, value in incoming.items():
@@ -751,7 +835,8 @@ def merge_info(incoming: dict, existing: dict) -> dict:
 
     local_vpinfe = dict(existing.get(VPINFE_SECTION) or {})
     for key, value in (incoming.get(VPINFE_SECTION) or {}).items():
-        if not _is_empty_value(local_vpinfe.get(key)) or _is_empty_value(value):
+        if (key == GAME_ID_KEY or not _is_empty_value(local_vpinfe.get(key))
+                or _is_empty_value(value)):
             continue
         if key in _MACHINE_LOCAL_INFO_KEYS and not _resolves_locally(key, value):
             continue
@@ -762,27 +847,75 @@ def merge_info(incoming: dict, existing: dict) -> dict:
     return merged
 
 
-def _import_table_info(source: AssetSource, asset: DetectedAsset, dest: Path) -> None:
-    """A table's own file goes in as it came, after a copy of the one it replaces."""
-    if dest.exists():
-        copy_aside(dest, IMPORT)
-    _extract_replace(source, asset.entries[0], dest)
-
-
-def _import_game_info(source: AssetSource, asset: DetectedAsset, base: Path) -> None:
+def _incoming_info(source: AssetSource, asset: DetectedAsset) -> dict:
     import json
 
-    entry = asset.entries[0]
     with tempfile.TemporaryDirectory() as scratch:
         staged = Path(scratch) / "bundle.info"
-        source.extract_member(entry.path, staged)
-        incoming = json.loads(staged.read_text(encoding="utf-8"))
+        source.extract_member(asset.entries[0].path, staged)
+        try:
+            incoming = json.loads(staged.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise ValueError(t("error.uploads.info_unreadable")) from exc
     if not isinstance(incoming, dict):
         raise ValueError(t("error.uploads.info_unreadable"))
+    return incoming
+
+
+def _incoming_record(source: AssetSource, asset: DetectedAsset) -> dict:
     try:
-        incoming = record_of(incoming)
+        return record_of(_incoming_info(source, asset))
+    except ValueError:
+        raise
     except Exception as exc:
         raise ValueError(t("error.uploads.info_unreadable")) from exc
+
+
+def _import_table_info(source: AssetSource, asset: DetectedAsset, dest: Path,
+                       mode: str | None = None) -> None:
+    """A table's own file, after a copy of the one already there, and merged into it as
+    `mode` says. The file is written as it is, never through the game codec, which would
+    add the fields only a game's file has; its `vpinfe.table` names the table and stays."""
+    import json
+
+    if not dest.exists():
+        payload = first_import_table(_incoming_info(source, asset), mode)
+        write_atomic(dest, lambda handle: json.dump(payload, handle, indent=4))
+        return
+    mode = mode or FILL
+    incoming = _incoming_info(source, asset)
+    existing = _stored_object(dest)
+    copy_aside(dest, IMPORT)
+    if existing is None:
+        logger.warning("Existing table .info is unreadable; replacing it: %s", dest)
+        _extract_replace(source, asset.entries[0], dest)
+        return
+    payload = merge_info(incoming, existing, mode)
+    held = (existing.get(VPINFE_SECTION) or {}).get(table_files.TABLE_SECTION)
+    if held is not None:
+        payload.setdefault(VPINFE_SECTION, {})[table_files.TABLE_SECTION] = held
+    write_atomic(dest, lambda handle: json.dump(payload, handle, indent=4))
+
+
+def _stored_object(path: Path) -> dict | None:
+    import json
+
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return stored if isinstance(stored, dict) else None
+
+
+def _ids_held_here() -> set[str]:
+    return {held for held in map(game_identity.game_id, game_repository.all_games()) if held}
+
+
+def _import_game_info(source: AssetSource, asset: DetectedAsset, base: Path,
+                      mode: str | None = None) -> None:
+    import json
+
+    incoming = _incoming_record(source, asset)
 
     dest = _info_path(base)
     if dest.exists():
@@ -797,9 +930,9 @@ def _import_game_info(source: AssetSource, asset: DetectedAsset, base: Path) -> 
         if isinstance(stored, dict) and needs_migration(stored):
             copy_aside(dest, migration_backup_reason(stored))
         copy_aside(dest, IMPORT)
-        payload = merge_info(incoming, existing)
+        payload = merge_info(incoming, existing, mode or FILL)
     else:
-        payload = incoming
+        payload = first_import(incoming, mode, _ids_held_here())
 
     write_atomic(dest, lambda handle: json.dump(info_codec.encode(payload), handle, indent=4))
 
@@ -983,11 +1116,16 @@ def _sha256(path: Path) -> str:
 def execute_import_plan(plan: ImportPlan, source_path: Path,
                         *, progress_cb: Callable[[str], None] | None = None,
                         declared: dict | None = None,
-                        converted: Mapping[str, Path] | None = None) -> dict:
+                        converted: Mapping[str, Path] | None = None,
+                        info_modes: Mapping[str, str] | None = None) -> dict:
     """Execute an import plan, streaming each asset from source_path to its destination.
 
     `converted` is the files already made for the assets that are converted, keyed by the
     name the file has in the drop; each is placed from there instead of from the drop.
+
+    `info_modes` is how each `.info` is merged into the one already there (`fill`, `facts`
+    or `all`), keyed by the file's member name; one not named is filled, or, where there is
+    none already, taken as `facts`.
 
     `declared` is what the sender said each uploaded file is, keyed by the name it arrived
     under. Recorded after the files are on disk, so a failed import writes no claim.
@@ -1032,10 +1170,11 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
             elif item.action == "extract_tree":
                 _extract_tree(source, item.asset, dest)
             elif item.action == "write_info":
+                mode = (info_modes or {}).get(item.member)
                 if item.asset.own_table:
-                    _import_table_info(source, item.asset, Path(item.destination))
+                    _import_table_info(source, item.asset, Path(item.destination), mode)
                 else:
-                    _import_game_info(source, item.asset, base)
+                    _import_game_info(source, item.asset, base, mode)
             elif item.action == "replace_media":
                 _import_media(source, item, base, converted or {})
                 media_kinds.append(item.asset.media_kind)
