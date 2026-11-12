@@ -227,9 +227,11 @@ def _put_launcher(path: Path, member: archive.Member) -> Copy | None:
     owner = launchers.get_launcher_store().get(member.subject_id)
     if owner is None:
         raise service_errors.NotFoundError(t("error.backups.no_owner", name=member.subject_name))
+    held = [Path(file).expanduser() for file in launcher_ops.config_files(owner).values()]
     wanted = Path(member.path).name
-    target = next((Path(held).expanduser() for held in launcher_ops.config_files(owner).values()
-                   if Path(held).expanduser().name == wanted), None)
+    target = next((one for one in held if one.name == wanted), None)
+    if target is None and owner.owns_ini and len(held) == 1:
+        target = held[0]
     if target is None:
         raise service_errors.RefusedError(t("error.launchers.copy_unmatched"))
     path_state.require(str(target.parent), path_state.DIR, writable=True,

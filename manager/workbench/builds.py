@@ -15,6 +15,7 @@ from common.i18n import t
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
 from manager.extensions import ext_row
+from manager.frontend import launchers as launchers_page
 from manager.frontend import players as players_page
 from manager.frontend import themes as themes_page
 from manager.kit import game_tables, offload, panel, verbs
@@ -489,7 +490,7 @@ async def _draw_launcher(container: ui.column, title: ui.column, library: Librar
     # Read fresh rather than from the grid's copy: every control in here writes, and a
     # rebuild that redrew from a stale row would show the edit undoing itself.
     found = await offload.io(library.launchers)
-    held = list(found.get("launchers") or [])
+    held = launchers_page.marked(found)
     row = next((one for one in held if one.get("launcher_id") == launcher_id), None)
     if row is None:
         _blank(container, title, t("manager.page.launcher"),

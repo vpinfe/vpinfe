@@ -452,9 +452,12 @@ def control_for(option: dict, value: Any, save: Callable[[Any], Any], *,
         return panel.field(str(value or ""), save_path, disabled=off, status=state,
                            placeholder=blank, left_empty=str(option.get("left_empty") or ""),
                            default=stands_for, whose=str(option.get("default_whose") or ""),
-                           browse=_browse_path(browse, str(option["path"]),
-                                              tuple(option.get("suffixes") or ()),
-                                              stands_for))
+                           marked=not option.get("unmarked"),
+                           readonly=bool(option.get("readonly")),
+                           browse_tip=str(option.get("chooser_tip") or ""),
+                           browse=option.get("chooser") or _browse_path(
+                               browse, str(option["path"]),
+                               tuple(option.get("suffixes") or ()), stands_for))
     return panel.field(str(value or ""), lambda text: save(text), disabled=off,
                        placeholder=blank)
 

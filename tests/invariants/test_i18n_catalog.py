@@ -81,12 +81,12 @@ class TestEveryRegistryResolves(unittest.TestCase):
 
     def test_launcher_fields(self) -> None:
         """Arguments may go without a description: the names they take and the Command
-        Line are drawn under them."""
+        Line are drawn under them. The Program says what it is by its name."""
         described = [(f"{app.id}.{f.key}", f.key, apps.field_words(app.id, f))
                      for app in apps.all_apps() for f in (*app.fields, *OWN_FIELDS)]
         self.assertEqual([name for name, key, said in described
                           if not said["label_key"]
-                          or not (said["description"] or key == "args")], [],
+                          or not (said["description"] or key in ("args", "bin_path"))], [],
                          "a launcher field with no words of its own")
 
     def test_tokens(self) -> None:

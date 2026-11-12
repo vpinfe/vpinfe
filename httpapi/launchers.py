@@ -13,11 +13,15 @@ around a table) is Protected; the rest keeps the config scopes.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Any
 
 from fastapi import APIRouter, Body, Request, Response
 
-from common.games import launcher_ops, upgrade_ops
+from common import service_errors
+from common.games import launcher_ops, launcher_settings, upgrade_ops
+from common.i18n import t
 from common.runtime import jobs
 
 from . import jobs as jobs_api
@@ -124,12 +128,98 @@ def make_launcher_settings_file(launcher_id: str) -> dict[str, Any]:
     return launcher_ops.make_settings_file(launcher_id)
 
 
+@router.post("/settings-file/undo", summary="Undo a change of settings file",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def undo_launcher_settings_file(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Puts the launcher and its files back as they were before the change that gave
+    `undo`. A token works once, and is gone when the server restarts."""
+    return launcher_settings.undo(str(body.get("undo") or ""))
+
+
+@router.post("/settings-file/places", summary="Where a settings file is looked for first",
+             dependencies=[requires(scopes.CONFIG_READ)])
+def launcher_settings_file_places(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """For an app and the settings a launcher holds: VPinFE's settings folder, marked
+    `default`, and the folder its program keeps its own settings in."""
+    return {"places": launcher_settings.places(str(body.get("app") or ""),
+                                               dict(body.get("settings") or {}))}
+
+
+@router.post("/{launcher_id}/settings-file", summary="Give it a settings file",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def set_launcher_settings_file(launcher_id: str, request: Request,
+                               body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """`choice` is `copy` (from `copy_from`, a launcher id, or `copy_file`), `fresh` (the
+    program writes a standard one) or `pick` (`existing`). A copy or a fresh file goes to
+    `save_dir` and `file_name`, which default to VPinFE's settings folder and the launcher's
+    name. A launcher not yet added is named by `create`, and is added with its file.
+
+    Where the file written over is one other launchers play with or the program's own, it
+    answers `{"needs_replace"}` and changes nothing until `replace` is true. Otherwise
+    `{"launcher", "file", "backed_up", "replaced", "undo"}`; `undo` is for the undo route,
+    and is empty after a plain add.
+
+    A `create` that sets the program or command a launcher runs needs `protected:write`,
+    as adding the launcher through the config does."""
+    create = body.get("create")
+    if isinstance(create, dict) and protected_settings.launcher_body_protected(
+            {"values": create.get("settings")}):
+        require(request, scopes.PROTECTED)
+    return launcher_settings.apply(launcher_id, body)
+
+
+@router.post("/{launcher_id}/settings-file/own-copy", summary="Give it a copy of its own",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def make_launcher_own_copy(launcher_id: str) -> dict[str, Any]:
+    """Copies the settings it shares into VPinFE's settings folder, under its name, and
+    has it play with the copy."""
+    return launcher_settings.make_own_copy(launcher_id)
+
+
+@router.post("/{launcher_id}/settings-file/received", summary="Take the settings file sent with it",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def launcher_settings_file_received(launcher_id: str,
+                                    body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """`{"data": base64}`, the file another install sent along with this launcher. It goes
+    into VPinFE's settings folder under the launcher's name, and the launcher plays with
+    it. Anything it replaces there is kept in Backups. The launcher has to be here already."""
+    try:
+        data = base64.b64decode(str(body.get("data") or ""), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise service_errors.RefusedError(t("error.launchers.bad_file")) from exc
+    return launcher_settings.receive_file(launcher_id, data)
+
+
+@router.post("/{launcher_id}/settings-file/renamed", summary="Its name changed",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def launcher_was_renamed(launcher_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """`{"was": old name}`. A settings file VPinFE keeps for it, under the old name in
+    VPinFE's own folder, takes the new one; any other file keeps its name."""
+    return launcher_settings.follow_rename(launcher_id, str(body.get("was") or ""))
+
+
+@router.post("/{launcher_id}/settings-file/delete", summary="Delete the file VPinFE made for it",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def delete_launcher_own_file(launcher_id: str) -> dict[str, Any]:
+    """Keeps the file in Backups, then deletes it. Only a file VPinFE made and no other
+    launcher plays with; anything else answers `{"deleted": false}`."""
+    return launcher_settings.delete_own_file(launcher_id)
+
+
 @router.post("/{launcher_id}/default", summary="Make it the default for its app",
              dependencies=[requires(scopes.CONFIG_WRITE)])
 def make_launcher_default(launcher_id: str) -> dict[str, Any]:
     """The launcher its app's tables use unless they name another. It moves to the front
     of the list, since the default is the first one switched on."""
     return launcher_ops.make_default(launcher_id)
+
+
+@router.post("/order", summary="Put the launchers back in an earlier order",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def restore_launcher_order(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """`{"order": [id, ...]}`, as `default` answered with `was`: those launchers first, in
+    that order, and any it does not name after them."""
+    return launcher_ops.restore_order(list(body.get("order") or []))
 
 
 @router.put("/mappings/{table_id}", summary="Point a table at a launcher",

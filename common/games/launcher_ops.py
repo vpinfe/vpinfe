@@ -88,7 +88,30 @@ def _described(launcher: launchers.Launcher) -> dict[str, Any]:
                     **_standing_words(launcher.app, f, standing.get(f.key))}
                    for f in launcher.fields()],
         "command_line": command_line.shown(launcher),
+        **_file_facts(launcher),
     }
+
+
+def _file_facts(launcher: launchers.Launcher) -> dict[str, Any]:
+    """Where this launcher's settings are, who else plays with them, and whether removing
+    it can offer to delete them."""
+    from common.games import launcher_settings
+    found = launcher_settings.effective_file(launcher)
+    return {"settings_file": str(found) if found else "",
+            "shared_with": launcher_settings.sharing(launcher),
+            **launcher_settings.kept_file_of(launcher)}
+
+
+def described(launcher: launchers.Launcher) -> dict[str, Any]:
+    return _described(launcher)
+
+
+def settings_of(launcher: launchers.Launcher) -> dict[str, Any]:
+    return _launcher_settings(launcher)
+
+
+def settings_surface(launcher: launchers.Launcher) -> Any:
+    return _app_settings_surface(launcher)
 
 
 def _standing_words(app_id: str, f: apps.Field, held: Standing | None) -> dict[str, Any]:
@@ -467,7 +490,7 @@ def write_config(launcher_id: str, body: dict[str, Any], *,
     if refused:
         raise service_errors.RefusedError(t(
             "error.launchers.one_table_only" if scope == SCOPE_LAUNCHER
-            else "error.launchers.all_tables_only", app_name=(apps.app_name(found.app)),
+            else "error.launchers.launcher_only", app_name=(apps.app_name(found.app)),
             keys=(", ".join(refused))))
 
     orders = settle and bool(set(writing) & set(getattr(config, "order_keys", tuple)()))
@@ -489,6 +512,8 @@ def _write_one(found: launchers.Launcher, config: Any, settings: dict[str, Any],
                table: str, writing: dict[str, str], create: bool) -> dict[str, Any]:
     if create and scope == SCOPE_LAUNCHER and not config_files(found):
         # Only when asked: a write on its own refuses where the program has no file yet.
+        if _program_made_the_file(found):
+            return _write_one(found, config, settings, scope, table, writing, False)
         make = getattr(config, "create", None)
         if make is None:
             raise service_errors.RefusedError(t(
@@ -669,6 +694,27 @@ def _can_run_for_file(launcher: launchers.Launcher) -> bool:
     return bool(command) and Path(command[0]).is_file() and os.access(command[0], os.X_OK)
 
 
+def _program_made_the_file(launcher: launchers.Launcher) -> bool:
+    """Run the program once so its own commented file is the one VPinFE writes into.
+
+    Best effort: a program that cannot run, refuses, times out or leaves no file returns
+    False and the caller writes the bare file. A file already there is left alone.
+    """
+    if _has_settings_file(launcher) or not _can_run_for_file(launcher) \
+            or _asked_without_result(launcher):
+        return False
+    command = _settings_file_command(launcher)
+    try:
+        exited = run_for_settings_file(command, apps.app_name(launcher.app))
+    except service_errors.ServiceError:
+        return False
+    if _has_settings_file(launcher):
+        return True
+    if exited:
+        _wrote_nothing[launcher.launcher_id] = command[0]
+    return False
+
+
 def _can_write_preferences() -> bool:
     """Whether a Linux program can keep its preferences: it uses `XDG_DATA_HOME` where set,
     else the home folder, and Visual Pinball crashes without saying why where neither takes
@@ -684,24 +730,15 @@ def _can_write_preferences() -> bool:
     return os.access(root, os.W_OK | os.X_OK)
 
 
-def make_settings_file(launcher_id: str) -> dict[str, Any]:
-    """Run the program once so it writes its own settings file, then say where it is.
-
-    Refused where the app has no such command, the program is not set, a file is already
-    there, or the program ran and left none - which the app does not promise it will.
-    """
-    found = launcher_or_refuse(launcher_id)
-    app_name = apps.app_name(found.app)
-    command = _settings_file_command(found)
-    if not command:
-        raise service_errors.RefusedError(t("error.launchers.cannot_make_file", app_name=app_name))
+def run_for_settings_file(command: list[str], app_name: str) -> bool:
+    """Run the program once so it writes its settings file, one run at a time and never
+    while a table plays. Returns whether it exited. Whether the file is there afterwards is
+    the caller's to check: the program does not promise it."""
     if launch_state.current().launching:
         raise service_errors.BlockedError(t("error.launchers.make_file_playing"))
     if not _making_file.acquire(blocking=False):
         raise service_errors.BlockedError(t("error.launchers.make_file_running", app_name=app_name))
     try:
-        if _has_settings_file(found):
-            raise service_errors.RefusedError(t("error.launchers.file_exists", app_name=app_name))
         if not _can_write_preferences():
             raise service_errors.RefusedError(
                 t("error.launchers.no_preferences_folder", app_name=app_name))
@@ -720,6 +757,23 @@ def make_settings_file(launcher_id: str) -> dict[str, Any]:
                 t("error.launchers.make_file_failed", app_name=app_name)) from exc
     finally:
         _making_file.release()
+    return exited
+
+
+def make_settings_file(launcher_id: str) -> dict[str, Any]:
+    """Run the program once so it writes its own settings file, then say where it is.
+
+    Refused where the app has no such command, the program is not set, a file is already
+    there, or the program ran and left none - which the app does not promise it will.
+    """
+    found = launcher_or_refuse(launcher_id)
+    app_name = apps.app_name(found.app)
+    command = _settings_file_command(found)
+    if not command:
+        raise service_errors.RefusedError(t("error.launchers.cannot_make_file", app_name=app_name))
+    if _has_settings_file(found):
+        raise service_errors.RefusedError(t("error.launchers.file_exists", app_name=app_name))
+    exited = run_for_settings_file(command, app_name)
     if not _has_settings_file(found):
         if exited:
             _wrote_nothing[found.launcher_id] = command[0]
@@ -737,8 +791,16 @@ def make_default(launcher_id: str) -> dict[str, Any]:
         raise service_errors.RefusedError(
             t("error.launchers.default_switched_off", name=found.display_name))
     store = launchers.get_launcher_store()
+    was = store.order()
     store.to_front(found.launcher_id)
-    return {"launcher_id": found.launcher_id, "app": found.app}
+    return {"launcher_id": found.launcher_id, "app": found.app, "was": was}
+
+
+def restore_order(order: list[str]) -> dict[str, Any]:
+    """Put the launchers back in an order `make_default` answered with."""
+    store = launchers.get_launcher_store()
+    store.set_order([str(one) for one in order])
+    return {"order": store.order()}
 
 
 def assign(table_id: str, launcher_id: str) -> dict[str, Any]:

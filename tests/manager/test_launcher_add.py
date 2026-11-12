@@ -159,7 +159,7 @@ class Standing(unittest.IsolatedAsyncioTestCase):
 
         await drawn.keep()
 
-        drawn.write.assert_awaited_with("Mine", {"bin_path": "/x/vpx", "ini_path": ""})
+        drawn.write.assert_awaited_with("Mine", {"bin_path": "/x/vpx", "ini_path": ""}, None)
 
     async def test_choosing_a_program_asks_again_and_draws_what_it_changes(self) -> None:
         answers = [{"ini_path": {"default_path": "/old.ini"}},

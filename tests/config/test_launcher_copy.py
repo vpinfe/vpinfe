@@ -7,6 +7,7 @@ thing on both ends.
 
 import json
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -19,9 +20,12 @@ from common.i18n import t
 class _Client:
     """A device that records what it was asked to write."""
 
-    def __init__(self, fail_on: str = "", fail_mappings: bool = False):
+    def __init__(self, fail_on: str = "", fail_mappings: bool = False,
+                 fail_files: bool = False):
         self.launchers: list[tuple[str, dict]] = []
+        self.files: list[tuple[str, bytes]] = []
         self.mappings: list[tuple[str, str]] = []
+        self._fail_files = fail_files
         self._fail_on = fail_on
         self._fail_mappings = fail_mappings
 
@@ -30,6 +34,12 @@ class _Client:
             raise RuntimeError("connection refused")
         self.launchers.append((launcher_id, body))
         return body
+
+    def put_launcher_settings_file(self, launcher_id, data):
+        if self._fail_files:
+            raise RuntimeError("connection refused")
+        self.files.append((launcher_id, data))
+        return {}
 
     def put_launcher_mapping(self, table_id, launcher_id):
         if self._fail_mappings:
@@ -67,12 +77,71 @@ class CopyTests(unittest.TestCase):
     def test_the_settings_travel(self) -> None:
         launcher_copy.copy_to(
             [_device("cab", "Cab")],
-            [_launcher("a", "VPX", ini_path="/cfg/quiet.ini")],
+            [_launcher("a", "VPX", launch_env="X=1")],
             client_for=self._client_for)
 
         body = self.clients["cab"].launchers[0][1]
-        self.assertEqual(body["settings"]["ini_path"], "/cfg/quiet.ini")
+        self.assertEqual(body["settings"]["launch_env"], "X=1")
         self.assertEqual(body["display_name"], "VPX")
+
+    def test_the_settings_file_goes_as_bytes_and_its_path_stays_behind(self) -> None:
+        """A path from this machine names nothing on the other, so a copy that carried it
+        would play with a file that is not there."""
+        with TemporaryDirectory() as folder:
+            quiet = Path(folder) / "quiet.ini"
+            quiet.write_bytes(b"[Player]\nBallTrail=0\n")
+
+            launcher_copy.copy_to(
+                [_device("cab", "Cab")], [_launcher("a", "VPX", ini_path=str(quiet))],
+                client_for=self._client_for)
+
+        client = self.clients["cab"]
+        self.assertNotIn("ini_path", client.launchers[0][1]["settings"])
+        self.assertEqual(client.files, [("a", b"[Player]\nBallTrail=0\n")])
+
+    def test_a_launcher_on_its_programs_own_file_sends_none(self) -> None:
+        launcher_copy.copy_to([_device("cab", "Cab")], [_launcher("a", "VPX")],
+                              client_for=self._client_for)
+
+        self.assertEqual(self.clients["cab"].files, [])
+
+    def test_a_file_that_is_there_but_cannot_be_read_is_said_not_dropped(self) -> None:
+        """Dropping it would have the launcher arrive on the other device's own settings
+        with nothing saying it was meant to carry these."""
+        with TemporaryDirectory() as folder:
+            quiet = Path(folder) / "quiet.ini"
+            quiet.mkdir()
+            client = _Client()
+
+            found = launcher_copy.copy_to(
+                [_device("cab", "Cab")], [_launcher("a", "VPX", ini_path=str(quiet))],
+                client_for=lambda _d: client)
+
+        self.assertEqual(found[0].error, t("said.file_not_arrived", name="VPX"))
+
+    def test_a_file_that_is_not_there_sends_nothing_and_no_path(self) -> None:
+        launcher_copy.copy_to(
+            [_device("cab", "Cab")], [_launcher("a", "VPX", ini_path="/nowhere/quiet.ini")],
+            client_for=self._client_for)
+
+        client = self.clients["cab"]
+        self.assertEqual(client.files, [])
+        self.assertNotIn("ini_path", client.launchers[0][1]["settings"])
+
+    def test_a_file_that_does_not_arrive_says_the_launcher_did(self) -> None:
+        """The two fixes differ: a launcher that arrived plays on the other device's own
+        settings, while one that did not is not there at all."""
+        with TemporaryDirectory() as folder:
+            quiet = Path(folder) / "quiet.ini"
+            quiet.write_bytes(b"x")
+            client = _Client(fail_files=True)
+
+            found = launcher_copy.copy_to(
+                [_device("cab", "Cab")], [_launcher("a", "VPX", ini_path=str(quiet))],
+                client_for=lambda _d: client)
+
+        self.assertEqual(found[0].error, t("said.file_not_arrived", name="VPX"))
+        self.assertEqual(found[0].launchers, 1)
 
     def test_the_copy_does_not_claim_to_own_an_ini(self) -> None:
         """`owns_ini` says whether *this* install created the file. The copy created

@@ -104,15 +104,11 @@ def _program_note(launcher: dict[str, Any]) -> str:
     return t("manager.workbench.app_missing", app=launcher["app_name"])
 
 
-def no_file_note(launcher: dict[str, Any]) -> str:
-    """Said on the launcher's own page where its program is there and has not written its
-    settings file, which is where it can be asked to; "" otherwise."""
-    if launcher.get("has_config") and _program_state(launcher) == path_state.OK \
-            and launcher.get("has_settings_file") is False:
-        if launcher.get("settings_file_not_made"):
-            return t("manager.workbench.file_not_made", app=launcher["app_name"])
-        return t("manager.workbench.file_not_written", app=launcher["app_name"])
-    return ""
+def awaiting_file(launcher: dict[str, Any]) -> bool:
+    """Whether its program is there and has not written its settings file, which is where
+    it can be asked to."""
+    return bool(launcher.get("has_config")) and _program_state(launcher) == path_state.OK \
+        and launcher.get("has_settings_file") is False
 
 
 def _config_group_label(key: str) -> Callable[[dict[str, Any]], str]:
@@ -140,7 +136,7 @@ def _config_group_block(key: str) -> Callable[[dict[str, Any]], Any]:
 # saying so takes no word at all - an unmarked row is the untouched one, so a mark always
 # means somebody did something.
 CAME_FROM = {
-    "launcher": "manager.workbench.all_tables",
+    "launcher": "manager.workbench.the_launcher",
     "folder": "manager.workbench.this_game",
     "entry": "manager.workbench.table",
 }
@@ -615,7 +611,7 @@ def _mark_for(held: dict, scope: str, field: Any,
     if not held.get("set_here") or held.get("in_effect"):
         return None
     return panel.state(t("manager.app_settings.ignored"), "warn",
-                       hint=t("manager.app_settings.all_tables_only"))
+                       hint=t("manager.app_settings.launcher_only"))
 
 
 async def _setting_entries(context: dict[str, Any],

@@ -49,7 +49,7 @@ class ClearHintTests(unittest.TestCase):
         said = all_settings._clear_hint(
             {"fallback_scope": "launcher", "fallback": "0"}, _Bool, "Visual Pinball X")
 
-        self.assertEqual(said, "Back to Off - All Tables")
+        self.assertEqual(said, "Back to Off - The Launcher")
 
     def test_whose_is_said_in_the_scope_words(self) -> None:
         said = all_settings._clear_hint(
@@ -154,10 +154,10 @@ class WhoseValueTests(unittest.TestCase):
     def test_changed_from_another_scope_s_value_names_that_scope(self) -> None:
         self.assertEqual(self.whose(set_here=True, in_effect=True, scope="folder", value="0",
                                     fallback_scope="launcher", fallback="1"),
-                         "Changed from On - All Tables")
+                         "Changed from On - The Launcher")
 
     def test_followed_from_another_scope(self) -> None:
-        self.assertEqual(self.whose(scope="launcher", value="0"), "All Tables")
+        self.assertEqual(self.whose(scope="launcher", value="0"), "The Launcher")
 
     def test_left_empty_says_what_its_blank_word_means(self) -> None:
         field = SimpleNamespace(type="int", choices=(), default="", key="Player.PlayfieldWidth",
@@ -166,7 +166,7 @@ class WhoseValueTests(unittest.TestCase):
 
         self.assertEqual(whose({"value": ""}, field, "Visual Pinball X"), "From the screen")
         self.assertEqual(whose({"scope": "launcher", "value": "1920"}, field,
-                               "Visual Pinball X"), "All Tables")
+                               "Visual Pinball X"), "The Launcher")
 
     def test_no_word_on_screen_is_the_wire_s(self) -> None:
         said = " ".join(all_settings.CAME_FROM.values()).lower()
@@ -184,7 +184,7 @@ class IgnoredTests(unittest.TestCase):
                                 "entry", _Bool, offered=False)
 
         self.assertEqual(chip.call_args.args[:2], ("Ignored", "warn"))
-        self.assertEqual(chip.call_args.kwargs["hint"], "Works only for all tables")
+        self.assertEqual(chip.call_args.kwargs["hint"], "Works only for the launcher")
 
     def test_one_the_table_does_not_hold_takes_no_mark(self) -> None:
         self.assertIsNone(all_settings._mark_for(

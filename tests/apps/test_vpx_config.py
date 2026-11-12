@@ -959,6 +959,40 @@ class RegisteredTests(_Case):
         self.assertTrue(self.at(SCOPE_ENTRY, key="Plugin.B2S.ShowGrill").set_here)
 
 
+class DeclaredTests(_Case):
+    """A file Visual Pinball did not write has no comments, and its blank settings still
+    show what the program does with them."""
+
+    def test_a_file_without_comments_shows_the_declared_default(self) -> None:
+        self.app_ini.write_text(
+            "[Global]\nEnableLog =\n[Player]\nBGSet =\nAAFactor =\n"
+            "; Exposure: How bright [Default: 3.0 in 0.0 .. 5.0]\nHDRGlobalExposure =\n")
+        fields = {f.key: f for g in self.config.groups(self.settings) for f in g.settings}
+
+        self.assertEqual(fields["Global.EnableLog"].default, "1")
+        self.assertEqual(fields["Player.BGSet"].choices[0], ("0", "Desktop / Full Single Screen"))
+        self.assertEqual(fields["Player.AAFactor"].default, "1")
+        # The comment is the build's own and is kept over the source's.
+        self.assertEqual(fields["Player.HDRGlobalExposure"].default, "3")
+
+    def test_a_setting_the_table_supplies_has_no_default(self) -> None:
+        self.app_ini.write_text(
+            "[Player]\nEmissionScale =\n[TableOverride]\nDifficulty =\nExposure =\nToneMapper =\n")
+        fields = {f.key: f for g in self.config.groups(self.settings) for f in g.settings}
+
+        for key in ("Player.EmissionScale", "TableOverride.Difficulty",
+                    "TableOverride.Exposure", "TableOverride.ToneMapper"):
+            with self.subTest(key=key):
+                self.assertFalse(fields[key].default)
+
+    def test_a_window_position_left_blank_declares_no_default(self) -> None:
+        self.app_ini.write_text("[Player]\nPlayfieldWndX =\nPlayfieldWndY =\n")
+        fields = {f.key: f for g in self.config.groups(self.settings) for f in g.settings}
+
+        self.assertEqual(fields["Player.PlayfieldWndX"].default, "")
+        self.assertEqual(self.config.blank_words()["Player.PlayfieldWndY"], "from_the_screen")
+
+
 class PluginFolderTests(unittest.TestCase):
     def test_on_macos_the_plugins_are_inside_the_bundle(self) -> None:
         from apps.vpx.plugins import folder
@@ -1182,11 +1216,11 @@ class WindowSizeTests(_Case):
         self.assertEqual(self.field("Player.MaxTexDimension").default, "16384")
         self.assertNotIn("Player.MaxTexDimension", self.config.blank_words())
 
-    def test_every_window_s_four_sizes_are_settings_vpx_declares(self) -> None:
+    def test_every_window_s_sizes_and_position_are_settings_vpx_declares(self) -> None:
         named = [key for key, word in self.config.blank_words().items()
                  if word == "from_the_screen"]
 
-        self.assertEqual(len(named), 20)
+        self.assertEqual(len(named), 28)
         self.assertEqual([key for key in named if key not in TYPES], [])
 
     def test_a_named_value_belongs_to_a_number_vpx_declares(self) -> None:

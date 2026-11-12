@@ -24,9 +24,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from common.failures import why
+from common.games import launcher_settings
 from common.i18n import t
 
 logger = logging.getLogger("vpinfe.common.games.launcher_copy")
@@ -46,6 +48,11 @@ class LocalWrites:
 
         return launcher_ops.put(launcher_id, body)
 
+    def put_launcher_settings_file(self, launcher_id: str, data: bytes) -> dict[str, Any]:
+        from common.games import launcher_settings
+
+        return launcher_settings.receive_file(launcher_id, data)
+
     def put_launcher_mapping(self, table_id: str, launcher_id: str) -> dict[str, Any]:
         from common.games import launchers
 
@@ -61,6 +68,9 @@ class LauncherWriter(Protocol):
     """
 
     def put_launcher(self, launcher_id: str, body: dict[str, Any]) -> dict[str, Any]: ...
+
+    def put_launcher_settings_file(self, launcher_id: str,
+                                   data: bytes) -> dict[str, Any]: ...
 
     def put_launcher_mapping(self, table_id: str,
                              launcher_id: str) -> dict[str, Any]: ...
@@ -134,6 +144,16 @@ def _send(device: dict[str, Any], sending: list[dict[str, Any]],
                            error=t("said.not_arrived", name=one.get("display_name")),
                            reason=_reason(exc))
         sent += 1
+        try:
+            data = _settings_file(one)
+            if data is not None:
+                client.put_launcher_settings_file(one["launcher_id"], data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not copy the settings file of %s to %s: %s",
+                           one.get("display_name"), name, exc)
+            return Outcome(device_id, name, launchers=sent,
+                           error=t("said.file_not_arrived", name=one.get("display_name")),
+                           reason=_reason(exc))
 
     mapped = 0
     for table_id, launcher_id in mappings.items():
@@ -160,12 +180,29 @@ def _reason(exc: Exception) -> str:
 
 def _body(launcher: dict[str, Any]) -> dict[str, Any]:
     """What travels. Not `owns_ini`: it says whether *this* install created the file, and
-    the copy did not create anything on the machine it lands on."""
+    the copy did not create anything on the machine it lands on. Not the settings file's
+    path either: it names a place on this machine, and the file itself goes after the
+    launcher (`_settings_file`)."""
+    settings = dict(launcher.get("settings") or {})
+    settings.pop(launcher_settings.KEY, None)
     return {"app": launcher.get("app", ""),
             "display_name": launcher.get("display_name", ""),
             "enabled": bool(launcher.get("enabled", True)),
             "owns_ini": False,
-            "settings": dict(launcher.get("settings") or {})}
+            "settings": settings}
+
+
+def _settings_file(launcher: dict[str, Any]) -> bytes | None:
+    """The bytes of the file the launcher plays with where it was pointed at one, else
+    None: a launcher on its program's own file has none to send, and the copy plays with
+    the program's own file over there."""
+    named = str((launcher.get("settings") or {}).get(launcher_settings.KEY) or "").strip()
+    if not named:
+        return None
+    try:
+        return Path(named).expanduser().read_bytes()
+    except FileNotFoundError:
+        return None
 
 
 def said(outcomes: Iterable[Outcome]) -> str:

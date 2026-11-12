@@ -18,6 +18,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
 from nicegui import run, ui
@@ -28,6 +29,7 @@ from common.devices import install_identity
 from common.failures import why
 from common.i18n import t
 from manager.backups import backup_rows
+from manager.frontend import settings_file_choice as file_choice
 from manager.kit import (
     busy,
     confirm,
@@ -36,6 +38,7 @@ from manager.kit import (
     offload,
     panel,
     states,
+    undo,
     verbs,
     views,
     walks,
@@ -120,6 +123,14 @@ def rows(held: list[dict], defaults: dict,
     } for one in held]
 
 
+def marked(found: dict[str, Any]) -> list[dict[str, Any]]:
+    """The launchers with `is_default` set on the one each app plays with unless a table
+    names another."""
+    defaults = set((found.get("defaults") or {}).values())
+    return [{**one, "is_default": one["launcher_id"] in defaults}
+            for one in found.get("launchers") or []]
+
+
 def launcher_offer(held: list[dict], app: str, named: str = "") -> list[dict[str, Any]]:
     """What a table of `app` may be pointed at, in order: that app's launchers, then
     every other program's. A switched-off one is left out unless the table names it,
@@ -199,7 +210,7 @@ async def _fill(library: Library, state: dict[str, Any], on_select: Callable[[di
             return
 
         by_id = {row["id"]: row for row in built}
-        by_launcher = {one["launcher_id"]: one for one in held}
+        by_launcher = {one["launcher_id"]: one for one in marked(found)}
         grid.on_row_focus(SCOPE,
                           lambda event: on_select(by_id.get(grid.focused_row(event))))
 
@@ -267,7 +278,7 @@ async def _fill(library: Library, state: dict[str, Any], on_select: Callable[[di
             again = await offload.io(library.launchers)
             fresh_held = list(again.get("launchers") or [])
             by_launcher.clear()
-            by_launcher.update({one["launcher_id"]: one for one in fresh_held})
+            by_launcher.update({one["launcher_id"]: one for one in marked(again)})
             grid.replace_rows(table, built, by_id,
                               rows(fresh_held, dict(again.get("defaults") or {}),
                                    dict(again.get("tables") or {})),
@@ -279,33 +290,44 @@ async def _fill(library: Library, state: dict[str, Any], on_select: Callable[[di
 
 def standing_option(field: dict[str, Any], app_name: str) -> dict[str, Any]:
     """A launcher field as the control reads it: a path left empty stands for the file
-    the program uses, and the hover says whose it is, and that it is not made yet."""
+    the program uses, and the hover says whose it is."""
     if not field.get("default_path"):
         return field
-    whose = t("manager.workbench.app_default", app=app_name)
-    if not field.get("default_exists"):
-        whose = "\n".join((whose, t("manager.workbench.not_created")))
-    return {**field, "default_whose": whose}
+    return {**field, "default_whose": t("manager.workbench.app_default", app=app_name)}
 
 
 @on_page
 async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], None],
                app: dict) -> None:
-    """A new launcher for an app: its name, and the paths the app declares.
-
-    Nothing copied from an existing one: Add is for a second program, and Duplicate is
-    the action for a second way of running the same one.
-    """
+    """A new launcher for an app: its name, the paths the app declares and where its
+    settings come from."""
+    from common.games import launcher_settings
     from common.games import launchers as model
 
-    names = await _names(library)
-    asked = [one for one in app.get("fields") or [] if one.get("path")]
+    held = await offload.io(library.launchers)
+    names = _names_of(held)
+    asked = [one for one in app.get("fields") or []
+             if one.get("path") and one["key"] != launcher_settings.KEY]
     made = model.mint_launcher_id()
+    fallback = model.free_name(app["name"], names)
+    places = await offload.io(library.launcher_settings_file_places, app["id"], {})
 
-    async def write(name: str, settings: dict[str, str]) -> None:
-        await run.io_bound(library.put_launcher, made, {
-            "app": app["id"], "enabled": True, "settings": settings,
-            "display_name": name or model.free_name(app["name"], names)})
+    def choosing(name: Callable[[], str]) -> file_choice.Choice:
+        return file_choice.Choice(library, app=app, held=held, places=places,
+                                  mode=file_choice.NEW, name=name, fallback=fallback)
+
+    @on_page
+    async def write(name: str, settings: dict[str, str],
+                    choice: file_choice.Choice | None) -> bool:
+        assert choice is not None
+        shown = name or fallback
+        answer = await choice.apply(made, create={
+            "app": app["id"], "enabled": True, "settings": settings, "display_name": shown})
+        if answer is None:
+            return False
+        file_choice.announce(library, answer, choice.how, file_choice.NEW,
+                             after=_forgotten(state, redraw))
+        return True
 
     async def standing(settings: dict[str, str]) -> dict[str, dict[str, Any]]:
         found = await offload.io(library.launcher_standing, app["id"], settings)
@@ -313,8 +335,18 @@ async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], Non
 
     if await ask_name(t("manager.launchers.new_title", app=app["name"]), t("word.add"),
                       names, write, asked=asked, looking=library.folders, standing=standing,
-                      placeholder=t("manager.launchers.name_example", app=app["name"])):
+                      placeholder=t("manager.launchers.name_example", app=app["name"]),
+                      choosing=choosing):
         await _open(state, redraw, made)
+
+
+def _forgotten(state: dict[str, Any], redraw: Callable[[], None]) -> Callable[[], Awaitable[Any]]:
+    """What runs after an Undo of an add: the launcher is gone, so the grid is drawn again
+    without it and the workbench is left empty."""
+    async def run() -> None:
+        state["launcher"] = ""
+        redraw()
+    return run
 
 
 def _place(index: int, total: int) -> str:
@@ -326,32 +358,48 @@ async def duplicate(library: Library, state: dict[str, Any], redraw: Callable[[]
                     launchers: list[dict]) -> None:
     """A copy of each, which is the case this feature exists for: change one thing -
     usually the Settings File - and you have a second way of running the same program.
-
-    The copy does not claim to own an ini. It points at whatever the original did, and
-    only a file VPinFE made is one VPinFE offers to delete. Over several it asks a name
-    for each in turn.
+    Over several it asks a name for each in turn.
     """
     from common.games import launchers as model
 
-    names = await _names(library)
+    held = await offload.io(library.launchers)
+    names = _names_of(held)
     made: list[str] = []
     for index, launcher in enumerate(launchers, 1):
         new_id = model.mint_launcher_id()
         offered = model.free_name(
             t("manager.launchers.copy_of", name=launcher["display_name"]), names)
+        app = {"id": launcher["app"], "name": launcher["app_name"]}
+        places = await offload.io(library.launcher_settings_file_places, launcher["app"],
+                                  dict(launcher.get("settings") or {}))
 
-        async def write(name: str, _settings: dict[str, str], original: dict = launcher,
-                        new_id: str = new_id, offered: str = offered) -> None:
-            await run.io_bound(library.put_launcher, new_id,
-                               {**original, "launcher_id": new_id, "owns_ini": False,
-                                "display_name": name or offered})
-            names.append(name or offered)
+        def choosing(name: Callable[[], str], launcher: dict = launcher, app: dict = app,
+                     places: list[dict] = places, offered: str = offered) -> file_choice.Choice:
+            return file_choice.Choice(library, app=app, held=held, places=places,
+                                      mode=file_choice.DUPLICATE, name=name,
+                                      fallback=offered, launcher=launcher)
+
+        @on_page
+        async def write(name: str, _settings: dict[str, str],
+                        choice: file_choice.Choice | None, original: dict = launcher,
+                        new_id: str = new_id, offered: str = offered) -> bool:
+            assert choice is not None
+            shown = name or offered
+            answer = await choice.apply(new_id, create={
+                "app": original["app"], "enabled": bool(original.get("enabled", True)),
+                "settings": dict(original.get("settings") or {}), "display_name": shown})
+            if answer is None:
+                return False
+            names.append(shown)
+            file_choice.announce(library, answer, choice.how, file_choice.DUPLICATE,
+                                 after=_forgotten(state, redraw))
+            return True
 
         answer = await ask_name(
             t("manager.launchers.duplicate_title", name=launcher["display_name"]),
             t("manager.workbench.duplicate"), names, write, named=offered,
             icon=verbs.DUPLICATE, place=_place(index, len(launchers)),
-            walking=len(launchers) > 1)
+            walking=len(launchers) > 1, choosing=choosing)
         if answer == walks.STOPPED:
             break
         if answer:
@@ -362,25 +410,82 @@ async def duplicate(library: Library, state: dict[str, Any], redraw: Callable[[]
         redraw()
 
 
+@on_page
+async def change_file(library: Library, launcher: dict, changed: Callable[[], Awaitable[Any]],
+                      ) -> None:
+    """Give a launcher another settings file: the same choices as a new launcher, and Save To
+    for where a new one goes. `changed` redraws whatever shows the file afterwards."""
+    held = await offload.io(library.launchers)
+    places = await offload.io(library.launcher_settings_file_places, launcher["app"],
+                              dict(launcher.get("settings") or {}))
+    name = str(launcher["display_name"])
+    choice = file_choice.Choice(
+        library, app={"id": launcher["app"], "name": launcher["app_name"]}, held=held,
+        places=places, mode=file_choice.CHANGE, name=lambda: name, fallback=name,
+        launcher=launcher)
+
+    @on_page
+    async def go() -> None:
+        if choice.refuse():
+            return
+        try:
+            answer = await choice.apply(launcher["launcher_id"])
+        except Exception as exc:  # noqa: BLE001 - said where the person is looking
+            ui.notify(t("manager.launchers.sf.change_failed"), caption=why(exc),
+                      type="negative")
+            return
+        if answer is None:
+            return
+        box.submit(True)
+        if answer.get("unchanged"):
+            ui.notify(t("manager.launchers.sf.unchanged", name=name))
+            return
+        file_choice.announce(library, answer, choice.how, file_choice.CHANGE, after=changed)
+        await changed()
+
+    with frame.opened(t("manager.launchers.sf.change_title", name=name),
+                      ignore_outside_click=True) as box:
+        panel.facts(ui, choice.rows())
+        with frame.footer():
+            frame.leave(box, False)
+            ok = frame.answer(t("word.change"), go, icon="swap_horiz")
+    frame.enter_presses(ok)
+    await box
+
+
+async def open_launcher(state: dict[str, Any], launcher_id: str) -> None:
+    """That launcher selected in the grid and open in the workbench."""
+    state["launcher"] = launcher_id
+    grid.land_on(SCOPE, {"id": launcher_id})
+    await _show(state, launcher_id)
+
+
+async def _show(state: dict[str, Any], launcher_id: str) -> None:
+    state["launcher"] = launcher_id
+    show = state.get("show_launcher")
+    if callable(show):
+        await show({"id": launcher_id})
+    if callable(opened := state.get("open_pane")):
+        opened()
+
+
 async def _open(state: dict[str, Any], redraw: Callable[[], None], made: str) -> None:
     """The grid drawn again with it, and it in the workbench."""
     state["launcher"] = made
     grid.land_on(SCOPE, {"id": made})
     redraw()
-    show = state.get("show_launcher")
-    if callable(show):
-        await show({"id": made})
-    if callable(opened := state.get("open_pane")):
-        opened()
+    await _show(state, made)
 
 
 async def ask_name(title: str, answer: str, names: list[str],
-                   write: Callable[[str, dict[str, str]], Awaitable[None]], *,
+                   write: Callable[..., Awaitable[bool | None]], *,
                    named: str = "", asked: list[dict] | None = None,
                    placeholder: str = "", icon: str = verbs.CREATE,
                    looking: Callable[..., dict] | None = None,
                    standing: Callable[[dict[str, str]], Awaitable[dict[str, dict]]] | None = None,
-                   place: str = "", walking: bool = False) -> bool | str:
+                   place: str = "", walking: bool = False,
+                   choosing: Callable[[Callable[[], str]], file_choice.Choice] | None = None,
+                   ) -> bool | str:
     """Name a launcher, and fill the path fields `asked` lists, before it exists.
 
     `looking` lists a folder for the picker; without it the path fields are typed only.
@@ -388,6 +493,9 @@ async def ask_name(title: str, answer: str, names: list[str],
     for would stand for left empty; a field it names shows that, and is asked again when
     another path changes.
     `place` says where a walk has got to, and `walking` splits Cancel into Skip and Stop.
+    `choosing` is given the name as typed and answers the Settings File rows; `write` gets it
+    as its third argument, None where there are none. `write` answers False where the
+    person declined a question of its own, and the dialog stays open.
 
     True once `write` took it, False when skipped, `walks.STOPPED` when a walk is ended.
     A name already in use, or any refusal from `write`, is said on the Name field and the
@@ -399,6 +507,8 @@ async def ask_name(title: str, answer: str, names: list[str],
     holders: dict[str, Any] = {}
     stands: dict[str, dict] = {}
     asking = [one["key"] for one in asked or ()]
+    chosen = choosing(lambda: " ".join(str(fields["name"].value or "").split())) \
+        if choosing else None
 
     def typed(key: str) -> str:
         text = str(fields[key].value or "").strip()
@@ -473,10 +583,14 @@ async def ask_name(title: str, answer: str, names: list[str],
         if any(model.same_name(name, one) for one in names):
             refused(t("error.launchers.name_taken", name=name))
             return
+        if chosen is not None and chosen.refuse():
+            return
         try:
-            await write(name, {key: typed(key) for key in asking})
+            wrote = await write(name, {key: typed(key) for key in asking}, chosen)
         except Exception as exc:  # noqa: BLE001 - said where it can be put right
             refused(why(exc))
+            return
+        if wrote is False:
             return
         box.submit(True)
 
@@ -490,20 +604,22 @@ async def ask_name(title: str, answer: str, names: list[str],
         if place:
             ui.label(place).classes("manager-help px-3")
         panel.facts(ui, [(t("word.name"), draw("name", named, placeholder))]
-                    + [(one["label"], asked_field(one)) for one in asked or ()])
+                    + [(one["label"], asked_field(one)) for one in asked or ()]
+                    + (chosen.rows() if chosen is not None else []))
         with frame.footer():
             frame.leave(box, walking)
             go = frame.answer(answer, keep, icon=icon)
     fields["name"].on_value_change(lambda: refused(""))
+    if chosen is not None:
+        fields["name"].on_value_change(chosen.follow_name)
     frame.focus(box, fields["name"], select=bool(named))
     frame.enter_presses(go)
     answered = await box
     return answered if answered == walks.STOPPED else bool(answered)
 
 
-async def _names(library: Library) -> list[str]:
-    found = await offload.io(library.launchers)
-    return [str(one.get("display_name") or "") for one in found.get("launchers") or []]
+def _names_of(held: dict) -> list[str]:
+    return [str(one.get("display_name") or "") for one in held.get("launchers") or []]
 
 
 def copy_targets(known: list[dict], install_id: str) -> list[dict]:
@@ -647,20 +763,72 @@ def acts(library: Library, state: dict[str, Any], launchers: list[dict], count: 
     """What can be done to these launchers, of the `count` there are. With `after`, also
     what can be done to their programs' settings files, for those that have one."""
     several = len(launchers) > 1
-    offered = [panel.Verb(t("manager.workbench.duplicate"),
-                          lambda: duplicate(library, state, redraw, launchers))]
-    keeping = [one for one in launchers if keeps_settings(one)]
-    if after is not None and keeping:
-        offered += copy_verbs(library, keeping, after, playing=playing)
+    offered: list[panel.Verb] = []
+    if several or not launchers[0].get("is_default"):
+        offered.append(_default_verb(library, state, launchers, after))
+    offered.append(panel.Verb(t("manager.launchers.duplicate_menu"),
+                              lambda: duplicate(library, state, redraw, launchers),
+                              group=_ABOUT_IT))
     if state.get("can_manage_devices"):
         offered.append(panel.Verb(t("manager.workbench.copy_devices"),
-                                  lambda: copy_dialog(library, state, launchers)))
+                                  lambda: copy_dialog(library, state, launchers),
+                                  group=_ABOUT_IT))
+    keeping = [one for one in launchers if keeps_settings(one)]
+    if after is not None and keeping:
+        offered += [replace(one, group=_ABOUT_IT)
+                    for one in copy_verbs(library, keeping, after, playing=playing)]
     offered.append(panel.Verb(
         t("word.remove"),
         None if count <= len(launchers) else (lambda: remove(library, state, redraw, launchers)),
         danger=True,
         hint=t("manager.launchers.keep_one" if several else "manager.workbench.only_launcher")))
     return offered
+
+
+_DEFAULT, _ABOUT_IT = "default", "about-it"
+
+
+def _default_verb(library: Library, state: dict[str, Any], launchers: list[dict],
+                  after: Callable[[], Awaitable[Any]] | None) -> panel.Verb:
+    """Make Default, alone at the top of the menu. Dimmed with the reason behind an info
+    mark where the launcher cannot be one; the selection's own dimming drops the mark."""
+    from manager.workbench import all_settings
+
+    label = t("word.make_default")
+    first = launchers[0]
+    refused = all_settings._why_not_the_default(first)
+    if refused:
+        return panel.Verb(label, hint=refused, one=True, group=_DEFAULT)
+    return panel.Verb(label, lambda: make_default(library, state, first, after), one=True,
+                      group=_DEFAULT)
+
+
+
+
+@on_page
+async def make_default(library: Library, state: dict[str, Any], launcher: dict,
+                       after: Callable[[], Awaitable[Any]] | None = None) -> None:
+    """The one act behind the menu's Make Default and the workbench's Default switch."""
+    try:
+        done = await offload.io(library.make_launcher_default, launcher["launcher_id"])
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(t("manager.workbench.save_failed"), caption=why(exc), type="negative")
+        return
+
+    async def settle() -> None:
+        refresh = state.get("refresh_launchers")
+        if callable(refresh):
+            await refresh()
+        if after is not None:
+            await after()
+
+    async def reverse() -> None:
+        await offload.io(library.restore_launcher_order, list(done.get("was") or []))
+        await settle()
+
+    undo.offer(t("manager.launchers.made_default", name=launcher["display_name"],
+                 app=launcher.get("app_name") or ""), reverse)
+    await settle()
 
 
 def removal_words(found: dict[str, Any]) -> tuple[str, list[str]]:
@@ -712,12 +880,17 @@ async def remove(library: Library, state: dict[str, Any], redraw: Callable[[], N
     else:
         detail, lines = removal_words_many(found)
         title = t("manager.launchers.remove_many", count=len(launchers))
+    own_files = [one["launcher_id"] for one in launchers if one.get("offer_delete")]
+    offered = confirm.Option(t("manager.launchers.sf.remove_file", count=len(own_files))) \
+        if own_files else None
     if not await confirm.ask(title, detail=detail, lines=lines, confirm=t("word.remove"),
-                             icon=verbs.REMOVE):
+                             icon=verbs.REMOVE, option=offered):
         return
     failed = Failures()
     for launcher in launchers:
         try:
+            if offered is not None and offered.on and launcher["launcher_id"] in own_files:
+                await run.io_bound(library.delete_launcher_own_file, launcher["launcher_id"])
             await run.io_bound(library.delete_launcher, launcher["launcher_id"])
         except Exception as exc:  # noqa: BLE001
             failed.add(launcher["display_name"], why(exc))

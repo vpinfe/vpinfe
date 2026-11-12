@@ -119,6 +119,7 @@ tests = [
 [[area]]
 paths = [
   "apps/vpx/i18n/*",
+  "apps/vpx/setting_declarations.py",
   "scripts/fetch_vpx_setting_types.py",
   "scripts/vpx_ini_drift.py",
 ]

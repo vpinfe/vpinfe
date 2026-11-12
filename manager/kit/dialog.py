@@ -111,7 +111,8 @@ def said(control: Any, message: str) -> None:
 def field(value: str = "", *, placeholder: str = "", lines: int = 0,
           browse: Callable[[str], Awaitable[str | None]] | None = None,
           default: str = "", whose: str = "", left_empty: str = "",
-          name: str = "", room: bool = False) -> Any:
+          name: str = "", room: bool = False, readonly: bool = False,
+          browse_tip: str = "") -> Any:
     """The panel's own field, answering nothing until the dialog does.
 
     `browse` takes the field's current value and returns the path picked, or None; what
@@ -123,6 +124,9 @@ def field(value: str = "", *, placeholder: str = "", lines: int = 0,
     `name` is what a screen reader calls the field, the label its row shows. `room` keeps
     the line under the field free for `said`, so an error does not resize the dialog, and
     takes the error away once the value changes.
+
+    A `readonly` field takes no typing: the box opens `browse` wherever it is pressed, and
+    `browse_tip` names that button.
     """
     if browse is not None and (default or left_empty):
         held: list[Any] = []
@@ -156,7 +160,10 @@ def field(value: str = "", *, placeholder: str = "", lines: int = 0,
             control.classes("manager-adorned")
             panel.path_input(control)
             with control.add_slot("append"):
-                panel.path_buttons(control, browsed)
+                panel.path_buttons(control, browsed, browse_tip)
+            if readonly:
+                control.props("readonly")
+                control.on("click", browsed, js_handler=panel.OPENS_ON_CLICK_JS)
         return control
 
 

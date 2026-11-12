@@ -65,7 +65,7 @@ def named_keys(root: pathlib.Path = ROOT, sections: Iterable[str] | None = None,
     found: dict[str, set[str]] = {}
     for where in SCANNED:
         for path in sorted((root / where).rglob("*.py")):
-            if path.name == "setting_types.py":
+            if path.name in ("setting_types.py", "setting_declarations.py"):
                 continue
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 if (isinstance(node, ast.Constant) and isinstance(node.value, str)

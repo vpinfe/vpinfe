@@ -597,7 +597,7 @@ async def ask_keys(vpx: Vpx) -> dict[str, Any]:
     flat = _flat(found)
 
     def draw(_values: dict[str, Any]) -> None:
-        holder = ui.element("div").classes("w-full")
+        holder = ui.element("div").classes("w-full px-3")
         context: dict[str, Any] = {"library": _Creating(client),
                                    "launcher": {"launcher_id": launcher_id}}
 

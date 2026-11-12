@@ -250,6 +250,22 @@ class LauncherStore:
             self._write(config, found + [one for one in items if one.get("id") != wanted])
             return True
 
+    def order(self) -> list[str]:
+        """The launcher ids in the order the list holds them."""
+        return [one.launcher_id for one in self.launchers()]
+
+    def set_order(self, ids: list[str]) -> None:
+        """Put the launchers named in `ids` first, in that order, and any others after
+        them as they were. An id with no launcher is skipped, so an order taken before a
+        launcher was removed does not bring it back."""
+        with config_service.writing(), self._lock:
+            config = self._core()
+            items = self._items(config)
+            by_id = {str(one.get("id")): one for one in items}
+            first = [by_id[wanted] for wanted in dict.fromkeys(ids) if wanted in by_id]
+            named = {str(one.get("id")) for one in first}
+            self._write(config, first + [one for one in items if str(one.get("id")) not in named])
+
     def remove(self, launcher_id: str) -> bool:
         """Forget a launcher. The tables listed on it go with it, back to the default."""
         wanted = (launcher_id or "").strip()

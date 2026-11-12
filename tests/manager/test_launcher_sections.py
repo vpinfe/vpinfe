@@ -58,18 +58,18 @@ class RailTests(unittest.TestCase):
 
         self.assertIn("launcher_displays", shown)
         self.assertIn("launcher_details", shown)
-        self.assertIn("launcher_backups", shown)
+        self.assertNotIn("launcher_backups", shown)
 
     def test_every_setting_is_in_all_settings_after_the_areas(self) -> None:
         shown = _shown(_context(path_state.OK, groups=("displays", "plugins", "more")))
 
         self.assertEqual(shown, ["launcher_details", "launcher_displays", "launcher_plugins",
-                                 "launcher_all", "launcher_backups"])
+                                 "launcher_all"])
 
     def test_a_program_that_is_not_there_leaves_only_what_can_fix_it(self) -> None:
         shown = _shown(_context(path_state.MISSING))
 
-        self.assertEqual(shown, ["launcher_details", "launcher_backups"])
+        self.assertEqual(shown, ["launcher_details"])
 
     def test_a_group_the_app_does_not_declare_is_absent_rather_than_empty(self) -> None:
         """An install without the plugin architecture shows fewer sections, not empty
@@ -438,30 +438,22 @@ class ProgramNoteTests(unittest.TestCase):
     def test_a_program_that_is_there_needs_no_note(self) -> None:
         self.assertEqual(all_settings._program_note(_launcher(path_state.OK)), "")
 
-    def test_a_program_that_has_not_written_its_file_says_so_only_on_its_own_page(self) -> None:
+    def test_a_program_without_its_file_is_awaiting_one_but_draws_no_note(self) -> None:
         found = {**_launcher(path_state.OK), "has_settings_file": False}
 
-        self.assertEqual(all_settings.no_file_note(found),
-                         t("manager.workbench.file_not_written", app="Visual Pinball X"))
+        self.assertTrue(all_settings.awaiting_file(found))
         self.assertEqual(all_settings._program_note(found), "",
                          "a table's settings read it as a reason to draw nothing")
 
-    def test_a_program_that_wrote_no_file_says_so_in_place_of_the_run_it_again_line(self) -> None:
-        found = {**_launcher(path_state.OK), "has_settings_file": False,
-                 "settings_file_not_made": True}
-
-        self.assertEqual(all_settings.no_file_note(found),
-                         t("manager.workbench.file_not_made", app="Visual Pinball X"))
-
-    def test_a_program_with_its_file_needs_no_note(self) -> None:
+    def test_a_program_with_its_file_is_not_awaiting_one(self) -> None:
         found = {**_launcher(path_state.OK), "has_settings_file": True}
 
-        self.assertEqual(all_settings.no_file_note(found), "")
+        self.assertFalse(all_settings.awaiting_file(found))
 
-    def test_a_program_that_is_not_there_is_not_told_to_run(self) -> None:
+    def test_a_program_that_is_not_there_is_not_awaiting_one(self) -> None:
         found = {**_launcher(path_state.MISSING), "has_settings_file": False}
 
-        self.assertEqual(all_settings.no_file_note(found), "")
+        self.assertFalse(all_settings.awaiting_file(found))
 
     def test_an_app_with_no_settings_of_its_own_gets_none(self) -> None:
         for state in (path_state.UNSET, path_state.MISSING):
@@ -479,13 +471,14 @@ class CopyVerbTests(unittest.TestCase):
             return None
 
         return launchers.acts(
-            Mock(), {}, [_launcher(state, has_config=has_config) | {"launcher_id": "l-1"}], 2,
+            Mock(), {}, [_launcher(state, has_config=has_config)
+                      | {"launcher_id": "l-1", "display_name": "Launcher"}], 2,
             lambda: None, after=done if after else None, playing=playing)
 
     def test_a_launcher_with_a_program_and_a_settings_file_offers_both(self) -> None:
         labels = [one.label for one in self._acts(path_state.OK)]
-        self.assertEqual(labels[1:3], [t("manager.backups.take_now"),
-                                       t("manager.backups.restore_dialog")])
+        self.assertIn(t("manager.backups.take_now"), labels)
+        self.assertIn(t("manager.backups.restore_dialog"), labels)
 
     def test_no_settings_file_or_no_program_offers_neither(self) -> None:
         for state, has_config in ((path_state.MISSING, True), (path_state.UNSET, True),
@@ -499,7 +492,9 @@ class CopyVerbTests(unittest.TestCase):
         self.assertNotIn(t("manager.backups.restore_dialog"), labels)
 
     def test_a_table_playing_refuses_both_and_says_why(self) -> None:
-        copy, restore = self._acts(path_state.OK, playing=True)[1:3]
+        verbs = {one.label: one for one in self._acts(path_state.OK, playing=True)}
+        copy = verbs[t("manager.backups.take_now")]
+        restore = verbs[t("manager.backups.restore_dialog")]
         self.assertEqual((copy.run, restore.run), (None, None))
         self.assertEqual((copy.hint, restore.hint),
                          (t(all_settings.PLAYING_NOTE), t(all_settings.PLAYING_NOTE)))
@@ -755,7 +750,7 @@ class ClearTests(unittest.IsolatedAsyncioTestCase):
     def test_its_hover_says_what_it_goes_back_to(self) -> None:
         icon_action, _ = self._drawn(self.SET)
 
-        self.assertEqual(icon_action.call_args.kwargs["hint"], "Back to Floating - All Tables")
+        self.assertEqual(icon_action.call_args.kwargs["hint"], "Back to Floating - The Launcher")
         self.assertTrue(icon_action.call_args.kwargs["enabled"])
 
     def test_while_a_table_is_playing_it_is_off_and_says_why(self) -> None:
@@ -843,7 +838,7 @@ class ScopeTests(unittest.IsolatedAsyncioTestCase):
                                 "entry", self.INPUT, offered=False)
 
         state.assert_called_once_with(t("manager.app_settings.ignored"), "warn",
-                                      hint=t("manager.app_settings.all_tables_only"))
+                                      hint=t("manager.app_settings.launcher_only"))
 
 
 class PairTests(unittest.IsolatedAsyncioTestCase):

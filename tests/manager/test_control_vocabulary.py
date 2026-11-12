@@ -55,6 +55,8 @@ BUDGET = {
                           "nor off while a table is to have only some of the files: a "
                           "choice over a list, not a fact row"),
     "launchers.py": (2, "checkboxes in the copy-to-device dialog"),
+    "confirm.py": (1, "the tick a confirmation offers beside its Yes, such as also deleting "
+                      "a launcher's settings file, which asks and sets nothing itself"),
     "clipboard.py": (1, "the textarea a browser that will not copy falls back to"),
     "token_panel.py": (1, "the read-only box a new token is shown in, once, so it can "
                          "be selected and copied"),
@@ -87,11 +89,13 @@ BUDGET = {
                        "import confirmation's per-item tick, not a fact row"),
     "record.py": (1, "a tick per kind in Record Media, a choice over a list as Get missing "
                      "art's is, with what the kind's slot holds beside it"),
-    "folder_picker.py": (3, "the filter above the folder list, a toolbar box like a "
+    "folder_picker.py": (4, "the filter above the folder list, a toolbar box like a "
                            "grid's search; the Show hidden tick beside it, which asks "
                            "what to show as All Settings' ticks do; and the name typed "
-                           "into the row a new folder takes in that list. None is a fact "
-                           "row and none sets anything on the folder chosen"),
+                           "into the row a new folder takes in that list; and the file name "
+                           "typed under the list when the picker is choosing where to save "
+                           "a file. None is a fact row and none sets anything on the "
+                           "folder chosen"),
     "setup_vpx.py": (1, "the long and short sides of the playfield screen with the cm / in "
                         "toggle, as the Screen Size row in vpx_displays draws them"),
     "vpx_displays.py": (1, "the cm / in toggle beside the Screen Size numbers, which sets "

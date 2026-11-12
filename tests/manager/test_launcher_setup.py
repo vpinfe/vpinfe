@@ -29,7 +29,8 @@ class Details:
                          "fields": [{"key": "bin_path", "path": "exe", "label": "Program"}],
                          "checks": {"bin_path": {"state": program}}}
         self.recheck, self.refresh, self.retitle = AsyncMock(), AsyncMock(), Mock()
-        self.put = AsyncMock(side_effect=RuntimeError(refused) if refused else None)
+        self.put = AsyncMock(return_value={},
+                             side_effect=RuntimeError(refused) if refused else None)
         self.rebuild = AsyncMock()
         self.context: dict[str, Any] = {
             "library": Mock(), "launcher": self.launcher,
@@ -56,7 +57,7 @@ class Details:
             one.stop()
 
     def sent(self) -> list[dict[str, Any]]:
-        return [one.args[2] for one in self.put.await_args_list]
+        return [one.args[2] for one in self.put.await_args_list if isinstance(one.args[2], dict)]
 
 
 class TroubleRecheck(unittest.IsolatedAsyncioTestCase):
@@ -142,11 +143,10 @@ class AFieldStandingForAFile(unittest.TestCase):
         option = launchers.standing_option(self.FIELD, "Visual Pinball X")
         self.assertEqual(option["default_whose"], "Visual Pinball X's default")
 
-    def test_a_file_not_made_yet_says_so_on_a_line_of_its_own(self) -> None:
+    def test_a_file_not_made_yet_is_said_beside_the_field_not_in_the_hover(self) -> None:
         option = launchers.standing_option({**self.FIELD, "default_exists": False},
                                             "Visual Pinball X")
-        self.assertEqual(option["default_whose"],
-                         "Visual Pinball X's default\nNot created yet")
+        self.assertEqual(option["default_whose"], "Visual Pinball X's default")
 
     def test_a_field_standing_for_nothing_is_left_as_it_came(self) -> None:
         field = {"key": "bin_path", "path": "exe"}

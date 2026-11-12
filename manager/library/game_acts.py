@@ -330,11 +330,20 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
 
     @on_page
     async def make_default() -> None:
+        locked = game_tables.is_locked(first.siblings)
+        was = next((row["id"] for row in first.siblings if row.get("default")), "") \
+            if locked else ""
         answers = await write([first], library.set_default_table, lambda item: (item.id,),
                               t("manager.workbench.change_failed"))
-        if answers is not None:
-            ui.notify(game_tables.now_plays(first.game, first.table), type="positive")
+        if answers is None:
+            return
+
+        async def put_back() -> None:
+            await run.io_bound(library.set_default_table, first.game_id, was)
             await after([first.game_id], False)
+
+        undo.offer(game_tables.now_plays(first.game, first.table), put_back)
+        await after([first.game_id], False)
 
     @on_page
     async def lock(locking: bool) -> None:

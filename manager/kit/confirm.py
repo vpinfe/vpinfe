@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any, overload
 
 from nicegui import ui
@@ -27,12 +28,13 @@ class Answer(enum.StrEnum):
     SECOND = "second"
 
 
-@overload
-async def ask(question: str, *, detail: str | Sequence[str] = ...,
-              lines: Iterable[str] = ..., confirm: str = ..., icon: str = ...,
-              danger: bool = ...,
-              also: tuple[str, Callable[[], Any], str] | None = ...,
-              second: None = ...) -> bool: ...
+@dataclass
+class Option:
+    """A tick offered with the question, unticked unless `on` says otherwise. The caller
+    reads `on` once the question is answered."""
+
+    label: str
+    on: bool = False
 
 
 @overload
@@ -40,7 +42,15 @@ async def ask(question: str, *, detail: str | Sequence[str] = ...,
               lines: Iterable[str] = ..., confirm: str = ..., icon: str = ...,
               danger: bool = ...,
               also: tuple[str, Callable[[], Any], str] | None = ...,
-              second: tuple[str, str]) -> Answer: ...
+              second: None = ..., option: Option | None = ...) -> bool: ...
+
+
+@overload
+async def ask(question: str, *, detail: str | Sequence[str] = ...,
+              lines: Iterable[str] = ..., confirm: str = ..., icon: str = ...,
+              danger: bool = ...,
+              also: tuple[str, Callable[[], Any], str] | None = ...,
+              second: tuple[str, str], option: Option | None = ...) -> Answer: ...
 
 
 async def ask(question: str, *, detail: str | Sequence[str] = "",
@@ -48,7 +58,8 @@ async def ask(question: str, *, detail: str | Sequence[str] = "",
               confirm: str = t("word.delete"), icon: str = verbs.DELETE,
               danger: bool = True,
               also: tuple[str, Callable[[], Any], str] | None = None,
-              second: tuple[str, str] | None = None) -> bool | Answer:
+              second: tuple[str, str] | None = None,
+              option: Option | None = None) -> bool | Answer:
     """Put the question, and wait for an answer.
 
     `question` is the whole ask - "Delete the extracted script?", never "Are you sure?",
@@ -62,6 +73,8 @@ async def ask(question: str, *, detail: str | Sequence[str] = "",
     `second` is another way to say yes, as its label and its drawing, quiet beside the
     confirm. Given one, the answer is an `Answer`; without, a bool as it always was.
 
+    `option` is a tick under the lines, whose state is left in the `Option` it came in.
+
     Enter presses the confirm unless the question is `danger`.
     """
     with frame.opened(question, classes="manager-confirm") as box:
@@ -70,6 +83,8 @@ async def ask(question: str, *, detail: str | Sequence[str] = "",
                 ui.label(said).classes("manager-help px-3")
         for line in lines:
             ui.label(line).classes("manager-confirm-line")
+        if option is not None:
+            ui.checkbox(option.label).props("dense").classes("px-3").bind_value(option, "on")
         with frame.footer():
             if also is not None:
                 label, act, drawing = also

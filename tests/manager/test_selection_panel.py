@@ -238,7 +238,7 @@ class PutBackTests(unittest.IsolatedAsyncioTestCase):
 
 
 class _Launcher(_Tables):
-    """The same tables, with the launcher's own values (All Tables) and the table rows
+    """The same tables, with the launcher's own values (the launcher) and the table rows
     the library lists."""
 
     def __init__(self, rows: list[dict], held: dict | None = None, **values: dict) -> None:

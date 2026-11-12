@@ -611,6 +611,67 @@ class NeverRunTests(unittest.TestCase):
         self.assertIn("ScreenInclination = 6", self.file.read_text())
 
 
+class SetupMakesTheFileTests(unittest.TestCase):
+    """Protects: (d) Setup on a launcher with no settings file leaves one holding what was
+    sent, whether or not the program ran and wrote its own first."""
+
+    def setUp(self) -> None:
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.data = pathlib.Path(self.tmp.name, "data")
+        self.store = own_launchers(self, self.tmp.name)
+        for patcher in (patch.object(launchers, "get_launcher_store", return_value=self.store),
+                        patch("apps.vpx.config._machine_folders",
+                              return_value=(self.data / "VPinballX", None))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.store.save([], {})
+        self.client = _client()
+        self.file = self.data / "VPinballX" / "10.8" / "VPinballX.ini"
+        self.program = pathlib.Path(self.tmp.name, "vpx")
+        self.program.write_text("#!/bin/sh\n")
+        self.program.chmod(0o755)
+        put_launcher(self.client, "l1", json={"app": "vpx", "settings": {
+            "bin_path": str(self.program)}})
+        self.addCleanup(launcher_ops._wrote_nothing.clear)
+
+    def _put(self, **body):
+        return self.client.put("/launchers/l1/config",
+                               json={"scope": "launcher", "values": {"Player.BGSet": "1"},
+                                     **body})
+
+    def _run(self, writes: bool) -> Any:
+        def made(command: list[str], **_: Any) -> None:
+            if writes:
+                self.file.parent.mkdir(parents=True)
+                self.file.write_text("; the program's own comment\n[Player]\nFXAA = 1\n")
+        return patch("common.games.launcher_ops.subprocess.run", side_effect=made)
+
+    def test_the_programs_own_file_is_the_one_written_into(self) -> None:
+        with self._run(writes=True):
+            got = self._put(create=True)
+
+        self.assertEqual(got.status_code, 200, got.text)
+        text = self.file.read_text()
+        self.assertIn("; the program's own comment", text)
+        self.assertIn("FXAA = 1", text)
+        self.assertIn("BGSet = 1", text)
+
+    def test_a_program_that_writes_nothing_leaves_the_bare_file(self) -> None:
+        with self._run(writes=False):
+            got = self._put(create=True)
+
+        self.assertEqual(got.status_code, 200, got.text)
+        self.assertEqual(self.file.read_text(), "[Player]\nBGSet = 1\n")
+
+    def test_a_program_that_cannot_run_leaves_the_bare_file(self) -> None:
+        with patch("common.games.launcher_ops.subprocess.run", side_effect=OSError("no")):
+            got = self._put(create=True)
+
+        self.assertEqual(got.status_code, 200, got.text)
+        self.assertEqual(self.file.read_text(), "[Player]\nBGSet = 1\n")
+
+
 class _TableCase(unittest.TestCase):
     """A launcher, and one table whose folder has a settings file of its own."""
 
@@ -754,7 +815,7 @@ class SeveralTablesTests(_TableCase):
         return job
 
     def test_more_than_one_is_a_job_that_writes_each(self) -> None:
-        got = self._write_many(["one", "two"], values={"Player.FXAA": "0"})
+        got = self._write_many(["one", "two"], values={"Player.FXAA": "2"})
 
         self.assertEqual(got.status_code, 202, got.text)
         self.assertEqual(got.headers["Location"], f"/api/v1/jobs/{got.json()['id']}")
@@ -763,7 +824,7 @@ class SeveralTablesTests(_TableCase):
         self.assertEqual(job.result, {"tables": 2, "written": ["one", "two"], "failed": []})
         for name in ("one", "two"):
             beside = pathlib.Path(self.files[name]).with_suffix(".ini")
-            self.assertEqual(beside.read_text(), "[Player]\nFXAA = 0\n")
+            self.assertEqual(beside.read_text(), "[Player]\nFXAA = 2\n")
         self.assertFalse(pathlib.Path(self.files["three"]).with_suffix(".ini").exists())
 
     def test_a_table_that_cannot_be_written_is_named_and_the_rest_go_on(self) -> None:
@@ -783,7 +844,7 @@ class SeveralTablesTests(_TableCase):
         blocker = jobs.submit(jobs.KIND_TABLE_SETTINGS, lambda job: release.wait(5))
         self.addCleanup(release.set)
 
-        got = self._write_many(["one", "two"], values={"Player.FXAA": "0"})
+        got = self._write_many(["one", "two"], values={"Player.FXAA": "2"})
 
         self.assertEqual(got.status_code, 409, got.text)
         release.set()
@@ -796,11 +857,11 @@ class SeveralTablesTests(_TableCase):
         self.assertEqual(jobs.active(jobs.KIND_TABLE_SETTINGS), [])
 
     def test_one_in_the_list_is_written_in_the_answer(self) -> None:
-        got = self._write_many(["one"], values={"Player.FXAA": "0"})
+        got = self._write_many(["one"], values={"Player.FXAA": "2"})
 
         self.assertEqual(got.status_code, 200, got.text)
         beside = pathlib.Path(self.files["one"]).with_suffix(".ini")
-        self.assertEqual(beside.read_text(), "[Player]\nFXAA = 0\n")
+        self.assertEqual(beside.read_text(), "[Player]\nFXAA = 2\n")
 
     def test_a_table_that_is_gone_is_named_and_the_rest_are_written(self) -> None:
         missing = service_errors.NotFoundError("no such table")

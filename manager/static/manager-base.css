@@ -1175,6 +1175,12 @@ body::before {
   width: 100%; max-width: calc(var(--measure) + var(--target-inline) + 4px);
 }
 .manager-field-line > .manager-field-row:has(input.manager-path-input) { flex: 1 1 auto; }
+/* A line with no Reset to show is the measure, as a path with none to draw is. */
+.manager-field-line:not(:has(> .manager-row-action)):has(input.manager-path-input),
+.manager-field-line:has(> .manager-row-action:empty):has(input.manager-path-input) {
+  max-width: var(--measure);
+}
+.manager-field-line > .manager-row-action:empty { display: none; }
 .manager-dialog .manager-field-line { width: 100%; max-width: var(--measure); }
 .manager-dialog .manager-field-line > .manager-field-row { flex: 1 1 auto; }
 .manager-field-line > .manager-row-action {
@@ -3923,14 +3929,15 @@ a.manager-tag:hover { background: var(--wash-hover); }
 .manager-fact-pick:not(:has(.manager-summary)):focus-visible > .manager-fact-label { color: var(--accent); text-decoration: underline; }
 .manager-fact-pick:has(.manager-summary) > .manager-fact-label { margin-right: 8px; }
 
-/* A summary fact: the count over what is newest, and the arrow saying it opens more. The
-   band reaches 8px past the text on each side, so the lit control clears its label. */
+/* A summary fact: the count over what is newest, and the arrow saying it opens more. It
+   is drawn as wide as a field in the same column, its text where a field's text starts and
+   its arrow where a field's last icon ends, so the column reads as one. */
 .manager-summary {
   display: flex; align-items: center; gap: 8px; min-width: 0; max-width: var(--measure);
-  padding: 6px 8px; margin: -6px 0 -6px -8px; border-radius: 6px;
+  padding: 6px 14px 6px 9px; margin: -6px 0; border-radius: 6px;
   transition: background-color 0.12s;
 }
-.manager-summary-text { display: flex; flex-direction: column; min-width: 0; flex: 0 1 auto; line-height: 1.25; }
+.manager-summary-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.25; }
 .manager-summary-sub { font-size: var(--fs-caption); color: var(--ink-3); }
 .manager-summary-warn { color: var(--tier-table); }
 .manager-summary-go { flex: none; color: var(--ink-2); font-size: var(--icon-mark); }
@@ -3939,6 +3946,11 @@ a.manager-tag:hover { background: var(--wash-hover); }
 .manager-fact-pick:focus-visible .manager-summary-go { color: var(--ink); }
 .manager-fact-pick:focus-visible { outline: none; }
 .manager-fact-pick:focus-visible .manager-summary { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* The Settings File choices: a radio each, the control it acts on tucked under its label. A
+   choice that is not picked keeps its control drawn but out of reach. */
+.manager-choices .manager-choice-more { margin-left: 28px; max-width: var(--measure); }
+.manager-choices .q-field--disabled .q-btn { pointer-events: none; }
 
 .manager-slot-facts { min-width: 0; }
 /* The filename is the one identifier a user recognizes, so it reads first and whole -
@@ -4512,6 +4524,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px; line-height: 1.5;
 }
+.manager-options--field { max-width: var(--measure); }
 .manager-option { overflow-wrap: break-word; min-width: 0; max-width: 100%; }
 .manager-option--window { color: var(--ink-3); }
 .manager-option--yours { color: var(--accent); }
@@ -4523,6 +4536,9 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
    the buttons under it moved. The 370px is what the header, filter and buttons take plus
    the dialog's own margin, so a short window shrinks the list before it cuts off Cancel. */
 .manager-folder-list { height: clamp(120px, 46vh, calc(100vh - 370px)); overflow-y: auto; }
+/* The Name box takes the room it needs from the list, so the dialog stays the size it opened at. */
+.manager-folder-list--saving { height: clamp(120px, 38vh, calc(100vh - 460px)); }
+.manager-picker-name { width: calc(100% - 24px); margin: 8px 12px 0; }
 /* The picker's three zones: where you are and how to narrow it, what is there, then the
    verbs under a rule. */
 .manager-picker-head {

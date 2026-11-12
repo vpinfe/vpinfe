@@ -605,7 +605,9 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
           on_control: Callable[[Any], Any] | None = None,
           prefix: str = "", suffix: str = "", wrap: bool = False,
           held: dict[str, str] | None = None,
-          default: str = "", whose: str = "", secret: bool = False) -> Callable[[], None]:
+          default: str = "", whose: str = "", secret: bool = False,
+          marked: bool = True, readonly: bool = False,
+          browse_tip: str = "") -> Callable[[], None]:
     """Free text the user can set.
 
     Written when you leave it or when you press Enter, and `debounce=0` is what makes
@@ -633,7 +635,11 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
 
     `default` is the path in use while the field is empty: it is the field's text, quiet,
     and `whose` says whose it is on hover. Typing it, or choosing it, clears the setting.
-    Any other path draws the dot before it and Reset after it.
+    Any other path draws the dot before it and Reset after it, unless the field is not
+    `marked`: then it reads as quiet ink while empty and draws neither.
+
+    A `readonly` field shows its value and its buttons but takes no typing: whatever
+    changes it does so through `browse`.
 
     `prefix` and `suffix` are drawn around a one-line field's text without being part of
     it: what is typed, and what is saved, is the middle.
@@ -658,12 +664,13 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
         """The dot, Reset, the quiet ink and the hover for what the field holds."""
         current = str(control.value or "")
         changed = marks and bool(current) and current != default
-        parts["dot"].set_visibility(changed)
+        if marked:
+            parts["dot"].set_visibility(changed)
         parts["row"].classes(add=None if changed else "manager-field-row--default",
                              remove="manager-field-row--default" if changed else None)
-        tip.say(t("manager.workbench.changed_from", value=default, whose=whose) if changed
-                else whose)
-        if parts.get("changed") is changed:
+        tip.say(t("manager.workbench.changed_from", value=default, whose=whose)
+                if changed and marked else whose)
+        if not marked or parts.get("changed") is changed:
             return
         parts["changed"] = changed
         parts["end"].clear()
@@ -708,10 +715,12 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
         with ui.row().classes("items-center gap-1 no-wrap manager-field-line"):
             with ui.row().classes("items-center gap-1 no-wrap manager-field-row") as row:
                 parts["row"] = row
-                parts["dot"] = ui.element("span").classes(
-                    "manager-mark manager-mark--full manager-named-mark")
+                if marked:
+                    parts["dot"] = ui.element("span").classes(
+                        "manager-mark manager-mark--full manager-named-mark")
                 control = draw_control()
-            parts["end"] = ui.element("div").classes("manager-row-action")
+            if marked:
+                parts["end"] = ui.element("div").classes("manager-row-action")
         show(control)
 
     def draw_control() -> Any:
@@ -728,6 +737,8 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
                 control.value = value or (default if marks else "")
                 control.props("dense borderless debounce=0" + (" autogrow" if wrap else "")) \
                     .classes("manager-edit-field")
+                if readonly:
+                    control.props("readonly")
                 if secret:
                     control.props("type=password autocomplete=new-password")
                 if prefix:
@@ -760,7 +771,9 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
                                 if not control.is_deleted:
                                     path_ends(control)
 
-                            path_buttons(control, _browsed)
+                            path_buttons(control, _browsed, browse_tip)
+                            if readonly:
+                                control.on("click", _browsed, js_handler=OPENS_ON_CLICK_JS)
             if disabled:
                 control.disable()
             if on_control is not None:
@@ -1294,10 +1307,11 @@ def hint(control: Any, said: str) -> None:
         control.props(remove="hint")
 
 
-def browse_button(on_click: Callable[[], Any]) -> ui.button:
-    """Browse, drawn in a field's append slot."""
+def browse_button(on_click: Callable[[], Any], tip: str = "") -> ui.button:
+    """Browse, drawn in a field's append slot. `tip` names what it opens where Browse
+    would not say."""
     return ui.button(icon=verbs.BROWSE, on_click=on_click) \
-        .props("flat round dense").tooltip(t("manager.folder_picker.browse"))
+        .props("flat round dense").tooltip(tip or t("manager.folder_picker.browse"))
 
 
 PATH_INPUT = "manager-path-input"
@@ -1415,10 +1429,14 @@ def copy_text(path: str) -> ui.button:
     return _copy_button(json.dumps(path), lambda: path)
 
 
-def path_buttons(control: ui.input, browsed: Callable[[], Any]) -> None:
+def path_buttons(control: ui.input, browsed: Callable[[], Any], tip: str = "") -> None:
     """Copy path, then Browse, into the append slot being drawn."""
     copy_path(control)
-    browse_button(browsed)
+    browse_button(browsed, tip)
+
+
+# A box that takes no typing opens its picker from anywhere on it but its own buttons.
+OPENS_ON_CLICK_JS = "(event) => { if (!event.target.closest('button')) emit(event); }"
 
 
 def path_field(placeholder: str = "", *, wants: str, value: str = "",

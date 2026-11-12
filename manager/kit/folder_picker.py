@@ -25,6 +25,7 @@ from nicegui import ui
 
 from common.config import path_state
 from common.failures import why
+from common.games import settings_file_name
 from common.i18n import t
 from manager.kit import dialog as frame
 from manager.kit import offload, panel, verbs
@@ -69,7 +70,7 @@ def suffixes_named(suffixes: tuple[str, ...]) -> str:
              last=suffixes[-1])
 
 
-def _last_name(path: str) -> str:
+def last_name(path: str) -> str:
     return re.split(r"[\\/]", path.rstrip("\\/"))[-1] or path
 
 
@@ -83,6 +84,11 @@ def enclosing(path: str) -> str:
     return trimmed[:cut + 1] if not head or head.endswith(":") else head
 
 
+def join(folder: str, name: str) -> str:
+    sep = "\\" if "\\" in folder and "/" not in folder else "/"
+    return folder.rstrip("\\/") + sep + name
+
+
 def _typed_path(text: str, here: str) -> str:
     """What was typed or pasted as a path: quotes dropped, as Windows' Copy as path adds
     them, and a bare name taken as inside the folder you are in."""
@@ -91,8 +97,7 @@ def _typed_path(text: str, here: str) -> str:
         said = said[1:-1].strip()
     if said and not re.search(r"[\\/]", said) and not said.startswith("~") \
             and not re.match(r"^[A-Za-z]:", said):
-        sep = "\\" if "\\" in here and "/" not in here else "/"
-        said = here.rstrip("\\/") + sep + said
+        said = join(here, said)
     return said
 
 
@@ -131,6 +136,7 @@ class Browser:
     start_naming: Callable[[], None]
     selected: Callable[[], str]
     can_name: bool
+    can_choose: Callable[[], bool]
 
 
 _DISK_TOPS = ("", "/", "/Volumes", "/media", "/mnt")
@@ -180,8 +186,15 @@ async def read_start(list_entries: Callable[..., dict], start: str = "", *,
 @on_page
 async def pick_path(list_entries: Callable[..., dict], start: str = "", *,
                     kind: str = "dir", suffixes: tuple[str, ...] = (),
-                    nearest: bool = False) -> str | None:
-    """The chosen path, or None where the dialog was cancelled."""
+                    nearest: bool = False, title: str = "",
+                    lead: Sequence[dict[str, Any]] | None = None, empty: str = "",
+                    notes: Callable[[str], str] | None = None,
+                    saving: str | None = None) -> str | None:
+    """The chosen path, or None where the dialog was cancelled.
+
+    With `saving`, the dialog names a file to be written in the folder it is in, starting
+    from that name: the path given back need not exist.
+    """
     first = await read_start(list_entries, start, kind=kind, suffixes=suffixes,
                              nearest=nearest)
     choose: dict[str, Any] = {}
@@ -190,9 +203,11 @@ async def pick_path(list_entries: Callable[..., dict], start: str = "", *,
         if "button" in choose:
             choose["button"].set_enabled(enabled)
 
-    with frame.opened(t(_TITLE[kind]), wide=True, ignore_outside_click=True) as box:
+    with frame.opened(title or t(_TITLE[kind]), wide=True,
+                      ignore_outside_click=True) as box:
         browser = draw_browser(first, list_entries, kind=kind, suffixes=suffixes,
-                               take=box.submit, on_ready=ready)
+                               take=box.submit, on_ready=ready, lead=lead, empty=empty,
+                               notes=notes, saving=saving)
         with frame.footer().classes("manager-dialog-footer--ruled"):
             if browser.can_name:
                 frame.aside(t("manager.folder_picker.new_folder"), browser.start_naming,
@@ -204,8 +219,7 @@ async def pick_path(list_entries: Callable[..., dict], start: str = "", *,
             else:
                 choose["button"] = frame.answer(
                     t("manager.folder_picker.choose"), browser.choose, icon=verbs.CHOOSE)
-                if not browser.selected():
-                    choose["button"].disable()
+                choose["button"].set_enabled(browser.can_choose())
 
     return await box
 
@@ -217,7 +231,10 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
                  file_row: Callable[[dict[str, Any]], None] | None = None,
                  keep: Callable[[dict[str, Any]], bool] | None = None,
                  folder_extra: Callable[[str], Callable[[], Any] | None] | None = None,
-                 empty: str = "", limit: int = 0, embedded: bool = False) -> Browser:
+                 empty: str = "", limit: int = 0, embedded: bool = False,
+                 notes: Callable[[str], str] | None = None,
+                 saving: str | None = None,
+                 lead: Sequence[dict[str, Any]] | None = None) -> Browser:
     """Draw the browser where the caller is standing and answer how to drive it.
 
     `take(path)` is called with the path chosen. `on_ready(enabled)` says whether Choose
@@ -227,6 +244,12 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     the end of a folder's row, or None. `limit` caps the rows drawn and `empty` words an
     empty folder. `embedded` is a browser in a tab: it fills the tab, opens with nothing
     chosen, and takes a typed file at once as there is no Choose to press.
+
+    `lead` is places to put before the ones the listing names, Home and Downloads among them.
+    `notes(path)` says a word to show at the end of a file's row, or "". `saving` turns the
+    browser into one that names a file: a Name box under the list, starting with that name
+    and ending in .ini whatever is typed, whose refusals switch Choose off. Clicking a file
+    puts its name in the box, and what is taken is the folder you are in and that name.
     """
     here = first.here
     start = first.start
@@ -234,7 +257,8 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     ready = on_ready or (lambda enabled: None)
     picked = start if kind != "dir" and not embedded and any(
         f["path"] == start for f in here.get("files") or []) else ""
-    state: dict[str, Any] = {"here": here, "selected": picked, "naming": None, "shown": ""}
+    state: dict[str, Any] = {"here": here, "selected": picked, "naming": None, "shown": "",
+                             "touched": False}
     field: dict[str, Any] = {}
     make_folder: Callable[[str, str], dict] | None = getattr(
         getattr(list_entries, "__self__", None), "make_folder", None) \
@@ -259,9 +283,43 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
                              + (" manager-source-fill" if embedded else "")):
         listing_col = ui.column().classes(
             "w-full gap-1 " + ("manager-source-list" if embedded
-                               else "manager-folder-list"))
+                               else "manager-folder-list"
+                               + (" manager-folder-list--saving" if saving is not None
+                                  else "")))
         ui.label(t("manager.folder_picker.private_note")).classes(
             "manager-help manager-picker-note")
+
+    def _final_name() -> str:
+        text = (field["name"].value or "").strip()
+        return text if text.lower().endswith(settings_file_name.SUFFIX) \
+            else text + settings_file_name.SUFFIX
+
+    def _name_problem() -> str:
+        text = field["name"].value or ""
+        return settings_file_name.problem(text) if text.strip() or state["touched"] else ""
+
+    def _name_suffix() -> None:
+        ends = (field["name"].value or "").lower().endswith(settings_file_name.SUFFIX)
+        field["name"].props["suffix"] = "" if ends else settings_file_name.SUFFIX
+
+    def _name_changed() -> None:
+        state["touched"] = True
+        _name_suffix()
+        why_not = _name_problem()
+        field["name"].props["error"] = bool(why_not)
+        field["name"].props["error-message"] = why_not
+        field["name"].update()
+        ready(_ok(False))
+
+    @on_page
+    async def _name_enter() -> None:
+        await _take()
+
+    def _ok(typing_now: bool) -> bool:
+        """Whether Choose has something to take."""
+        if saving is not None:
+            return typing_now or not settings_file_name.problem(field["name"].value or "")
+        return typing_now or bool(state["selected"])
 
     def _choice() -> str:
         """What Choose would give: the folder you are in, or the file chosen in it."""
@@ -282,8 +340,10 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     def draw_path() -> None:
         path_row.clear()
         here_now = state["here"]
-        named = {one["path"]: one for one in
-                 (places if places is not None else here_now.get("roots") or [])}
+        named: dict[str, dict[str, Any]] = {}
+        for one in [*(lead or []), *(places if places is not None
+                                     else here_now.get("roots") or [])]:
+            named.setdefault(one["path"], one)
         state["shown"] = _choice()
         seen: dict[str, Any] = {"was": object()}
         with path_row:
@@ -316,7 +376,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
                 return (control.value or "") != state["shown"]
 
             def typed() -> None:
-                ready(typing() or bool(state["selected"]))
+                ready(_ok(typing()))
 
             async def look() -> None:
                 said = control.value or ""
@@ -380,7 +440,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
             fresh = await offload.io(list_entries, probe, kind, suffixes, shown.value)
         except Exception as exc:  # noqa: BLE001
             return None, "", why(exc)
-        name = _last_name(where).lower()
+        name = last_name(where).lower()
         files = fresh.get("files") or []
         entry = next((one for one in files if one["name"].lower() == name), None)
         if is_folder:
@@ -426,7 +486,10 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
             ui.run_javascript(_REFOCUS_JS % json.dumps(panel.native_id(field["control"])))
 
     async def _take() -> None:
-        if kind == "dir":
+        if saving is not None:
+            if _ok(False):
+                await _give(join(state["here"]["path"], _final_name()))
+        elif kind == "dir":
             await _give(state["here"]["path"])
         elif state["selected"]:
             await _give(state["selected"])
@@ -450,9 +513,13 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
 
     def select(path: str) -> None:
         state["selected"] = path
+        if saving is not None:
+            name = last_name(path)
+            field["name"].value = name[:-len(settings_file_name.SUFFIX)] \
+                if name.lower().endswith(settings_file_name.SUFFIX) else name
         draw_listing()
         _sync_field()
-        ready(True)
+        ready(_ok(False))
 
     def draw_listing() -> None:
         listing_col.clear()
@@ -503,6 +570,8 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
         with row:
             ui.icon(_ROW_ICON[kind]).classes("shrink-0")
             ui.label(one["name"]).classes("manager-source-name grow")
+            if note := notes(one["path"]) if notes is not None else "":
+                ui.label(note).classes("manager-help shrink-0")
         row.on("click", lambda p=one["path"]: select(p))
         row.on("dblclick", lambda p=one["path"]: _give(p))
 
@@ -556,7 +625,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
         draw_path()
         if not cleared:
             draw_listing()
-        ready(bool(state["selected"]))
+        ready(_ok(False))
 
     @on_page
     async def _go(path: str, *, keep_filter: bool = False) -> None:
@@ -571,10 +640,16 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     def _opens(path: str) -> Callable[[], Any]:
         return lambda: _go(path)
 
+    if saving is not None:
+        field["name"] = ui.input(label=t("word.name"), value=saving) \
+            .props("dense outlined").classes("manager-picker-name")
+        _name_suffix()
+        field["name"].on_value_change(_name_changed)
+        field["name"].on("keydown.enter", _name_enter)
     draw_path()
     draw_listing()
     term.on_value_change(draw_listing)
     shown.on_value_change(lambda: _go(state["here"]["path"], keep_filter=True))
 
     return Browser(_choose, _start_naming, lambda: state["selected"],
-                   can_name=make_folder is not None)
+                   can_name=make_folder is not None, can_choose=lambda: _ok(False))

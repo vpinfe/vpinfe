@@ -896,6 +896,24 @@ class Library:
     def make_launcher_settings_file(self, launcher_id: str) -> dict:
         return self._client.make_launcher_settings_file(launcher_id)
 
+    def set_launcher_settings_file(self, launcher_id: str, body: dict) -> dict:
+        return self._client.set_launcher_settings_file(launcher_id, body)
+
+    def make_launcher_own_copy(self, launcher_id: str) -> dict:
+        return self._client.make_launcher_own_copy(launcher_id)
+
+    def launcher_was_renamed(self, launcher_id: str, was: str) -> dict:
+        return self._client.launcher_was_renamed(launcher_id, was)
+
+    def delete_launcher_own_file(self, launcher_id: str) -> dict:
+        return self._client.delete_launcher_own_file(launcher_id)
+
+    def undo_launcher_settings_file(self, token: str) -> dict:
+        return self._client.undo_launcher_settings_file(token)
+
+    def launcher_settings_file_places(self, app: str, settings: dict) -> list[dict]:
+        return self._client.launcher_settings_file_places(app, settings)
+
     def launcher_leftovers(self, launcher_id: str) -> dict:
         """Read fresh every time: moving them is what changes the answer."""
         return self._client.launcher_leftovers(launcher_id)
@@ -957,6 +975,9 @@ class Library:
 
     def make_launcher_default(self, launcher_id: str) -> dict:
         return self._client.make_launcher_default(launcher_id)
+
+    def restore_launcher_order(self, order: list[str]) -> dict:
+        return self._client.restore_launcher_order(order)
 
     def assign_launcher(self, table_id: str, launcher_id: str) -> dict:
         """Every game's tables are read again: the table id does not say which game

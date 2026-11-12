@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html
 import json
 import os
 from collections.abc import Awaitable, Callable, Collection, Sequence
@@ -21,7 +22,7 @@ from nicegui import ui
 
 from common.failures import why
 from common.i18n import t
-from manager.kit import confirm, offload, panel, undo, verbs
+from manager.kit import confirm, deeplink, offload, panel, undo, verbs
 from manager.kit import dialog as frame
 from manager.kit.data import config_groups
 from manager.kit.on_page import on_page
@@ -31,6 +32,8 @@ from manager.workbench import launcher as wb_launcher
 SCOPE_ENTRY = "entry"
 SCOPE_LAUNCHER = "launcher"
 ADDED = "added_settings"
+# Past this many launchers a selection's "uses the launchers' settings" line counts them.
+MOST_LAUNCHERS_NAMED = 3
 # How long a read of a selection runs before the section says it is reading.
 READING_NOTICE_S = 1.0
 # How often a write into several tables is asked how far it has got.
@@ -180,7 +183,7 @@ async def _selection_entries(context: dict[str, Any],
     view = point_of_view(groups, values, added)
     options = table_options(groups, values)
     if not blocks and view is None and options is None:
-        entries.append(panel.intro(t("manager.app_settings.no_override")))
+        entries.append(_uses_launcher(context, tables))
     if view is not None:
         blocks.append((view.label, view.rows))
     entries += await all_settings._setting_entries(
@@ -200,6 +203,37 @@ async def _selection_entries(context: dict[str, Any],
                                           launcher_name=launcher.get("display_name") or "")),
         icon=verbs.DRILL, hint=t("manager.app_settings.show_all.help"))))
     return entries
+
+
+def _uses_launcher(context: dict[str, Any],
+                   tables: Sequence[dict[str, Any]]) -> tuple[Any, Callable[[], None]]:
+    """The line for tables that set nothing of their own, a way to the settings they use.
+    Tables on several launchers have no one page, so each launcher is named and linked."""
+    found = {str(one["launcher_id"]): one for table in tables
+             if (one := _runs(context, table)) is not None}
+
+    def way(launcher_id: str, label: str) -> Callable[[], None]:
+        to = "/manager?" + deeplink.query({"view": "launchers", "launcher": launcher_id})
+        return panel.link(label, to=to)
+
+    if len(found) == 1:
+        ((launcher_id, _),) = found.items()
+        return (panel.FULL, way(launcher_id, t("manager.app_settings.no_override")))
+    if len(found) > MOST_LAUNCHERS_NAMED:
+        return panel.intro(t("manager.app_settings.no_override_many", count=len(found)))
+
+    def draw() -> None:
+        with ui.element("div").classes("manager-help manager-intro"):
+            ui.html(html.escape(t("manager.app_settings.no_override_some")) + " ",
+                    tag="span", sanitize=False)
+            for index, (launcher_id, one) in enumerate(found.items()):
+                if index:
+                    joiner = (f" {t('manager.launchers.sf.and')} " if index == len(found) - 1
+                              else t("manager.launchers.sf.list_join"))
+                    ui.html(html.escape(joiner), tag="span", sanitize=False)
+                way(launcher_id, str(one.get("display_name") or ""))()
+
+    return (panel.FULL, draw)
 
 
 def _keep_link(context: dict[str, Any], launcher: dict[str, Any] | None,
@@ -297,7 +331,7 @@ async def _program_entries(context: dict[str, Any],
     view = point_of_view(groups, values, added)
     options = table_options(groups, values)
     if not blocks and view is None and options is None:
-        entries.append(panel.intro(t("manager.app_settings.no_override")))
+        entries.append(_uses_launcher(context, [table]))
     if view is not None:
         blocks.append((view.label, view.rows))
     entries += await all_settings._setting_entries(

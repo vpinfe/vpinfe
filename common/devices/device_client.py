@@ -13,6 +13,7 @@ this device can be asked" are different facts and one of them is a bug.
 
 from __future__ import annotations
 
+import base64
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -477,6 +478,19 @@ class RemoteDevice:
         return launcher_wire.from_item(dict(self._http.put_json(
             self._url(f"/config/launchers/{launcher_id}"),
             launcher_wire.to_item(launcher_id, body, held)) or {}))
+
+    def put_launcher_settings_file(self, launcher_id: str, data: bytes) -> dict[str, Any]:
+        """Send the settings file a launcher plays with, after the launcher itself. That
+        install keeps it in its own settings folder; a path from this one would name
+        nothing there."""
+        try:
+            return dict(self._http.post_json(
+                self._url(f"/launchers/{launcher_id}/settings-file/received"),
+                {"data": base64.b64encode(data).decode("ascii")}) or {})
+        except Exception as exc:
+            if _absent(exc):
+                raise TooOldError(t(TOO_OLD)) from exc
+            raise
 
     def put_launcher_mapping(self, table_id: str, launcher_id: str) -> dict[str, Any]:
         """Point a table on another machine at a launcher. Table ids travel because they

@@ -1309,6 +1309,9 @@ class ApiClient:
     def make_launcher_default(self, launcher_id: str) -> dict:
         return dict(self._post(f"/launchers/{launcher_id}/default", {}) or {})
 
+    def restore_launcher_order(self, order: list[str]) -> dict:
+        return dict(self._post("/launchers/order", {"order": list(order)}) or {})
+
     def assign_launcher(self, table_id: str, launcher_id: str) -> dict:
         """Point a table at one, or clear it back to the default with an empty id."""
         return dict(self._put(f"/launchers/mappings/{table_id}",
@@ -1660,6 +1663,29 @@ class ApiClient:
         """Runs the launcher's program once so it writes its own settings file."""
         return dict(self._post(f"/launchers/{launcher_id}/config/file", {},
                                timeout=_MAKE_FILE_TIMEOUT) or {})
+
+    def set_launcher_settings_file(self, launcher_id: str, body: dict) -> dict:
+        """Give a launcher a settings file. `needs_replace` in the answer means nothing was
+        done yet."""
+        return dict(self._post(f"/launchers/{launcher_id}/settings-file", body,
+                               timeout=_MAKE_FILE_TIMEOUT) or {})
+
+    def make_launcher_own_copy(self, launcher_id: str) -> dict:
+        return dict(self._post(f"/launchers/{launcher_id}/settings-file/own-copy", {}) or {})
+
+    def launcher_was_renamed(self, launcher_id: str, was: str) -> dict:
+        return dict(self._post(f"/launchers/{launcher_id}/settings-file/renamed",
+                               {"was": was}) or {})
+
+    def delete_launcher_own_file(self, launcher_id: str) -> dict:
+        return dict(self._post(f"/launchers/{launcher_id}/settings-file/delete", {}) or {})
+
+    def undo_launcher_settings_file(self, token: str) -> dict:
+        return dict(self._post("/launchers/settings-file/undo", {"undo": token}) or {})
+
+    def launcher_settings_file_places(self, app: str, settings: dict) -> list[dict]:
+        return list(self._post("/launchers/settings-file/places",
+                               {"app": app, "settings": settings}).get("places") or [])
 
     def launcher_leftovers(self, launcher_id: str) -> dict:
         """What an upgrade of the launcher's program left in its settings."""

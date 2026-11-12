@@ -194,7 +194,7 @@
   "field.args.taken.ini": "-ini comes from Settings File",
   "field.args.taken.play": "-play is added for you",
   "field.bin_path.description": "The Visual Pinball executable this launcher runs",
-  "field.ini_path.description": "The VPinballX.ini this launcher starts tables with, and the one its settings here change",
+  "field.ini_path.description": "Where this launcher's settings are saved",
   "field.ini_path.label": "Settings File",
   "field.ini_path.nowhere": "Visual Pinball makes it the first time it runs",
   "field.log_delete_on_start.description": "Delete Visual Pinball's log before each table, so it covers only that table",

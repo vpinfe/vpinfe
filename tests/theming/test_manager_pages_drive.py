@@ -372,7 +372,7 @@ class ManagerPagesDrive(unittest.TestCase):
     def test_a_vpx_install_opens_each_area_of_its_settings(self) -> None:
         self.assertEqual(self.seen["headings"][f"view=launchers&launcher={VPX}"]["opened"],
                          ["Details", "Displays", "Input", "Sound", "Graphics", "Plugins",
-                          "All Settings", "Settings File"])
+                          "All Settings"])
 
     def test_a_section_that_reads_before_it_draws_is_read_once_drawn(self) -> None:
         opened = self.seen["headings"][f"view=launchers&launcher={VPX}"]["headings"]

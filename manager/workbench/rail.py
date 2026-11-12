@@ -62,7 +62,7 @@ from manager.workbench.game_table import (
     _table_block,
     _table_settings,
 )
-from manager.workbench.launcher import _app_keeps_settings, _config_backups, _launcher_details
+from manager.workbench.launcher import _launcher_details
 from manager.workbench.subject_verbs import SUBJECT_VERBS
 from manager.workbench.tag import _tag_details, _tag_games
 
@@ -246,9 +246,6 @@ SECTIONS: tuple[Section, ...] = (
     *_launcher_config_sections(),
     Section("launcher_all", lambda _: t("manager.workbench.all_settings"), _all_settings,
             subjects=frozenset({"launcher"}), shown=_all_settings_shown),
-    Section("launcher_backups", lambda _: t("manager.workbench.settings_file"),
-            _config_backups, subjects=frozenset({"launcher"}), shown=_app_keeps_settings,
-            titled=True),
     Section("collection_details", lambda _: t("manager.workbench.details"),
             _collection_details,
             subjects=frozenset({"collection"})),

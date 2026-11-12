@@ -43,6 +43,7 @@ from common.apps.contract import (
 
 from . import areas, bindings, build, displays, leftovers, plugins, screens
 from . import ini as vini
+from .setting_declarations import DECLARED, Declaration
 from .setting_types import CONTEXTUAL, LABELS, REGISTERED, TYPES
 
 REST = areas.REST
@@ -67,13 +68,17 @@ EDITOR_SECTIONS = ("DefaultProps\\", "CVEdit")
 EDITOR_PHYSICS = re.compile(r"Player\.(FlipperPhysics|TablePhysics|PhysicsSetName).*\d")
 POINT_OF_VIEW = areas.POINT_OF_VIEW_KEYS
 
-# VPX sizes a window left blank from its screen, never by the 16384 it declares.
+# VPX sizes a window left blank from its screen, never by the 16384 it declares, and
+# centers it there rather than at the 0 it declares for its position.
 _WINDOWS = (("Player", "Playfield"), ("Backglass", "Backglass"), ("ScoreView", "ScoreView"),
             ("Topper", "Topper"), ("PlayerVR", "Preview"))
-FROM_THE_SCREEN = frozenset(f"{section}.{window}{mode}{side}" for section, window in _WINDOWS
-                            for mode in ("", "FS") for side in ("Width", "Height"))
-# And a view's mode from the table, never by the mode it declares.
-FROM_THE_TABLE = areas.VIEW_MODES
+FROM_THE_SCREEN = frozenset(
+    {f"{section}.{window}{mode}{side}" for section, window in _WINDOWS
+     for mode in ("", "FS") for side in ("Width", "Height")}
+    | {f"{section}.{window}Wnd{axis}" for section, window in _WINDOWS[:4] for axis in "XY"})
+# And a view's mode, and these four, from the table, never by what they declare.
+FROM_THE_TABLE = areas.VIEW_MODES | {"TableOverride.Difficulty", "TableOverride.Exposure",
+                                     "TableOverride.ToneMapper", "Player.EmissionScale"}
 # Settings this app's catalog names, over the label the program's own file gives them.
 NAMED_HERE = frozenset({"Player.ScreenInclination"})
 NAMED_VALUES = {"Player.MaxFramerate": (("-1", "match_the_display"), ("0", "no_limit"))}
@@ -432,9 +437,40 @@ def _shortest(said: str) -> str:
     return said
 
 
+# Visual Pinball registers one per audio endpoint when it starts, so the source declares no
+# single key for it: a gain from 0 to 2, at 1.
+_ENDPOINT_GAIN = re.compile(r"Player\.AudioSource\..+\.Gain")
+ENDPOINT_GAIN = Declaration("", "", "1", minimum=0.0, maximum=2.0)
+
+
+def _declared(one: vini.Setting) -> vini.Setting:
+    """What Visual Pinball's source says of a setting, for what the file's own comment
+    leaves out. The comment wins wherever it speaks: it matches the build in use."""
+    said = DECLARED.get(one.qualified) or (
+        ENDPOINT_GAIN if _ENDPOINT_GAIN.fullmatch(one.qualified) else None)
+    if said is None:
+        return one
+    named = replace(
+        one,
+        label=said.label if one.label == one.key and said.label else one.label,
+        description=one.description or said.description)
+    plugin = REGISTERED.get(one.qualified)
+    if one.default or one.choices or (plugin is not None and plugin.default):
+        return named
+    return replace(
+        named,
+        default=said.default or "",
+        choices=said.choices,
+        minimum=named.minimum if named.minimum is not None else said.minimum,
+        maximum=named.maximum if named.maximum is not None else said.maximum,
+        kind=vini.KIND_CHOICE if said.choices
+        else vini.KIND_NUMBER if said is ENDPOINT_GAIN else named.kind)
+
+
 def _registered(one: vini.Setting) -> vini.Setting:
-    """A setting as the file describes it, or as its plugin registers it where the file
-    writes it bare."""
+    """A setting as the file describes it, or as the source declares it, or as its plugin
+    registers it where the file writes it bare."""
+    one = _declared(one)
     said = REGISTERED.get(one.qualified)
     if said is None or one.default or one.choices:
         return one
@@ -463,8 +499,11 @@ def _defaults(rev: int | None, present: frozenset[str] | None,
 def _by_build(one: vini.Setting, defaults: Mapping[str, str]) -> vini.Setting:
     """A setting with the default its build gives it, unless the file states another."""
     said = defaults.get(one.qualified)
-    registered = REGISTERED.get(one.qualified)
-    if said is None or one.default not in ("", registered.default if registered else ""):
+    # What this module filled in is not the file stating anything.
+    unstated = {"", *(own.default for own in (REGISTERED.get(one.qualified),
+                                              DECLARED.get(one.qualified))
+                      if own is not None and own.default is not None)}
+    if said is None or one.default not in unstated:
         return one
     return replace(one, default=said)
 
