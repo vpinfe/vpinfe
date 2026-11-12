@@ -48,7 +48,7 @@ class ThemeLocalesDriveTests(TempTree):
         self.assertEqual(said["own"], "Authors from the file")
         self.assertEqual((said["one"], said["many"]), ("1 table", "12 tables"))
         self.assertEqual(said["missing"], "Fallback")
-        self.assertEqual(said["core"], "Launching...")
+        self.assertEqual(said["core"], "Launching…")
 
 
 if __name__ == "__main__":

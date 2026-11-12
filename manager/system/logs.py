@@ -210,13 +210,14 @@ def _file_menu(library: Library, held: dict[str, Any],
     """What is done to the file or to how it is drawn, kept out of the bar because none
     of it is wanted on every visit."""
     with ui.button(icon=verbs.MORE).props("flat dense round size=sm") as more, ui.menu():
-        ui.menu_item(t("manager.logs.stop_wrapping") if held["wrap"]
-                     else t("manager.logs.wrap"),
-                     lambda: remember("wrap", not held["wrap"])) \
+        wrap = ui.menu_item(on_click=lambda: remember("wrap", not held["wrap"])) \
             .classes("manager-menu-item")
-        ui.menu_item(t("manager.about.support_package"),
-                     support_dialog.open_support_package).classes("manager-menu-item")
+        with wrap, ui.row().classes("items-center gap-2 no-wrap w-full"):
+            ui.label(t("manager.logs.wrap")).classes("grow min-w-0")
+            if held["wrap"]:
+                ui.icon("check").classes("manager-menu-check")
         if held["path"]:
+            ui.separator()
             # In the browser at the click, which is the only moment it will copy.
             ui.menu_item(t("word.copy_path")) \
                 .classes("manager-menu-item") \
@@ -224,6 +225,9 @@ def _file_menu(library: Library, held: dict[str, Any],
                     js_handler=clipboard.COPY_JS % json.dumps(held["path"]))
             ui.menu_item(t("manager.logs.download"),
                          lambda: _download(library, held)).classes("manager-menu-item")
+        ui.separator()
+        ui.menu_item(t("manager.about.support_package"),
+                     support_dialog.open_support_package).classes("manager-menu-item")
     more.tooltip(t("manager.logs.file_menu"))
 
 

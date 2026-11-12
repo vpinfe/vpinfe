@@ -120,7 +120,7 @@ class Acts(unittest.TestCase):
         self.assertIsNotNone(one.draw)
         self.assertIsNone(several.draw)
         self.assertIsNone(several.run)
-        self.assertEqual(t("word.not_for_several"), several.hint)
+        self.assertEqual("", several.hint)
 
     def test_a_copy_whose_owner_is_gone_cannot_be_restored_and_says_why(self) -> None:
         row = backups.rows([_copy(gone=True)])[0]

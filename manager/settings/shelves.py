@@ -173,12 +173,10 @@ def _moves(block: Shelves, shelf_id: str, at: int, of: int) -> None:
     An end the row is already at is shown and refused, so the entries keep their places."""
     _button, menu = panel.menu_button(verbs.MORE, t("manager.theme_sources.move"))
     with menu:
-        for label, by, icon, allowed in (
-                (t("manager.theme_sources.move_up"), -1, verbs.UP, at > 0),
-                (t("manager.theme_sources.move_down"), 1, verbs.DOWN, at < of - 1)):
-            entry = panel.menu_entry(
-                label, partial(block.step, shelf_id, by) if allowed else None,
-                mark=partial(ui.icon, icon),
-                classes="" if allowed else "manager-menu-blocked", auto_close=allowed)
-            if not allowed:
-                entry.props("aria-disabled=true")
+        panel.verb_entries([
+            panel.Verb(t("manager.theme_sources.move_up"),
+                       partial(block.step, shelf_id, -1) if at > 0 else None,
+                       hint=t("manager.theme_sources.already_first")),
+            panel.Verb(t("manager.theme_sources.move_down"),
+                       partial(block.step, shelf_id, 1) if at < of - 1 else None,
+                       hint=t("manager.theme_sources.already_last"))])

@@ -84,27 +84,6 @@ class ThePictures(unittest.TestCase):
         self.assertEqual(([""], []), self._framed(_theme()))
 
 
-class ARowMenu(unittest.TestCase):
-    def test_a_row_says_it_has_no_menu_exactly_when_it_has_no_acts(self) -> None:
-        for installed in (False, True):
-            for active in (False, True):
-                for update in (False, True):
-                    theme = _theme(installed=installed, active=active,
-                                   update_available=update)
-                    row = themes.rows([theme])[0]
-                    self.assertEqual(
-                        row[themes.grid.NO_MENU], not themes.acts(Mock(), [theme], Mock()),
-                        f"installed={installed} active={active} update={update}")
-
-    def test_the_active_theme_once_current_is_the_only_one_without(self) -> None:
-        current = themes.rows([_theme(installed=True, active=True)])[0]
-        updatable = themes.rows([_theme(installed=True, active=True,
-                                        update_available=True)])[0]
-
-        self.assertEqual((True, False), (current[themes.grid.NO_MENU],
-                                         updatable[themes.grid.NO_MENU]))
-
-
 class WhereItComesFrom(unittest.TestCase):
     def test_a_repository_or_a_file_in_one_reads_as_owner_and_repo(self) -> None:
         for url in ("https://github.com/owner/repo",

@@ -240,20 +240,9 @@ def _row(block: Block, group: str, source: dict[str, Any], at: int, of: int,
                 if took := source.get("took") or []:
                     line.tooltip(t("manager.theme_sources.took", count=_count(
                         int(source["count"])), taken=len(took), names=", ".join(took)))
-        if of > 1:
-            _moves(block, group, address, at, of)
-
-        async def remove() -> None:
-            await block.remove(group, source)
-
-        async def rename() -> None:
-            await rename_source(block, group, source)
-
-        with ui.element("div").classes("manager-row-action"):
-            panel.icon_action(t("manager.theme_sources.rename"), rename, icon=verbs.RENAME,
-                              hint=t("manager.theme_sources.rename"))()
-            panel.icon_action(t("word.remove"), remove, icon=verbs.REMOVE,
-                              hint=t("word.remove"))()
+        _button, menu = panel.menu_button(verbs.MORE, t("manager.folders.more"))
+        with menu:
+            panel.verb_entries(acts(block, group, source, at, of), menu.close)
 
 
 def _name(group: str, source: dict[str, Any]) -> None:
@@ -277,21 +266,25 @@ def _title(group: str, source: dict[str, Any]) -> str:
     return str(source.get("label") or "") or _own_title(group, source)
 
 
-def _moves(block: Block, group: str, address: str, at: int, of: int) -> None:
-    """Move Up and Move Down, because a drag needs a way to do the same without a pointer.
+def acts(block: Block, group: str, source: dict[str, Any], at: int,
+         of: int) -> list[panel.Verb]:
+    """What the row's menu holds, in order: the moves, Rename, then Remove last and in red.
     An end the row is already at is shown and refused rather than left out, so the two
-    entries keep their places from row to row."""
-    _button, menu = panel.menu_button(verbs.MORE, t("manager.theme_sources.move"))
-    with menu:
-        for label, by, icon, allowed in (
-                (t("manager.theme_sources.move_up"), -1, verbs.UP, at > 0),
-                (t("manager.theme_sources.move_down"), 1, verbs.DOWN, at < of - 1)):
-            entry = panel.menu_entry(
-                label, partial(block.step, group, address, by) if allowed else None,
-                mark=partial(ui.icon, icon),
-                classes="" if allowed else "manager-menu-blocked", auto_close=allowed)
-            if not allowed:
-                entry.props("aria-disabled=true")
+    moves keep their places from row to row."""
+    address = str(source["address"])
+    found: list[panel.Verb] = []
+    if of > 1:
+        found.append(panel.Verb(t("manager.theme_sources.move_up"),
+                                partial(block.step, group, address, -1) if at > 0 else None,
+                                hint=t("manager.theme_sources.already_first")))
+        found.append(panel.Verb(t("manager.theme_sources.move_down"),
+                                partial(block.step, group, address, 1) if at < of - 1 else None,
+                                hint=t("manager.theme_sources.already_last")))
+    found.append(panel.Verb(t("manager.theme_sources.rename"),
+                            partial(rename_source, block, group, source)))
+    found.append(panel.Verb(t("word.remove"), partial(block.remove, group, source),
+                            danger=True))
+    return found
 
 
 def _count(count: int) -> str:

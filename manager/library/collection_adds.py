@@ -447,9 +447,8 @@ def draw(offer: Offer, known: Read, close: Callable[[], Any]) -> None:
     if known.recent:
         top = known.recent[0]
         _item(t("manager.adds.add_to", name=top), go(top),
-              smart=known.kinds.get(top, False),
-              held=holds_all(known.held, top, offer.rows))
-    parent = _item(t("manager.adds.verb"), None, opens=True)
+              held=holds_all(known.held, top, offer.rows), slot=False)
+    parent = _item(t("manager.adds.verb"), None, opens=True, slot=False)
     with parent, ui.menu().props('anchor="top end" self="top start"') as sub:
         if known.recent:
             ui.item_label(t("manager.adds.recent")).props("header") \
@@ -477,7 +476,7 @@ def draw(offer: Offer, known: Read, close: Callable[[], Any]) -> None:
             await remove(offer.library, offer.narrowed, [row.game for row in offer.rows],
                          then=offer.then)
 
-        _item(t("manager.adds.remove_from", name=offer.narrowed), take_out)
+        _item(t("manager.adds.remove_from", name=offer.narrowed), take_out, slot=False)
 
 
 def draw_every(offer: Offer, collections: list[dict[str, Any]],
@@ -502,9 +501,10 @@ def draw_every(offer: Offer, collections: list[dict[str, Any]],
 
 
 def _item(label: str, act: Callable[[], Any] | None, *, smart: bool = False,
-          held: bool = False, opens: bool = False) -> Any:
+          held: bool = False, opens: bool = False, slot: bool = True) -> Any:
     """One entry: the Smart mark in the leading slot, In It in the trailing one. An entry
-    already true is inert, and stays open on a click it will not act on."""
+    already true is inert, and stays open on a click it will not act on. `slot=False` is
+    the entry in a menu of verbs, which has no leading slot."""
     def mark() -> None:
         with ui.icon(verbs.SMART).classes("manager-menu-mark"):
             ui.tooltip(t("manager.collections.smart.help")).classes("manager-menu-tip")
@@ -518,7 +518,7 @@ def _item(label: str, act: Callable[[], Any] | None, *, smart: bool = False,
     return panel.menu_entry(label, None if held else act, mark=mark if smart else None,
                             trail=trail if held or opens else None,
                             classes="manager-menu-blocked" if held else "",
-                            auto_close=False)
+                            auto_close=False, slot=slot)
 
 
 # --- More Collections... and New Collection... ------------------------------------

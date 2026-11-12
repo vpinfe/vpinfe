@@ -319,6 +319,11 @@ async def _fill(library: Library, body: Any, state: dict[str, Any],
                 search.value = find
             with bar.bottom, panel.bar_end():
                 count = ui.label(summary(built)).classes("text-xs manager-label")
+                strip = [(t("manager.backups.take_now"), lambda: _ask_now(library, refresh))]
+                if backup_go_back.available(built):
+                    strip.append((t("manager.backups.go_back"),
+                                  lambda: backup_go_back.ask(library)))
+                panel.add_action(strip, empty=not built)
                 show_selection = panel.selection_menu(
                     t("manager.backups.actions_selected"), lambda: picked(),
                     lambda chosen: acts(library, chosen, refresh,
@@ -328,11 +333,6 @@ async def _fill(library: Library, body: Any, state: dict[str, Any],
                     panel.icon_only(verbs.CLEAN,
                                     lambda: backup_cleanup.ask(library, built, refresh),
                                     hint=t("manager.backups.clean_up"))
-                strip = [(t("manager.backups.take_now"), lambda: _ask_now(library, refresh))]
-                if backup_go_back.available(built):
-                    strip.append((t("manager.backups.go_back"),
-                                  lambda: backup_go_back.ask(library)))
-                panel.add_action(strip, empty=not built)
 
         _folder_line(found.get("folder") or {})
         if not built:

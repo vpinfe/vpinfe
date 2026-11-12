@@ -297,7 +297,7 @@ class CollectionAddsDrive(unittest.TestCase):
         self.assertEqual("Launch", labels[0])
         self.assertEqual("Add to Collection / chevron_right", labels[-2])
         self.assertEqual("Delete from Disk", labels[-1])
-        self.assertLess(labels.index("Back Up Now"), len(labels) - 2)
+        self.assertLess(labels.index("Back Up Now…"), len(labels) - 2)
         self.assertIn("Hand-picked · 2 games", self.seen["dialogs"][0])
         self.assertIn("Smart · 2 games", self.seen["dialogs"][0])
 
@@ -349,7 +349,7 @@ class CollectionAddsDrive(unittest.TestCase):
         self.assertEqual([[f"{HAND} / In It", True],
                           ["settings_suggest / Last Played", False],
                           [f"settings_suggest / {SMART}", False],
-                          ["New Collection...", False]], self.seen["game_menu"])
+                          ["New Collection…", False]], self.seen["game_menu"])
 
     def test_undoing_a_removal_puts_it_back_in_its_place(self) -> None:
         order = [game for game, _t, origin in self.seen["put_back_refs"] if origin == "named"]

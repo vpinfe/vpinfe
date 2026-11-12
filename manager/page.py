@@ -130,10 +130,10 @@ RAIL_PX = 57
 # Every entry is a place, not a thing. Gallery is gone - the media map in the details
 # pane answers "what is missing here" and the Media section answers "what is missing
 # anywhere", which is what it was reaching for.
-# Grouped, because four of these are what the library holds and the rest are not.
+# Grouped, because some of these are what the library holds and the rest are not.
 # A subject is a place, not transient state - so Tables and Tags are
 # rail entries rather than a mode a dropdown puts the Games page into.
-# Library is a rail entry like the rest, with the four it holds nested under it - not a
+# Library is a rail entry like the rest, with the entries it holds nested under it - not a
 # bare heading, which would be the one thing in this rail that is not a place. It is a
 # disclosure rather than a destination: a row that both navigated and collapsed would
 # make one click mean two things, and the children are the destinations.

@@ -68,7 +68,7 @@ class FoldersPageDrive(unittest.TestCase):
             seen["body"] = await browser.evaluate(BODY)
             seen["rows"] = await browser.evaluate(ROW_TEXTS)
 
-            await walk.act(lambda: browser.click(f"{ROWS} .q-btn", nth=1),
+            await walk.act(lambda: browser.click(f"{ROWS} > .q-btn", nth=0),
                            until=f"document.querySelectorAll({json.dumps(MENU_ITEMS)}).length > 0")
             seen["menu_first"] = await browser.evaluate(MENU_TEXTS)
             await browser.press("Escape", "Escape")
@@ -79,9 +79,10 @@ class FoldersPageDrive(unittest.TestCase):
 
             await walk.visit(ADDRESS)
             await browser.wait_for(f"document.querySelectorAll({json.dumps(ROWS)}).length === 2")
-            await walk.act(
-                lambda: browser.click(f"{ROWS} .manager-row-action button", nth=1),
-                until=f"document.querySelectorAll({json.dumps(ROWS)}).length === 1")
+            await walk.act(lambda: browser.click(f"{ROWS} > .q-btn", nth=1),
+                           until=f"document.querySelectorAll({json.dumps(MENU_ITEMS)}).length > 0")
+            await browser.evaluate(choose(t("word.remove")))
+            await browser.wait_for(f"document.querySelectorAll({json.dumps(ROWS)}).length === 1")
             seen["after_remove"] = await browser.evaluate(ROW_TEXTS)
             seen["notices"] = await browser.evaluate(NOTICES)
 
@@ -91,7 +92,7 @@ class FoldersPageDrive(unittest.TestCase):
             await browser.wait_for(f"document.querySelectorAll({json.dumps(ROWS)}).length === 2")
             seen["after_undo"] = await browser.evaluate(ROW_TEXTS)
 
-            await walk.act(lambda: browser.click(f"{ROWS} .q-btn", nth=1),
+            await walk.act(lambda: browser.click(f"{ROWS} > .q-btn", nth=0),
                            until=f"document.querySelectorAll({json.dumps(MENU_ITEMS)}).length > 0")
             await browser.evaluate(choose(t("manager.theme_sources.move_down")))
             await browser.wait_for(
@@ -101,7 +102,7 @@ class FoldersPageDrive(unittest.TestCase):
                 one["path"] for one in json.load(urllib.request.urlopen(
                     instance.manager_url("/api/v1/locations"), timeout=10))["locations"]]
 
-            await walk.act(lambda: browser.click(f"{ROWS} .q-btn", nth=1),
+            await walk.act(lambda: browser.click(f"{ROWS} > .q-btn", nth=1),
                            until=f"document.querySelectorAll({json.dumps(MENU_ITEMS)}).length > 0")
             await browser.evaluate(choose(t("manager.folders.put_here")))
             chip = json.dumps(t("manager.folders.new_games"))

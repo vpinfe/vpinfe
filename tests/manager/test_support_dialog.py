@@ -53,7 +53,7 @@ class WalkTests(_Drafted):
                          ["logs", "previous_log", "settings"])
         self.assertTrue(all(field["value"] for field in step["fields"]))
         self.assertEqual([one["label"] for one in step["steps"]],
-                         ["What Goes In", "Privacy", "Share"])
+                         ["Include", "Privacy", "Share"])
 
     def test_next_reads_the_device_and_opens_privacy(self) -> None:
         step = asyncio.run(dialog.calls(self.draft).check(

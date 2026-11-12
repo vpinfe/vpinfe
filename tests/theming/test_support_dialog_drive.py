@@ -112,7 +112,7 @@ class SupportDialogDrive(unittest.TestCase):
                 await browser.navigate(f"http://127.0.0.1:{port}/{mode}")
                 await browser.wait_for("!!document.querySelector('#open')")
                 await browser.click("#open")
-                await reads("What Goes In")
+                await reads("Include")
                 found["what_fits"] = await fits()
 
                 await browser.click(FORWARD)

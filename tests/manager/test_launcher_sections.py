@@ -484,7 +484,7 @@ class CopyVerbTests(unittest.TestCase):
 
     def test_a_launcher_with_a_program_and_a_settings_file_offers_both(self) -> None:
         labels = [one.label for one in self._acts(path_state.OK)]
-        self.assertEqual(labels[1:3], [t("manager.backups.back_up_title"),
+        self.assertEqual(labels[1:3], [t("manager.backups.take_now"),
                                        t("manager.backups.restore_dialog")])
 
     def test_no_settings_file_or_no_program_offers_neither(self) -> None:

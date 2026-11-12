@@ -65,12 +65,6 @@ class TheMarkOnATheme(unittest.TestCase):
 
         self.assertEqual(themes.rows([theme])[0]["trust"], themes.UNACCEPTED)
 
-    def test_a_stopped_theme_has_something_to_do_so_its_row_has_a_menu(self) -> None:
-        theme = _theme(installed=True, active=True,
-                       trust=_trust(accepted.SOURCE, accepted_=False))
-
-        self.assertFalse(themes.rows([theme])[0][themes.grid.NO_MENU])
-
 
 class TheQuestions(unittest.IsolatedAsyncioTestCase):
     async def asked(self, call) -> tuple[str, list[str], str, dict]:

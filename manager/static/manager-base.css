@@ -1685,6 +1685,13 @@ body.manager-menu-open .q-tooltip.manager-menu-tip { display: block !important; 
   min-height: 24px !important;
   padding: 8px 12px 2px !important;
 }
+/* A menu's title is the name of what it acts on, so it keeps that name's own casing; cyan
+   marks it as the subject rather than a group of items. */
+.manager-menu-header.manager-menu-title {
+  color: var(--accent) !important;
+  text-transform: none;
+  letter-spacing: normal;
+}
 /* Body voice. You read an item and click it; sentence case is how a name stays a name,
    which is what a menu over a library is full of. */
 .q-menu .manager-menu-item,

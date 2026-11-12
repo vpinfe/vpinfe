@@ -62,8 +62,8 @@ class ForAGame(unittest.TestCase):
         verbs = game_acts.game_acts(_library(), [_game()], {}, _refresh,
                                     collections=lambda _: None)
 
-        self.assertEqual(["Launch", "Mark Private", "Match to VPS...", "Auto-Match",
-                          "Download Missing Media...", "Send to Device...", "Back Up Now",
+        self.assertEqual(["Launch", "Mark Private", "Match to VPS…", "Auto-Match",
+                          "Download Missing Media…", "Send to Device…", "Back Up Now…",
                           "Add to Collection", "Delete from Disk"], _labels(verbs))
 
     def test_it_is_filed_only_once_the_collections_are_read(self) -> None:
@@ -83,8 +83,8 @@ class ForAGame(unittest.TestCase):
         rated = game_acts.game_acts(_library(), [_game()], {}, _refresh, rate=rate)
         unrated = game_acts.game_acts(_library(), [_game()], {}, _refresh)
 
-        self.assertEqual("Rate...", _labels(rated)[1])
-        self.assertNotIn("Rate...", _labels(unrated))
+        self.assertEqual("Rate…", _labels(rated)[1])
+        self.assertNotIn("Rate…", _labels(unrated))
 
     def test_private_is_offered_for_the_games_it_applies_to(self) -> None:
         plain = game_acts.game_acts(_library(), [_game()], {}, _refresh)
@@ -103,7 +103,7 @@ class ForAGame(unittest.TestCase):
         state: dict[str, Any] = {"watch_jobs": lambda: None}
         games = [_game()]
         verbs = game_acts.game_acts(_library(), games, state, _refresh)
-        send = next(one for one in verbs if one.label == "Send to Device...")
+        send = next(one for one in verbs if one.label == "Send to Device…")
 
         with patch.object(game_acts.send_to_device, "ask_where") as ask:
             assert send.run is not None
@@ -118,8 +118,9 @@ class ForAGame(unittest.TestCase):
         offered = game_acts.game_acts(played, [_game()], {}, _refresh)
         quiet = game_acts.game_acts(unplayed, [_game()], {}, _refresh)
 
-        self.assertTrue(next(one for one in offered if one.label == "Reset Play Record").danger)
-        self.assertNotIn("Reset Play Record", _labels(quiet))
+        self.assertTrue(next(one for one in offered
+                             if one.label == "Reset Game Play Record").danger)
+        self.assertNotIn("Reset Game Play Record", _labels(quiet))
 
     def test_deleting_from_disk_is_a_danger_offered_for_any_games(self) -> None:
         for chosen in ([_game()], [_game(), _game("medusa")]):
@@ -138,9 +139,9 @@ class ForATable(unittest.TestCase):
     def test_the_games_own_record_is_cleared_apart_from_the_tables(self) -> None:
         played = _library({"id": "afm", "user": {"play_count": 3}})
 
-        verb = game_acts.reset_games(played, ["afm"], _refresh, "Reset game's play record")
+        verb = game_acts.reset_games(played, ["afm"], _refresh)
 
-        self.assertEqual("Reset game's play record", verb.label if verb else "")
+        self.assertEqual("Reset Game Play Record", verb.label if verb else "")
         self.assertIsNone(game_acts.reset_games(_library({"id": "afm"}), ["afm"], _refresh))
 
     def test_a_table_that_is_not_the_default_can_be_made_it(self) -> None:
@@ -173,15 +174,15 @@ class ForATable(unittest.TestCase):
         played = _acts(_table("a", user={"last_played": "2026-10-01T20:00:00Z"}))
         unplayed = _acts(_table("a", user={"play_count": 0}))
 
-        self.assertIn("Reset Play Record", _labels(played))
+        self.assertIn("Reset Table Play Record", _labels(played))
         self.assertTrue(next(one for one in played
-                             if one.label == "Reset Play Record").danger)
-        self.assertNotIn("Reset Play Record", _labels(unplayed))
+                             if one.label == "Reset Table Play Record").danger)
+        self.assertNotIn("Reset Table Play Record", _labels(unplayed))
 
     def test_the_games_record_is_reset_beside_the_tables(self) -> None:
         verbs = _acts(_table("a"), library=_library({"id": "afm", "user": {"play_count": 2}}))
 
-        self.assertEqual("Reset game's play record", verbs[-1].label)
+        self.assertEqual("Reset Game Play Record", verbs[-1].label)
         self.assertTrue(verbs[-1].danger)
 
     def test_a_table_on_disk_cannot_be_forgotten(self) -> None:
@@ -291,12 +292,12 @@ class ForSeveralTables(unittest.TestCase):
         self.assertIn("Hide", _labels(verbs))
         self.assertIn("Unhide", _labels(verbs))
 
-    def test_making_a_default_is_for_one_table_and_says_so(self) -> None:
+    def test_making_a_default_is_for_one_table_and_is_dimmed_for_several(self) -> None:
         verbs = panel.for_selection(_several(_table("a"), _table("b", "medusa")), 2)
 
         make = next(one for one in verbs if one.label == "Make Default")
         self.assertIsNone(make.run)
-        self.assertEqual("One at a time", make.hint)
+        self.assertEqual("", make.hint)
 
     def test_forgetting_is_one_verb_for_one_table_or_many(self) -> None:
         gone: dict[str, Any] = {"available": False, "absent_since": "2026-10-01"}
@@ -342,7 +343,7 @@ class DeletingATableFile(unittest.IsolatedAsyncioTestCase):
         verbs = game_acts.table_acts(
             library, [game_acts.Target("afm", "Attack from Mars", table, [table, _table("b")])],
             _after, {}, None)
-        run = next(one for one in verbs if one.label == "Delete from Disk...").run
+        run = next(one for one in verbs if one.label == "Delete from Disk").run
         assert run is not None
         with patch.object(game_acts.offload, "io", _inline), \
                 patch.object(game_acts.run, "io_bound", _inline), \

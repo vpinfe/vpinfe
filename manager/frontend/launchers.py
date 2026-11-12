@@ -635,7 +635,7 @@ def copy_verbs(library: Library, launchers: list[dict],
             walking=walking)
 
     hint = t(all_settings.PLAYING_NOTE) if playing else ""
-    return [panel.Verb(t("manager.backups.back_up_title"),
+    return [panel.Verb(t("manager.backups.take_now"),
                        None if playing else guarded(take), hint=hint),
             panel.Verb(t("manager.backups.restore_dialog"),
                        None if playing else guarded(choose), hint=hint)]

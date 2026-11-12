@@ -242,7 +242,7 @@ async def open_for(library: Library, subject_kind: str, subject_id: str, name: s
 
         with frame.footer():
             if back_up_now:
-                aside = frame.aside(t("manager.backups.back_up_title"), take, icon=verbs.ADD)
+                aside = frame.aside(t("manager.backups.take_now"), take, icon=verbs.ADD)
                 aside.set_enabled(not hint)
                 if hint:
                     aside.tooltip(hint)

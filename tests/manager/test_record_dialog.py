@@ -361,7 +361,7 @@ class EntryTests(unittest.TestCase):
                                       "reason": "Recording isn't supported on macOS yet"}])
 
         self.assertIsNotNone(drawn)
-        self.assertEqual(action.call_args.args[0], "Record Media...")
+        self.assertEqual(action.call_args.args[0], "Record Media…")
         self.assertEqual((action.call_args.kwargs["enabled"], action.call_args.kwargs["hint"]),
                          (False, "Recording isn't supported on macOS yet"))
 

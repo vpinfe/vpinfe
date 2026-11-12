@@ -187,13 +187,7 @@ def _row(theme: dict[str, Any]) -> dict[str, Any]:
             "registry": repo_name(str(theme["registry"])) if theme.get("registry") else "",
             "repository": repo_name(str(theme["url"])) if theme.get("url") else "",
             "updated": str(theme.get("updated") or ""),
-            "said": theme_card.said(theme), grid.NO_MENU: _has_no_acts(theme)}
-
-
-def _has_no_acts(theme: dict[str, Any]) -> bool:
-    """True exactly when `acts` returns nothing."""
-    return bool(theme.get("installed") and theme.get("active")
-                and not theme.get("update_available") and not stopped(theme))
+            "said": theme_card.said(theme)}
 
 
 def build(library: Library, state: dict[str, Any],
@@ -242,6 +236,9 @@ async def _fill(library: Library, state: dict[str, Any],
             with bar.bottom, panel.bar_end():
                 count = ui.label(_themes_said(len(built), len(built))) \
                     .classes("text-xs manager-label")
+                panel.add_action([(t("manager.themes.add_theme"),
+                                   lambda: theme_sources.add_source(library, redraw))],
+                                 empty=False)
                 show_selection = panel.selection_menu(
                     t("manager.themes.themes_menu"), lambda: grid.selection(table),
                     lambda chosen: acts_on(chosen),
@@ -249,9 +246,6 @@ async def _fill(library: Library, state: dict[str, Any],
                 panel.refresh(lambda: _fill(library, state, on_select, redraw, body,
                                             refresh=True),
                               t("manager.themes.check_updates"))
-                panel.add_action([(t("manager.themes.add_theme"),
-                                   lambda: theme_sources.add_source(library, redraw))],
-                                 empty=False)
 
         async def on_header_context(col_id: str | None) -> None:
             await grid.header_menu(menu, table, COLUMNS, col_id)
@@ -487,6 +481,9 @@ def acts(library: Library, themes: list[dict[str, Any]],
                                   icon=verbs.ACTIVATE, one=True))
         offered.append(panel.Verb(t("word.uninstall"),
                                   lambda: _uninstall(library, idle, after), danger=True))
+    elif any(one["active"] for one in themes):
+        offered.append(panel.Verb(t("word.uninstall"), danger=True,
+                                  hint=t("manager.themes.active_stays")))
     return offered
 
 

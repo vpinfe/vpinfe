@@ -382,8 +382,7 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
                 key, found, label=names[key][0], tip=names[key][1], tone=WARM,
                 icon=verbs.NO_ART,
                 opens=unfilled_opens,
-                fix=Fix(GET_MEDIA, t("manager.media_fill.get_media"),
-                        t("manager.media_fill.get_media.help"), kind)))
+                fix=Fix(GET_MEDIA, t("manager.media_fill.get_missing"), "", kind)))
     if collected:
         rows.append(_games_without("no_media", found, label=names["no_media"][0],
                                    tip=names["no_media"][1], tone=WARM,

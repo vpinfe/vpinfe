@@ -270,7 +270,7 @@ class SettleTests(unittest.TestCase):
                     mock.patch.object(wizard_settle, "Library", lambda _client: _Held()), \
                     mock.patch.object(wizard_settle.offload, "io", _io):
                 task, dialog = await _opened(_walked(_MATCHES, seen))
-                said(_buttons(dialog, "Change...")[0], "click")
+                said(_buttons(dialog, "Change…")[0], "click")
                 await _settled()
                 lines = [one.text for one in dialog.descendants()
                          if isinstance(one, ui.label) and one.text.startswith("Entry")]
@@ -292,7 +292,7 @@ class SettleTests(unittest.TestCase):
                     mock.patch.object(wizard_settle, "Library", lambda _client: _Held()), \
                     mock.patch.object(wizard_settle.offload, "io", _io):
                 task, dialog = await _opened(_walked(_MATCHES, seen))
-                said(_buttons(dialog, "Change...")[0], "click")
+                said(_buttons(dialog, "Change…")[0], "click")
                 await _settled()
                 said(_forward(dialog), "click")
                 await _settled()
@@ -308,7 +308,7 @@ class SettleTests(unittest.TestCase):
             with mock.patch.object(vps_match, "ask", _asked(vps_match.CANCELLED)), \
                     mock.patch.object(wizard_settle, "Library", lambda _client: _Held()):
                 task, dialog = await _opened(_walked(_MATCHES, seen))
-                said(_buttons(dialog, "Change...")[0], "click")
+                said(_buttons(dialog, "Change…")[0], "click")
                 await _settled()
                 said(_forward(dialog), "click")
                 await _settled()
@@ -329,7 +329,7 @@ class SettleTests(unittest.TestCase):
                     mock.patch.object(wizard_settle, "Library", lambda _client: Down()), \
                     mock.patch.object(wizard_settle.offload, "io", _io):
                 task, dialog = await _opened(_walked(_MATCHES, seen))
-                said(_buttons(dialog, "Change...")[0], "click")
+                said(_buttons(dialog, "Change…")[0], "click")
                 await _settled()
                 lines = [one.text for one in dialog.descendants()
                          if isinstance(one, ui.label) and one.text == "Picked"]
@@ -368,7 +368,7 @@ class SettleTests(unittest.TestCase):
             with mock.patch.object(vps_match, "ask", ask), \
                     mock.patch.object(wizard_settle, "Library", lambda _client: _Held()):
                 task, dialog = await _opened(_calls(first=first))
-                said(_buttons(dialog, "Change...")[0], "click")
+                said(_buttons(dialog, "Change…")[0], "click")
                 await _settled()
                 await _finished(task)
 

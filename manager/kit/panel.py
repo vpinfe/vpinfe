@@ -1958,21 +1958,22 @@ def menu_entry(label: str, on_click: Callable[..., Any] | None = None, *,
                mark: Callable[[], Any] | None = None,
                trail: Callable[[], Any] | None = None,
                classes: str = "", auto_close: bool = True, refused: str = "",
-               under: str = "") -> Any:
+               under: str = "", slot: bool = True) -> Any:
     """An entry in a menu whose items share the leading slot: `mark` draws into it, and an
-    entry without one indents to it so the labels line up. `trail` draws the state at the
-    end. `under` is a line of detail below the label. `refused` dims it, with those words
-    under it, and it does nothing."""
+    entry without one indents to it so the labels line up. `slot=False` is for an entry in
+    a menu of verbs, which have none. `trail` draws the state at the end. `under` is a line
+    of detail below the label. `refused` dims it, with those words under it, and it does
+    nothing."""
     if refused:
         on_click, auto_close = None, False
         classes = f"manager-menu-blocked {classes}"
     item = ui.menu_item(on_click=on_click, auto_close=auto_close) \
         .classes(f"manager-menu-item {classes}".strip())
     with item, ui.row().classes("items-center gap-2 no-wrap w-full"):
-        if mark is None:
-            ui.element("span").classes("manager-menu-mark")
-        else:
+        if mark is not None:
             mark()
+        elif slot:
+            ui.element("span").classes("manager-menu-mark")
         with ui.column().classes("gap-0 grow min-w-0"):
             ui.label(label)
             if refused or under:
@@ -1995,7 +1996,7 @@ class Verb:
     `draw` stands in for an entry of its own: it draws several into the menu being built,
     given what closes that menu, for the one list that is a submenu with state of its own.
     `one` is a verb with no meaning over several rows: with several chosen it stays in the
-    menu, dimmed and saying so (`for_selection`). `tip` is what a hover adds to the label.
+    menu, dimmed (`for_selection`). `tip` is what a hover adds to the label.
     `block` is the extension an entry comes from: its entries follow core's, each block under
     a rule and its name. `block_mark` draws before that name, for an extension VPinFE did
     not ship. `group` names what an entry acts on: a rule is drawn where it changes.
@@ -2018,11 +2019,11 @@ class Verb:
 
 def for_selection(entries: Sequence[Verb], count: int) -> list[Verb]:
     """The list for `count` rows chosen: a one-at-a-time verb is refused while there are
-    several, so the menu keeps its shape as the selection grows."""
+    several, so the menu keeps its shape as the selection grows. It is dimmed and says
+    nothing more."""
     if count < 2:
         return list(entries)
-    return [replace(one, run=None, choices=(), to="", draw=None,
-                    hint=t("word.not_for_several")) if one.one else one
+    return [replace(one, run=None, choices=(), to="", draw=None, hint="") if one.one else one
             for one in entries]
 
 
@@ -2041,6 +2042,8 @@ def _verb_entry(verb: Verb) -> None:
     acts = live and not verb.choices and not verb.to
     item = ui.menu_item(on_click=verb.run if acts else None,
                         auto_close=live and not verb.choices).classes(classes)
+    if not live:
+        item.props["aria-disabled"] = "true"
     if verb.to:
         item.props["href"] = verb.to
         if leaves(verb.to):
@@ -2114,7 +2117,7 @@ def verb_menu(menu: Any, name: str, entries: Sequence[Verb],
         return
     with menu:
         if entries:
-            ui.item_label(name).props("header").classes("manager-menu-header")
+            ui.item_label(name).props("header").classes("manager-menu-header manager-menu-title")
             ui.separator()
             verb_entries(entries, menu.close)
         if tail:

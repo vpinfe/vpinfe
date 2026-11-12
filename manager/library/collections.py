@@ -313,14 +313,14 @@ def build(collections: list[dict[str, Any]], library: Any,
         with bar.bottom, panel.bar_end():
             count = ui.label(t("manager.collections.collections",
                                count=len(collections_only()))).classes("text-xs manager-label")
+            panel.add_action([(t("manager.collections.new_collection"),
+                               lambda: collection_adds.ask_new(library, created))],
+                              empty=not collections_only())
             show_selection = panel.selection_menu(
                 t("manager.collections.collections_menu"), lambda: grid.selection(table),
                 lambda chosen: acts(library, state, [one["_raw"] for one in chosen], redrawn,
                                     moves=moves(chosen[0]["name"]) if chosen else ()),
                 lambda: table.run_grid_method("deselectAll"))
-            panel.add_action([(t("manager.collections.new_collection"),
-                               lambda: collection_adds.ask_new(library, created))],
-                              empty=not collections_only())
 
     by_id = {row["id"]: row for row in built}
     grid.on_row_focus(SCOPE,

@@ -178,7 +178,8 @@ def _need_menu(menu: Any, need: needs.Need, fix: Callable[..., Any],
             panel.menu_entry(mine.label, lambda: fix(need), under=mine.tip)
             if need.new and mine.key == needs.GET_MEDIA:
                 panel.menu_entry(
-                    t("manager.needs.fix_new", fix=mine.label, count=len(need.new)),
+                    t("manager.needs.fix_new", fix=mine.label.removesuffix("…"),
+                      count=len(need.new)),
                     lambda: fix(need, need.new))
         panel.menu_entry(
             t("manager.needs.skip_version") if need.key == needs.UPDATE

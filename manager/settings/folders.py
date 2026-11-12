@@ -385,9 +385,6 @@ def _row(block: Folders, folder: Folder, at: int, of: int) -> None:
         _button, menu = panel.menu_button(verbs.MORE, t("manager.folders.more"))
         with menu:
             panel.verb_entries(acts(block, folder, at, of), menu.close)
-        with ui.element("div").classes("manager-row-action"):
-            panel.icon_action(t("word.remove"), partial(block.remove, folder),
-                              icon=verbs.REMOVE, hint=t("word.remove"))()
 
 
 def _caption(block: Folders, folder: Folder) -> None:

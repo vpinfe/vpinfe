@@ -1023,6 +1023,15 @@ called Actions, which names the mechanism and says nothing about the subject.
 - **One word per act.** **Delete** means removed from disk, or removed permanently where there is
   no disk. **Remove** takes it out of the library and keeps the files. **Forget** stops
   tracking something VPinFE does not own. **Uninstall** is for a theme.
+- **A menu is grouped by what its entries act on.** Set `Verb.group` and `verb_entries` draws a
+  rule where it changes: opening or playing, then what the item is (details, matching), then
+  its media, then moving or copying it elsewhere, then collections. A group of one still gets its
+  own rule, and an entry that draws its own items (Add to Collection) does not draw one.
+- **Dots mean the item asks for something first.** `…` (the one character, never three
+  periods) ends a label that opens a choice or a form before it acts: *Rate…*, *Back Up Now…*,
+  *Copy to Devices…*. A plain yes or no confirm takes none, because the confirm is the
+  safety and not a step in the task: *Delete from Disk*, *Go back to 2.x*. The same act has
+  the same label everywhere it appears. A progress word takes the character too (*Checking…*).
 
 A verb in a panel follows the value it changes — same column, one gap after it. It is not
 pushed to the panel's edge for a tidy column of verbs: that assumes the value fills the
@@ -1703,15 +1712,22 @@ What's busy, puts them in a `.manager-tile-rows`: a name, a share and a size to 
   menu - dropdowns, grid header and cell menus, bulk actions, pickers:
   - A **group header** takes `.manager-group`'s treatment: small, uppercase, tracked, `--ink-3`.
     It is a signpost and recedes. Never larger or brighter than the items it labels.
+  - A **menu title** names what the menu acts on, a row's own name. It is `--accent`, in
+    that name's own casing: uppercasing replaces the name's capitals and tracked letters
+    make it a label rather than a name.
   - An **item** is body voice: sentence case, `--ink-2`, no letter-spacing. You read a
     name and click it, and a name only survives in sentence case.
   - **Hover and focus paint a full-width band.** A color change alone is too weak to say
     *this row is the target*, and an item that sizes to its own text draws the band to the
     end of the words rather than the edge of the menu.
-  - **Accent is the current value and nothing else** - the chosen item, the checkmark. When
+  - **Accent is the current value and nothing else** - the chosen item, the checkmark, and
+    the menu title. When
     every item is accent-colored the color stops meaning anything.
   - **One leading slot**, fixed width, for whatever marks the item; items with no mark
-    indent to it so the labels line up. `panel.menu_entry` draws an item that way.
+    indent to it so the labels line up. `panel.menu_entry` draws an item that way. A menu of
+    verbs has no slot, so an entry in one (Add to Collection among a row's acts) is drawn with
+    `slot=False` and carries no mark, so one icon never shifts the other labels. A list of
+    collections keeps its slot, where the Smart mark tells entries apart.
   - **The trailing slot is state** - a checkmark, a count, a shortcut, or *In It* on an
     entry that is already true, which is then inert. Never a second action.
   - A **destructive** item colors its *text*; the band stays the ordinary one. A red row

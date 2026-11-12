@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,10 @@ Rate = Callable[[list[str], int], Awaitable[bool]]
 Collections = Callable[[Callable[[], Any]], None]
 
 PLAYED = ("last_played", "play_count", "play_time_seconds")
+
+# The blocks a menu is drawn in, a rule where one gives way to the next (`Verb.group`).
+PLAY, DETAILS, MEDIA, MOVE, FILES, COLLECTIONS = (
+    "play", "details", "media", "move", "files", "collections")
 
 
 def has_record(record: dict[str, Any] | None) -> bool:
@@ -151,27 +155,31 @@ def game_acts(library: Any, games: list[dict[str, Any]], state: dict[str, Any],
             else t("manager.record.title_games", count=len(ids))
         await recorder.ask(library, [(game_id, "") for game_id in ids], title, state, placed)
 
-    offered = [panel.Verb(t("manager.games.launch"), launch, one=True)]
+    offered = [panel.Verb(t("manager.games.launch"), launch, one=True, group=PLAY)]
     if rate is not None:
-        offered.append(panel.Verb(t("manager.games.rate"), partial(_rate, games, rate)))
+        offered.append(panel.Verb(t("manager.games.rate"), partial(_rate, games, rate),
+                                  group=DETAILS))
     if not all(marked):
-        offered.append(panel.Verb(t("manager.games.mark_private"), partial(mark_private, True)))
+        offered.append(panel.Verb(t("manager.games.mark_private"), partial(mark_private, True),
+                                  group=DETAILS))
     if any(marked):
         offered.append(panel.Verb(t("manager.games.clear_private"),
-                                  partial(mark_private, False)))
-    offered.append(panel.Verb(t("manager.games.match_vps"), matched))
+                                  partial(mark_private, False), group=DETAILS))
+    offered.append(panel.Verb(t("manager.games.match_vps"), matched, group=DETAILS))
     offered.append(panel.Verb(t("manager.games.auto_match"), auto_match,
-                              tip=t("manager.games.auto_match.help")))
-    offered.append(panel.Verb(t("manager.media_fill.get_missing"), get_missing_media))
+                              tip=t("manager.games.auto_match.help"), group=DETAILS))
+    offered.append(panel.Verb(t("manager.media_fill.get_missing"), get_missing_media,
+                              group=MEDIA))
     if recording := recorder.verb(library, record_media):
-        offered.append(recording)
+        offered.append(replace(recording, group=MEDIA))
     offered.append(panel.Verb(t("manager.games.send_device"),
-                              lambda: send_to_device.ask_where(games, state)))
+                              lambda: send_to_device.ask_where(games, state), group=MOVE))
     offered.append(panel.Verb(
-        t("manager.backups.back_up_title"),
-        lambda: backup_rows.back_up_games(library, games, lambda: refresh(ids))))
+        t("manager.backups.take_now"),
+        lambda: backup_rows.back_up_games(library, games, lambda: refresh(ids)), group=MOVE))
     if collections is not None:
-        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections))
+        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections,
+                                  group=COLLECTIONS))
     if reset := reset_games(library, ids, refresh):
         offered.append(reset)
     if deleter := delete_games(library, games, refresh):
@@ -208,8 +216,8 @@ async def _rate(games: list[dict[str, Any]], rate: Rate) -> None:
     box.open()
 
 
-def reset_games(library: Any, game_ids: list[str], refresh: Refresh,
-                label: str = "") -> panel.Verb | None:
+def reset_games(library: Any, game_ids: list[str],
+                refresh: Refresh) -> panel.Verb | None:
     """Clear the play record of those of these games that hold one, or None where none does."""
     held = {str(one.get("id")): one.get("user") for one in library.games
             if str(one.get("id")) in game_ids}
@@ -233,7 +241,7 @@ def reset_games(library: Any, game_ids: list[str], refresh: Refresh,
         ui.notify(t("manager.workbench.reset_done"), type="positive")
         await refresh(clearing)
 
-    return panel.Verb(label or t("manager.workbench.reset_action"), reset, danger=True)
+    return panel.Verb(t("manager.workbench.reset_game_action"), reset, danger=True)
 
 
 def delete_games(library: Any, games: list[dict[str, Any]], refresh: Refresh) -> panel.Verb:
@@ -476,39 +484,40 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
     offered: list[panel.Verb] = []
     table = first.table
     if not one:
-        offered.append(panel.Verb(t("word.make_default"), one=True))
+        offered.append(panel.Verb(t("word.make_default"), one=True, group=DETAILS))
     elif not table.get("default"):
         if not game_tables.why_not_default(table):
-            offered.append(panel.Verb(t("word.make_default"), make_default, one=True))
+            offered.append(panel.Verb(t("word.make_default"), make_default, one=True,
+                                      group=DETAILS))
     elif locking := game_tables.lock_act(table, first.siblings):
         locks, words = locking
-        offered.append(panel.Verb(words, partial(lock, locks), one=True))
+        offered.append(panel.Verb(words, partial(lock, locks), one=True, group=DETAILS))
     hidden = [bool(item.table.get("hidden")) for item in targets]
     if not all(hidden):
-        offered.append(panel.Verb(t("manager.games.hide"), partial(hide, True)))
+        offered.append(panel.Verb(t("manager.games.hide"), partial(hide, True),
+                                  group=DETAILS))
     if any(hidden):
-        offered.append(panel.Verb(t("manager.games.unhide"), partial(hide, False)))
+        offered.append(panel.Verb(t("manager.games.unhide"), partial(hide, False),
+                                  group=DETAILS))
     if not all(game_tables.runs_its_own_script(item.table) for item in targets):
-        offered.append(panel.Verb(t("manager.games.extract_script"), extract))
+        offered.append(panel.Verb(t("manager.games.extract_script"), extract, group=FILES))
+    if any(game_tables.can_swap(item.table) for item in targets):
+        offered.append(panel.Verb(t("manager.table_swap.replace_file"), replace_file, one=True,
+                                  group=FILES))
     if recording := recorder.verb(library, record_media):
-        offered.append(recording)
+        offered.append(replace(recording, group=MEDIA))
     if collections is not None:
-        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections))
+        offered.append(panel.Verb(t("manager.adds.verb"), draw=collections,
+                                  group=COLLECTIONS))
     if any(game_tables.runs_its_own_script(item.table) for item in targets):
         offered.append(panel.Verb(t("manager.games.delete_script"), drop_script, danger=True))
     if any(has_record(item.table.get("user")) for item in targets):
-        offered.append(panel.Verb(t("manager.workbench.reset_action"), reset, danger=True))
-    if reset_game := reset_games(library, games_of(targets),
-                                 lambda ids: after(ids, False),
-                                 t("manager.workbench.reset_game_action")):
+        offered.append(panel.Verb(t("manager.workbench.reset_table_action"), reset, danger=True))
+    if reset_game := reset_games(library, games_of(targets), lambda ids: after(ids, False)):
         offered.append(reset_game)
     if any(game_tables.can_forget(item.table) for item in targets):
         offered.append(panel.Verb(t("word.forget"), forget, danger=True))
-    swappable = any(game_tables.can_swap(item.table) for item in targets)
-    if swappable:
-        offered.insert(
-            len(offered) - sum(verb.danger for verb in offered),
-            panel.Verb(t("manager.table_swap.replace_file"), replace_file, one=True))
+    if any(game_tables.can_swap(item.table) for item in targets):
         offered.append(panel.Verb(t("manager.table_swap.delete_file"), delete_file,
                                   danger=True, one=True))
     offered += ext_verbs.offered(
@@ -519,13 +528,13 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
 
 def collections_of(offer: collection_adds.Offer,
                    known: collection_adds.Read | None) -> Collections | None:
-    """The add-to-collection entries under a rule, drawn into whichever menu is being
-    built. None until the library's collections have been read."""
+    """The add-to-collection entries, drawn into whichever menu is being built; the rule
+    above them is the menu's own (`Verb.group`). None until the library's collections have
+    been read."""
     if known is None:
         return None
 
     def draw(close: Callable[[], Any]) -> None:
-        ui.separator()
         collection_adds.draw(offer, known, close)
 
     return draw
