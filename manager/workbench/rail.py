@@ -33,6 +33,7 @@ from manager.workbench.core import (
     _docked,
     _section_row,
     dock_height,
+    dock_width,
 )
 from manager.workbench.device import (
     _device_capabilities,
@@ -168,6 +169,8 @@ async def _rail(context: dict[str, Any], subject: str,
             if docked:
                 work.classes(add="manager-has-dock")
                 work.style(f"--dock-h: {dock_height(state, section)}px")
+                if dock_width(section):
+                    work.style(f"--dock-w: {dock_width(section)}px")
                 work._props["data-dock-section"] = section
                 if subject in VIEWER_FIRST:
                     work._props["data-viewer-first"] = "1"

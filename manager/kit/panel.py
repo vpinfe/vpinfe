@@ -46,7 +46,8 @@ ASIDE = object()
 # rather than as something between two groups.
 LEDE = object()
 # A fact that is only read, as (READ, (label, value)): no control to centre, so its row is
-# as tall as the words and a run of them sits close together.
+# as tall as the words and a run of them sits close together. A plain-text value is one
+# without being marked; a value drawn by a function keeps the taller row of a control.
 READ = object()
 # A fact about the row above it, as (SUB, (label, value)): its label is indented behind an
 # elbow so it reads as part of that row.
@@ -224,7 +225,8 @@ def _fact_row(target: Any, label: Any, value: Any) -> None:
     # re-casing it is how "RAR Tool Path" reached a user as "Rar Tool Path" -
     # the casing rule is a fallback for a bare key, not a filter over finished
     # words. A surface that writes its labels in prose cases them on the way in.
-    target.label(str(label)).classes("manager-fact-label")
+    target.label(str(label)).classes(
+        "manager-fact-label" if callable(value) else "manager-fact-label manager-fact-read")
     _draw_value(target, value)
 
 
@@ -1893,7 +1895,7 @@ def draft_button(label: str, on_click: Callable[[], Any], *, icon: str, hint: st
     draft has something in it. `primary` is the filled one, Save."""
     control = ui.button(label, icon=icon, on_click=on_click)
     if primary:
-        control.props("dense no-caps no-wrap unelevated size=sm")
+        control.props("dense no-caps no-wrap unelevated size=sm").classes("manager-action")
     else:
         control.props("flat dense no-caps size=sm").classes("manager-action")
     if hint:

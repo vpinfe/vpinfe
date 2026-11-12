@@ -14,7 +14,7 @@ from common import i18n
 from common.games import asset_resolver, collation
 from common.games.asset_registry import ALWAYS_KEPT as _ALWAYS_KEPT
 from common.i18n import t
-from manager.kit import game_tables, offload, panel, verbs
+from manager.kit import game_tables, offload, panel, scroll, verbs
 from manager.library import file_states, uploads
 from manager.library.assets import _reason
 from manager.workbench.core import _asset_name
@@ -27,6 +27,8 @@ from manager.workbench.file import (
 )
 from manager.workbench.game_media import _kept_kinds, _pick_slot
 from manager.workbench.game_table import _add_action, _extract_script, _rom_state, _state
+
+_CHOSEN = "manager-source-row--chosen"
 
 
 def _assets_label(context: dict[str, Any]) -> str:
@@ -55,10 +57,14 @@ async def _assets_block(context: dict[str, Any]) -> None:
 
     turn = [0]
     one_at_a_time = asyncio.Lock()
+    rows: dict[str, ui.element] = {}
+    drawn: list[tuple[Any, Any, Any]] = []
 
-    async def draw() -> None:
+    async def draw(*, whole: bool = True) -> None:
         # Each pick redraws on a task of its own, and a draw awaits between clearing the
         # dock and filling it. Only the newest pick draws, so two cards never stack.
+        # A pick leaves the list standing and moves the mark while the files are the ones
+        # the rows were drawn from; any other draw rebuilds them.
         turn[0] += 1
         mine = turn[0]
         async with one_at_a_time:
@@ -67,13 +73,26 @@ async def _assets_block(context: dict[str, Any]) -> None:
             library, game_id = context["library"], context["game_id"]
             files = await offload.io(library.files_of, "asset", game_id)
             found = _picked(files, str(context["slot"]["kind"] or ""), context["lens"])
-            holder.clear()
-            with holder:
-                for _kind, section in _asset_sections(
-                        context, files, found,
-                        lambda key: partial(_pick_slot, context, key, draw)):
-                    section()
+            shown = [(one["id"], one.get("file"), one.get("present")) for one in files]
+            if whole or found is None or shown != drawn:
+                drawn[:] = shown
+                rows.clear()
+                holder.clear()
+                with holder:
+                    for _kind, section in _asset_sections(
+                            context, files, found,
+                            lambda key: partial(_pick_slot, context, key, pick), rows):
+                        section()
+            else:
+                for file_id, row in rows.items():
+                    if found is not None and file_id == found["id"]:
+                        row.classes(add=_CHOSEN)
+                    else:
+                        row.classes(remove=_CHOSEN)
             await _asset_dock(context, found, files)
+
+    async def pick() -> None:
+        await scroll.held(lambda: draw(whole=False))
 
     await draw()
 
@@ -101,7 +120,8 @@ async def _asset_dock(context: dict[str, Any], found: dict[str, Any] | None,
 
 def _asset_sections(context: dict[str, Any], files: list[dict[str, Any]],
                     found: dict[str, Any] | None = None,
-                    pick: Callable[[str], Callable[[], Any]] | None = None
+                    pick: Callable[[str], Callable[[], Any]] | None = None,
+                    rows: dict[str, ui.element] | None = None
                     ) -> list[tuple[str, Callable[[], None]]]:
     """One section for every type the library collects, in the order of the word each
     shows, whether or not the game holds a file of it. A type the library does not
@@ -112,14 +132,15 @@ def _asset_sections(context: dict[str, Any], files: list[dict[str, Any]],
     kinds = {*asset_resolver.PER_TABLE_KINDS, *(game.get("assets") or {}), "rom"}
     chosen = next((item for item in context["tables"]
                    if item.get("id") == context["lens"]), None)
-    return [(kind, _section(context, kind, files, chosen, found, pick))
+    return [(kind, _section(context, kind, files, chosen, found, pick, rows))
             for kind in sorted((one for one in kinds if _collects(one, kept)),
                                key=lambda one: collation.sort_key(_asset_name(one)))]
 
 
 def _section(context: dict[str, Any], kind: str, files: list[dict[str, Any]],
              chosen: dict[str, Any] | None, found: dict[str, Any] | None,
-             pick: Callable[[str], Callable[[], Any]] | None) -> Callable[[], None]:
+             pick: Callable[[str], Callable[[], Any]] | None,
+             rows: dict[str, ui.element] | None = None) -> Callable[[], None]:
     here = [one for one in files if one.get("kind") == kind and one.get("present")]
     table = chosen if chosen is not None else {}
     scripted = kind == "script" and chosen is not None \
@@ -138,8 +159,10 @@ def _section(context: dict[str, Any], kind: str, files: list[dict[str, Any]],
                     _add_action(context, kind)
             for one in here:
                 key = f"{kind}:{str(one.get('file') or '').lower()}"
-                _file_row(kind, one, found is not None and one["id"] == found["id"],
-                          pick(key) if pick else None)
+                element = _file_row(kind, one, found is not None and one["id"] == found["id"],
+                                    pick(key) if pick else None)
+                if rows is not None:
+                    rows[one["id"]] = element
             told = kind == "rom" and _table_rom(chosen, here)
             if not here and not told:
                 _nothing_here(context, kind, scripted)
@@ -179,18 +202,17 @@ def _nothing_here(context: dict[str, Any], kind: str, scripted: bool) -> None:
     if kind == "readme" and ((context["game"].get("assets") or {}).get(kind) or {}).get("present"):
         _state(t("word.present"), "on")()
         return
-    ui.label(t("word.none")).classes("manager-help")
 
 
 def _file_row(kind: str, row: dict[str, Any], chosen: bool,
-              pick: Callable[[], Any] | None) -> None:
+              pick: Callable[[], Any] | None) -> ui.element:
     """A file: its name, the one chip that is an exception, its size, and the way into
     its card. Who owns it and which VPS record it is are on the card."""
     name, size = str(row.get("file") or ""), row.get("size_bytes")
     classes = ("items-center gap-3 w-full no-wrap manager-source-row "
                "manager-source-row--pick manager-source-row--entry")
     if chosen:
-        classes += " manager-source-row--chosen"
+        classes += " " + _CHOSEN
     element = ui.row().classes(classes).props("tabindex=0 role=button")
     if pick is not None:
         element.on("click", lambda: pick())
@@ -204,6 +226,7 @@ def _file_row(kind: str, row: dict[str, Any], chosen: bool,
             if size:
                 ui.label(i18n.size(size)).classes("manager-help w-full")
         ui.icon(verbs.DRILL).classes("manager-summary-go")
+    return element
 
 
 def _chip_of(kind: str, row: dict[str, Any]) -> None:

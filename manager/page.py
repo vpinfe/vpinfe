@@ -717,6 +717,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     ui.on(folders.MOVED, lambda event: folders.moved(state, event))
     ui.on(shelves.MOVED, lambda event: shelves.moved(state, event))
     ui.on("hub_dock_px", lambda event: core.dock_dragged(state, event.args))
+    ui.on("hub_dock_w", lambda event: core.dock_widened(event.args))
     ui.on("hub_row_focus", grid.row_focused)
     ui.on("hub_row_pick", lambda: state["pick_row"]())
     ui.on("hub_stacked", lambda event: state["stacked_changed"](event.args))

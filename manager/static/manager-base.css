@@ -2098,6 +2098,12 @@ body.manager-menu-open .q-tooltip.manager-menu-tip { display: block !important; 
   border-color: var(--accent);
   background: var(--accent-wash);
 }
+/* The filled one keeps its fill, and the edge goes clear so it is the same box as the
+   outlined one beside it. */
+.manager-action.q-btn.bg-primary,
+.manager-action.q-btn.bg-primary:hover {
+  border-color: transparent;
+}
 /* The same control at the chip's scale, for an action that sits beside a state rather
    than after a field. The edge stays - without one it reads as a second value, and this
    panel is worked in rather than read - but the type comes down: measured beside a chip
@@ -2494,7 +2500,7 @@ body.manager-menu-open .q-tooltip.manager-menu-tip { display: block !important; 
   position: sticky; top: -8px; z-index: 1;
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   align-self: stretch; box-sizing: border-box;
-  margin: 0 calc(-1 * var(--panel-gutter));
+  margin: 0 calc(-1 * var(--panel-gutter)) 8px;
   padding: 6px calc(2 * var(--panel-gutter));
   background: var(--surface-1);
   border-bottom: 1px solid var(--line);
@@ -2965,13 +2971,17 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
 @container (min-width: 900px) {
   .manager-has-dock {
     /* `auto` so the track follows the dock's own width. */
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: none;
   }
-  /* Half the workbench, so a wide window has no dead middle. The floor keeps it
-     usable where half is not much. */
-  .manager-dock { width: max(320px, 50cqw); }
+  /* The list stops growing at 520px and the dock takes the rest, never less than half.
+     680px is the list and the rail beside it. A dragged width (`--dock-w`) replaces the
+     default; 440px is what the dock leaves of the page for the rail, the grip and a list
+     that can still be read, and the drag in `core._GRIP` stops at the same place. */
+  .manager-dock {
+    width: min(max(320px, var(--dock-w, max(50cqw, 100cqw - 680px))), 100cqw - 440px);
+  }
 }
 /* The handle between browse and work. Only where they are stacked - side by side the
    split is the panel's own width, which the outer splitter already owns. */
@@ -2981,6 +2991,7 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
    and the band below the open section read as belonging to whatever was above it.
    A stub you could put two fingers on says "drag me" and says nothing else. */
 .manager-dock-grip {
+  --axis: y;
   height: 19px; cursor: row-resize; flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center;
 }
@@ -3023,11 +3034,14 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
 }
 @container (min-width: 900px) {
   .manager-dock { border-top: none; border-left: 1px solid var(--line); }
-  /* Below the grip's own rules on purpose: same specificity, so source order decides.
-     Above them this loses to the `display` they set, and the handle shows up floating
-     at the top of a layout where the dock is beside the map and there is nothing to
-     drag. */
-  .manager-dock-grip { display: none; }
+  /* Beside the list the handle is a vertical stub on the dock's edge, dragged for
+     width. Below the grip's own rules on purpose: same specificity, so source order
+     decides. */
+  .manager-dock-grip {
+    --axis: x;
+    width: 12px; height: auto; cursor: col-resize; touch-action: none;
+  }
+  .manager-dock-grip::before { width: 4px; height: 44px; }
 }
 
 /* Takes the panel. A 420px cap used to stop four fields stretching across a window,
@@ -3654,12 +3668,15 @@ a.manager-tag:hover { background: var(--wash-hover); }
   max-height: 100%;
 }
 .manager-stage .manager-file-text { max-height: none; height: 100%; }
-/* The text editor: the stage's one child, the text above and a strip below it. The editor
-   fills the box rather than sizing it, so the strip stays on screen whatever the file's
-   length. The page's tokens repaint what CodeMirror's theme draws. */
+/* The text editor: the stage's one child, a strip above the text. The editor fills the
+   box rather than sizing it, so the strip stays on screen whatever the file's length.
+   The page's tokens repaint what CodeMirror's theme draws. */
 .manager-editor {
   flex: 1 1 0; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 6px;
 }
+/* The stage scrolls, so a gap inside it goes with the content; the card below needs one
+   outside it, or a short dock cuts the text off against the card's border. */
+.manager-stage:has(> .manager-editor) { margin-bottom: 8px; }
 .manager-editor-box {
   flex: 1 1 0; min-height: 160px; position: relative; overflow: hidden;
   border: 1px solid var(--line); border-radius: 8px;

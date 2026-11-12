@@ -15,7 +15,7 @@ from common.config.labels import field_label, humanize
 from common.failures import why
 from common.games import asset_registry
 from common.i18n import t
-from manager.kit import busy, deeplink, game_tables, grid, panel
+from manager.kit import busy, deeplink, game_tables, grid, panel, remembered, scroll
 from manager.kit.on_page import on_page
 
 # Which group a section belongs to, in the order they are shown.
@@ -40,24 +40,36 @@ if (!window.__hubDockGrip) {
     const dock = main && main.querySelector('.manager-dock');
     if (!dock) return;
     e.preventDefault();
-    drag = { y: e.clientY, from: dock.getBoundingClientRect().height, main,
-             sign: main.dataset.viewerFirst ? 1 : -1 };
+    const wide = getComputedStyle(grip).getPropertyValue('--axis').trim() === 'x';
+    const box = dock.getBoundingClientRect();
+    drag = { wide, at: wide ? e.clientX : e.clientY, from: wide ? box.width : box.height, main,
+             sign: wide || main.dataset.viewerFirst ? 1 : -1 };
     grip.setPointerCapture(e.pointerId);
   });
   document.addEventListener('pointermove', (e) => {
     if (!drag) return;
     e.preventDefault();
-    const room = drag.main.getBoundingClientRect().height;
+    const room = drag.main.getBoundingClientRect();
     // Both regions keep a floor, so a drag cannot leave either as a sliver.
-    const next = Math.min(room - 160, Math.max(140, drag.from + drag.sign * (e.clientY - drag.y)));
+    if (drag.wide) {
+      // The dock is on the right: moving left makes it wider.
+      const page = drag.main.closest('.manager-sections') || drag.main;
+      const next = Math.min(page.getBoundingClientRect().width - 440,
+                            Math.max(320, drag.from - (e.clientX - drag.at)));
+      drag.main.style.setProperty('--dock-w', Math.round(next) + 'px');
+      return;
+    }
+    const next = Math.min(room.height - 160,
+                          Math.max(140, drag.from + drag.sign * (e.clientY - drag.at)));
     drag.main.style.setProperty('--dock-h', Math.round(next) + 'px');
   });
   const done = () => {
     if (!drag) return;
-    const px = parseInt(drag.main.style.getPropertyValue('--dock-h'), 10);
+    const wide = drag.wide;
+    const px = parseInt(drag.main.style.getPropertyValue(wide ? '--dock-w' : '--dock-h'), 10);
     const drag_section = drag.main.dataset.dockSection || '';
     drag = null;
-    if (px) emitEvent('hub_dock_px', {section: drag_section, px});
+    if (px) emitEvent(wide ? 'hub_dock_w' : 'hub_dock_px', {section: drag_section, px});
   };
   document.addEventListener('pointerup', done);
   document.addEventListener('pointercancel', done);
@@ -177,7 +189,7 @@ def _rebuilds(context: dict[str, Any], subject: str,
         if callable(refresh) and context.get(refresh_of):
             await refresh(context[refresh_of])
 
-    async def rebuild() -> None:
+    async def redraw() -> None:
         if grid_first:
             await behind()
             await again()
@@ -186,7 +198,11 @@ def _rebuilds(context: dict[str, Any], subject: str,
         await again()
         await behind()
 
+    async def rebuild() -> None:
+        await scroll.held(redraw)
+
     context["saved"] = behind
+    context["reopen"] = redraw
     return rebuild
 
 
@@ -285,6 +301,21 @@ def dock_dragged(state: dict[str, Any], args: Any) -> None:
         state.setdefault("dock_px", {})[section] = int(px)
 
 
+def dock_width(section: str) -> int:
+    """The width the dock was dragged to beside the list, 0 until it has been. Remembered
+    per browser: the divider is a preference about this screen, not about a game."""
+    return int((remembered.get("dock_w") or {}).get(section) or 0)
+
+
+def dock_widened(args: Any) -> None:
+    """The browser's report of a drag beside the list: the section and the width."""
+    if not isinstance(args, dict):
+        return
+    section, px = str(args.get("section") or ""), args.get("px")
+    if section and isinstance(px, (int, float)) and px > 0:
+        remembered.put("dock_w", {**(remembered.get("dock_w") or {}), section: int(px)})
+
+
 async def _pane_build(container: ui.column, state: dict[str, Any],
                       draw: Callable[[], Awaitable[None]]) -> None:
     """One pane build, after any already running, with the pane busy from the call
@@ -377,7 +408,7 @@ def _choose(context: dict[str, Any], key: str) -> None:
     """Make it the section on screen."""
     context["state"]["section"] = key
     deeplink.sync(context["state"])
-    asyncio.create_task(context["rebuild"]())
+    asyncio.create_task(context.get("reopen", context["rebuild"])())
 
 
 def _title(target: ui.column, name: str, subtitle: str) -> None:

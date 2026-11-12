@@ -779,7 +779,7 @@ A panel that shows facts uses the same control for the same kind of value, every
 | Free text the user can set | a field, with a resting edge so it does not read as text |
 | A color the user can set | a swatch of it that opens a picker, its `#RRGGBB` on hover |
 | A choice between a few named states | a segmented control with an edge (`panel.segmented`) |
-| A fact the user can only read | a row of `panel.READ`, as tall as its words |
+| A fact the user can only read | plain text in `panel.facts`, drawn as a row as tall as its words |
 
 **A segmented control has a visible boundary.** A bare run of text buttons reads as a label
 until it is hovered, so the edge, the divider between segments and the filled segment for the
@@ -788,6 +788,16 @@ one in force are drawn by `panel.segmented` and never by a call site. No module 
 
 Mixing them — a checkbox here, a text state and a button there — makes the reader work out
 three times what one convention says once.
+
+**Plain text is the tight row; anything else keeps the full one.** A value that is only text
+takes the read row, a line tall, so a run of facts packs the way a sentence would. A link, a
+chip, a star or a control keeps the 30px row, because it is something to aim at.
+
+**Beside the list, the work gets the room.** In the whole-window view the list keeps about
+520px next to the rail and the file panel takes the rest, never less than half. The divider
+between them is dragged, the width is remembered for the section, and neither side shrinks
+below a readable width. A redraw after a write keeps the list where it was scrolled to
+(`manager/kit/scroll.py`); a pick marks the chosen row and redraws only the card.
 
 **A select hides its options, which is right until the options are the information.** Where
 the choice is between named things a reader already knows — a theme, a sort order, a table —
@@ -971,11 +981,12 @@ answers.
   verb fit no rule and cost the width the description needs. The empty state keeps the
   full text button: that is where somebody meets the page for the first time, and an icon
   there is a guess.
-- **The Edit row is a third place that is an icon and a tooltip.** Under a file's viewer, one
+- **The Edit row is a third place that is an icon and a tooltip.** Above a file's viewer, one
   icon button for each tool that changes the file's content (rotate, later crop and trim),
   named by its tooltip. A press changes the view only, and the row then shows Not saved,
   Cancel and Save, which is where the file is written once. A tool that cannot run is dimmed,
-  and its tooltip says why.
+  and its tooltip says why. The text editor's bar of Not saved, Cancel and Save sits above its
+  text in the same place, so a file's edit controls are at the top whatever its kind.
 
 ### An action sits with what it acts on
 

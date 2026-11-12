@@ -348,14 +348,6 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
         note(state)
 
     with ui.element("div").classes("manager-editor"):
-        with ui.element("div").classes("manager-editor-box"):
-            code = ui.codemirror(
-                current(), language=LANGUAGES[kind],
-                theme=_THEMES[_DARK.get(ui.context.client, True)],
-                line_wrapping=kind in WRAPPED, on_change=changed,
-                keymap={"Mod-s": save_it})
-            if locked:
-                code.disable()
         with ui.row().classes("items-center gap-2 w-full no-wrap manager-editor-strip"):
             said = ui.label(t("word.not_saved")).classes("manager-draft-state") \
                 .tooltip(t("manager.text_editor.not_saved.help"))
@@ -380,6 +372,14 @@ def editor(context: dict[str, Any], path: str, label: str, found: dict[str, Any]
                                           primary=True)
             if locked:
                 save.set_visibility(False)
+        with ui.element("div").classes("manager-editor-box"):
+            code = ui.codemirror(
+                current(), language=LANGUAGES[kind],
+                theme=_THEMES[_DARK.get(ui.context.client, True)],
+                line_wrapping=kind in WRAPPED, on_change=changed,
+                keymap={"Mod-s": save_it})
+            if locked:
+                code.disable()
     held.views.append(show)
     held.syncs.append(sync)
     if not enlarged:

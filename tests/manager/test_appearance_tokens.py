@@ -53,11 +53,12 @@ FOREIGN_PREFIXES = ("--ag-", "--q-")
 # list's grid or row, from its Artwork settings, and on a page's kinds, from how many
 # rows the first column takes, and on Overview's top card, from the picture behind it, and
 # on a high score row, from the longest entry in its group, and on a progress ring, from
-# the percent done.
+# the percent done, and the dock's width, from where the person dragged it. `--axis` is the
+# reverse: the stylesheet defines it and the drag handler reads it, so no rule uses it.
 # `--fit` is read by the rule a backglass preview writes with its two windows' shapes in
 # it, which is not in the stylesheet.
-RUNTIME = {"--dock-h", "--rows", "--drops-top", "--drops-left", "--blank", "--art-h",
-           "--sum", "--gaps", "--gap", "--chrome", "--cap", "--stack", "--tall", "--fit",
+RUNTIME = {"--dock-h", "--dock-w", "--axis", "--rows", "--drops-top", "--drops-left", "--blank",
+           "--art-h", "--sum", "--gaps", "--gap", "--chrome", "--cap", "--stack", "--tall", "--fit",
            "--kind-rows", "--hero-picture", "--hs-rank", "--hs-init", "--hs-player",
            "--hs-score", "--hs-unit", "--p"}
 
