@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 # the wizard calls the field.
 SOURCES = ("tables", "media", "roms", "altdata", "music", "pups", "user", "history")
 
+# The kinds whose folder field says more than its label does.
+EXPLAINED = frozenset({"altdata", "music", "user"})
+
 # Derived and deliberately not offered. The reading works; there is nowhere settled to
 # put what it reads, and a field that carries nothing is a promise the code cannot keep.
 #
@@ -632,7 +635,7 @@ def derive_sources(library: SourceLibrary, chosen: dict | None = None) -> list[S
         guess = str(guessed.get(key, "") or "").strip()
         path = str(said if said is not None else guess).strip()
         found.append(Source(key=key, label=t(f"kind.{key}.label"),
-                            help=t(f"kind.{key}.help"), path=path,
+                            help=t(f"kind.{key}.help") if key in EXPLAINED else "", path=path,
                             derived=said is None and bool(path),
                             not_found=not path and not guess))
     return found

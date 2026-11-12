@@ -124,8 +124,7 @@ COLUMNS = [
                               ".filter(Boolean).join(' ')"}),
     discovery_marks.column(neither=t("word.none")),
     discovery_states.in_library().column(
-        "in_library", t("manager.discovery.in_library"),
-        help=t("manager.discovery.in_library.help")),
+        "in_library", t("manager.discovery.in_library")),
     *(_kind_column(*kind) for kind in KINDS),
     discovery_states.gap().column(
         "gap", t("manager.discovery.gaps"), help=t("manager.discovery.gaps.help")),
@@ -139,12 +138,12 @@ COLUMNS = [
     grid_module.column(TABLE_AUTHORS, t("manager.discovery.table_authors"),
                        help=t("manager.discovery.table_authors.help"),
                        **grid_module.NUMBER_COLUMN),
-    grid_module.column("manufacturer", t("word.manufacturer"), help=t("help.who_made_it")),
-    grid_module.year_column("year", t("word.year"), help=t("help.year_released")),
+    grid_module.column("manufacturer", t("word.manufacturer"), help=grid_module.NO_HELP),
+    grid_module.year_column("year", t("word.year"), help=grid_module.NO_HELP),
     grid_module.column("game_type", t("manager.games.type"),
                        help=t("manager.games.type.help")),
     grid_module.list_column("themes", t("manager.games.game_themes"), 200,
-                            help=t("manager.games.themes.help")),
+                            help=grid_module.NO_HELP),
 ]
 
 _KIND_FIELDS = [field for _listed, field, _word in KINDS]

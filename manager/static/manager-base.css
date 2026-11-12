@@ -1466,6 +1466,28 @@ body::before {
   background: transparent;
 }
 .manager-menu-blocked-mark { color: var(--ink-3) !important; font-size: var(--icon-menu); }
+/* A refused entry that gives its reason: the words dim and the info mark does not, so the
+   one control on the line stays easy to find. Opacity on the item would take the mark
+   with it, so the label carries it instead. */
+.q-menu .manager-menu-item.manager-menu-blocked.manager-menu-explained,
+.q-menu .manager-menu-item.manager-menu-blocked.manager-menu-explained:hover { opacity: 1; }
+.q-menu .manager-menu-item.manager-menu-blocked.manager-menu-explained .manager-menu-text {
+  opacity: 0.55;
+}
+/* The mark's tap target is the padding, taken back out of the item's height. */
+.q-menu .manager-menu-item .manager-menu-says {
+  flex: none;
+  font-size: var(--icon-menu);
+  color: var(--ink-3);
+  cursor: pointer;
+  border-radius: 50%;
+  padding: calc((var(--target-inline) - var(--icon-menu)) / 2);
+  margin-block: calc((var(--target-inline) - var(--icon-menu)) / -2);
+  margin-inline-end: calc((var(--target-inline) - var(--icon-menu)) / -2);
+}
+.q-menu .manager-menu-item .manager-menu-says:hover,
+.q-menu .manager-menu-item .manager-menu-says:focus-visible { color: var(--accent); }
+.q-menu .manager-menu-item .manager-menu-says:focus-visible { outline: 2px solid var(--accent); }
 /* Which of a game's tables it offers. A radio rather than a glyph: a game has exactly
    one default, that is what a radio means, and it reads as a control - which this one
    is. Kept clear of the text glyphs in `game_tables.py`, whose question is a different
@@ -1629,6 +1651,8 @@ body::before {
    picker's own are the exception. */
 body.manager-menu-open .q-tooltip { display: none !important; }
 body.manager-menu-open .q-tooltip.manager-menu-tip { display: block !important; }
+/* The same words opened by the mark are already on screen, so the hover copy steps aside. */
+body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !important; }
 
 /* Quasar gives a tooltip no width. Same ceiling and wrapping as the grid's own. */
 .q-tooltip {

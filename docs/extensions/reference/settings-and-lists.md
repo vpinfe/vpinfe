@@ -258,8 +258,8 @@ right-click menu and in the menu the bar shows while any row is selected.  `{"ke
 | `action` | In place of `run`: the key of a dialog declared with [`ctx.ui.action`](actions.md).  It opens over the rows chosen, and its `ask` is handed their ids (see [Over rows](actions.md#over-rows)).  It takes no `danger`, since the dialog asks for itself.  The list is read again after the dialog runs |
 | `each` | With `action`: one dialog for each row chosen, in order, with **Skip** and **Stop** where Cancel would be.  Skip leaves that row as it was and moves on; Stop ends the run.  Without it, one dialog covers every row |
 | `danger` | Puts the verb last, under a rule, in red, and asks first.  The question is `list.<key>.verb.<verb>.confirm`, and `{count}` is the number of rows selected, which can be more than the rows the verb acts on when it also has `needs`.  The Manager does the asking; the route runs the verb whenever it is called |
-| `needs` | A row field that is true or false.  The verb is dimmed on a row where it is not, with the words `list.<key>.verb.<verb>.needs`.  With several rows selected, it acts on the rows where the field is true.  Core checks this again when the verb is pressed |
-| `one` | The verb makes no sense over several rows.  With several selected it stays in the menu, dimmed, and says **One at a time**.  Core turns it down for any other number of rows |
+| `needs` | A row field that is true or false.  The verb is dimmed on a row where it is not, with the words `list.<key>.verb.<verb>.needs` behind an info mark.  With several rows selected, it acts on the rows where the field is true.  Core checks this again when the verb is pressed |
+| `one` | The verb makes no sense over several rows.  With several selected it stays in the menu, dimmed.  Core turns it down for any other number of rows |
 | `label` | Shown as written; left out, `list.<key>.verb.<verb>.label`, then the verb's key |
 
 The question a danger verb asks has a singular and a plural, `{"one": "Remove this row?",

@@ -26,6 +26,7 @@ SHARE = "share"
 STEPS = (WHAT, PRIVACY, SHARE)
 
 PARTS = ("logs", "previous_log", "settings")
+HELPED = ("logs", "previous_log")
 SHOWN_PRECAUTIONS = 5
 
 
@@ -45,7 +46,8 @@ def _what(draft: Draft) -> dict[str, Any]:
         "help": t("manager.support.what.lead"), "steps": _row(WHAT),
         "fields": [{"key": part, "type": "switch", "value": getattr(draft, part),
                     "label": t(f"manager.support.what.{part}"),
-                    "help": t(f"manager.support.what.{part}_help")} for part in PARTS],
+                    **({"help": t(f"manager.support.what.{part}_help")}
+                       if part in HELPED else {})} for part in PARTS],
     }
 
 
@@ -146,7 +148,6 @@ def _summary(draft: Draft, refresh: Callable[[], None], inspect: Callable[[], No
         (panel.HEADING, t("manager.support.privacy.choices")),
         (t("manager.support.privacy.hide_tables"),
          panel.switch(draft.hide_tables, hide_tables)),
-        panel.note(t("manager.support.privacy.hide_tables_help")),
         (t("manager.support.privacy.also_hide"), _hiding(draft, rebuilt)),
         panel.note(t("manager.support.privacy.also_hide_help")),
         (panel.FULL, panel.action(t("manager.support.privacy.inspect"), inspect,
@@ -203,7 +204,7 @@ def _draw_share(draft: Draft) -> None:
     panel.facts(ui, [
         (t("manager.support.share.package"), together(
             panel.action(t("word.fetch"), download, icon=verbs.FETCH,
-                         hint=t("manager.support.share.download_hint")))),
+                         hint=panel.NO_HINT))),
         panel.note(t("manager.support.share.package_help", name=made.filename,
                      kb=max(1, round(len(made.data) / 1024)))),
         (t("manager.support.share.discord"), together(

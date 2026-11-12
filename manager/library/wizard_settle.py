@@ -55,10 +55,10 @@ def settle(field: dict[str, Any], answered: dict[str, str],
                 with ui.row().classes("items-center") as reveal:
                     panel.action(t("manager.wizard_lists.show_all", count=len(rows)),
                                  lambda: toggle(), icon=verbs.UNHIDE,
-                                 hint=t("manager.wizard_lists.show_all.hint"))()
-                    panel.action(t("manager.wizard_lists.hide_settled"),
+                                 hint=panel.NO_HINT)()
+                    panel.action(t("manager.wizard_lists.hide_matched"),
                                  lambda: toggle(), icon=verbs.HIDE,
-                                 hint=t("manager.wizard_lists.hide_settled.hint"))()
+                                 hint=panel.NO_HINT)()
                 shows, hides = [one for one in reveal.default_slot.children
                                 if isinstance(one, ui.button)]
             with box:
@@ -73,7 +73,7 @@ def settle(field: dict[str, Any], answered: dict[str, str],
                         with ui.element("div").classes("shrink-0"):
                             panel.action(t("manager.wizard_lists.change"),
                                          lambda one=one: change(one), icon=verbs.MATCH,
-                                         hint=t("manager.wizard_lists.change.hint"))()
+                                         hint=panel.NO_HINT)()
                     holders[key] = row
         on_control(box)
 
@@ -96,7 +96,7 @@ def settle(field: dict[str, Any], answered: dict[str, str],
             for one in rows:
                 holders[str(one["key"])].set_visibility(every["on"] or not one.get("settled"))
             settled = len(rows) - len(unsettled)
-            summary.set_text(t("manager.wizard_lists.all_settled", count=len(rows))
+            summary.set_text(t("manager.wizard_lists.nothing_left")
                              if rows and not unsettled else "")
             shows.set_visibility(not every["on"])
             hides.set_visibility(every["on"])

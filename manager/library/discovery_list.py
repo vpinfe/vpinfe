@@ -428,7 +428,7 @@ def _available(context: dict[str, Any], scene: Scene, kind: Kind, rows: list[dic
                                                                     for one in rows):
                 panel.action(t("manager.discovery.show_pictures"), show_pictures,
                              icon=verbs.SHOW_PICTURES, inline=True,
-                             hint=t("manager.discovery.show_pictures.help"))()
+                             hint=panel.NO_HINT)()
         with ui.column().classes("gap-0 w-full min-w-0 manager-rels"):
             for record, nested in release_match.in_lineage(shown()):
                 _release(context, scene, kind, record, view, features, picture_of(record),

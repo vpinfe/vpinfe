@@ -155,7 +155,7 @@ class Kept:
     controller makes it."""
 
     label: str
-    tip: str
+    tip: str = ""
     pad: bool = True
 
 
@@ -485,11 +485,12 @@ class Table:
             self._chip(row, binding, clashes.get(input_registry.contention(binding)) or [])
         for one in row.kept:
             with ui.element("div").classes("manager-chip-holder"):
-                with ui.element("div").classes("manager-member-chip manager-chip-quiet") \
-                        .tooltip(one.tip):
+                with ui.element("div").classes("manager-member-chip manager-chip-quiet") as chip:
                     if one.pad:
                         ui.icon(verbs.CONTROLLER).classes("manager-chip-glyph")
                     ui.label(one.label)
+                if one.tip:
+                    chip.tooltip(one.tip)
         if not held and not row.kept:
             ui.label(t("manager.binding_table.nothing_mapped")) \
                 .classes("manager-member-chip manager-tier manager-tier--warn") \
@@ -633,7 +634,7 @@ class Table:
                 words = t("manager.binding_table.opening", device=self._cab)
             elif not self._frontend_up:
                 panel.action(t("action.frontend.start"), self._open_windows, icon=verbs.OPEN_WINDOW,
-                             hint=t("action.frontend.start.help"))()
+                             hint=panel.NO_HINT)()
                 words = t("manager.binding_table.frontend_closed", device=self._cab)
             else:
                 ui.label(t(self.words.send_events, device=self._cab)) \

@@ -402,6 +402,8 @@ def _changed(held: dict, field: Any) -> bool:
 def _clear_hint(held: dict, field: Any, app_name: str) -> str:
     """What resetting it will leave in force, and whose value that is."""
     value, whose = _follows(held, field, app_name)
+    if value and not _leaves(held, field) and getattr(field, "blank", ""):
+        return t("manager.workbench.back_link_author")
     if value:
         return t("manager.workbench.back_to", value=value, whose=whose)
     return t("manager.workbench.back_link", whose=whose)
@@ -501,7 +503,7 @@ async def _config_rows(context: dict[str, Any], group: Any) -> None:
             entries.append((FULL, panel.action(
                 t("manager.workbench.more_settings", count=rest),
                 lambda: _open_all_settings(context, area=group.key), icon=verbs.DRILL,
-                hint=t("manager.workbench.more_settings.help"))))
+                hint=panel.NO_HINT)))
         with ui.column().classes("gap-0 manager-form"):
             panel.facts(ui, entries)
 

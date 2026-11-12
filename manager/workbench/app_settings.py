@@ -178,7 +178,7 @@ async def _selection_entries(context: dict[str, Any],
         partial(_every, context, inner, t("manager.app_settings.selection_all",
                                           count=len(tables),
                                           launcher_name=launcher.get("display_name") or "")),
-        icon=verbs.DRILL, hint=t("manager.app_settings.all_settings.help"))))
+        icon=verbs.DRILL, hint=panel.NO_HINT)))
     return entries
 
 
@@ -319,7 +319,7 @@ async def _program_entries(context: dict[str, Any],
     entries.append((panel.FULL, panel.action(
         t("manager.app_settings.change_button"),
         partial(_every_setting, context, table, inner), icon=verbs.DRILL,
-        hint=t("manager.app_settings.all_settings.help"))))
+        hint=panel.NO_HINT)))
     return entries
 
 

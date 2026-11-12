@@ -12,6 +12,7 @@ write every owner's.
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import sys
@@ -73,6 +74,66 @@ def tier(key):
     return "prose" if key.rsplit(".", 1)[-1] in PROSE_LEAVES else "chrome"
 
 
+def _grid_words():
+    """Every name the bundled grid contains, or None where the bundle cannot be found.
+
+    The grid takes `grid.*` as one dictionary and ignores any entry it has no name for,
+    so a key whose name is not in its script is a word nothing can show.
+    """
+    spec = importlib.util.find_spec("nicegui")
+    if spec is None or not spec.origin:
+        return None
+    bundle = Path(spec.origin).parent / "elements" / "aggrid" / "dist" / "index.js"
+    if not bundle.is_file():
+        return None
+    return set(re.findall(r"[A-Za-z_$][\w$]*", bundle.read_text(encoding="utf-8",
+                                                                errors="ignore")))
+
+
+def _settings_words():
+    """`(setting words, groups, lists, choices)` of every setting the schema declares."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from common.config import config_schema
+    stems, choices = {config_schema.window_screen("any").keys}, {}
+    for option in config_schema.options():
+        stems.add(option.keys)
+        choices[option.keys] = {str(value) for value in option.choices}
+    groups = {option.group for option in config_schema.options() if option.group}
+    return stems, groups, {spec.key for spec in config_schema.lists()}, choices
+
+
+def _live_setting_words(core):
+    """The `config.*` and `grid.*` keys of `core` that the schema or the bundled grid names.
+
+    A key not returned here is asked for by nothing, whatever prefix the code builds.
+    """
+    stems, groups, lists, choices = _settings_words()
+    grid = _grid_words()
+    live = set()
+    for key in core:
+        if key.startswith("grid."):
+            if grid is None or key[len("grid."):] in grid:
+                live.add(key)
+        elif key.startswith("config."):
+            head, _, rest = key[len("config."):].partition(".")
+            if head == "group":
+                found = rest.split(".")[0] in groups
+            elif head == "list":
+                found = rest.split(".")[0] in lists
+            else:
+                stem = max((s for s in stems if key == s or key.startswith(s + ".")),
+                           key=len, default=None)
+                found = stem is not None
+                leaf = key[len(stem) + 1:] if stem else ""
+                for marker in ("choice.", "choice_help."):
+                    if found and leaf.startswith(marker):
+                        found = leaf[len(marker):] in choices[stem]
+            if found:
+                live.add(key)
+    return live
+
+
 def referenced():
     """Every catalog key the tree asks for, literal or built from a prefix."""
     exact, prefixes = set(), set()
@@ -88,7 +149,11 @@ def referenced():
             text = path.read_text(encoding="utf-8", errors="ignore")
             exact.update(KEY_MARKUP.findall(text), KEY_TEXT.findall(text))
     exact.update(KEY_DOC.findall(THEME_DOC.read_text(encoding="utf-8")))
-    return exact, {p for p in prefixes if p}
+    exact.update(_live_setting_words(load(SOURCE)))
+    kept = {p for p in prefixes if p and not p.startswith("config.")}
+    if _grid_words() is not None:
+        kept.discard("grid.")
+    return exact, kept
 
 
 # Every ASCII letter mapped to something that looks like it and is not it. A word that

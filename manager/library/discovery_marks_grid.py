@@ -54,8 +54,7 @@ VIEWS: dict[str, list[str] | views.Preset] = {
         help=t("manager.discovery.marks.ignored.help")),
     WANTED_VIEW: views.Preset(
         columns=_SHORT, sort=_NEWEST,
-        filters={discovery_marks.FIELD: {"values": [vps_marks.WANTED]}},
-        help=t("manager.discovery.marks.wanted.help")),
+        filters={discovery_marks.FIELD: {"values": [vps_marks.WANTED]}}),
 }
 
 
@@ -64,12 +63,12 @@ def columns() -> list[dict[str, Any]]:
         grid_module.identifier(
             "name", t("word.game"), 260, pinned="left", subtitle="said",
             picture=thumbnails.FIELD, glyph=icons.GAMES,
-            help=t("manager.discovery.marks.name.help"),
+            help=grid_module.NO_HELP,
             **{":getQuickFilterText":
                "params => [params.data.name, params.data.said, params.data.detail]"
                ".filter(Boolean).join(' ')"}),
         grid_module.column(
-            "kind", t("word.kind"), 140, help=t("manager.discovery.marks.kind.help"),
+            "kind", t("word.kind"), 140, help=grid_module.NO_HELP,
             **grid_module.choice_filter([{"value": scope, "label": t(word)}
                                          for scope, word in _KIND_WORDS.items()])),
         grid_module.column("detail", t("manager.discovery.marks.detail"), 200, flex=1,
@@ -77,7 +76,7 @@ def columns() -> list[dict[str, Any]]:
         discovery_marks.column(),
         grid_module.column(
             "since", t("manager.discovery.marks.since"),
-            help=t("manager.discovery.marks.since.help"),
+            help=grid_module.NO_HELP,
             **grid_module.window_filter([(t(word), days)
                                          for word, days in discovery_ask.SINCE_DAYS]),
             **_SINCE_SAID),

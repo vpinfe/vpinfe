@@ -34,10 +34,10 @@ _BROWSER = (
 
 COLUMNS = [
     grid_module.identifier("browser", t("manager.security.col_browser"), 200, flex=1,
-                           help=t("manager.security.col_browser.help"),
+                           help=grid_module.NO_HELP,
                            **{":cellRenderer": _BROWSER}),
     grid_module.column("address", t("manager.security.col_address"), 130,
-                       help=t("manager.security.col_address.help")),
+                       help=grid_module.NO_HELP),
     grid_module.column("access", t("manager.security.col_access"), 90,
                        help=t("manager.security.col_access.help")),
     grid_module.column("created", t("manager.security.col_first_seen"), 130,
@@ -198,7 +198,6 @@ async def open_list(library: Library, sessions: list[dict[str, Any]], mine: str,
             frame.cancel(box.close, t("word.close"))
             go = frame.answer(t("manager.security.sign_out"), lambda: sign_out(picked_ids()),
                               icon=verbs.SIGN_OUT)
-            go.tooltip(t("manager.security.sign_out_hint"))
         go.set_enabled(False)
     await box
     if changed:

@@ -120,7 +120,7 @@ class Inspector:
                          icon=verbs.REMOVE, hint=t("manager.support.inspect.remove_line_hint"),
                          danger=True)()
             panel.action(t("manager.support.inspect.keep_line"), self._unpick,
-                         icon=verbs.KEEP, hint=t("manager.support.inspect.keep_line_hint"))()
+                         icon=verbs.KEEP, hint=panel.NO_HINT)()
 
     def _footer(self) -> None:
         draft = self.draft
@@ -132,7 +132,7 @@ class Inspector:
                 panel.action(t("manager.support.inspect.put_back", file=name),
                              lambda name=name: self._put_back(name),
                              icon=verbs.UNHIDE,
-                             hint=t("manager.support.inspect.put_back_hint", file=name))()
+                             hint=panel.NO_HINT)()
             if draft.removed:
                 panel.action(t("manager.support.inspect.restore_lines",
                                count=len(draft.removed)), self._restore_lines,

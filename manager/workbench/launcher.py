@@ -340,7 +340,6 @@ async def _launcher_details(context: dict[str, Any]) -> None:
         (HEADING, t("manager.workbench.this_launcher")),
         (t("word.name"), panel.field(launcher["display_name"], rename,
                              placeholder=launcher["app_name"], refuses=True)),
-        panel.note(t("manager.workbench.name_note")),
         (t("word.runs"), launcher["app_name"]),
         (t("word.default"), panel.switch(
             is_default, lambda e: make_default(bool(e.value)),

@@ -106,10 +106,10 @@ Runtime state written by VPinFE, not shown as a setting.
 | `thumbnail_height` | choice (small, medium, large) | `small` | Taller grid rows show bigger pictures and fit fewer on a screen |
 | `thumbnail_frame` | bool | `true` | A dark tile behind each picture keeps light pictures readable in the light theme |
 | `thumb_cache_max_mb` | int | `500` | Disk space the Manager may use for the small pictures in its lists |
-| `dates` | choice (language, iso, mm/dd/yyyy, dd/mm/yyyy, dd.mm.yyyy, yyyy/mm/dd) | `language` | How a day is written, wherever the Manager shows one |
-| `times` | choice (24h, 12h) | `24h` | How a time of day is written, where the Manager shows one |
+| `dates` | choice (language, iso, mm/dd/yyyy, dd/mm/yyyy, dd.mm.yyyy, yyyy/mm/dd) | `language` | Date Format |
+| `times` | choice (24h, 12h) | `24h` | Time Format |
 | `relative_dates` | bool | `true` | Anything from the last month says how long ago it was, whatever the format |
-| `units` | choice (region, cm, in) | `region` | How the Manager writes a length. By default this device's country decides |
+| `units` | choice (region, cm, in) | `region` | How the Manager writes a length. By default this device's country decides. |
 | `open_links` | choice (new, reuse) | `new` | Where a link to another site opens. Your browser picks tab or window. |
 | `hidden_overview` | list |  | Overview rows that stay quiet. A row left on reports whatever it finds. |
 | `discovery_shelf_order` | list |  | Top to bottom order of Discovery's Home shelves. Set on the Discovery page. |
@@ -143,7 +143,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `playfield_orientation` | choice (bottom_right, bottom_left, upright) | `bottom_right` | Which way round the playfield is stored |
 | `sound` | bool | `false` | Record the table's sound as a file of its own |
 | `sound_source` | string |  | A sound source by name |
-| `record_command` | string |  | The command that records each screen |
+| `record_command` | string |  | Record Command |
 | `encode_command` | string |  | Turns each recording into the stored file |
 
 ### `updates`
@@ -156,7 +156,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `get_media_for_new_games` | bool | `true` | When you add a game, downloads the media it is missing once it is matched, and takes its backglass picture from its backglass file. Never replaces your media. |
 | `update_downloaded_media` | bool | `true` | Once a day, replaces media from VPinMediaDB when it has a newer version. Never touches your own media. |
 | `ask_where_new_games_go` | bool | `true` | On, adding a game asks which folder it goes to. Off, it goes to the folder marked for them. |
-| `new_games_location` | string |  | The folder a new game is created in. Set from the library's folders. |
+| `new_games_location` | string |  | One of the library's folders |
 | `download_spreadsheet` | choice (never, daily, weekly, monthly) | `daily` | Downloads the latest copy on this schedule. Matching, game details and new VPS releases all read it. |
 | `show_updates` | bool | `true` | Shows the menu number, the Updates shelf and the notices on a game |
 
@@ -196,8 +196,8 @@ Runtime state written by VPinFE, not shown as a setting.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `active` | string | `Revolution` | Active Theme |
-| `registries` | list | `https://raw.githubusercontent.com/vpinfe/themes/main/themes.json` | Theme Lists, most trusted first. Only themes from the VPinFE Theme List are installed on their own. |
-| `repositories` | list |  | Single Themes, one repository each. They come before the Theme Lists. None is installed on its own. |
+| `registries` | list | `https://raw.githubusercontent.com/vpinfe/themes/main/themes.json` | Most trusted first. Only themes from the VPinFE Theme List are installed on their own. |
+| `repositories` | list |  | One repository each. If a Theme List has a theme of the same name, this one is used. None is installed on its own. |
 | `refresh` | choice (never, daily, weekly, monthly) | `daily` | How often to check for new themes and updates |
 
 ### `logger`
@@ -220,9 +220,9 @@ Runtime state written by VPinFE, not shown as a setting.
 | `playfield_variant` | choice (table, fss) | `table` | Which playfield picture your library uses: the standard one, or the one captured in Full Single Screen mode |
 | `playfield_resolution` | choice (4k, 1k) | `4k` | The size of playfield pictures VPinFE downloads |
 | `playfield_video_resolution` | choice (4k, 1k) | `1k` | The size of playfield videos VPinFE downloads |
-| `preferred_picture` | choice (auto, png, webp, jpg) | `auto` | The format Convert starts with for pictures. Automatic follows its advice |
-| `preferred_sound` | choice (auto, mp3, ogg) | `auto` | The format Convert starts with for sounds. Automatic follows its advice |
-| `keep_originals` | choice (auto, keep, discard) | `auto` | Whether Convert starts by copying each original to Backups. Automatic keeps them |
+| `preferred_picture` | choice (auto, png, webp, jpg) | `auto` | The format Convert starts with for pictures. Automatic follows its advice. |
+| `preferred_sound` | choice (auto, mp3, ogg) | `auto` | The format Convert starts with for sounds. Automatic follows its advice. |
+| `keep_originals` | choice (auto, keep, discard) | `auto` | Whether Convert starts by copying each original to Backups. Automatic keeps them. |
 | `manufacturer_logos_dir` | string |  | Put one image per manufacturer here, named for the manufacturer |
 | `wheelset` | string |  | Shows an alternate wheel style, from a folder under medias/wheels/ in each game. A game without it keeps its own wheel. A theme can override this. |
 
@@ -231,8 +231,8 @@ Runtime state written by VPinFE, not shown as a setting.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `setup_pending` | bool | `false` | Written true on this device's first save. Setup clears it when it finishes. |
-| `name` | string |  | What to call this device where one is listed. Defaults to its hostname. |
-| `features` | list | `library,frontend,devices,overview` | What this device is for. Each one you add appears in the Manager. |
+| `name` | string |  | Defaults to its hostname |
+| `features` | list | `library,frontend,devices,overview` | Each one you turn on adds its pages to the Manager |
 | `language` | choice (auto, en) | `auto` | What language VPinFE speaks. Your library's own words - table names and the rest - are never translated. |
 | `update_channel` | choice (stable, beta) | `stable` | Stable is for everyday use. Beta may be unstable but gets updates first. |
 
@@ -251,7 +251,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabled` | bool | `false` | Enable DOF |
-| `config_tool_api_key` | string |  | Downloads your DOF config. Sign in to the tool and copy the key from Cabinets |
+| `config_tool_api_key` | string |  | Downloads your DOF config. Sign in to the tool and copy the key from Cabinets. |
 | `download_config` | choice (never, daily, weekly, monthly) | `weekly` | How often to ask the DOF Config Tool for newer config |
 
 ### `real_dmd`
@@ -270,7 +270,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | --- | --- | --- | --- |
 | `chunk_size` | int | `1048576` | Files go across in pieces this size; lower it if sends fail on a weak connection |
 | `send_masked_config` | bool | `false` | Where a game has a settings file made for mobile devices, named with the word below, that file is sent to the device instead of its own settings |
-| `config_mask` | string | `mobile` | The word that marks a settings file made for the device. Copy a table's settings file, add the word before .ini, and the device gets that copy |
+| `config_mask` | string | `mobile` | The word that marks a settings file made for the device. Copy a table's settings file, add the word before .ini, and the device gets that copy. |
 
 ### `vpinplay`
 

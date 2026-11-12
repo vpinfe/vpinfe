@@ -245,20 +245,20 @@ class RemovedWordsTests(unittest.TestCase):
 
     def test_a_folder_with_games_says_how_many_left(self) -> None:
         self.assertEqual(self.said(games=214), "Removed /games/a. Its 214 games left the "
-                                               "library, and nothing on disk was touched")
+                                               "library, and nothing on disk was touched.")
 
     def test_a_folder_with_one_game_says_its_game(self) -> None:
         self.assertEqual(self.said(games=1), "Removed /games/a. Its game left the library, "
-                                             "and nothing on disk was touched")
+                                             "and nothing on disk was touched.")
 
     def test_a_single_game_folder_is_its_game(self) -> None:
         self.assertEqual(self.said(kind=model.KIND_GAME, games=0),
                          "Removed /games/a. Its game left the library, and nothing on "
-                         "disk was touched")
+                         "disk was touched.")
 
     def test_a_folder_that_cannot_be_read_has_no_count_to_give(self) -> None:
         self.assertEqual(self.said(state=path_state.NOT_ANSWERING, games=0),
-                         "Removed /games/a. Nothing on disk was touched")
+                         "Removed /games/a. Nothing on disk was touched.")
 
 
 class ActTests(unittest.IsolatedAsyncioTestCase):

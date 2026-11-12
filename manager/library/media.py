@@ -128,7 +128,7 @@ COLUMNS: list[dict[str, Any]] = [
     # The value stays the kind, which is what the Kind filter lists; a later page shows
     # as "Flyer, page 2" and the filter still finds it under Flyer.
     grid.column("label", t("word.kind"), 160, group=t(_FILE),
-                help=t("manager.media.kind.help"),
+                help=grid.NO_HELP,
                 **{":valueFormatter": "params => (params.data || {}).named || params.value"}),
     grid.column("path", t("word.path"), 300, group=t(_FILE),
                 help=t("manager.media.path.help")),
@@ -138,15 +138,15 @@ COLUMNS: list[dict[str, Any]] = [
     grid.column("used_by", t("word.used_by"), type="numericColumn", group=t(_FILE),
                 help=t("manager.media.used_by.help")),
     file_states.table("manager.media.unused_meaning", converts=True).column(
-        "reason", t("word.in_use"), 150, help=t("manager.media.reason.help"), group=t(_FILE)),
+        "reason", t("word.in_use"), 150, group=t(_FILE)),
     grid.column("match", t("manager.media.match"), 140, group=t(_SOURCE),
                 help=t("manager.media.match.help")),
     grid.column("covered_by", t("manager.media.covered"), 130, group=t(_FILE),
                 help=t("manager.media.covered_by.help")),
     grid.column("manufacturer", t("word.manufacturer"), 150, group=t(_GAME),
-                help=t("help.who_made_it")),
+                help=grid.NO_HELP),
     grid.year_column("year", t("word.year"), group=t(_GAME),
-                     help=t("help.year_released")),
+                     help=grid.NO_HELP),
 ]
 
 _ALL = [definition["field"] for definition in COLUMNS]
@@ -216,8 +216,7 @@ VIEWS: dict[str, list[str] | views.Preset] = {
         filters={"reason": {"values": [file_states.IN_USE, file_states.WONT_PLAY]}},
         help=t("manager.media.view_sources.help")),
     "manager.view.everything": views.Preset(
-        columns=tuple(_ALL),
-        help=t("manager.media.view_everything.help")),
+        columns=tuple(_ALL)),
 }
 
 

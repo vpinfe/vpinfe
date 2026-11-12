@@ -175,7 +175,7 @@ def _need_menu(menu: Any, need: needs.Need, fix: Callable[..., Any],
     menu.clear()
     with menu:
         if (mine := need.fix) is not None:
-            panel.menu_entry(mine.label, lambda: fix(need), under=mine.tip)
+            panel.menu_entry(mine.label, lambda: fix(need), says=mine.tip)
             if need.new and mine.key == needs.GET_MEDIA:
                 panel.menu_entry(
                     t("manager.needs.fix_new", fix=mine.label.removesuffix("…"),
@@ -184,10 +184,10 @@ def _need_menu(menu: Any, need: needs.Need, fix: Callable[..., Any],
         panel.menu_entry(
             t("manager.needs.skip_version") if need.key == needs.UPDATE
             else t("manager.needs.dismiss"),
-            lambda: acts.dismiss(need), under=needs.comes_back(need.key, need))
+            lambda: acts.dismiss(need), says=needs.comes_back(need.key, need))
         panel.menu_entry(
             t("manager.needs.stop_checking"), lambda: acts.stop(need.key, need.label),
-            under=t("manager.needs.stop_checking.extension", name=need.source)
+            says=t("manager.needs.stop_checking.extension", name=need.source)
             if needs.is_extension(need.key) else "")
 
 
@@ -205,7 +205,9 @@ def _need_row(need: needs.Need, state: dict[str, Any], fix: Callable[..., Any],
     row.on("keydown.enter", lambda: state["open_on"](need.opens))
     with row:
         ui.icon(need.icon).classes("manager-need-icon")
-        ui.label(need.label).classes("manager-setting grow min-w-0").tooltip(need.tip)
+        name = ui.label(need.label).classes("manager-setting grow min-w-0")
+        if need.tip:
+            name.tooltip(need.tip)
         if need.new and need.opens.view in ("games", "tables"):
             # Only a grid has rows to narrow to the new ones.
             from manager.library import games
@@ -254,15 +256,15 @@ def _aside_line(one: needs.Aside, acts: set_aside.Acts) -> None:
     with ui.row().classes("manager-aside-line items-center gap-3 w-full no-wrap"):
         ui.icon(one.icon).classes("manager-need-icon manager-need--muted")
         ui.label(one.label).classes("manager-setting grow min-w-0")
-        ui.label(one.chip).classes("manager-member-chip manager-chip-quiet") \
-            .tooltip(one.tip)
+        chip = ui.label(one.chip).classes("manager-member-chip manager-chip-quiet")
+        if one.tip:
+            chip.tooltip(one.tip)
         again = acts.check_again if one.stopped else acts.show_again
-        panel.action(t("manager.needs.check_again") if one.stopped
+        panel.action(t("manager.needs.turn_on") if one.stopped
                      else t("manager.needs.show_again"),
                      lambda: again(one.key, one.label), inline=True,
                      icon=verbs.REFRESH if one.stopped else verbs.UNHIDE,
-                     hint=t("manager.needs.check_again.help") if one.stopped
-                     else t("manager.needs.show_again.help"))()
+                     hint=panel.NO_HINT)()
 
 
 def _needs_you(arranged: needs.Arranged, state: dict[str, Any], fix: Callable[..., Any],
@@ -477,7 +479,7 @@ def _recent_jobs(library: Library, state: dict[str, Any]) -> None:
                              lambda: state["open_on"](needs.Opens(
                                  "jobs", keys={"jobs_find": "", "jobs_outcome": ""})),
                              inline=True, icon=verbs.GO,
-                             hint=t("manager.sections.all_jobs.help"))()
+                             hint=panel.NO_HINT)()
 
     def tick() -> None:
         if (now := signature()) != held["signature"]:

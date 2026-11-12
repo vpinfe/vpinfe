@@ -506,8 +506,7 @@ def _item(label: str, act: Callable[[], Any] | None, *, smart: bool = False,
     already true is inert, and stays open on a click it will not act on. `slot=False` is
     the entry in a menu of verbs, which has no leading slot."""
     def mark() -> None:
-        with ui.icon(verbs.SMART).classes("manager-menu-mark"):
-            ui.tooltip(t("manager.collections.smart.help")).classes("manager-menu-tip")
+        ui.icon(verbs.SMART).classes("manager-menu-mark")
 
     def trail() -> None:
         if held:
@@ -625,8 +624,7 @@ def _collection_row(one: dict[str, Any], held: bool, chosen: bool,
     row = ui.row().classes(classes)
     with row:
         if smart:
-            ui.icon(verbs.SMART).classes("manager-menu-mark") \
-                .tooltip(t("manager.collections.smart.help"))
+            ui.icon(verbs.SMART).classes("manager-menu-mark")
         else:
             ui.element("span").classes("manager-menu-mark")
         with ui.column().classes("gap-0 grow min-w-0"):

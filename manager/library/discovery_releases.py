@@ -58,39 +58,37 @@ def columns(kind_words: Mapping[str, str],
         grid_module.identifier(
             "name", t("word.game"), 260, pinned="left", subtitle="said",
             picture=thumbnails.FIELD, glyph=icons.GAMES,
-            help=t("manager.discovery.releases.name.help"),
+            help=grid_module.NO_HELP,
             **{":getQuickFilterText":
                "params => [params.data.name, params.data.said, params.data.find, "
                "params.data.authors, params.data.version].filter(Boolean).join(' ')"}),
         discovery_marks.column(),
         grid_module.column(
-            "kind", t("word.kind"), help=t("manager.discovery.releases.kind.help"),
+            "kind", t("word.kind"), help=grid_module.NO_HELP,
             **grid_module.choice_filter([{"value": listing, "label": t(word)}
                                          for listing, word in kind_words.items()])),
         grid_module.column("version", t("word.version"),
-                           help=t("manager.discovery.releases.version.help")),
+                           help=grid_module.NO_HELP),
         grid_module.list_column(
             "authors", t("manager.discovery.ask.group.author"), 200,
-            help=t("manager.discovery.releases.authors.help"), plain=True),
+            help=grid_module.NO_HELP, plain=True),
         grid_module.column(
             "added", t("manager.discovery.ask.added"),
             help=t("manager.discovery.releases.added.help"),
             **grid_module.window_filter([(t(word), days)
                                          for word, days in discovery_ask.SINCE_DAYS]),
             **_ADDED_SAID),
-        discovery_states.held().column(
-            "held", t("manager.view.have"), help=t("manager.discovery.releases.held.help")),
+        discovery_states.held().column("held", t("manager.view.have")),
         grid_module.column("format", t("manager.discovery.ask.format_pick"),
-                           help=t("manager.discovery.releases.format.help"),
+                           help=grid_module.NO_HELP,
                            **grid_module.choice_filter(_formats(release_rows))),
         grid_module.list_column(
             "features", t("manager.games.features"), 200,
-            help=t("manager.discovery.releases.features.help"), plain=True),
+            help=grid_module.NO_HELP, plain=True),
         discovery_states.mod().column(
             "mod", t("manager.games.mod"), help=t("manager.discovery.releases.mod.help")),
         discovery_states.in_library().column(
-            "in_library", t("manager.discovery.in_library"),
-            help=t("manager.discovery.in_library.help")),
+            "in_library", t("manager.discovery.in_library")),
     ]
 
 

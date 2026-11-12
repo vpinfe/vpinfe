@@ -749,8 +749,7 @@ async def _draw_collection(container: ui.column, title: ui.column, library: Libr
                     .tooltip(row.get("name") or "")
                 with ui.row().classes("items-center gap-1 no-wrap"):
                     if smart:
-                        ui.icon(verbs.SMART).classes("manager-heading-mark") \
-                            .tooltip(t("manager.collections.smart.help"))
+                        ui.icon(verbs.SMART).classes("manager-heading-mark")
                     ui.label(t("manager.workbench.smart_games", count=size) if smart
                              else t("manager.workbench.hand_picked", count=size)) \
                         .classes("text-xs manager-workbench-label leading-none truncate")

@@ -92,10 +92,6 @@ RAIL_PX = 230
 KINDS_NOTE = (t("manager.settings.kinds_note"), t("manager.settings.kinds_names_note"))
 ASSETS_NOTE = t("manager.settings.assets_note")
 
-# Every source that ships is listed, switched off included: "why is that catalog not
-# coming up" is answered by seeing it sitting there off.
-SOURCES_NOTE = t("manager.settings.sources_note")
-
 DISCOVERY_PAGE = "library.discovery"
 # The setting that shows updates: the number on the rail, the shelf and the notices.
 SHOW_COUNT = "show_updates"
@@ -903,7 +899,7 @@ def last_checked(checked_at: str, now: Callable[[], Any], *,
                 shown.tooltip(when.local(checked_at))
             panel.action(t("manager.settings.check_now"), now, icon=verbs.REFRESH, inline=True,
                          enabled=not blocked,
-                         hint=blocked or t("manager.settings.check_now.help"))()
+                         hint=blocked or panel.NO_HINT)()
 
     return (field_label(t("manager.settings.last_checked")), checked)
 
@@ -1269,7 +1265,6 @@ async def _discovery_page(library: Library, redraw: Callable[[], None],
             values = await offload.io(library.config_values)
         except Exception as exc:  # noqa: BLE001 - the sources stay on the page
             entries += [(panel.HEADING, t("manager.settings.heading_sources")),
-                        panel.lede(SOURCES_NOTE),
                         panel.intro(t("said.settings_unreadable"), hint=why(exc))]
         else:
             updates = next((one for one in schema if one.get("name") == "updates"), {})
@@ -1287,8 +1282,7 @@ async def _discovery_page(library: Library, redraw: Callable[[], None],
             entries += section_rows(library, "updates", counted, values, writable,
                                     region.refill, after={SHOW_COUNT: recount})
             entries += shelves.entries(library, state, values)
-            entries += [(panel.HEADING, t("manager.settings.heading_sources")),
-                        panel.lede(SOURCES_NOTE)]
+            entries.append((panel.HEADING, t("manager.settings.heading_sources")))
             entries += section_rows(library, "updates", rest, values, writable,
                                     region.refill)[0 if writable else 1:]
             entries += await _spreadsheet_check(library, region.refill)
@@ -2622,7 +2616,6 @@ async def _identity_page(library: Library, reported: str,
             (t("word.name"), panel.field(str(held.get("name") or ""),
                                                      rename,
                                  placeholder=reported)),
-            panel.note(t("manager.settings.name_note")),
         ]
         if language is not None:
             entries.append((language.label or humanize(language.key),
@@ -2701,7 +2694,7 @@ def _setup_entries() -> list[tuple[Any, Any]]:
         panel.intro(t("manager.setup.again_note")),
         (panel.FULL, panel.action(t("manager.setup.open"),
                                   lambda: setup_page.open_setup(), icon=verbs.GO,
-                                  hint=t("manager.setup.open.help"))),
+                                  hint=panel.NO_HINT)),
     ]
 
 

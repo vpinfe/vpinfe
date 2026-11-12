@@ -104,8 +104,7 @@ SETTING_LOOKS = "settings"
 _COLLECTION_LOOKS_DATA = "__vpinfeCollectionLooks"
 _COLLECTION_LOOK = (
     f"name => ((window.{_COLLECTION_LOOKS_DATA} || {{}})[name] || {{}}).smart"
-    f" ? {{mark: {json.dumps(verbs.SMART)},"
-    f" tip: {json.dumps(t('manager.collections.smart.help'))}}} : {{}}"
+    f" ? {{mark: {json.dumps(verbs.SMART)}}} : {{}}"
 )
 _SETTING_NAMES_DATA = "__vpinfeSettingNames"
 _SETTING_LOOK = (

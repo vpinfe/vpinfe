@@ -431,7 +431,7 @@ def setup_line(*, window: bool) -> None:
         ui.icon("error_outline").classes("manager-attention-icon")
         ui.label(t("manager.setup.not_finished")).classes("manager-attention-line grow")
         panel_parts.action(t("word.continue"), lambda: setup_page.open_setup(window=window),
-                           icon=verbs.GO, hint=t("manager.setup.open.help"))()
+                           icon=verbs.GO, hint=panel_parts.NO_HINT)()
 
 
 def arrives_in_setup(pending: bool, view: str) -> bool:

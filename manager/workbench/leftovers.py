@@ -78,7 +78,7 @@ def _one_line(context: dict[str, Any], launcher_id: str, count: int) -> None:
         ui.icon("error_outline").classes("manager-attention-icon")
         ui.label(t("manager.leftovers.line", count=count)).classes("manager-attention-line grow")
         panel.action(t("manager.leftovers.review"), review, icon=verbs.EXPAND,
-                     hint=t("manager.leftovers.review.help"))()
+                     hint=panel.NO_HINT)()
 
 
 def _full(context: dict[str, Any], launcher_id: str, items: list[dict[str, Any]],
@@ -166,4 +166,4 @@ def _row(one: dict[str, Any], turn_on: Any) -> None:
                 .classes("manager-help")
         if one.get("action") == TURN_ON:
             panel.action(t("manager.leftovers.turn_on"), lambda key=one["key"]: turn_on(key),
-                         icon=verbs.POWER, hint=t("manager.leftovers.turn_on.help"))()
+                         icon=verbs.POWER, hint=panel.NO_HINT)()

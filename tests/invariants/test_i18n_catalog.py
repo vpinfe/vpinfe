@@ -1805,18 +1805,22 @@ class TestEveryKeyIsServed(unittest.TestCase):
         self.assertEqual(offenders, [], "the catalog has no entry for these")
 
 
+def _script() -> Any:
+    spec = importlib.util.spec_from_file_location("i18n_script",
+                                                  ROOT / "scripts" / "i18n.py")
+    assert spec is not None and spec.loader is not None, "scripts/i18n.py is gone"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _scan() -> tuple[set[str], set[str]]:
     """Every key the tree asks for, exact and by prefix.
 
     Imported from `scripts/i18n.py` rather than restated here, so the translator's
     `--unused` report and this gate cannot come to different answers.
     """
-    spec = importlib.util.spec_from_file_location("i18n_script",
-                                                  ROOT / "scripts" / "i18n.py")
-    assert spec is not None and spec.loader is not None, "scripts/i18n.py is gone"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.referenced()
+    return _script().referenced()
 
 
 class TestTheCatalogHoldsNothingSpare(unittest.TestCase):
@@ -1840,6 +1844,18 @@ class TestTheCatalogHoldsNothingSpare(unittest.TestCase):
         spare = [key for key in sorted(SOURCE)
                  if key not in asks and not key.startswith(tuple(derived))]
         self.assertEqual(spare, [], "nothing asks for these; drop them from every catalog")
+
+    def test_no_start_of_a_setting_or_grid_key_excuses_the_rest(self) -> None:
+        _, derived = _scan()
+        self.assertEqual([p for p in derived if p.startswith(("config.", "grid."))], [])
+
+    def test_a_removed_setting_and_a_name_the_grid_lacks_are_not_asked_for(self) -> None:
+        live = _script()._live_setting_words({
+            "config.manager.appearance.label": "", "config.manager.appearance.choice.dark": "",
+            "config.manager.appearance.choice.gone": "", "config.manager.gone.label": "",
+            "config.group.gone": "", "grid.noRowsToShow": "", "grid.pinLeft": ""})
+        self.assertEqual(sorted(live), ["config.manager.appearance.choice.dark",
+                                        "config.manager.appearance.label", "grid.noRowsToShow"])
 
 
 class TestParametersMatchTheirTemplate(unittest.TestCase):

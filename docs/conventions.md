@@ -371,7 +371,7 @@ The test is rewording. If the English changes and the key is now wrong, the key 
 from the text, so say what the string is for instead of taking words from the sentence. An
 error is named for what went wrong (`error.games.unknown_kind`), not for its sentence.
 Variants of one thing share a stem and differ by a role word (`restored`, `restored_some`,
-`restore_failed`). Column help is named for the column (`manager.assets.reason.help`).
+`restore_failed`). Column help is named for the column (`manager.assets.scope.help`).
 
 `tests/invariants/test_a_key_names_a_place_not_a_sentence.py` fails on a leaf of more than
 three words, and on a three-word leaf whose words all appear, in order, in its own text. A
@@ -1016,13 +1016,22 @@ called Actions, which names the mechanism and says nothing about the subject.
   rule of its own; no page fills one manually. A right-click on a selected row, while several
   are selected, acts on the selection under a header that counts it (*3 copies*); on an
   unselected row it acts on that row alone and leaves the selection. A verb with no meaning over
-  several (`Verb.one`) stays in place, dimmed and reading *One at a time*; one that asks
+  several (`Verb.one`) stays in place, dimmed, with no mark because there is no reason to give; one that asks
   something about each row walks the selection, a dialog per row (`walks.each`). A grid
   draws checkboxes only when it is given a selection handler, and has a header menu
   wherever it has a row menu.
 - **Danger goes last, under a rule, in red.** A verb that cannot run right now stays in
-  the list, dimmed, with the reason under it, so nobody wonders where it went. One this
-  install can never perform is not in the list at all.
+  the list, dimmed, so nobody wonders where it went, and ends in the info mark
+  (`verbs.SAYS_MORE`) that gives the reason. One this install can never perform is not in
+  the list at all.
+- **A menu item is one line.** No item draws help or a reason under its label, because a
+  reason can run two sentences and a menu is for choosing. The words go behind the item:
+  a refused item ends in the info mark at full brightness while its label dims, and the
+  reason shows on hover and on a click, tap or Enter on the mark (`panel.menu_says`, drawn
+  for you by `Verb.hint` and `panel.menu_entry(refused=)`). A live item that needs an
+  explanation takes it as a hover tooltip alone, with no mark (`panel.menu_entry(says=)`,
+  `Verb.tip`), since nothing about it is refused. The line `under=` draws is for data, such
+  as the table a game's entry names, never for help.
 - **One word per act.** **Delete** means removed from disk, or removed permanently where there is
   no disk. **Remove** takes it out of the library and keeps the files. **Forget** stops
   tracking something VPinFE does not own. **Uninstall** is for a theme.
@@ -1740,7 +1749,8 @@ What's busy, puts them in a `.manager-tile-rows`: a name, a share and a size to 
     `slot=False` and carries no mark, so one icon never shifts the other labels. A list of
     collections keeps its slot, where the Smart mark tells entries apart.
   - **The trailing slot is state** - a checkmark, a count, a shortcut, or *In It* on an
-    entry that is already true, which is then inert. Never a second action.
+    entry that is already true, which is then inert. Never a second action, except the info
+    mark that gives a refused item's reason.
   - A **destructive** item colors its *text*; the band stays the ordinary one. A red row
     reads as an error that has already happened.
   - **A separator divides groups**, never decorates.

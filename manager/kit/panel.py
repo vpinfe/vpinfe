@@ -1808,6 +1808,17 @@ def choice(options: Sequence[tuple[str, str, str]], value: str | None,
     return draw
 
 
+# `hint=NO_HINT` says a button needs no tooltip because its words already say what pressing
+# it does. A control with no words (an icon alone) takes a real hint instead, and
+# `test_every_button_says_what_pressing_it_does` refuses the marker there.
+NO_HINT = "\0no-hint"
+
+
+def _hint_on(control: ui.button, hint: str) -> None:
+    if hint and hint != NO_HINT:
+        control.tooltip(hint)
+
+
 def action(label: str,
            # The event or nothing, which is NiceGUI's own Handler type: `js` emits a
            # result and this is what receives it.
@@ -1837,8 +1848,7 @@ def action(label: str,
             control.on("click", on_click, js_handler=js)
         if not enabled:
             control.disable()
-        if hint:
-            control.tooltip(hint)
+        _hint_on(control, hint)
 
     return draw
 
@@ -1853,8 +1863,7 @@ def link_action(label: str, *, to: str, icon: str = "", hint: str = "") -> Calla
         control = ui.button(label, icon=icon or None) \
             .props("flat dense no-caps size=sm").classes("manager-action")
         control.props["href"] = to
-        if hint:
-            control.tooltip(hint)
+        _hint_on(control, hint)
 
     return draw
 
@@ -1905,8 +1914,7 @@ def remote_action(label: str, on_click: Callable[..., Any] | None = None, *, ico
     else:
         control = control.props("no-caps flat") \
             .classes("remote-action" + (" remote-action--danger" if danger else ""))
-    if hint:
-        control.tooltip(hint)
+    _hint_on(control, hint)
     return control
 
 
@@ -1926,7 +1934,7 @@ def remote_key(label: str, on_click: Callable[..., Any] | None = None, *, icon: 
     control = control.props(props).classes(f"remote-key remote-key--{size}")
     if hold:
         control = control.props(f"data-hold-action={hold}")
-    control.tooltip(hint)
+    _hint_on(control, hint)
     return control
 
 
@@ -1945,30 +1953,53 @@ def icon_action(label: str, on_click: Callable[[], Any], *, icon: str, hint: str
     return draw
 
 
+def menu_says(item: Any, text: str, *, mark: bool) -> None:
+    """The words behind a menu item, kept off the menu itself: `text` shows on hover.
+    With `mark` the item also ends in an info mark that opens it on a click, a tap or
+    Enter, which is how a refused item gives its reason on a touch screen. Without it the
+    words are hover only. Call inside the item's row, after its label."""
+    ui.tooltip(text).classes("manager-menu-tip manager-detailed") \
+        .props["target"] = f"#{item.html_id}"
+    if mark:
+        item.classes("manager-menu-explained")
+        icon = ui.icon(verbs.SAYS_MORE).classes("manager-menu-says") \
+            .props("tabindex=0 role=button aria-hidden=false")
+        icon.props["aria-label"] = text
+        icon.on("click.stop", js_handler="() => {}")
+        icon.on("keydown.enter.stop", js_handler="(e) => e.target.click()")
+        with icon, ui.menu().classes("manager-detailed"):
+            ui.label(text)
+
+
 def menu_entry(label: str, on_click: Callable[..., Any] | None = None, *,
                mark: Callable[[], Any] | None = None,
                trail: Callable[[], Any] | None = None,
                classes: str = "", auto_close: bool = True, refused: str = "",
-               under: str = "", slot: bool = True) -> Any:
+               under: str = "", says: str = "", slot: bool = True) -> Any:
     """An entry in a menu whose items share the leading slot: `mark` draws into it, and an
     entry without one indents to it so the labels line up. `slot=False` is for an entry in
     a menu of verbs, which have none. `trail` draws the state at the end. `under` is a line
-    of detail below the label. `refused` dims it, with those words under it, and it does
-    nothing."""
+    of data below the label, never an explanation. `says` is the explanation of a live
+    entry, shown on hover. `refused` dims the entry, does nothing, and gives the reason
+    behind an info mark."""
     if refused:
         on_click, auto_close = None, False
         classes = f"manager-menu-blocked {classes}"
     item = ui.menu_item(on_click=on_click, auto_close=auto_close) \
         .classes(f"manager-menu-item {classes}".strip())
+    if refused:
+        item.props["aria-disabled"] = "true"
     with item, ui.row().classes("items-center gap-2 no-wrap w-full"):
         if mark is not None:
             mark()
         elif slot:
             ui.element("span").classes("manager-menu-mark")
-        with ui.column().classes("gap-0 grow min-w-0"):
+        with ui.column().classes("gap-0 grow min-w-0 manager-menu-text"):
             ui.label(label)
-            if refused or under:
-                ui.label(refused or under).classes("manager-menu-sub")
+            if under:
+                ui.label(under).classes("manager-menu-sub")
+        if refused or says:
+            menu_says(item, refused or says, mark=bool(refused))
         if trail is not None:
             trail()
     return item
@@ -1980,9 +2011,9 @@ class Verb:
 
     Written once per subject and drawn in both places it is offered: the panel header's
     menu and the grid row's context menu. `run` absent is offered and refused, and
-    `hint` says why. `choices` opens a second menu instead of acting. `to` makes it a
-    link to that address instead, one outside the Manager opening a new tab and marked
-    as leaving. `in_panel` false keeps it to the grid, for a verb whose panel home is a
+    `hint` says why, behind an info mark. `choices` opens a second menu instead of acting.
+    `to` makes it a link to that address instead, one outside the Manager opening a new tab
+    and marked as leaving. `in_panel` false keeps it to the grid, for a verb whose panel home is a
     field. `icon` is for where it is also drawn as a button; a menu item takes none.
     `draw` stands in for an entry of its own: it draws several into the menu being built,
     given what closes that menu, for the one list that is a submenu with state of its own.
@@ -2010,8 +2041,8 @@ class Verb:
 
 def for_selection(entries: Sequence[Verb], count: int) -> list[Verb]:
     """The list for `count` rows chosen: a one-at-a-time verb is refused while there are
-    several, so the menu keeps its shape as the selection grows. It is dimmed and says
-    nothing more."""
+    several, so the menu keeps its shape as the selection grows. It is dimmed and has no
+    reason to give, so no mark."""
     if count < 2:
         return list(entries)
     return [replace(one, run=None, choices=(), to="", draw=None, hint="") if one.one else one
@@ -2040,13 +2071,13 @@ def _verb_entry(verb: Verb) -> None:
         if leaves(verb.to):
             item.props["target"] = "_blank"
             item.props["rel"] = "noopener noreferrer"
-    if verb.tip:
-        item.tooltip(verb.tip)
+    refused_why = verb.hint if verb.hint and not live else ""
+    says = "\n\n".join(one for one in (refused_why, verb.tip) if one)
     with item, ui.row().classes("items-center gap-2 no-wrap w-full"):
-        with ui.column().classes("gap-0 grow min-w-0"):
+        with ui.column().classes("gap-0 grow min-w-0 manager-menu-text"):
             ui.label(verb.label)
-            if verb.hint and not live:
-                ui.label(verb.hint).classes("manager-menu-sub")
+        if says:
+            menu_says(item, says, mark=bool(refused_why))
         if verb.choices:
             ui.icon(verbs.DRILL).classes("manager-menu-trail")
         elif verb.to and leaves(verb.to):

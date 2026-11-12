@@ -77,7 +77,7 @@ class Tester:
                 return
             panel.action(t("manager.dof.test"), self._test, icon=verbs.RUN, inline=True,
                          enabled=not reason and bool(token),
-                         hint=reason or t("manager.dof.test_hint"))()
+                         hint=reason or panel.NO_HINT)()
             if reason:
                 ui.label(reason).classes("manager-help")
 

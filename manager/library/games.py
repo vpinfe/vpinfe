@@ -112,14 +112,14 @@ _RATING_CHOICES = ([{"value": 0, "label": t("manager.games.unrated")},
 COLUMNS = [
     grid.identifier("name", t(_GAME), 280, pinned="left", group=t(_GAME),
                 subtitle="said", picture=thumbnails.FIELD, glyph=icons.GAMES,
-                help=t("manager.games.game.help"),
+                help=grid.NO_HELP,
                 **row_drag.source(row_drag.GAMES)),
     # Always, including 1: it is the only thing saying the row collapses its tables,
     # and it qualifies everything to its right. "Table Count" rather
     # than "Tables", which read as the tables themselves - this is a number about the
     # game, and it belongs with the game's other facts.
     grid.column("table_count", t("word.table_count"), type="numericColumn", group=t(_GAME),
-                filter="agNumberColumnFilter", help=t("manager.games.table_count.help")),
+                filter="agNumberColumnFilter", help=grid.NO_HELP),
     game_states.vps_match().column("vps_match", t("manager.games.vps_match"), group=t(_GAME)),
     game_states.vps_entry().column("vps_shared", t("manager.games.vps_entry"),
                                    group=t(_GAME)),
@@ -130,14 +130,14 @@ COLUMNS = [
     # Named for whose rating it is, because the tables grid has one too and "Rating"
     # in two places invites the reader to assume they are the same number.
     grid.column("rating", t("manager.games.game_rating"), group=t(_GAME),
-                help=t("manager.games.game_rating.help"),
+                help=grid.NO_HELP,
                 cellClass="manager-stars-cell",
                 **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("game")}),
     grid.list_column("tags", t("manager.workbench.tags"), 200, group=t(_GAME),
-                     help=t("manager.games.tags.help"), looks=renderers.TAG_LOOKS),
+                     help=grid.NO_HELP, looks=renderers.TAG_LOOKS),
     grid.list_column("collections", t("manager.workbench.collections"), 200,
-                     group=t(_GAME), help=t("manager.games.collections.help"),
+                     group=t(_GAME), help=grid.NO_HELP,
                      looks=renderers.COLLECTION_LOOKS),
     grid.column("game_type", t("manager.games.type"), group=t(_GAME),
                 help=t("manager.games.type.help")),
@@ -145,11 +145,11 @@ COLUMNS = [
     # have a Manager one, so "Themes" in a column header is three things one screen apart.
     # The panel says "Themes" plainly, because a group headed Machine has said which.
     grid.list_column("themes", t("manager.games.game_themes"), 200, group=t(_GAME),
-                     help=t("manager.games.themes.help")),
+                     help=grid.NO_HELP),
     grid.column("manufacturer", t("word.manufacturer"), group=t(_GAME),
-                help=t("help.who_made_it")),
+                help=grid.NO_HELP),
     grid.year_column("year", t("word.year"), group=t(_GAME),
-                     help=t("help.year_released")),
+                     help=grid.NO_HELP),
     game_states.hidden(game=True).column("hidden", game_tables.FRONTEND, group=t(_GAME)),
     game_states.private().column("private", game_tables.COMMUNITY, group=t(_GAME)),
 ]
@@ -232,7 +232,6 @@ def asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     width = max((grid.header_width(label) for label in labels.values()), default=92)
     has = game_states.asset()
     return [has.column(f"asset_{key}", label, width, group=t(_ASSETS),
-                       help=t("help.asset_kind", label=label),
                        cellClass=drop_target.ASSET_CELL,
                        cellStyle={"textAlign": "center"})
             for key, label in sorted(labels.items(), key=lambda kv: kv[1].lower())]
@@ -373,7 +372,7 @@ def _nothing_yet(words: str, library: Any, state: dict[str, Any],
     library_add.add_action(library, state, view, empty=True)
     if rescan is not None:
         panel.action(t("manager.games.rescan"), rescan, icon=verbs.REFRESH,
-                     hint=t("manager.games.rescan_hint"))()
+                     hint=panel.NO_HINT)()
 
 
 def _narrow(table: Any, search: Any, state: dict[str, Any]) -> None:
@@ -882,26 +881,26 @@ TABLE_COLUMNS = [
     grid.identifier("game", t(_TABLE), 270, pinned="left", group=t(_GAME),
                 subtitle=("said", "", "said_built"),
                 picture=thumbnails.FIELD, glyph=icons.TABLES,
-                help=t("manager.games.table_game.help"),
+                help=grid.NO_HELP,
                 **row_drag.source(row_drag.TABLES)),
     grid.column("version", t("word.version"), group=t(_TABLE),
-                help=t("manager.games.version.help")),
+                help=grid.NO_HELP),
     grid.column("on_vps", t("manager.games.on_vps"), group=t(_TABLE),
                 help=t("manager.games.on_vps.help")),
     game_states.release().column("release", t("manager.games.release"), 150, group=t(_TABLE)),
     grid.column("mod_of", t("manager.games.mod_of"), 200, group=t(_TABLE),
-                help=t("manager.games.mod_of.help"),
+                help=grid.NO_HELP,
                 **{**grid.choice_filter([
                     {"value": _MOD, "label": t("manager.games.mod")},
                     {"value": "", "label": t("manager.games.no_mod_known")}],
                     formatted=True), **_MOD_DRAWN}),
     grid.column("author", t("word.author"), 160, group=t(_TABLE),
-                help=t("manager.games.author.help")),
+                help=grid.NO_HELP),
     grid.column("rom", t("manager.games.rom"), 110, group=t(_TABLE),
-                help=t("manager.games.rom.help")),
+                help=grid.NO_HELP),
     game_states.rom().column("rom_state", t("manager.games.rom_state"), 130, group=t(_TABLE)),
     grid.column("launcher", t("manager.games.launcher"), group=t(_TABLE),
-                help=t("manager.games.launcher.help"),
+                help=grid.NO_HELP,
                 **_LAUNCHER_DRAWN),
     grid.column("settings", t("manager.workbench.table_settings"), 155, group=t(_TABLE),
                 help=t("manager.games.settings.help"),
@@ -911,12 +910,12 @@ TABLE_COLUMNS = [
                      help=t("manager.games.own_settings.help"),
                      looks=renderers.SETTING_LOOKS),
     grid.column(GAME_RATING, t("manager.games.game_rating"), group=t(_GAME),
-                help=t("manager.games.game_rating.help"),
+                help=grid.NO_HELP,
                 cellClass="manager-stars-cell",
                 **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("game", on_table=True)}),
     grid.column("rating", t("manager.games.table_rating"), group=t(_TABLE),
-                help=t("manager.games.table_rating.help"),
+                help=grid.NO_HELP,
                 cellClass="manager-stars-cell",
                 **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("table")}),
@@ -937,7 +936,7 @@ TABLE_COLUMNS = [
     # Last and widest: it is the identifier of record, and the part that tells two
     # tables of one game apart sits at its end.
     grid.column("filename", game_tables.FILE, 420, group=t(_TABLE),
-                help=t("manager.games.filename.help")),
+                help=grid.NO_HELP),
     *FEATURE_COLUMNS,
 ]
 
@@ -977,7 +976,7 @@ def table_asset_columns(keys: list[str]) -> list[dict[str, Any]]:
     return [grid.column(f"asset_{key}", header, width,
                         cellClass=f"manager-media-cell {drop_target.ASSET_CELL}",
                         group=t(_ASSETS),
-                        help=t("help.table_asset_kind", label=(header)),
+                        help=grid.NO_HELP,
                         **grid.choice_filter([*_STATE_CHOICES, _UNUSED_CHOICE]),
                         **renderers.drawable("mark"))
             for key, header in headers.items()]

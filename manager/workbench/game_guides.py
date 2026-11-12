@@ -60,7 +60,7 @@ async def _guides_block(context: dict[str, Any]) -> None:
         with ui.element("div").classes("manager-slot-actions px-3"):
             panel.action(t("manager.workbench.add_guide"),
                          lambda: _add_guide(context), icon=verbs.ADD,
-                         hint=t("manager.workbench.add_guide.help"))()
+                         hint=panel.NO_HINT)()
         ext_groups.fill(context, "guides")
     # Read at the drop by the page's listener, `guide_moved`.
     context["state"]["guide_move"] = context
@@ -97,7 +97,7 @@ def _guide_act(context: dict[str, Any], guide: dict[str, Any]) -> Callable[[], N
     def draw() -> None:
         if guide.get("hidden"):
             panel.action(t("manager.workbench.unhide"), act, icon=verbs.UNHIDE, inline=True,
-                         hint=t("manager.workbench.unhide.help"))()
+                         hint=panel.NO_HINT)()
             return
         mine = guide.get("origin") != "vps"
         with ui.element("div").classes("manager-row-action"):

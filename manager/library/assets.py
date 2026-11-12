@@ -120,7 +120,7 @@ COLUMNS: list[dict[str, Any]] = [
                 help=t("manager.assets.scope.help")),
     grid.column("label", t("word.kind"), 160, group=t(_FILE),
                 **{":cellRenderer": _KIND},
-                help=t("manager.assets.kind.help")),
+                help=grid.NO_HELP),
     grid.column("path", t("word.path"), 300, group=t(_FILE),
                 help=t("manager.assets.path.help")),
     grid.column("source", t("word.source"), 165, group=t(_SOURCE),
@@ -129,13 +129,13 @@ COLUMNS: list[dict[str, Any]] = [
     grid.column("used_by", t("word.used_by"), type="numericColumn", group=t(_FILE),
                 help=t("manager.assets.used_by.help")),
     file_states.table("manager.assets.unused_meaning").column(
-        "reason", t("word.in_use"), 150, help=t("manager.assets.reason.help"), group=t(_FILE)),
+        "reason", t("word.in_use"), 150, group=t(_FILE)),
     grid.column("match", t("manager.assets.match"), 140, group=t(_SOURCE),
                 help=t("manager.assets.match.help")),
     grid.column("manufacturer", t("word.manufacturer"), 150, group=t(_GAME),
-                help=t("help.who_made_it")),
+                help=grid.NO_HELP),
     grid.year_column("year", t("word.year"), group=t(_GAME),
-                     help=t("help.year_released")),
+                     help=grid.NO_HELP),
 ]
 
 _ALL = [definition["field"] for definition in COLUMNS]
@@ -168,8 +168,7 @@ VIEWS: dict[str, list[str] | views.Preset] = {
         filters={"reason": {"values": [file_states.IN_USE]}},
         help=t("manager.assets.sources_view.help")),
     "manager.view.everything": views.Preset(
-        columns=tuple(_ALL),
-        help=t("manager.assets.everything_view.help")),
+        columns=tuple(_ALL)),
 }
 
 

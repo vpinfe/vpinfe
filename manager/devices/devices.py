@@ -773,19 +773,19 @@ COLUMNS: list[dict[str, Any]] = [
     # A column has to be declared to be sorted on, and this one is a fact about the row
     # rather than anything to read.
     grid.column("self", t("manager.devices.device_2"), hide=True,
-                help=t("manager.devices.self.help")),
+                help=grid.NO_HELP),
     grid.identifier("name", t("word.name"), 200, pinned="left",
-                help=t("manager.devices.name.help")),
+                help=grid.NO_HELP),
     grid.column("kind", t("word.kind"), 120, **grid.choice_filter(_KIND_CHOICES),
-                help=t("manager.devices.kind.help")),
+                help=grid.NO_HELP),
     REACH.column("state", t("word.state"), 150),
     grid.column("last_seen", t("word.last_seen"), 170,
-                help=t("manager.devices.last_seen.help"),
+                help=grid.NO_HELP,
                 **when.cell("last_seen")),
     grid.column("address", t("manager.devices.address"), 150,
-                help=t("manager.devices.address.help")),
+                help=grid.NO_HELP),
     grid.column("version", t("word.version"), 160,
-                help=t("manager.devices.version.help")),
+                help=grid.NO_HELP),
     browser_state.TABLE.column("browser", t("manager.devices.browser"), 150),
     grid.list_column("features", t("manager.devices.features"), 150,
                      help=t("manager.devices.features.help"),
@@ -1351,7 +1351,7 @@ def settings_door(context: dict[str, Any]) -> list[tuple[Any, Any]]:
                     else t("manager.devices.open_settings"),
                          open_it, icon="open_in_new", inline=True,
                          enabled=not stopped,
-                         hint=t("manager.devices.open_settings_here.help") if here
+                         hint=panel.NO_HINT if here
                          else t("manager.devices.open_settings.help"))()
 
     return [("", door), panel.note(t(stopped) if stopped else t(SETTINGS_NOTE))]

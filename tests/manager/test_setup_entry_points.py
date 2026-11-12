@@ -59,14 +59,12 @@ class SetupLineTests(unittest.TestCase):
         (button,) = _buttons(holder)
         self.assertEqual(button.text, "Continue")
 
-    def test_continue_is_a_button_with_a_hint_so_the_keyboard_reaches_it(self) -> None:
+    def test_continue_is_a_button_so_the_keyboard_reaches_it(self) -> None:
         """A label with a click handler is a mouse-only control."""
         holder = _drawn(lambda: page.setup_line(window=False))
 
         (button,) = _buttons(holder)
         self.assertTrue(button._props.get("icon"))
-        self.assertIn("Opens Setup over this page",
-                      [one.text for one in holder.descendants() if isinstance(one, ui.tooltip)])
 
     def test_pressing_continue_reopens_setup(self) -> None:
         opened = mock.AsyncMock()

@@ -298,7 +298,7 @@ class _Sources:
                     else t("manager.mediasource.on_device", device=host)) \
                     .classes("manager-source-host")
                 named.tooltip(t("manager.mediasource.this_device.help") if merged
-                              else t("manager.mediasource.on_device.help", device=host))
+                              else t("manager.mediasource.on_device.help"))
                 if self.online:
                     ui.tab("online", label=t("manager.mediasource.online"),
                            icon=verbs.FROM_ONLINE)

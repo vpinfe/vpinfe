@@ -1132,7 +1132,7 @@ def _open_frontend_offer(state: dict[str, Any], client_for_target: Callable[[], 
                       position="top")
 
     panel.remote_action(label, open_it, icon=verbs.OPEN_WINDOW,
-                        hint=t("action.frontend.start.help"))
+                        hint=panel.NO_HINT)
 
 
 def _dots_sheet(state: dict[str, Any], client_for_target: Callable[[], Any],
@@ -2577,26 +2577,26 @@ def _keys(client_for_target: Callable[[], Any]) -> None:
     with ui.column().classes("w-full gap-2 remote-keys"):
         with ui.element("div").classes("remote-keys-pages"):
             panel.remote_key(t("manager.remote.page_back"), icon=verbs.PAGE_EARLIER,
-                             hint=t("manager.remote.page_back.help"), size="page",
+                             hint=panel.NO_HINT, size="page",
                              hold="page_previous")
             panel.remote_key(t("manager.remote.page_forward"), icon=verbs.PAGE_LATER,
-                             hint=t("manager.remote.page_forward.help"), size="page",
+                             hint=panel.NO_HINT, size="page",
                              hold="page_next", icon_after=True)
         with ui.element("div").classes("remote-keys-steps"):
             panel.remote_key(t("input.previous.label"), icon=verbs.EARLIER,
-                             hint=t("manager.remote.previous.help"), hold="previous")
+                             hint=panel.NO_HINT, hold="previous")
             _tap_button("select", client_for_target, icon=verbs.PICK,
                         hint=t("manager.remote.select.help"), size="select")
             panel.remote_key(t("input.next.label"), icon=verbs.LATER,
-                             hint=t("manager.remote.next.help"), hold="next")
+                             hint=panel.NO_HINT, hold="next")
         ui.label(t("manager.remote.hold_hint")).classes("remote-hint")
     with ui.element("div").classes("remote-keys-tap"):
         _tap_button("back", client_for_target, icon=verbs.BACK,
                     hint=t("manager.remote.back.help"))
         _tap_button("menu", client_for_target, icon=verbs.OPEN_MENU,
-                    hint=t("manager.remote.menu.help"))
+                    hint=panel.NO_HINT)
         _tap_button("collection_menu", client_for_target, icon=verbs.OPEN_COLLECTIONS,
-                    hint=t("manager.remote.collections.help"))
+                    hint=panel.NO_HINT)
 
 
 def _tap_button(action: str, client_for_target: Callable[[], Any], *, icon: str, hint: str,

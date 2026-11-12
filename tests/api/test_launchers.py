@@ -1489,7 +1489,7 @@ class CuratedTests(_TableCase):
 
         self.assertEqual((heading["label"], heading["description"]),
                          ("Pinball MAME", "Plays ROMs"))
-        self.assertEqual(heading["note"], "Runs the original game's ROM")
+        self.assertEqual(heading["note"], "")
 
     def test_a_heading_at_a_table_still_names_the_rows_it_cannot_hold(self) -> None:
         plugins = self._groups("entry")["plugins"]

@@ -891,8 +891,7 @@ def _rom_state(pinmame: dict[str, Any], rom: str,
         ui.button(t("manager.workbench.assets"), icon=verbs.DRILL,
                   on_click=lambda: _choose(context, "assets")) \
             .props("flat dense no-caps size=sm") \
-            .classes("manager-action manager-action--inline") \
-            .tooltip(t("manager.workbench.rom_tip"))
+            .classes("manager-action manager-action--inline")
 
     return draw
 
@@ -918,7 +917,7 @@ def _add_action(context: dict[str, Any], kind: str) -> None:
     opens = _add_opener(context, kind)
     if opens is not None:
         panel.action(t("word.add"), opens, icon=verbs.ADD, inline=True,
-                     hint=t("manager.workbench.add_missing.help"))()
+                     hint=panel.NO_HINT)()
 
 
 def _add_opener(context: dict[str, Any], kind: str) -> Callable[[], Any] | None:
@@ -1088,7 +1087,7 @@ def _faults(context: dict[str, Any], table: dict[str, Any],
         faults.append(_Fault(
             (words, rom), words, {"rom": rom},
             panel.action(t("word.add"), opens, icon=verbs.ADD,
-                         hint=t("manager.workbench.add_missing.help")) if opens else None))
+                         hint=panel.NO_HINT) if opens else None))
     if updates and table.get("update_available"):
         source = table.get("source") or {}
         theirs = str(source.get("version") or "")
@@ -1487,4 +1486,4 @@ def _tables_block(context: dict[str, Any]) -> None:
     # where one of these is added.
     with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
         panel.action(t("manager.workbench.add_table"), lambda: _add_table(context),
-                     icon=verbs.ADD, hint=t("manager.workbench.add_table.help"))()
+                     icon=verbs.ADD, hint=panel.NO_HINT)()

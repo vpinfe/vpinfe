@@ -64,8 +64,7 @@ def _kept(term: str) -> Kept:
     if devices == {_DEVICE_KEY}:
         return Kept(t("manager.vpx_input.other_key"), t("manager.vpx_input.other_key.help"),
                     pad=False)
-    return Kept(t("manager.vpx_input.controller_button"),
-                t("manager.vpx_input.controller_button.help"))
+    return Kept(t("manager.vpx_input.controller_button"))
 
 
 def table_rows(group: Any, flat: Mapping[str, str]) -> list[Row]:

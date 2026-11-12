@@ -34,7 +34,7 @@ COLUMNS = [
     grid_module.column("note", t("manager.backups.note"), 200, flex=1,
                        help=t("manager.backups.note.help")),
     grid_module.column("size", t("word.size"), 100, type="numericColumn",
-                       help=t("manager.backups.size.help"),
+                       help=grid_module.NO_HELP,
                        **{":valueFormatter": "params => (params.data || {}).size_text || ''"}),
 ]
 

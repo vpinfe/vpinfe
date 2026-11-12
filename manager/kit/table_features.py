@@ -68,8 +68,7 @@ _STATES = {
     UNUSED: State(UNUSED, t("manager.table_features.not_used"), "manager-tier--off", "",
                   t("manager.table_features.script_unused")),
     UNKNOWN: State(UNKNOWN, t("manager.table_features.unknown"), "manager-tier--unknown", "",
-                   t("manager.table_features.unknown_tip"), glyph="?",
-                   glyph_class="manager-unknown"),
+                   "", glyph="?", glyph_class="manager-unknown"),
 }
 
 # In place, then unknown, then the blank: the order a header and a filter list them.

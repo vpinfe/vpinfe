@@ -41,7 +41,7 @@ LABEL = t("manager.tageditor.tags")
 SCOPE = "manager.tags"
 
 USE = states.Table(
-    covers=t("manager.tageditor.unused.help"),
+    covers="",
     states=(states.State(TAG_IN_USE, t("manager.tageditor.in_use"),
                          t("manager.tageditor.in_use.meaning"), glyph=states.TICK),
             states.State(TAG_UNUSED, t("manager.tageditor.unused"),
@@ -56,15 +56,15 @@ SPELLING = states.Table(
 
 COLUMNS = [
     grid.identifier("tag", t("manager.tageditor.tag"), 220, pinned="left",
-                    help=t("manager.tageditor.tag.help"),
+                    help=grid.NO_HELP,
                     **renderers.drawable("chips", list="tag_list",
                                          looks=renderers.TAG_LOOKS)),
     grid.column("same", t("manager.tageditor.spelled_as"), 160,
                 help=t("manager.tageditor.spelled_as.help")),
     grid.column("description", t("manager.workbench.description"), 280,
-                help=t("manager.tageditor.description.help")),
+                help=grid.NO_HELP),
     grid.column("games", t("manager.tageditor.games"), type="numericColumn",
-                help=t("manager.tageditor.games.help")),
+                help=grid.NO_HELP),
     grid.column("tables", t("manager.tageditor.tables"), type="numericColumn",
                 help=t("manager.tageditor.tables.help")),
     grid.column("source", t("manager.tags.from"), 200, help=t("manager.tags.from.help")),

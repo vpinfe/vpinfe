@@ -101,7 +101,7 @@ _REDRAWN: dict[str, Any] = {":equals": "() => false"}
 
 COLUMNS: list[dict[str, Any]] = [
     grid.identifier("name", t("word.name"), 260, pinned="left",
-                    help=t("manager.players.name.help"),
+                    help=grid.NO_HELP,
                     **{":cellRenderer": _NAME, **_REDRAWN}),
     grid.column("initials", t("manager.players.initials"), 160,
                 help=t("manager.players.initials.help"),
@@ -723,8 +723,7 @@ def _picture_slot(context: dict[str, Any]) -> None:
     label = t("manager.players.picture")
 
     with ui.column().classes("w-full gap-1 min-w-0"):
-        with ui.element("div").classes("manager-slot-art manager-slot-art--person") \
-                .tooltip(t("manager.players.picture.help")):
+        with ui.element("div").classes("manager-slot-art manager-slot-art--person"):
             with ui.column().classes("manager-slot-blank items-center gap-1"):
                 if initials:
                     context["picture_initials"] = ui.label(initials) \

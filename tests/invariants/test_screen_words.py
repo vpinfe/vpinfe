@@ -29,7 +29,6 @@ CABINET = {
     "manager.setup.cabinet": "the physical cabinet, Setup's own How you play answer",
     "manager.themes.both": "a theme made for a cabinet or a desktop",
     "manager.themes.cabinet": "a theme made for a cabinet rather than a desktop",
-    "manager.themes.made_for.help": "what a theme is made for: a cabinet, a desktop or both",
 }
 
 MACHINE: dict[str, str] = {

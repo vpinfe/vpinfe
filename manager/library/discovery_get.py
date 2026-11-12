@@ -581,7 +581,7 @@ def use_a_file(context: dict[str, Any], game_id: str, holder: Any, *, ours: tupl
     def draw() -> None:
         heard = uploads.listener(arrived)
         panel.action(t("manager.discovery.use_file"), heard, icon=verbs.FROM_FILE,
-                     hint=t("manager.discovery.use_file.help"),
+                     hint=panel.NO_HINT,
                      js="() => window.__managerChoose(false, emit, true)")()
 
     return draw

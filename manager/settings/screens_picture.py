@@ -476,7 +476,7 @@ class Picture:
             ui.icon(verbs.DONE).classes("manager-rotation-icon")
             ui.label(t("manager.screens.rotated_correctly"))
         panel.action(t("manager.screens.check_again"), self._check_again,
-                     icon=verbs.REVERT, hint=t("manager.screens.check_again.help"))()
+                     icon=verbs.REVERT, hint=panel.NO_HINT)()
 
     async def _hold(self) -> None:
         if self.test is None or await self.test.hold() or self.phase != _CHECKING:

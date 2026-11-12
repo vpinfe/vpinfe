@@ -1,7 +1,8 @@
 """Every button says what pressing it does: `panel.action`, `panel.remote_action` and
-`panel.remote_key` each carry a `hint=`, drawn as its tooltip, and it is never empty. A
-button built by hand with an icon and no label carries a tooltip too, since the icon is
-all a person has."""
+`panel.remote_key` carry a `hint=` drawn as its tooltip, or `panel.NO_HINT` where the
+button's own words already say it. A button with no words takes a hint, never the
+marker. A button built by hand with an icon and no label carries a tooltip too, since the
+icon is all a person has."""
 
 from __future__ import annotations
 
@@ -115,7 +116,29 @@ class TestEveryButtonSaysWhatPressingItDoes(unittest.TestCase):
                 if not _has_hint(node):
                     offenders.append(f"{path.relative_to(REPO).as_posix()}:{node.lineno}")
         self.assertGreater(total, 70)
-        self.assertEqual(offenders, [], "give it a hint= that says what pressing it does")
+        self.assertEqual(offenders, [], "give it a hint= that says what pressing it does, "
+                                        "or hint=panel.NO_HINT where its words already do")
+
+    def test_no_hint_is_only_for_a_button_with_words(self) -> None:
+        wordless = []
+        marked = 0
+        for path, tree in _sources():
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                for keyword in node.keywords:
+                    if keyword.arg == "hint" and isinstance(keyword.value, ast.Attribute) \
+                            and keyword.value.attr == "NO_HINT":
+                        marked += 1
+                        label = node.args[0] if node.args else None
+                        named = (isinstance(node.func, ast.Attribute) and node.func.attr in (
+                            "action", "link_action", "remote_action", "remote_key")) \
+                            or (isinstance(node.func, ast.Name) and node.func.id == "_tap_button")
+                        if not named or label is None or (
+                                isinstance(label, ast.Constant) and not label.value):
+                            wordless.append(f"{path.relative_to(REPO).as_posix()}:{node.lineno}")
+        self.assertGreater(marked, 0, "the scan stopped finding the marker")
+        self.assertEqual(wordless, [], "a button with no words needs a hint saying what it does")
 
     def test_a_button_with_no_label_has_a_tooltip(self) -> None:
         offenders = []

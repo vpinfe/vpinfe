@@ -131,14 +131,14 @@ ORIGINAL = states.Table(
 
 COLUMNS = [
     grid_module.identifier("name", t("manager.backups.name"), 220, pinned="left",
-                           help=t("manager.backups.name.help"),
+                           help=grid_module.NO_HELP,
                            **{":getQuickFilterText":
                               "params => [(params.data || {}).name, (params.data || {}).holds]"
                               ".filter(Boolean).join(' ')"}),
     grid_module.column("table", t("word.table"), 200,
-                       help=t("manager.backups.table.help")),
+                       help=grid_module.NO_HELP),
     grid_module.column("kind", t("word.kind"), 150,
-                       help=t("manager.backups.kind_column.help"),
+                       help=grid_module.NO_HELP,
                        **grid_module.choice_filter(_choices(KIND_WORDS))),
     grid_module.column("taken", t("manager.backups.taken"), 190,
                        tooltipField="taken_utc", help=t("manager.backups.taken.help"),
@@ -147,7 +147,7 @@ COLUMNS = [
                        help=t("manager.backups.reason.help"),
                        **grid_module.choice_filter(_choices(REASON_WORDS))),
     grid_module.column("size", t("word.size"), 100, type="numericColumn",
-                       help=t("manager.backups.size.help"),
+                       help=grid_module.NO_HELP,
                        **{":valueFormatter": "params => (params.data || {}).size_text || ''"}),
     ORIGINAL.column("original", t("manager.backups.original"), 130),
     grid_module.column("note", t("manager.backups.note"), 220,

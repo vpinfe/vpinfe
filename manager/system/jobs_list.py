@@ -72,14 +72,14 @@ def _said(field: str) -> dict[str, Any]:
 
 COLUMNS = [
     grid.identifier("what", t("manager.jobs.what"), 230, pinned="left",
-                    help=t("manager.jobs.what.help"), **OPENS_REPORT),
+                    help=grid.NO_HELP, **OPENS_REPORT),
     grid.column("started", t("manager.jobs.started"), 190, filter=False,
                 help=t("manager.jobs.started.help"), **_said("started"), **OPENS_REPORT),
     grid.column("took", t("manager.jobs.took"), 130, filter=False,
                 help=t("manager.jobs.took.help"), **_said("took"), **OPENS_REPORT),
     OUTCOME_STATES.column("outcome", t("manager.jobs.outcome"), 140, **OPENS_REPORT),
     grid.column("detail", t("manager.jobs.detail"), 420,
-                help=t("manager.jobs.detail.help"),
+                help=grid.NO_HELP,
                 **{":cellRenderer": _DETAIL_RENDERER}, **OPENS_REPORT),
 ]
 

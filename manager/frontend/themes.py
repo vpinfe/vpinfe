@@ -87,21 +87,21 @@ PAIR_RATIO = 4 / 3
 
 COLUMNS: list[dict[str, Any]] = [
     grid.identifier("name", t("manager.themes.theme"), 320, subtitle="said",
-                    help=t("manager.themes.theme.help"),
+                    help=grid.NO_HELP,
                     picture="preview", glyph=theme_card.GLYPH, frame=thumbnails.PREVIEW),
     grid.column("made_for", t("manager.themes.made_for"), 190,
-                help=t("manager.themes.made_for.help"),
+                help=grid.NO_HELP,
                 **grid.choice_filter([{"value": key, "label": label}
                                       for key, label in MADE_FOR.items()])),
     STATUS.column("status", t("word.status"), 160),
     grid.column("updated", t("manager.themes.updated"), 150,
                 help=t("manager.themes.updated.help"), **when.cell("updated")),
     TRUST.column("trust", t("manager.themes.trust"), 140),
-    grid.column("author", t("word.author"), 140, help=t("manager.themes.author.help")),
+    grid.column("author", t("word.author"), 140, help=grid.NO_HELP),
     grid.column("registry", t("manager.themes.list"), 200,
-                help=t("manager.themes.list.help")),
+                help=grid.NO_HELP),
     grid.column("repository", t("manager.themes.repository"), 280,
-                help=t("manager.themes.repository.help")),
+                help=grid.NO_HELP),
 ]
 _ALL = [one["field"] for one in COLUMNS]
 _SHOWN = ("name", "made_for", "status", "updated", "trust")
@@ -112,14 +112,12 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.everything": views.Preset(
         columns=_SHOWN, help=t("manager.view.themes_everything.help")),
     "manager.view.themes_installed": views.Preset(
-        columns=_SHOWN, filters={"status": {"values": [ACTIVE, UPDATE, INSTALLED]}},
-        help=t("manager.view.themes_installed.help")),
+        columns=_SHOWN, filters={"status": {"values": [ACTIVE, UPDATE, INSTALLED]}}),
     "manager.view.updates": views.Preset(
         columns=_QUIET, filters={"status": {"values": [UPDATE]}},
         help=t("manager.view.themes_updates.help")),
     "manager.view.themes_available": views.Preset(
-        columns=_QUIET, filters={"status": {"values": [AVAILABLE]}},
-        help=t("manager.view.themes_available.help")),
+        columns=_QUIET, filters={"status": {"values": [AVAILABLE]}}),
 }
 
 
@@ -490,8 +488,6 @@ def acts(library: Library, themes: list[dict[str, Any]],
 # The one act `_status_value` offers, named by its icon rather than by which of Install,
 # Update or Make Active it is - `acts` already picked that.
 _STATUS_HINTS = {
-    verbs.FETCH: "manager.themes.install.help",
-    verbs.UPDATE: "manager.themes.update.help",
     verbs.ACTIVATE: "manager.themes.make_active.help",
     verbs.ACCEPT: "manager.themes.accept.help",
 }
@@ -511,7 +507,8 @@ def _status_value(context: dict[str, Any], library: Library,
             panel.state(STATUS.word(kind), _PANEL_TIER.get(kind, "off"))()
             if waiting is not None:
                 panel.action(waiting.label, waiting.run, icon=waiting.icon, inline=True,
-                             hint=t(_STATUS_HINTS.get(waiting.icon, "")))()
+                             hint=t(_STATUS_HINTS[waiting.icon]) if waiting.icon in _STATUS_HINTS
+                             else panel.NO_HINT)()
     return draw
 
 

@@ -806,8 +806,9 @@ def build(ctx: Any) -> None:
             # Play history is one file - GameStats.csv or the Popper database - where
             # every other source is a folder, and a folder check marks it missing.
             **({"wants": "file"} if source.key == "history" else {}),
-            "help": (ctx.t("wizard.sources.worked_out", help=source.help)
-                     if source.derived else source.help),
+            "help": (ctx.t("wizard.sources.worked_out", help=source.help) if source.help
+                     else ctx.t("wizard.sources.worked_out_alone"))
+            if source.derived else source.help,
         } for source in sources]
 
         # Only where there is a choice to make. One system is not a decision, and a
@@ -984,8 +985,7 @@ def build(ctx: Any) -> None:
                  "choices": [[name, ctx.t("wizard.names.some.choice",
                                           name=ctx.t(f"wizard.names.field.{name}"),
                                           count=differing[name])]
-                             for name in plan_for.DETAIL_FIELDS],
-                 "help": ctx.t("wizard.names.some.help")},
+                             for name in plan_for.DETAIL_FIELDS]},
             ],
         }
 
@@ -1017,7 +1017,8 @@ def build(ctx: Any) -> None:
 
             def option(kind: str, name: str, help_text: str) -> list[Any]:
                 if kind == looks:
-                    help_text = ctx.t("wizard.media.looks_like", help=help_text)
+                    help_text = (ctx.t("wizard.media.looks_like", help=help_text) if help_text
+                                 else ctx.t("wizard.media.looks_like_alone"))
                 return [kind, name, help_text, sample]
 
             fields.append(
@@ -1029,8 +1030,7 @@ def build(ctx: Any) -> None:
                  "choices": [
                      option(mapping.LOGOS, ctx.t("wizard.media.logos"),
                             ctx.t("wizard.media.logos.help")),
-                     option(mapping.WHEELS, ctx.t("wizard.media.wheels"),
-                            ctx.t("wizard.media.wheels.help"))]})
+                     option(mapping.WHEELS, ctx.t("wizard.media.wheels"), "")]})
         fields.append({"key": "fetch_media", "type": "switch",
                        "label": ctx.t("wizard.media.fetch.label"),
                        "value": _on(said, "fetch_media"),

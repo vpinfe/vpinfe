@@ -131,7 +131,7 @@ def run_card(state: dict[str, Any], client_for_target: Client,
     if recording:
         panel.remote_action(t("manager.remote.pause"),
                             partial(act, "pause_capture", "manager.remote.pause_failed"),
-                            icon=verbs.PAUSE, hint=t("manager.remote.pause.help"))
+                            icon=verbs.PAUSE, hint=panel.NO_HINT)
     else:
         panel.remote_action(t("manager.page.resume"),
                             partial(act, "resume_capture", "manager.remote.resume_failed"),
@@ -277,7 +277,7 @@ def controller(state: dict[str, Any], client_for_target: Client,
                         icon=verbs.ACCEPT, primary=True,
                         hint=t("manager.record.use_this.help"))
     panel.remote_action(t("manager.record.discard"), partial(decide, False),
-                        icon=verbs.DISCARD, hint=t("manager.record.discard.help"))
+                        icon=verbs.DISCARD, hint=panel.NO_HINT)
     panel.remote_action(t("manager.record.skip"), skip, icon=verbs.SKIP,
                         hint=t("manager.record.skip.help"))
     panel.remote_action(t("manager.record.stop"), partial(end, state, client_for_target, redraw),

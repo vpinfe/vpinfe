@@ -424,7 +424,7 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
     waiting = tuple(sorted(one for one in watched.get("recordings") or () if one))
     if waiting:
         rows.append(Need("recordings", t("manager.needs.recordings"),
-                         t("manager.needs.recordings.tip"), ACCENT, verbs.REVIEW,
+                         "", ACCENT, verbs.REVIEW,
                          Opens(then=REVIEW), waiting, _UNIT_RECORDINGS))
 
     if untied := library.untied_tables():
@@ -564,7 +564,7 @@ class Aside:
     chip: str
     tip: str
     # False where it was dismissed, which Show Again undoes; True where its check is off,
-    # which Check Again turns back on.
+    # which Turn On resumes.
     stopped: bool = False
 
 
@@ -585,7 +585,7 @@ def _dismissed_aside(need: Need) -> Aside:
 
 def _stopped_aside(key: str) -> Aside:
     return Aside(key, name_of(key), _ICONS[key], t("manager.needs.chip_stopped"),
-                 t("manager.needs.chip_stopped.tip"), stopped=True)
+                 "", stopped=True)
 
 
 def _extension_unread(key: str, unread: Any) -> bool:
@@ -630,11 +630,11 @@ def arrange(rows: list[Need], record: Mapping[str, list[str]], stopped: set[str]
         covered = need.covered
         held = set(record.get(need.key, ()))
         if is_extension(need.key) and need.key in stopped:
-            # Its dismissal is kept: Check Again brings the row back as it was left.
+            # Its dismissal is kept: Turn On brings the row back as it was left.
             if held:
                 kept[need.key] = list(record[need.key])
             aside.append(Aside(need.key, need.label, need.icon, t("manager.needs.chip_stopped"),
-                               t("manager.needs.chip_stopped.tip"), stopped=True))
+                               "", stopped=True))
             continue
         still = [one for one in covered if one in held]
         away = _held_for_games(need.key, record.get(need.key, ()), filled, exclude=covered)

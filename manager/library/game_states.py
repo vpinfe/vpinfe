@@ -108,7 +108,7 @@ def vps_match() -> states.Table:
     """Whether a game is matched to a VPS entry. Unmatched is amber: VPinFE can look
     nothing up for it. Cleared is the user's own answer, so it is quiet."""
     return states.Table(
-        covers=t("manager.games.vps_match.help"),
+        covers="",
         states=(
             states.State(game_tables.VPS_MATCHED, t("manager.game_tables.matched"),
                          t("manager.table_state.vps.matched"), glyph=states.TICK),
@@ -122,7 +122,7 @@ def how_matched() -> states.Table:
     """How the match in force was made; blank where there is none."""
     said = game_tables.HOW_MATCHED
     return states.Table(
-        covers=t("manager.games.how_matched.help"),
+        covers="",
         states=(
             states.State("auto", said["auto"], t("manager.table_state.how.auto")),
             states.State("import", said["import"], t("manager.table_state.how.import")),

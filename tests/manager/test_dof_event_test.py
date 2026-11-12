@@ -204,7 +204,7 @@ class TesterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_every_button_carries_what_pressing_it_does(self) -> None:
         await self._draw(Library({"event": None, "blocked": ""}))
-        self.assertEqual(self._last()["hint"], t("manager.dof.test_hint"))
+        self.assertEqual(self._last()["hint"], dof.panel.NO_HINT)
 
         await self._draw(Library({"event": "E900", "blocked": ""}))
         self.assertEqual(self._last()["hint"], t("manager.dof.stop_hint"))

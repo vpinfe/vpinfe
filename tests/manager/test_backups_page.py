@@ -10,7 +10,7 @@ from common import i18n
 from common.backups import copies
 from common.i18n import t
 from manager.backups import backups
-from manager.kit import deeplink, panel, views, when
+from manager.kit import deeplink, grid, panel, views, when
 from manager.kit.data import Library
 
 
@@ -196,8 +196,9 @@ class FolderLine(unittest.TestCase):
 
 
 class Columns(unittest.TestCase):
-    def test_every_column_header_has_a_tooltip(self) -> None:
-        bare = [one["field"] for one in backups.COLUMNS if not one.get("headerTooltip")]
+    def test_every_column_has_a_tooltip_or_says_it_needs_none(self) -> None:
+        bare = [one["field"] for one in backups.COLUMNS
+                if not one.get("headerTooltip") and not one.get(grid.NO_HELP_KEY)]
 
         self.assertEqual([], bare)
 

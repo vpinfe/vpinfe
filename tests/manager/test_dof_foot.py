@@ -105,6 +105,7 @@ class LastCheckedTests(unittest.TestCase):
         with patch.object(settings, "ui"), patch.object(settings, "panel") as panel:
             _, draw = settings.last_checked("", lambda: None, blocked=blocked)
             draw()
+        self.no_hint = panel.NO_HINT
         return panel.action.call_args.kwargs
 
     def test_a_reason_dims_the_act_and_is_its_tooltip(self) -> None:
@@ -117,7 +118,7 @@ class LastCheckedTests(unittest.TestCase):
         shown = self._action("")
 
         self.assertTrue(shown["enabled"])
-        self.assertEqual(shown["hint"], t("manager.settings.check_now.help"))
+        self.assertEqual(shown["hint"], self.no_hint)
 
 
 class KeySaveTests(unittest.IsolatedAsyncioTestCase):

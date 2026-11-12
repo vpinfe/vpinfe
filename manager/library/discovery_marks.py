@@ -66,8 +66,7 @@ def column(neither: str = "") -> dict[str, Any]:
     """The Status column of both grids: Wanted with the bookmark, Ignored as the quiet word,
     and nothing on the rows that are neither. `neither` names those rows in the filter, for a
     grid whose view keeps them without the Ignored ones; empty offers no such choice."""
-    return discovery_states.marks(neither).column(
-        FIELD, t("word.status"), help=t("manager.discovery.mark.column.help"))
+    return discovery_states.marks(neither).column(FIELD, t("word.status"))
 
 
 # ---------------------------------------------------------------------------------------

@@ -497,7 +497,7 @@ def page(*, subject: Mapping[str, str], state: dict[str, Any],
             if len(ordered) > limit:
                 panel.action(t("manager.discovery.ask.more", count=len(ordered) - limit),
                              lambda: more(limit),
-                             icon=verbs.ADD, hint=t("manager.discovery.ask.more.help"))()
+                             icon=verbs.ADD, hint=panel.NO_HINT)()
 
     def more(limit: int) -> None:
         own["limit"] = limit + WALL_AT_FIRST * 2

@@ -692,6 +692,14 @@ def two_line(header: str) -> str:
     return header if len(words) < 2 else " ".join(words[:-1]) + "\n" + words[-1]
 
 
+# `help=NO_HELP` says a header needs nothing beyond its words. It is for a header that
+# already says what the column holds; a column with no header words (a mark or a colour
+# only) takes a tooltip instead, and `test_every_grid_column_has_a_tooltip` refuses the
+# marker there.
+NO_HELP = "\0no-help"
+NO_HELP_KEY = "noHelp"
+
+
 def column(field: str, header: str, width: int = 0, help: str = "",
            **extra: Any) -> dict[str, Any]:
     """A column sized to fit, which is its header unless the content needs more.
@@ -712,9 +720,9 @@ def column(field: str, header: str, width: int = 0, help: str = "",
     """
     header = two_line(header)
     # `help` says what the column is and what its values mean, in words the header does
-    # not already carry, and is not optional: `build` refuses a column that has none, so
-    # a column the user can hover always explains itself.
-    tip = {"headerTooltip": help} if help else {}
+    # not already carry. `build` refuses a column with neither `help` nor `NO_HELP`.
+    tip = ({NO_HELP_KEY: True} if help == NO_HELP
+           else {"headerTooltip": help} if help else {})
     shown = extra.get(":valueFormatter")
     search = {":getQuickFilterText": shown} if shown else {}
     size = max(width, header_width(header))
@@ -861,7 +869,7 @@ ART_KEY = "thumbnail"
 def for_grid(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The definitions as AG Grid wants them, without our own keys."""
     return [{k: v for k, v in column.items()
-             if k not in (GROUP_KEY, ART_KEY, renderers.CHOICES_KEY)}
+             if k not in (GROUP_KEY, ART_KEY, NO_HELP_KEY, renderers.CHOICES_KEY)}
             for column in columns]
 
 
@@ -1074,7 +1082,7 @@ def build(columns: list[dict[str, Any]], rows: list[dict[str, Any]], scope: str,
             f"the one its rows are scanned by; this one declares {len(marked)}"
             + (f" ({', '.join(str(m) for m in marked)})" if marked else ""))
     bare = [str(definition.get("field")) for definition in columns
-            if not definition.get("headerTooltip")]
+            if not definition.get("headerTooltip") and not definition.get(NO_HELP_KEY)]
     if bare:
         raise ValueError(f"{scope}: every grid column carries a header tooltip, "
                          f"passed as help=; these do not: {', '.join(bare)}")

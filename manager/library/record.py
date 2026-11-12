@@ -416,7 +416,7 @@ async def _dialog(library: Any, named: list[Target], title: str,
              panel.select(existing, now["existing"], pick,
                           describes={existing[choice]:
                                      t(f"manager.record.existing.{choice}.description")
-                                     for choice in EXISTING})),
+                                     for choice in EXISTING if choice != FILL})),
             (panel.ASIDE, lambda: shown.update(touches=panel.line(""))),
             (t("manager.record.estimate"),
              lambda: shown.update(estimate=ui.label("").classes("manager-fact-value"))),
@@ -804,7 +804,7 @@ def waiting_line(library: Any, rows: Sequence[dict[str, Any]],
         panel.action(t("manager.record.review"), look, icon=verbs.REVIEW, inline=True,
                      hint=t("manager.record.review.help"))()
         panel.action(t("manager.record.discard"), throw, icon=verbs.DISCARD, inline=True,
-                     hint=t("manager.record.discard.help"))()
+                     hint=panel.NO_HINT)()
 
 
 SKIP, NEXT, DONE = "skip", "next", "done"
@@ -970,4 +970,4 @@ def proposal(library: Any, row: dict[str, Any], decided: Callable[[bool], Any], 
         panel.action(t("manager.record.use_this"), use, icon=verbs.ACCEPT,
                      hint=t("manager.record.use_this.help"))()
         panel.action(t("manager.record.discard"), discard, icon=verbs.DISCARD,
-                     hint=t("manager.record.discard.help"))()
+                     hint=panel.NO_HINT)()

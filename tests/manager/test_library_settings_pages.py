@@ -150,10 +150,10 @@ class TheDiscoveryPage(_Offloaded):
         shown = await self._draw(EXTENSION, VPINMEDIADB)
 
         self.assertEqual(["Updates", "Show Updates", "note", "Home Shelves", "lede", "full",
-                          "Sources", "lede"], shown[:8])
-        self.assertEqual("Virtual Pinball Spreadsheet", shown[8])
+                          "Sources"], shown[:7])
+        self.assertEqual("Virtual Pinball Spreadsheet", shown[7])
         at = shown.index("sub Last Checked")
-        self.assertGreater(at, 8)
+        self.assertGreater(at, 7)
         self.assertEqual("rule", shown[at + 1])
 
     async def test_the_shelves_are_drawn_from_the_values_the_page_read(self) -> None:

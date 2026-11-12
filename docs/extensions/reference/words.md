@@ -14,7 +14,7 @@ them.
 | `settings.<key>.choice.<value>` | A select option | The label given in `choices` |
 | `list.<key>.title` | A list's title | The key |
 | `list.<key>.column.<field>.header` | A column's header | The field |
-| `list.<key>.column.<field>.help` | A column's tooltip | Its header |
+| `list.<key>.column.<field>.help` | A column's tooltip | Nothing |
 | `list.<key>.view.<viewkey>.name` | A view's name | The view's key |
 | `list.<key>.view.<viewkey>.help` | A view's tooltip | Nothing |
 | `list.<key>.act.<act>.label` | An act in a list's title menu | The act's key |
@@ -37,8 +37,8 @@ Anything else is yours to ask for with `ctx.t("wizard.title")`.  `contract.words
 same for a module that is not handed `ctx`.  A key the file does not have answers the full key,
 `ext.<name>.<key>`, so a gap shows.
 
-Give every column a `help`.  Without one the tooltip is the header, which says nothing new to
-the person hovering it.  A word you pass in code, like `title="VPinPlay"`, is shown as
+Give a column a `help` when its header does not say it all.  Without one the column has no
+tooltip, which is right when the header does.  A word you pass in code, like `title="VPinPlay"`, is shown as
 written in every language, which suits a product name.
 
 **Slots.**  `{name}` in a value is filled from the call's keyword arguments with `format_map`.

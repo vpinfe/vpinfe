@@ -75,8 +75,7 @@ def change_match(pick: Callable[[], Any], *, matched: bool,
         hint = t("manager.workbench.change_release_match.help") if matched \
             else t("manager.workbench.match_release.help")
     else:
-        hint = t("manager.workbench.change_match.help") if matched \
-            else t("manager.workbench.match_vps.help")
+        hint = panel.NO_HINT
 
     def draw() -> None:
         with ui.element("div").classes("manager-slot-actions"):

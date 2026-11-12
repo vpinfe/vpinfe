@@ -1,5 +1,5 @@
 """A help line, a tooltip, a state or a setting's description that is one sentence takes
-no full stop."""
+no full stop, and a line of two or more sentences ends every one of them with one."""
 
 from __future__ import annotations
 
@@ -15,8 +15,10 @@ from tests.support.catalogs import served
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = served()
 
-# One sentence ending and the next beginning.
-_BOUNDARY = re.compile(r"[.!?][”\"')]?\s+(?=[A-Z0-9“\"(])")
+# One sentence ending and the next beginning. A number before the stop is a step's
+# number ("1. Download it"), which starts a line and ends no sentence.
+_BOUNDARY = re.compile(r"(?<!\b\d)[.!?][”\"')]?\s+(?=[A-Z0-9“\"(])")
+_ENDS_WITH_A_STOP = re.compile(r"[.!?…:][”\"')]?$")
 
 # The Manager's helpers that draw their first argument as a help line or a state.
 _PANEL_HELP = frozenset({"note", "intro", "lede", "state"})
@@ -28,6 +30,13 @@ def _lone_stops(value: Any) -> list[str]:
     return [line for line in lines
             if line.endswith(".") and not line.endswith("...")
             and not _BOUNDARY.search(line[:-1])]
+
+
+def _unfinished(value: Any) -> list[str]:
+    forms = value.values() if isinstance(value, dict) else [value]
+    lines = [line.strip() for form in forms for line in str(form).split("\n")]
+    return [line for line in lines
+            if _BOUNDARY.search(line) and not _ENDS_WITH_A_STOP.search(line)]
 
 
 def _keys(node: ast.AST) -> list[str]:
@@ -84,6 +93,19 @@ class TheCatalog(unittest.TestCase):
                  .startswith("error.") and (lines := _lone_stops(value))}
 
         self.assertEqual(found, {})
+
+
+class EverySentenceOfALongerLine(unittest.TestCase):
+    def test_ends_with_a_stop(self) -> None:
+        found = {key: lines for key, value in CATALOG.items()
+                 if (lines := _unfinished(value))}
+
+        self.assertEqual(found, {}, "end the last sentence with a full stop")
+
+    def test_a_numbered_step_is_not_two_sentences(self) -> None:
+        self.assertEqual(_unfinished("1. Download it from the site"), [])
+        self.assertEqual(_unfinished("Removed it. Nothing else changed"),
+                         ["Removed it. Nothing else changed"])
 
 
 class WhereTheManagerDrawsThem(unittest.TestCase):

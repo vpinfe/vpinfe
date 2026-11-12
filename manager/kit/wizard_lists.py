@@ -60,10 +60,10 @@ def checklist(field: dict[str, Any], ticked: Sequence[str],
                 count = ui.label("").classes("manager-help grow")
                 panel.action(t("manager.wizard_lists.select_all"),
                              lambda: setall(True), icon=verbs.ACCEPT,
-                             hint=t("manager.wizard_lists.select_all.hint"))()
+                             hint=panel.NO_HINT)()
                 panel.action(t("manager.wizard_lists.select_none"),
                              lambda: setall(False), icon=verbs.CLEAR,
-                             hint=t("manager.wizard_lists.select_none.hint"))()
+                             hint=panel.NO_HINT)()
             box = Answer([one["key"] for one in rows if str(one["key"]) in ticks]) \
                 .classes("manager-wizard-list")
             empty = ui.label(t("manager.wizard_lists.no_match")).classes("manager-help px-3")

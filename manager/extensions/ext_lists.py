@@ -188,9 +188,7 @@ def columns(declared: dict[str, Any]) -> list[dict[str, Any]]:
         kind = str(one.get("kind") or "text")
         extra = {**_KIND.get(kind, {}), **(when.cell(one["field"]) if kind == "date" else {})}
         header = str(one.get("header") or one["field"])
-        # An extension that says nothing about a column still gets a page: `grid.build`
-        # refuses a column with no tooltip, and the list is the extension's to declare.
-        said = str(one.get("help") or header)
+        said = str(one.get("help") or grid.NO_HELP)
         if one is subject:
             out.append(grid.identifier(
                 one["field"], header, FIRST_WIDTH, help=said, subtitle=UNDER, link=HELD,
@@ -240,7 +238,7 @@ def _drawn(kind: str, column: dict[str, Any], header: str) -> dict[str, Any]:
 
 def _in_library() -> dict[str, Any]:
     return grid.column(HELD, t("manager.community.in_library"),
-                       help=t("manager.community.in_library.help"),
+                       help=grid.NO_HELP,
                        **grid.choice_filter(
                            [{"value": True, "label": t("manager.community.held")},
                             {"value": False, "label": t("manager.community.not_held")}],

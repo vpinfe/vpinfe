@@ -173,7 +173,7 @@ def _in_frontend_switch(context: dict[str, Any], row: dict[str, Any]) -> Callabl
         if bool(event.value) != shown():
             await _save(context, {"in_frontend": bool(event.value)})
 
-    return panel.switch(shown(), changed, hint=t("manager.workbench.in_menu.help"))
+    return panel.switch(shown(), changed)
 
 
 def _open_now(context: dict[str, Any]) -> str:
@@ -233,8 +233,7 @@ def _open_on(context: dict[str, Any], row: dict[str, Any], *,
                 t("manager.workbench.open_on.use_all" if here
                   else "manager.workbench.open_on.use_this"), use, inline=True,
                 icon=verbs.OPENS_ON,
-                hint=t("manager.workbench.open_on.use_all.help" if here
-                       else "manager.collections.opens_on.help"))()
+                hint=panel.NO_HINT if here else t("manager.collections.opens_on.help"))()
 
     return _region(context, "open_on", draw)
 
@@ -283,8 +282,7 @@ def _image_slot(context: dict[str, Any], row: dict[str, Any]) -> None:
         await _written(context)
 
     with ui.column().classes("w-full gap-1 manager-slot p-2 mt-3"):
-        ui.label(label).classes("manager-card-title") \
-            .tooltip(t("manager.workbench.wheel.help"))
+        ui.label(label).classes("manager-card-title")
         with ui.element("div").classes("manager-slot-art manager-slot-art--wheel"):
             if present:
                 ui.image(art.collection(name, version=row.get("image_version"),
@@ -552,8 +550,7 @@ def _rules_block(context: dict[str, Any], row: dict[str, Any]) -> None:
     with ui.row().classes("items-center gap-1 no-wrap manager-group"):
         ui.label(t("manager.workbench.rules"))
         if smart:
-            ui.icon(verbs.SMART).classes("manager-heading-mark") \
-                .tooltip(t("manager.collections.smart.help"))
+            ui.icon(verbs.SMART).classes("manager-heading-mark")
     if not rows and not smart:
         with ui.row().classes("items-center gap-2 w-full no-wrap py-1"):
             ui.label(t("manager.workbench.hand_picked_rules")) \

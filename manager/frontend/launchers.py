@@ -71,15 +71,15 @@ _NUMERIC: dict[str, Any] = {"type": "numericColumn", "filter": "agNumberColumnFi
 
 COLUMNS: list[dict[str, Any]] = [
     grid.identifier("name", t("word.name"), 240, pinned="left", subtitle="app",
-                    help=t("manager.launchers.name.help")),
+                    help=grid.NO_HELP),
     grid.column("tables", t("manager.launchers.tables"),
-                help=t("manager.launchers.tables.help"), **_NUMERIC),
+                help=grid.NO_HELP, **_NUMERIC),
     STATES.column("state", t("word.state"), 150),
     grid.column("default", t("word.default"), 110,
                 help=t("manager.launchers.default.help")),
-    grid.column("app", t("word.runs"), 180, help=t("manager.launchers.app.help")),
+    grid.column("app", t("word.runs"), 180, help=grid.NO_HELP),
     grid.column("program", t("word.program"), 420,
-                help=t("manager.launchers.program.help")),
+                help=grid.NO_HELP),
 ]
 
 LAUNCHER_VIEWS: dict[str, list[str] | views.Preset] = {
