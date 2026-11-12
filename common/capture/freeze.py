@@ -16,7 +16,7 @@ from typing import Any
 
 from common import events
 from common.config.config_access import cfg_get
-from common.host import launch_state, tools
+from common.host import launch, launch_state, tools
 
 from . import adapters, compose, geometry, placing, preflight
 from .geometry import Turn
@@ -41,6 +41,7 @@ FAILED = "failed"
 class Playing:
     game: Any
     table_id: str
+    game_id: str = ""
 
 
 @dataclass
@@ -222,7 +223,8 @@ class Flow:
     def launched(self, **payload: Any) -> None:
         if payload.get("source") == launch_state.SOURCE_CAPTURE:
             return
-        self.playing = Playing(payload.get("game"), str(payload.get("table_id") or ""))
+        self.playing = Playing(payload.get("game"), str(payload.get("table_id") or ""),
+                               str(payload.get("game_id") or ""))
         self._aimed = None
 
     def exited(self, **_payload: Any) -> None:
@@ -312,6 +314,11 @@ class Flow:
                 kept = self.kit.keep(shot, playing)
                 if kept is not None:
                     logger.info("Take Picture: kept %s", kept)
+                    events.emit(events.TABLE_PICTURE_TAKEN, game=playing.game,
+                                game_id=playing.game_id, table_id=playing.table_id,
+                                file=kept.name,
+                                taken=shot.taken.isoformat(timespec="seconds"),
+                                private=launch.is_private(playing.game))
 
         self.kit.later(finish)
         return said(TAKEN) if shot.stills else said(FAILED)

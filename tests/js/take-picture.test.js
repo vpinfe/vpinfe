@@ -39,7 +39,9 @@ async function playing({ answers = {} } = {}) {
                  get_mainmenu_config: {}, get_monitors: [], get_collections: [] };
   vpin.call = (method) => Promise.resolve(method in boot ? boot[method] : null);
   const asked = [];
-  vpin.callInternal = (method) => {
+  const reports = [];
+  vpin.callInternal = (method, ...args) => {
+    if (method === "report_input_action") { reports.push(args[0]); return Promise.resolve({}); }
     if (method === "library_waiting") return Promise.resolve([]);
     if (method === "signin_pending") return Promise.resolve(null);
     if (method === "get_attract_config") return Promise.resolve({ enabled: false });
@@ -70,7 +72,7 @@ async function playing({ answers = {} } = {}) {
     await vpin.handleEvent({ type: "TableLaunching" });
     await ticks();
   };
-  return { vpin, asked, seen, played, press, remote, launch };
+  return { vpin, asked, reports, seen, played, press, remote, launch };
 }
 
 describe("during play the page hears Take Picture and Back, and hands them to core", () => {
@@ -158,5 +160,36 @@ describe("what core answered is what is heard", () => {
     await press(1);
 
     assert.deepEqual(played, []);
+  });
+});
+
+describe("a pad press during play is reported to core for extensions", () => {
+  test("Take Picture and Back from the pad are reported by name", async () => {
+    const { press, launch, reports } = await playing();
+    await launch();
+
+    await press(0);
+    await press(1);
+
+    assert.deepEqual(reports, ["take_picture", "back"]);
+  });
+
+  test("the table has the other buttons while it plays, so they are not reported", async () => {
+    const { vpin, press, launch, reports } = await playing();
+    vpin.joyButtonMap = { "0": ["left"] };
+    await launch();
+
+    await press(0);
+
+    assert.deepEqual(reports, []);
+  });
+
+  test("a press from the Remote is not reported back", async () => {
+    const { remote, launch, reports } = await playing();
+    await launch();
+
+    await remote("take_picture");
+
+    assert.deepEqual(reports, []);
   });
 });

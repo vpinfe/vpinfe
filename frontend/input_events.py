@@ -40,8 +40,10 @@ def on_input_action(*, action: str, phase: str, source: str = "",
     `source` stays here and in the log. A theme that behaved differently depending on
     where a press came from would be a bug surface, and a contract 1 theme cannot see it
     in any case - so what reaches the theme is exactly what a keystroke reaches it with.
+
+    Not a press the page itself reported: it has answered that one already.
     """
-    if _bridge is None:
+    if _bridge is None or source == input_actions.PAGE:
         return
     _bridge.send_event_all_with_iframe({"type": MESSAGE_TYPE,
                                         "action": action, "phase": phase})

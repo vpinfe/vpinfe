@@ -42,7 +42,14 @@ from common.games.game_metadata import (
 )
 from common.games.game_repository import all_games
 from common.games.player_records import get_records
-from common.host import frontend_browser, frontend_state, frontend_windows, launch, launch_state
+from common.host import (
+    frontend_browser,
+    frontend_state,
+    frontend_windows,
+    input_actions,
+    launch,
+    launch_state,
+)
 from common.host.display_service import monitors_as_dicts
 from common.i18n import t
 from common.players.players import get_roster
@@ -180,6 +187,9 @@ API_INTERNAL_METHODS = {
     # nobody asked to pause.
     'take_picture',
     'resume_play',
+    # The page telling core which named action a person pressed, for the extensions that hear
+    # them. A theme calling it would put presses on the bus nobody made.
+    'report_input_action',
     # Exit's Stop recording? on the cabinet. A theme calling it would end a recording
     # run nobody at the cabinet asked to end.
     'stop_recording',
@@ -754,6 +764,10 @@ class API:
         """A button was held at the cabinet long enough to take the controller back."""
         events.emit(events.INPUT_CAPTURE_RELEASED)
         return {"released": True}
+
+    def report_input_action(self, action: Any) -> dict[str, Any]:
+        """A named action was pressed at this screen, and the page has answered it."""
+        return {"announced": input_actions.heard(str(action or ""))}
 
     def resume_play(self) -> dict[str, Any]:
         """Back pressed while a table runs: resumes it where it is frozen."""

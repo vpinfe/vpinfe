@@ -78,6 +78,11 @@ JOBS_READ = "jobs:read"
 # adding a scope to a live route later is churn and declaring one is free.
 INPUT_ACT = "input:act"
 
+# Hearing the named actions a person presses (Take Picture, Back, left, select), as an
+# extension's `input.action` events. Not input:act, which presses them, and never a key
+# code: the actions are what the cabinet's controls were already bound to.
+INPUT_READ = "input:read"
+
 # Declared by an extension that provides an app, whether or not it serves routes of its own.
 APPS_PROVIDE = "apps:provide"
 
@@ -106,7 +111,7 @@ CORE = frozenset({
     UPLOADS_WRITE, VPS_READ, FILESYSTEM_READ, CAPTURE_RUN,
     CONFIG_READ, CONFIG_WRITE,
     SYSTEM_READ, SYSTEM_ADMIN,
-    EVENTS_SUBSCRIBE, JOBS_READ, INPUT_ACT,
+    EVENTS_SUBSCRIBE, JOBS_READ, INPUT_ACT, INPUT_READ,
     DEVICES_READ, DEVICES_WRITE, HARDWARE_READ,
     PREFERENCES_READ, PREFERENCES_WRITE,
     PLAYERS_READ, PLAYERS_WRITE,

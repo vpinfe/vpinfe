@@ -2814,6 +2814,7 @@
   "manager.ext_page.games_write": "0f72c6a78b30",
   "manager.ext_page.hardware_usb": "057f1003a492",
   "manager.ext_page.home": "d2187d527809",
+  "manager.ext_page.input_read": "9dab0dfd8a26",
   "manager.ext_page.list_failed": "e08d2e7c8679",
   "manager.ext_page.not_trusted": "134c04486cd4",
   "manager.ext_page.not_trusted_chip": "a6436d374350",

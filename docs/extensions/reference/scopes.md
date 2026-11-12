@@ -60,6 +60,7 @@ extension with "Asks for scopes that do not exist".
 | `events:subscribe` | Subscribe to the event stream over the API |
 | `jobs:read` | Read jobs |
 | `input:act` | Send input |
+| `input:read` | Hear the named input actions people press, as `input.action` events: Take Picture, Back, select and the rest.  Never key or button codes |
 | `devices:read`, `devices:write` | Read, change devices |
 | `hardware:read` | List the USB, serial and display devices attached to this device, through `ctx.hardware`.  Not `devices:*`, which are other VPinFE installs |
 | `preferences:read`, `preferences:write` | Read, change preferences |

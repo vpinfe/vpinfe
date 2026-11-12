@@ -95,6 +95,13 @@ def _session_event(game: Any = None, table_id: str | None = None, **payload: Any
         if name in payload}
 
 
+def _picture_event(game: Any = None, table_id: str | None = None, **payload: Any) -> dict:
+    """A table event, and the picture it kept: its `file` among the game's pictures, when it
+    was `taken` and whether the game is Private."""
+    return _game_event(game, table_id) | {
+        name: payload[name] for name in ("file", "taken", "private") if name in payload}
+
+
 def _game_reference(game_id: str, name: str) -> dict:
     reference: dict[str, Any] = {"id": game_id, "name": name}
     if game_id:
@@ -156,6 +163,7 @@ STREAMED_EVENTS: dict[str, Callable[..., dict]] = {
     events.TABLE_LAUNCHED: _session_event,
     events.TABLE_EXITED: _table_event,
     events.TABLE_PLAY_RECORDED: _session_event,
+    events.TABLE_PICTURE_TAKEN: _picture_event,
     events.GAME_SELECTED: _game_event,
     # The library moved under whoever is holding it. Local subscribers get this
     # already; it crosses now because a frontend on another machine has no other way

@@ -72,19 +72,29 @@ class ExtensionConfig:
         self._store.set_setting(self._name, key, value)
 
 
+# Events an extension hears only for a scope its manifest declares and its owner sees. Kept
+# beside the subscription because the bus itself takes any name from anyone.
+SCOPED_EVENTS = {core_events.INPUT_ACTION: "input:read"}
+
+
 class ExtensionEvents:
     """The bus, seen from one extension: it is told what core did, and publishes under
     its own namespace so nothing it emits can be mistaken for a core event."""
 
     def __init__(self, name: str, declared: tuple[str, ...],
-                 on_failure: Callable[..., None]) -> None:
+                 on_failure: Callable[..., None], scopes: Iterable[str] = ()) -> None:
         self._name = name
         self._declared = frozenset(declared)
+        self._scopes = frozenset(scopes)
         self._on_failure = on_failure
         self._logger = logger_for(name)
         self.registered: list[tuple[str, Callable]] = []
 
     def subscribe(self, event: str, handler: Callable) -> None:
+        if event in SCOPED_EVENTS and SCOPED_EVENTS[event] not in self._scopes:
+            raise ContractError(f"{self._name} subscribes to {event}, which needs "
+                                f"{SCOPED_EVENTS[event]}, which its manifest does not declare")
+
         def contained(**payload: Any) -> None:
             try:
                 with reach.unmarked():
@@ -1436,7 +1446,8 @@ class ExtensionContext:
         self.logger = logger_for(manifest.name)
         self.config = ExtensionConfig(manifest.name, store,
                                       lambda: self.ui.settings_defaults())
-        self.events = ExtensionEvents(manifest.name, manifest.events, on_failure)
+        self.events = ExtensionEvents(manifest.name, manifest.events, on_failure,
+                                      manifest.scopes)
         self.files = ExtensionFiles(manifest.name, "fs:read" in manifest.capabilities,
                                     "fs:write" in manifest.capabilities)
         self.jobs = ExtensionJobs(manifest.name)

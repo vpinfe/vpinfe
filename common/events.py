@@ -23,6 +23,12 @@ TABLE_EXITED = "table.exited"
 # purpose, before the runtime and the score are written.
 TABLE_PLAY_RECORDED = "table.play_recorded"
 
+# A Take Picture press produced a picture and it is saved in the game's Pictures, whichever
+# button or remote tap started it. Carries `game_id`, `table_id`, `file` (the picture's file
+# name, as `/games/{id}/pictures/{name}` has it), `taken` and `private`. Not fired for a picture
+# that could not be kept.
+TABLE_PICTURE_TAKEN = "table.picture_taken"
+
 # The library changed under whoever is holding it. Re-reading a game replaces the object
 # rather than mutating it, so a holder of the old one is stale and cannot tell.
 GAME_CHANGED = "game.changed"

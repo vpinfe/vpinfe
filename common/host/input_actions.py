@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from common import events
 from common.config import input_registry
@@ -32,6 +33,10 @@ RELEASE = "release"
 # A tap is a press and a release in one, which is what a click or a key repeat is.
 TAP = "tap"
 PHASES = (TAP, PRESS, RELEASE)
+
+# The `source` of a press the frontend's own page reported, as opposed to one an API caller,
+# a mobile device or the table's keys made.
+PAGE = "page"
 
 # Long enough to survive a missed renewal on a phone, short enough that a wheel started
 # by a lost release stops before anyone has to go and find out why. The caller is expected
@@ -47,6 +52,7 @@ _lock = threading.Lock()
 # design deliberately leaves as last-press-wins rather than deciding it here; see the
 # input design notes for the trigger that reopens it.
 _held: dict[str, threading.Timer] = {}
+_announcer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="input-heard")
 
 
 def known(action: str) -> bool:
@@ -96,6 +102,26 @@ def tap(action: str, *, source: str) -> None:
     """
     press(action, source=source)
     release(action, source=source)
+
+
+def heard(action: str) -> bool:
+    """A press the page already answered, put on the bus for extensions. False, and nothing
+    announced, for a name that is not an input action.
+
+    Not a hold: no release follows. `frontend/input_events.py` leaves `PAGE` out of what it
+    sends the windows. Announced in order from one worker, because the page's calls are
+    answered one at a time and a slow handler here would hold up its next Take Picture.
+    """
+    if not known(action):
+        return False
+    _announcer.submit(events.emit, events.INPUT_ACTION,
+                      action=action, phase=PRESS, source=PAGE)
+    return True
+
+
+def settle() -> None:
+    """Returns once every announcement made so far has been delivered. For tests."""
+    _announcer.submit(lambda: None).result(timeout=5)
 
 
 def act(action: str, phase: str, *, source: str,

@@ -58,6 +58,10 @@ class _Flow(unittest.TestCase):
         self.flow = freeze.reset_for_tests(kit)
         self.addCleanup(freeze.reset_for_tests)
         self.game = types.SimpleNamespace(full_path_game="/games/Example")
+        self.private = False
+        patch = mock.patch.object(freeze.launch, "is_private", lambda game: self.private)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.flow.launched(game=self.game, table_id="t1",
                            source=launch_state.SOURCE_FRONTEND)
 
@@ -140,6 +144,64 @@ class FreezeLookTakeTests(_Flow):
 
         self.assertFalse(self.table.state.paused)
         self.assertEqual(self.kept, [])
+
+
+class PictureTakenEventTests(_Flow):
+    """An extension is told once a picture is kept, and only then, whichever press took it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        events.clear()
+        self.addCleanup(events.clear)
+        self.heard: list[dict[str, Any]] = []
+        events.subscribe(events.TABLE_PICTURE_TAKEN, lambda **payload: self.heard.append(payload))
+        self.private = True
+        self.flow.launched(game=self.game, table_id="t1", game_id="g-1",
+                           source=launch_state.SOURCE_FRONTEND)
+
+    def test_a_kept_picture_is_announced_with_where_it_is(self) -> None:
+        self._press()
+        self.assertEqual(self.heard, [], "freezing the table keeps nothing")
+
+        self._press()
+
+        self.assertEqual(len(self.heard), 1)
+        said = self.heard[0]
+        self.assertEqual((said["game_id"], said["table_id"], said["file"], said["private"]),
+                         ("g-1", "t1", "kept.png", True))
+        self.assertEqual(said["taken"], self.shot.taken.isoformat(timespec="seconds"))
+
+    def test_a_picture_that_could_not_be_kept_is_not_announced(self) -> None:
+        self.flow.kit.keep = lambda shot, playing: None
+        self._press()
+
+        self._press()
+
+        self.assertEqual(self.heard, [])
+
+    def test_nothing_to_picture_announces_nothing(self) -> None:
+        self.shot = freeze.Shot()
+        self._press()
+
+        self._press()
+
+        self.assertEqual(self.heard, [])
+
+    def test_the_game_is_announced_as_private_only_when_it_is(self) -> None:
+        self.private = False
+        self._press()
+        self._press()
+
+        self.assertIs(self.heard[0]["private"], False)
+
+    def test_a_game_made_private_during_play_is_private_when_its_picture_is_kept(self) -> None:
+        self.private = False
+        self._press()
+        self.private = True
+
+        self._press()
+
+        self.assertIs(self.heard[0]["private"], True)
 
 
 class WhatIsPlayingTests(_Flow):

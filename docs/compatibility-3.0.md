@@ -1629,6 +1629,16 @@ which Popper uses for that screen, import into these kinds.
 Covered by `tests/media/test_media_resolution.py`, `tests/media/test_asset_registry.py` and
 `tests/importer/test_mapping.py`.
 
+**PAR-114 - The page reports the named action it answered.** One WebSocket method,
+`report_input_action`, carries the name of an input action the page just answered (Take Picture,
+Back, select and the rest) and puts it on the bus as `input.action`, for the extensions that ask
+to hear them. Refused to themes, like `report_window`: its caller is core's own page, and a theme
+calling it would put presses on the bus that nobody made. Nothing a theme reads changes.
+*Why:* a press at the cabinet's keyboard or pad is heard by the page alone, so core cannot tell
+an extension about it unless the page says. Covered by `tests/js/input.test.js`,
+`tests/js/take-picture.test.js`, `tests/api/test_input_actions.py` and
+`tests/invariants/test_parity.py`.
+
 ## Explicitly *not* exceptions
 
 The theme-facing payload (`tables_json` keys, media path fields, stable values) and

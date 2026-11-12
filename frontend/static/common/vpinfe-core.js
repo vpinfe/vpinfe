@@ -492,6 +492,7 @@ const INTERNAL_METHODS = new Set([
   "report_window",
   "take_picture",
   "resume_play",
+  "report_input_action",
   "stop_recording",
   "recording_offer",
   "record_media",
@@ -3696,7 +3697,7 @@ class VPinFECore {
     if (!muted && !this._scrub && started - held.since >= this.scrubAfterMs) {
       this.#beginScrub(held);
     }
-    if (!muted) await this.#dispatchAction(held.action);
+    if (!muted) await this.#dispatchAction(held.action, false);
     if (this._hold !== held) return;
 
     held.interval = PAGING_ACTIONS.has(held.action) ? this.pageRepeatMs
@@ -3721,8 +3722,14 @@ class VPinFECore {
     }
     if (!action) return;
     if (message.phase === "release") return this.#endHold(action);
-    this.#dispatchAction(action);
+    this.#dispatchAction(action, false);
     this.#startHold(action);
+  }
+
+  // Tells core which named action a person pressed here, for an extension that asked to hear
+  // them. Fire and forget: a press never waits on an extension.
+  #announce(action) {
+    this.callInternal("report_input_action", action).catch(() => {});
   }
 
   // Take Picture and Back while a table runs, from a gamepad or any other producer; the
@@ -3783,7 +3790,10 @@ class VPinFECore {
 
   // What an action does, whichever input produced it. One place, so the keyboard and
   // the gamepad cannot drift apart again.
-  #dispatchAction(action) {
+  //
+  // `announce` is false for a press that did not start here: one that came over the bus is
+  // core's already, and a repeat is the same press still held.
+  #dispatchAction(action, announce = true) {
     // Core's own, and answered only while a table runs; never a theme's.
     if (action === "take_picture") return;
     if (this.isController() && this.#attractActivity()) return;
@@ -3792,6 +3802,7 @@ class VPinFECore {
     // A field owns its keystrokes; back and select still reach the dialog, so a cabinet
     // button can dismiss it or finish it while the field has focus.
     if (this.inputMode === "text" && action !== "back" && action !== "select") return;
+    if (announce) this.#announce(action);
     // A confirm owns every action while it is up. Answering it is the only thing the
     // buttons can do, so an unmapped press cannot dismiss it and cannot act behind it.
     if (this.#pendingConfirm) {
@@ -4101,7 +4112,11 @@ class VPinFECore {
   async #onButtonPressed(buttonIndex, gamepadIndex, standard = false) {
     const presses = this.#padPresses(buttonIndex, standard);
     if (!this.frontendInputEnabled) {
-      for (const action of presses) this.#inPlay(action);
+      // The table has the keys, so core hears these presses from nobody else.
+      for (const action of presses) {
+        if (PLAY_ACTIONS.has(action)) this.#announce(action);
+        this.#inPlay(action);
+      }
       return;
     }
 

@@ -1441,3 +1441,50 @@ describe("a binding reads as a standard button, a hold, or neither", () => {
     assert.deepEqual(plain(maps.keys), {});
   });
 });
+
+describe("a press the page hears is reported to core for extensions", () => {
+  const field = () => ({ tagName: "INPUT", type: "text" });
+  const reported = (calls) => calls().filter(m => m === "report_input_action");
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  test("a bound key reports its action once", async () => {
+    const { press, release, calls } = controller();
+
+    await press("ArrowRight");
+    await release("ArrowRight");
+    await settle();
+
+    assert.equal(reported(calls).length, 1);
+  });
+
+  test("an OS key repeat is not reported again", async () => {
+    const { press, release, calls } = controller();
+
+    await press("ArrowRight");
+    await press("ArrowRight", { repeat: true });
+    await release("ArrowRight");
+    await settle();
+
+    assert.equal(reported(calls).length, 1);
+  });
+
+  test("a keystroke typed into a text field is not reported", async () => {
+    const { press, calls } = controller();
+
+    await press("q", { target: field() });
+    await press("Enter", { target: field() });
+    await settle();
+
+    assert.deepEqual(reported(calls), []);
+  });
+
+  test("an action core sent is not reported back", async () => {
+    const { vpin, calls } = controller();
+
+    await vpin.handleEvent({ type: "InputAction", action: "next", phase: "press" });
+    await vpin.handleEvent({ type: "InputAction", action: "next", phase: "release" });
+    await settle();
+
+    assert.deepEqual(reported(calls), []);
+  });
+});

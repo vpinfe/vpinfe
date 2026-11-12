@@ -321,7 +321,7 @@ def _capture_folder() -> Path:
     return CAPTURE_LAUNCH_DIR
 
 
-def _is_private(game: Game) -> bool:
+def is_private(game: Game) -> bool:
     """Off the file, not `game.meta_config`: that record can predate a Private switch
     thrown during the game."""
     try:
@@ -548,7 +548,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
             launched = {"game": game, "ini_config": ini_config, "table_id": table_id,
                         "game_id": game_identity.game_id(game), "source": source,
                         "up": [player.as_payload() for player in up],
-                        "private": _is_private(game)}
+                        "private": is_private(game)}
             logger.info("Launching: %s", command_line.readable(cmd))
             process = popen(
                 cmd,
@@ -610,7 +610,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                                 tables.entry_native_key(entry), rom, up, before, entry)
         events.emit(events.TABLE_PLAY_RECORDED, game=game, ini_config=ini_config,
                     table_id=table_id, game_id=game_identity.game_id(game),
-                    source=source, private=_is_private(game), **recorded)
+                    source=source, private=is_private(game), **recorded)
     game_play_service.delete_nvram_if_configured(game, entry)
 
 

@@ -317,6 +317,24 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
             "new_entries": [{"player": owner, "entries": [entry]}]})
         self.assertNotIn("secret-ini-config", recorded)
 
+    async def test_a_picture_taken_reaches_a_client_with_the_file_and_privacy(self) -> None:
+        """A client learns a picture exists and what it is called, and whether the game is
+        Private so it can decide what to do with it."""
+        game = SimpleNamespace(game_dir_name="Attack from Mars", meta_config={})
+        stream = self._open()
+        await self._hello(stream)
+
+        events.emit(events.TABLE_PICTURE_TAKEN, game=game, game_id="g1", table_id="afm-1.2",
+                    file="2026-11-11 17.41.02.png", taken="2026-11-11T17:41:02",
+                    private=True, ini_config="secret-ini-config")
+        frame = await self._next(stream)
+
+        self.assertEqual(_fields(frame)["event"], events.TABLE_PICTURE_TAKEN)
+        self.assertEqual(_shape(frame), {
+            "game": {"id": "", "name": "Attack from Mars"}, "table": {"id": "afm-1.2"},
+            "file": "2026-11-11 17.41.02.png", "taken": "2026-11-11T17:41:02", "private": True})
+        self.assertNotIn("secret-ini-config", frame)
+
     async def test_neither_carries_a_path_from_the_machine_it_happened_on(self) -> None:
         """Both events carry a filesystem path on the bus, for handlers in this process.
         A subscriber elsewhere has a different path for the same thing and would be told

@@ -222,6 +222,77 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual([one["phase"] for one in self.bridge.sent],
                          ["press", "release"])
 
+    def test_a_press_the_page_already_answered_does_not_go_back_to_it(self) -> None:
+        """The page announces what it handled so extensions hear it, and sending it
+        back to the windows would have it answer its own press a second time."""
+        input_actions.heard("take_picture")
+        input_actions.settle()
+
+        self.assertEqual(self.bridge.sent, [])
+
+
+class PageHeardTests(unittest.TestCase):
+    """Protects: (b) an extension hears a press the page answered, once, as a named action."""
+
+    def setUp(self) -> None:
+        events.clear()
+        input_actions.release_all()
+        self.heard = _Heard()
+        self.addCleanup(events.clear)
+        self.addCleanup(input_actions.release_all)
+
+    def test_a_named_action_is_announced_as_a_press_from_the_page(self) -> None:
+        self.assertTrue(input_actions.heard("back"))
+        input_actions.settle()
+
+        self.assertEqual([(one["action"], one["phase"], one["source"])
+                          for one in self.heard.seen],
+                         [("back", "press", input_actions.PAGE)])
+
+    def test_a_name_that_is_not_an_action_is_not_announced(self) -> None:
+        self.assertFalse(input_actions.heard("KeyQ"))
+        self.assertFalse(input_actions.heard(""))
+        input_actions.settle()
+
+        self.assertEqual(self.heard.seen, [])
+
+    def test_nothing_is_held_afterwards(self) -> None:
+        input_actions.heard("next")
+        input_actions.settle()
+        input_actions.release_all()
+
+        self.assertEqual(self.heard.phases, ["press"], "no hold was armed, so none is let go")
+
+    def test_a_slow_handler_does_not_hold_up_the_page_and_order_is_kept(self) -> None:
+        import threading
+
+        gate = threading.Event()
+        order: list[str] = []
+
+        def slow(**payload) -> None:
+            gate.wait(5)
+            order.append(payload["action"])
+
+        events.subscribe(events.INPUT_ACTION, slow)
+
+        input_actions.heard("next")
+        input_actions.heard("back")
+        self.assertEqual(order, [], "the caller returned while the handler still waits")
+        gate.set()
+        input_actions.settle()
+
+        self.assertEqual(order, ["next", "back"])
+
+    def test_the_page_reports_through_the_api(self) -> None:
+        from frontend.api import API
+
+        reported = API.report_input_action(API.__new__(API), "select")
+
+        input_actions.settle()
+
+        self.assertEqual(reported, {"announced": True})
+        self.assertEqual([one["action"] for one in self.heard.seen], ["select"])
+
 
 def _wait_for(said, seconds: float = 2.0) -> bool:
     """Poll rather than sleep the whole budget: a timer test that always costs its

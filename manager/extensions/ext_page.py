@@ -467,6 +467,7 @@ def _actions(offered: list[dict], name: str, refill: Callable[[], None]) -> None
 PLAINLY = {
     "games:read": "manager.ext_page.read_library",
     "games:write": "manager.ext_page.games_write",
+    "input:read": "manager.ext_page.input_read",
     "players:read": "manager.ext_page.see_players",
     "filesystem:read": "manager.ext_page.filesystem_read",
     "config:read": "manager.ext_page.config_read",

@@ -2063,6 +2063,7 @@
   "manager.ext_action.worth_knowing": "Worth knowing",
   "manager.ext_mark.tip": "Unofficial, from {name}",
   "manager.ext_page.games_write": "Add and Change Games",
+  "manager.ext_page.input_read": "See Actions",
   "manager.ext_page.config_write": "Add Library Folders",
   "manager.ext_page.ui_mount": "Add a Page to the Manager",
   "manager.ext_page.list_failed": "Could not read them",
