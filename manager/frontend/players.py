@@ -744,7 +744,8 @@ def _picture_slot(context: dict[str, Any]) -> None:
                     context["library"], label, partial(set_picture, context),
                     services=[one for one in context.get("accounts") or []
                               if one.get("picture") and not one.get("error")],
-                    use_service=partial(use_account_picture, context)),
+                    use_service=partial(use_account_picture, context),
+                    now=picture_address(player, art.PANEL) if present else ""),
                 icon=verbs.REPLACE if present else verbs.ADD,
                 hint=t("manager.players.picture_replace.help") if present
                 else t("manager.players.picture_add.help"))()

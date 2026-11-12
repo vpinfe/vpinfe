@@ -216,7 +216,8 @@ def focus(box: ui.dialog, control: Any, *, select: bool = False) -> None:
 
 
 def enter_presses(button: ui.button) -> None:
-    """Enter anywhere in the dialog but a textarea presses `button`. Bound in the
+    """Enter anywhere in the dialog but a textarea or a control that takes Enter itself
+    presses `button`, once the key was pressed and let go on the same element. Bound in the
     browser: NiceGUI does not forward a keyup from a Quasar input inside a dialog."""
     ui.run_javascript(f"""
         (() => {{
@@ -224,8 +225,18 @@ def enter_presses(button: ui.button) -> None:
           const wire = () => {{
             const button = document.getElementById('c{button.id}');
             if (!button) {{ if (++tries < 40) setTimeout(wire, 25); return; }}
-            button.closest('.q-dialog').addEventListener('keyup', (event) => {{
-              if (event.key === 'Enter' && event.target.tagName !== 'TEXTAREA') button.click();
+            const dialog = button.closest('.q-dialog');
+            let pressed = null;
+            dialog.addEventListener('keydown', (event) => {{
+              pressed = event.key === 'Enter' ? event.target : null;
+            }});
+            dialog.addEventListener('keyup', (event) => {{
+              const origin = pressed;
+              pressed = null;
+              if (event.key !== 'Enter' || origin !== event.target) return;
+              if (event.target.tagName === 'TEXTAREA') return;
+              if (event.target.closest('button, a, [role=button], [role=menuitem]')) return;
+              button.click();
             }});
           }};
           wire();

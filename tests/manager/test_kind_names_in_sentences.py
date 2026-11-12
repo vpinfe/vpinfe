@@ -43,7 +43,7 @@ class KindNamesInSentences(unittest.TestCase):
              "media": {"scoreview": {"file": "afm.png"}}},
             "wheel", "Wheel", _nothing, mediasource._media(LIBRARY, "wheel"))
 
-        self.assertEqual(slot._in_use("afm.png"), "Already the DMD")
+        self.assertEqual(slot._in_use("/x/afm.png", "afm.png"), ("Used as the DMD", False))
 
     def test_an_empty_tile(self) -> None:
         self.assertEqual(mediamap._tooltip("playfield_fss", {"present": False}),

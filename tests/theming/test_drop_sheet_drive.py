@@ -139,6 +139,10 @@ class DropSheetDrive(unittest.TestCase):
             document = await browser.send("Runtime.evaluate", {"expression": "window.__asked"})
             await browser.send("DOM.setFileInputFiles", {
                 "objectId": document["result"]["objectId"], "files": [str(added)]})
+            verb = f"[...document.querySelectorAll('{SOURCES} .q-btn')].pop()"
+            await browser.wait_for(
+                f"(b => !!b && !b.disabled && !b.classList.contains('disabled'))({verb})")
+            await browser.evaluate(f"{verb}.click()")
             await browser.wait_for(OPEN)
             seen["added_card"] = await browser.evaluate(CARD_TEXT)
 

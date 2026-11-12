@@ -27,6 +27,12 @@ class _Probe(mediasource._Sources):
     def title(self) -> str:
         return "Probe"
 
+    def verb_label(self) -> str:
+        return "Use"
+
+    def take_button(self) -> None:
+        ui.button("Choose a File")
+
     def starts(self) -> list[dict[str, Any]]:
         return []
 

@@ -157,6 +157,14 @@ class PlayersDrive(unittest.TestCase):
                 await browser.send("DOM.setFileInputFiles",
                                    {"nodeId": picker["nodeId"], "files": [str(path)]})
 
+            async def use_picked(path: Path) -> None:
+                """Offer `path` to the picture dialog and press its verb."""
+                await pick(f"{DIALOG} .q-uploader input[type=file]", path)
+                verb = f"[...document.querySelectorAll('{FOOTER}')].pop()"
+                await browser.wait_for(
+                    f"(b => !!b && !b.disabled && !b.classList.contains('disabled'))({verb})")
+                await browser.evaluate(f"{verb}.click()")
+
             async def add(which: str) -> None:
                 await walk.drawn()
                 await press(".manager-grid-bar .q-btn", "add")
@@ -261,7 +269,7 @@ class PlayersDrive(unittest.TestCase):
             seen["acts_before"] = await browser.evaluate(f"{SHOWN_ACTS}.map({SAYS})")
             await press(ACTS, "Add")
             await browser.wait_for(DIALOG_UP)
-            await pick(f"{DIALOG} .q-uploader input[type=file]", red)
+            await use_picked(red)
             await browser.wait_for(f"!document.querySelector('{DIALOG}')")
             await browser.wait_for(f"!!document.querySelector({in_row})")
             await browser.wait_for(f"!!document.querySelector('{PERSON} img')")
@@ -275,7 +283,7 @@ class PlayersDrive(unittest.TestCase):
 
             await press(ACTS, "Replace")
             await browser.wait_for(DIALOG_UP)
-            await pick(f"{DIALOG} .q-uploader input[type=file]", blue)
+            await use_picked(blue)
             await browser.wait_for(f"!document.querySelector('{DIALOG}')")
             await noticed("Picture replaced")
             seen["replaced_blue"] = await stored_is(pictures.BLUE)

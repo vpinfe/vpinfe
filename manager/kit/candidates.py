@@ -13,8 +13,7 @@ from typing import Any
 
 from nicegui import ui
 
-from common.i18n import t
-from manager.kit import panel, verbs
+from manager.kit import panel
 
 # A family with no frame of its own still gets a mark, so the slot is never empty.
 GLYPHS = {"audio": "graphic_eq"}
@@ -58,9 +57,11 @@ def credits(*pieces: str | tuple[str, ...]) -> Callable[[], None]:
 
 def _body(src: str, name: str, meta: str | Callable[[], None], tag: str, family: str,
           glyph: str, small: bool = False, line: bool = False, peek: str = "",
-          more: tuple[str, ...] = (), missing: str = "") -> None:
+          more: tuple[str, ...] = (), missing: str = "", slot: bool = False,
+          tag_here: bool = False) -> None:
     """The picture and the words, which both shapes draw the same way."""
-    frame = "manager-source-thumb" + (" manager-source-thumb--small" if small else "")
+    frame = "manager-source-thumb" + (" manager-source-thumb--slot" if slot else
+                                      " manager-source-thumb--small" if small else "")
     if line:
         ui.icon(glyph or GLYPHS.get(family, FALLBACK)).classes("shrink-0")
     else:
@@ -74,7 +75,8 @@ def _body(src: str, name: str, meta: str | Callable[[], None], tag: str, family:
         for said in more:
             ui.label(said).classes("manager-help")
         if tag:
-            ui.label(tag).classes("manager-source-tag")
+            ui.label(tag).classes("manager-source-tag"
+                                  + (" manager-source-tag--here" if tag_here else ""))
 
 
 def thumb(src: str, glyph: str, missing: str = "", family: str = "image") -> None:
@@ -100,31 +102,35 @@ def _frame(frame: str, src: str, family: str, glyph: str, peek: str = "",
         box.tooltip(missing)
 
 
-def row(src: str, name: str, meta: str | Callable[[], None], tag: str, take: Callable, *,
-        family: str = "image", glyph: str = "", action: str = t("manager.candidates.use"),
-        line: bool = False, current: bool = False, peek: str = "") -> None:
-    """What it looks like, what it is, and the one thing you can do with it.
+def row(src: str, name: str, meta: str | Callable[[], None], tag: str, pick: Callable, *,
+        family: str = "image", glyph: str = "", line: bool = False, peek: str = "",
+        use: Callable | None = None, tag_here: bool = False,
+        missing: str = "") -> Any:
+    """What it looks like and what it is, with the whole row as the target.
 
-    `meta` is a line of words, or a function that draws one (see `credits`).
-    `line` draws it the way a folder is drawn, for a list where nothing has a picture.
-    `current` marks the one already in place, which has nothing left to do. `peek` is a
-    larger copy for the bigger look, where `src` is sized for the row.
+    A click picks it, which is a choice and not yet an act; a double-click is `use`, the act
+    itself, for a person who knows what they want. `meta` is a line of words, or a function
+    that draws one (see `credits`). `line` draws it the way a folder is drawn, for a list
+    where nothing has a picture. `tag` is what the file already does, green where it does
+    that for the thing being filled. `peek` is a larger copy for the bigger look, where
+    `src` is sized for the row.
     """
-    classes = "items-center gap-3 w-full no-wrap manager-source-row"
-    with ui.row().classes(classes + (" manager-source-row--line" if line else "")):
-        _body(src, name, meta, tag, family, glyph, line=line, peek=peek)
-        if current:
-            panel.state(t("word.current"), "on")()
-        else:
-            ui.button(action, icon=verbs.ACCEPT, on_click=take) \
-                .props("flat dense no-caps size=sm") \
-                .classes("manager-action shrink-0")
+    classes = "items-center gap-3 w-full no-wrap manager-source-row manager-source-row--pick"
+    element = ui.row().classes(classes + (" manager-source-row--line" if line else ""))
+    with element:
+        _body(src, name, meta, tag, family, glyph, line=line, peek=peek, slot=True,
+              tag_here=tag_here, missing=missing)
+    element.on("click", lambda: pick())
+    if use is not None:
+        element.on("dblclick", lambda: use())
+    return element
 
 
 def choice(src: str, name: str, meta: str, pick: Callable | None = None, *,
            family: str = "image", glyph: str = "", chosen: bool = False,
            trailing: Callable[[], None] | None = None, entry: bool = False,
-           more: tuple[str, ...] = (), missing: str = "") -> Any:
+           more: tuple[str, ...] = (), missing: str = "", slot: bool = False,
+           use: Callable | None = None, tag: str = "", tag_here: bool = False) -> Any:
     """A row whose target is the whole row, with no button on it.
 
     For the lists you scan rather than compare: forty candidates with forty buttons is
@@ -138,6 +144,8 @@ def choice(src: str, name: str, meta: str, pick: Callable | None = None, *,
     row rather than about the list. `entry` takes the grid's two-line type, for a row
     naming the same kind of thing a grid row names. `more` is lines under `meta`, as
     quiet as it is. `missing` is what the frame says on hover when there is no picture.
+    `slot` draws the picture in the slot a picker's list shares, whole. `use` is what a
+    double-click does. `tag` and `tag_here` are as in `row`.
     """
     classes = "items-center gap-3 w-full no-wrap manager-source-row"
     if pick is not None:
@@ -148,9 +156,12 @@ def choice(src: str, name: str, meta: str, pick: Callable | None = None, *,
         classes += " manager-source-row--entry"
     element = ui.row().classes(classes)
     with element:
-        _body(src, name, meta, "", family, glyph, small=True, more=more, missing=missing)
+        _body(src, name, meta, tag, family, glyph, small=True, more=more, missing=missing,
+              slot=slot, tag_here=tag_here)
         if trailing is not None:
             trailing()
     if pick is not None:
         element.on("click", lambda: pick())
+    if use is not None:
+        element.on("dblclick", lambda: use())
     return element

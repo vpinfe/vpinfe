@@ -4338,7 +4338,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 
 /* --- where a file can come from --------------------------------------- */
 
-.manager-dialog.manager-sources-card.q-card { width: min(840px, 94vw); max-height: 84vh; gap: 6px; }
+.manager-dialog.manager-sources-card.q-card { width: min(920px, 94vw); max-height: 92vh; gap: 6px; }
 /* A row that navigates rather than acting: the whole thing is the target, so it says
    so on hover instead of hiding a click behind a label. Separate from --line, which a
    folder is and which is also a row with no picture in it. */
@@ -4395,9 +4395,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-destination {
   padding: 8px 4px 10px; border-bottom: 1px solid var(--line-soft);
 }
-.manager-destination-name {
-  padding-top: 4px; word-break: break-all; font-family: inherit;
-}
 /* Stated before the write, not only in the confirm afterwards - but kept quiet,
    because replacing a file is the ordinary case and not a warning. */
 .manager-destination-conflict {
@@ -4420,8 +4417,14 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   font-size: var(--fs-body); color: var(--ink-2);
   word-break: break-word; line-height: 1.3;
 }
-/* One height for every tab. The lists inside take what is left and scroll. */
-.manager-sources-panels { height: min(52vh, 560px); }
+/* The list and the pane beside it, one height for every tab. The lists inside take what is
+   left and scroll. */
+.manager-sources-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 14px;
+  width: 100%; padding: 0 12px; height: min(60vh, 560px); min-height: 0;
+}
+.manager-sources-body > .manager-sources-panels { height: 100%; min-width: 0; }
+.manager-sources-card .q-tab__label { white-space: nowrap; }
 /* A list never shrinks past a few rows: with the copy-or-keep choice above it, the panel
    scrolls rather than letting the list run under the drop zone below it. */
 .manager-sources-panels .q-tab-panel { display: flex; flex-direction: column; overflow-y: auto; }
@@ -4430,7 +4433,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
    slab in the middle of a dark dialog. */
 .manager-sources-panels, .manager-sources-panels .q-tab-panel,
 .manager-sources-card .q-tabs { background: transparent; }
-.manager-sources-panels .q-tab-panel { padding: 12px 4px; }
+.manager-sources-panels .q-tab-panel { padding: 8px 0; }
 /* Five sources have to fit without a scroll arrow: an arrow on a tab bar means the
    ways of doing this are hidden behind a control nobody looks for. */
 .manager-sources-card .q-tab { color: var(--ink-3); padding: 4px 10px; min-width: 0; }
@@ -4704,13 +4707,21 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
    list is the long one - a dozen results at the full size is most of a screen. The
    enlarge is what covers the case where the small picture is not enough. */
 .manager-source-thumb--small { width: 76px; height: 57px; }
+/* The slot every picture in a picker's list shares: one size whatever the shape, the picture
+   scaled to fit and never cut, on the ground that makes a dark picture readable. */
+.manager-source-thumb--slot {
+  width: 104px; height: 64px; background: var(--art-ground); border-color: transparent;
+}
+.manager-source-thumb--slot img, .manager-source-thumb--slot video { object-fit: contain; }
 .manager-source-thumb--small .manager-source-thumb-glyph { font-size: var(--icon-slot-small); }
 
 /* What a file already does for this game, when it does something. Not a warning:
    using it again is legitimate, and the tag is there so nobody has to wonder. */
 .manager-source-tag {
-  font-size: var(--fs-caption); color: var(--accent); opacity: 0.85;
+  font-size: var(--fs-caption); color: var(--ink-3);
 }
+/* Doing this very job, which is the one case worth a colour. */
+.manager-source-tag--here { color: var(--positive); }
 
 .manager-source-zone { min-height: 200px; padding: 20px 16px; flex: 1 1 auto; }
 /* A long device name is cut here; the tab's tooltip names it whole. */
@@ -5318,4 +5329,137 @@ a.manager-member-go, a.manager-member-go:hover, a.manager-member-go:focus-visibl
 @media (max-width: 520px) {
   .manager-presets-change { grid-template-columns: minmax(0, 1fr); }
   .manager-presets-changes { min-height: 300px; }
+}
+
+/* --- a picker's pane: Now, New and what saving does ---------------------------------- */
+.manager-pane { min-width: 0; align-self: stretch; overflow-y: auto; }
+.manager-pair { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.manager-pair--side { flex-direction: row; align-items: flex-start; }
+.manager-pair--side .manager-pair-cell { flex: 1 1 0; min-width: 0; }
+.manager-pair-cell { width: 100%; }
+.manager-pair-arrow { display: none; color: var(--ink-3); align-self: center; }
+.manager-pair-label {
+  font-size: var(--fs-caption); color: var(--ink-3); text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.manager-pair-art { width: 100%; align-items: flex-start; }
+.manager-pair-card { width: 100%; align-items: flex-start; }
+/* The picture on its own ground, shrink-wrapped to its shape. */
+.manager-pick-art {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; max-width: 100%;
+  background: var(--art-ground); border-radius: 4px; overflow: hidden;
+}
+.manager-pick-art img, .manager-pick-art video { display: block; max-width: 100%; max-height: 150px; }
+.manager-pair--side .manager-pick-art img { max-height: 180px; }
+.manager-pick-art--glyph { width: 100%; height: 96px; }
+.manager-pick-art:hover .manager-slot-zoom { opacity: 1; }
+.manager-pick-text {
+  white-space: pre-wrap; word-break: break-word; font-size: var(--fs-caption);
+  color: var(--ink-2); background: var(--surface-sunken); border-radius: 4px;
+  padding: 6px 8px; width: 100%;
+}
+.manager-pair-name { word-break: break-word; }
+.manager-pair-empty { padding: 4px 0; }
+.manager-pair-drop {
+  width: 100%; padding: 14px 8px; border: 1px dashed var(--line); border-radius: 6px;
+}
+.manager-pair-drop-icon { font-size: var(--icon-slot); color: var(--ink-3); }
+.manager-pair-choose--late { display: none; }
+.manager-pair-trip--narrow { display: none; }
+.manager-drop-hot .manager-pair-drop { border-color: var(--accent); background: var(--accent-wash); }
+.manager-source-list > .manager-source-row, .manager-pick-list > .manager-source-row {
+  border-color: transparent; border-radius: 0;
+}
+.manager-source-list > .manager-source-row:nth-child(even) { background: var(--grid-stripe); }
+.manager-source-list > .manager-source-row.manager-source-row--chosen,
+.manager-pick-list > .manager-source-row.manager-source-row--chosen {
+  border-color: var(--accent); background: var(--accent-wash-on);
+}
+.manager-sources-lead { width: 100%; flex: 0 0 auto; padding: 0 0 6px; }
+/* A file the dialog lists but cannot use: seen, not pressable. */
+.manager-source-row--dim { opacity: 0.45; pointer-events: none; }
+.manager-picker-note { padding-bottom: 2px; }
+
+/* The source picker is drawn as bands and panels, not loose controls: a ruled title, a
+   shaded tab bar, the list as one bordered panel, and the pane beside it as another with
+   a rule between what it holds. */
+.manager-sources-card .manager-dialog-title {
+  border-bottom: 1px solid var(--line); padding-bottom: 10px; align-self: stretch;
+}
+.manager-sources-card .q-tabs { background: var(--surface-lift); border-bottom: 1px solid var(--line); }
+/* The list and the pane share one top and one bottom edge. */
+.manager-sources-card .manager-sources-panels .q-tab-panel { padding-top: 0; padding-bottom: 0; }
+.manager-sources-card .manager-source-list,
+.manager-sources-card .manager-source-offers,
+.manager-sources-card .manager-picker-well {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.manager-sources-card .manager-source-list, .manager-sources-card .manager-source-offers { padding: 4px; }
+.manager-sources-card .manager-picker-well { width: 100%; margin: 0; flex: 1 1 auto; min-height: 0; }
+.manager-sources-card .manager-picker-well .manager-source-list {
+  background: none; border: 0; border-radius: 0; padding: 0;
+}
+.manager-sources-card .manager-picker-head { width: 100%; margin: 0; }
+.manager-sources-card .manager-source-list > .manager-source-row:nth-child(even),
+.manager-sources-card .manager-source-offers > .manager-source-row:nth-child(even) {
+  background: var(--wash-hover);
+}
+.manager-sources-card .manager-source-list > .manager-source-row,
+.manager-sources-card .manager-source-offers > .manager-source-row {
+  border-bottom: 1px solid var(--line-soft);
+}
+.manager-sources-card .manager-source-row--pick:hover,
+.manager-sources-card .manager-source-list > .manager-source-row--pick:hover {
+  background: var(--accent-wash);
+}
+.manager-sources-card .manager-source-list > .manager-source-row.manager-source-row--chosen,
+.manager-sources-card .manager-source-offers > .manager-source-row.manager-source-row--chosen {
+  border-color: var(--accent); background: var(--accent-wash-on);
+}
+/* What the list is of, and the way to a different one, in a band of its own. */
+.manager-source-head {
+  background: var(--surface-lift); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; justify-content: space-between;
+}
+.manager-source-head .manager-fact-heading { border-top: 0; margin: 0; padding: 0; }
+.manager-sources-card .manager-pane {
+  background: var(--surface-lift); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+}
+.manager-sources-card .manager-pair-label { font-weight: 600; }
+.manager-sources-card .manager-pair-cell ~ .manager-pair-cell {
+  border-top: 1px solid var(--line-soft); padding-top: 10px;
+}
+.manager-sources-card .manager-pair--side .manager-pair-cell ~ .manager-pair-cell {
+  border-top: 0; padding-top: 0; border-left: 1px solid var(--line-soft); padding-left: 10px;
+}
+/* The settings fill the rest of the tab as a panel of their own and scroll inside it. */
+.manager-sources-card .manager-record-settings { padding: 8px 14px; }
+/* The panels' soft rule is lost on the darker ground of this panel. */
+.manager-sources-card .manager-record-settings .manager-fact-heading:not(:first-child) {
+  border-top: 1px solid var(--line);
+}
+.manager-pane-extra { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.manager-pane-extra:empty { display: none; }
+
+/* On a narrow screen the pane is one compact row above the list: Now, an arrow, New. */
+@media (max-width: 720px) {
+  .manager-sources-body {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    height: min(76vh, 640px);
+  }
+  .manager-sources-body > .manager-pane { order: -1; overflow: visible; }
+  .manager-pair, .manager-pair--side { flex-direction: row; align-items: center; }
+  .manager-pair-arrow { display: block; }
+  .manager-pair-cell { flex: 1 1 0; min-width: 0; }
+  .manager-sources-card .manager-pair-cell ~ .manager-pair-cell {
+    border-top: 0; padding-top: 0; border-left: 1px solid var(--line-soft); padding-left: 10px;
+  }
+  .manager-pick-art img, .manager-pick-art video { max-height: 56px; }
+  .manager-pick-art--glyph { height: 56px; }
+  .manager-pair-drop { padding: 6px; }
+  .manager-source-thumb--slot { width: 84px; height: 56px; }
+  .manager-pair-choose--late { display: flex; }
+  .manager-pair-trip--wide { display: none; }
+  .manager-pair-trip--narrow { display: block; }
 }

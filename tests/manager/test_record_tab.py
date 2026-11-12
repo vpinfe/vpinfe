@@ -44,19 +44,6 @@ class WhichSlotsRecordTests(unittest.TestCase):
         self.assertEqual((recorded.records, recorded.first), (True, "record"))
         self.assertEqual((wheel.records, wheel.first), (False, ""))
 
-    def test_the_file_name_follows_the_recording_on_its_tab(self) -> None:
-        context = {"library": _library([CAPTURE]), "game_id": "g1", "game": {},
-                   "lens": ""}
-        slot = mediasource._Slot(context, "playfield_video", "Playfield Video",
-                                 lambda: None, mediasource._media(context["library"],
-                                                                  "playfield_video"),
-                                 records=True)
-
-        slot.picked("record")
-        self.assertEqual(slot.chosen_extension, ".mp4")
-        slot.picked("upload")
-        self.assertEqual(slot.chosen_extension, "")
-
     def test_a_backglass_file_opens_an_empty_picture_slot_on_its_tab(self) -> None:
         context = {"library": _library([]), "game_id": "g1", "game": {}, "lens": ""}
         offer = {"path": "a.directb2s", "file": "a.directb2s", "grill": True,
@@ -72,18 +59,6 @@ class WhichSlotsRecordTests(unittest.TestCase):
         self.assertEqual((empty.backglass, empty.first), (True, "backglass"))
         self.assertEqual((filled.backglass, filled.first), (True, ""))
         self.assertEqual((none.backglass, none.first), (False, ""))
-
-    def test_the_file_name_follows_the_backglass_file_on_its_tab(self) -> None:
-        context = {"library": _library([]), "game_id": "g1", "game": {}, "lens": ""}
-        slot = mediasource._Slot(context, "backglass", "Backglass", lambda: None,
-                                 mediasource._media(context["library"], "backglass"),
-                                 backglass_files=[{"path": "a.directb2s"}])
-
-        slot.picked("backglass")
-        self.assertEqual(slot.chosen_extension, ".png")
-        slot.picked("upload")
-        self.assertEqual(slot.chosen_extension, "")
-
 
 class StoppedTests(unittest.TestCase):
     def test_what_stops_record_is_said_in_order(self) -> None:
@@ -131,7 +106,8 @@ class Device:
         return {"id": "j1"}
 
     def capture_proposals(self) -> dict[str, Any]:
-        return {"proposals": [{"id": "a1", "kind": "playfield_video"}]}
+        return {"proposals": [{"id": "a1", "kind": "playfield_video", "file": "take.mp4",
+                               "url": "/media/take.mp4", "size": 2048}]}
 
     placements = displaced_by = place_media = None
 
@@ -166,7 +142,9 @@ class TabTests(unittest.IsolatedAsyncioTestCase):
                                                                       "playfield_video"),
                                  records=True)
         slot.dialog = mock.Mock(is_deleted=False, value=True)
+        slot.pane, slot.verb = mock.Mock(), mock.Mock()
         slot.placed_at = {"table": lens}
+        self.slot = slot
         with mock.patch.object(record, "ended", mock.AsyncMock(return_value=ran)):
             await slot.record_tab(mock.MagicMock())
             go = next(call.args[1] for call in self.action.call_args_list
@@ -181,7 +159,14 @@ class TabTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.started, [{
             "tables": [{"game": "g1", "table": "t1"}], "existing": "fill",
             "kinds": ["playfield_video"], "settings": {}, "review": True}])
-        self.assertEqual(self.shown.call_args.args[1], {"id": "a1", "kind": "playfield_video"})
+
+    async def test_the_recording_is_the_new_one_and_waits_for_the_verb(self) -> None:
+        await self._record({"state": "recorded", "proposed": [
+            {"kind": "playfield_video", "id": "a1"}]}, lens="t1")
+
+        self.assertEqual("take.mp4", self.slot.pending.card.name)
+        self.slot.pane.show.assert_called_once_with(self.slot.pending.card)
+        self.slot.verb.enable.assert_called_once()
 
     async def test_a_kind_that_failed_says_why_without_its_name(self) -> None:
         await self._record({"state": "failed", "proposed": [], "reason": None,

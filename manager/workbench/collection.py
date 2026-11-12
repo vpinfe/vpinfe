@@ -303,7 +303,9 @@ def _image_slot(context: dict[str, Any], row: dict[str, Any]) -> None:
             ui.button(t("word.replace") if present else t("word.add"),
                       icon=verbs.REPLACE if present else verbs.ADD,
                       on_click=lambda: mediasource.open_image_sources(
-                          library, name, label, lambda: _written(context))) \
+                          library, name, label, lambda: _written(context),
+                          art.collection(name, version=row.get("image_version"),
+                                         size=art.PANEL) if present else "")) \
                 .props("flat dense no-caps size=sm").classes("manager-action")
             if present:
                 ui.button(t("word.remove"), icon=verbs.REMOVE, on_click=clear) \

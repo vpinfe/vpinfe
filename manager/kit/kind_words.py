@@ -23,6 +23,12 @@ def plural(kind: str, media: bool = False) -> str:
     return _word(kind, media, "plural") or label(kind, media)
 
 
+def with_article(kind: str, media: bool = False) -> str:
+    """One of the kind with its article, for a sentence that needs one: "a Wheel",
+    "an Instruction Card". The article is the catalog's, because it agrees with the word."""
+    return _word(kind, media, "a") or label(kind, media)
+
+
 def vps_name(kind: str, media: bool = False) -> str:
     """One of the kind as VPS lists it: "VPS ROM", "VPS point of view"."""
     return _word(kind, media, "vps") or label(kind, media)

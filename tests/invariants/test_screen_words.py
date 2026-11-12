@@ -69,6 +69,7 @@ ASSET = {
     "manager.assets.assets_missing": LOADS,
     "manager.assets.search_assets": LOADS,
     "manager.add.assets": ASSETS_PAGE,
+    "manager.mediasource.backglass_file": "the tab for the backglass file a table loads",
     "manager.backups.kind.asset": "the copy of a file of the Assets page",
     "manager.page.assets": ASSETS_PAGE,
     "manager.section.assets": ASSETS_PAGE,

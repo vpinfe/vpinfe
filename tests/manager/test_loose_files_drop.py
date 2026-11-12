@@ -49,7 +49,7 @@ class TheCountReachesTheDialogTests(unittest.IsolatedAsyncioTestCase):
         context = {"library": self.library, "game_id": "g-1", "game": GAME}
         sources = mediasource._Folder(context, "backglass", "Backglass", AsyncMock())
 
-        await press(sources.arrived, uploads.Drop(upload_id="u-1", count=3))
+        await press(sources.use_drop, uploads.Drop(upload_id="u-1", count=3))
 
         self.assertEqual(("", 3), self.opened_with())
 

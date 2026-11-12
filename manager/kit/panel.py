@@ -2271,7 +2271,7 @@ def tag_link(tag: str, color: str, *, to: str, mark: str = "",
 
 
 def link_out(label: str, *, to: str, hint: str = "", opener: bool = False,
-             rel: str = "") -> Callable[[], None]:
+             rel: str = "", on_click: Callable[[], Any] | None = None) -> Callable[[], None]:
     """A link that leaves the Manager, opening in a new tab and marked `open_in_new`.
 
     `label` is the thing being opened wherever the surface has one to give - a name
@@ -2279,10 +2279,13 @@ def link_out(label: str, *, to: str, hint: str = "", opener: bool = False,
 
     A new tab has no opener unless `opener` asks for one, and only a tab with an opener can
     find the Manager's window by name from a link of its own. `rel` sets the link's `rel`
-    outright, for an address the Manager did not choose.
+    outright, for an address the Manager did not choose. `on_click` runs as the tab opens,
+    without stopping it.
     """
     def draw() -> None:
         row = ui.link(target=to, new_tab=True).classes("manager-link manager-link-out")
+        if on_click is not None:
+            row.on("click", on_click)
         if opener:
             row.props("rel=opener")
         elif rel:

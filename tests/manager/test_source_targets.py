@@ -368,6 +368,7 @@ class TakingAFileFromTheDisk(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.library = _library()
         self.slot = _wheel_slot(self.library)
+        self.slot.pane, self.slot.verb = mock.Mock(), mock.Mock()
         self.finished = mock.AsyncMock()
         self.said = mock.Mock()
         for patched in (mock.patch("manager.kit.offload.run.io_bound", new=_now),
@@ -378,30 +379,26 @@ class TakingAFileFromTheDisk(unittest.IsolatedAsyncioTestCase):
             self.addCleanup(patched.stop)
 
     async def _take(self, name: str = "art.png", path: str = "/Volumes/share/art.png") -> None:
+        """A double-click on the row: pick it and press the verb."""
         self.slot.file_row({"name": name, "path": path})
-        take = cast(Any, mediasource.candidates.row).call_args.args[4]
-        await clicks.press(take)
+        await clicks.press(cast(Any, mediasource.candidates.row).call_args.kwargs["use"])
 
     async def test_the_file_is_read_here_and_placed_as_bytes_under_its_name(self) -> None:
-        with mock.patch.object(mediasource.confirm, "replace",
-                               new=mock.AsyncMock(return_value=True)):
-            await self._take()
+        await self._take()
 
         self.library.disk_file.assert_called_once_with("/Volumes/share/art.png", IMAGE_FAMILY)
         self.library.place_media.assert_called_once_with("game", "", "wheel", "art.png",
                                                          b"bytes")
         self.finished.assert_awaited_once()
 
-    async def test_a_replacement_somebody_declines_costs_no_read_and_no_write(self) -> None:
-        self.library.displaced_by.return_value = ["medias/old.png"]
+    async def test_a_click_alone_picks_and_costs_no_read_and_no_write(self) -> None:
+        self.slot.file_row({"name": "art.png", "path": "/Volumes/share/art.png"})
 
-        with mock.patch.object(mediasource.confirm, "replace",
-                               new=mock.AsyncMock(return_value=False)):
-            await self._take()
+        cast(Any, mediasource.candidates.row).call_args.args[4]()
 
         self.library.disk_file.assert_not_called()
         self.library.place_media.assert_not_called()
-        self.finished.assert_not_awaited()
+        self.slot.verb.enable.assert_called_once()
 
     async def test_a_file_that_cannot_be_read_is_said_and_nothing_is_written(self) -> None:
         self.library.disk_file.side_effect = service_errors.RefusedError("not for this slot")
@@ -418,8 +415,9 @@ class TakingAFileFromTheDisk(unittest.IsolatedAsyncioTestCase):
         image = mediasource._Image(self.library, "Favorites", "Image", _nothing)
         taken = mock.AsyncMock()
         with mock.patch.object(image, "took", new=taken):
+            image.pane, image.verb = mock.Mock(), mock.Mock()
             image.file_row({"name": "art.png", "path": "/Volumes/share/art.png"})
-            await clicks.press(cast(Any, mediasource.candidates.row).call_args.args[4])
+            await clicks.press(cast(Any, mediasource.candidates.row).call_args.kwargs["use"])
 
         self.library.disk_file.assert_called_once_with("/Volumes/share/art.png", image.accept)
         taken.assert_awaited_once_with("art.png", b"bytes")

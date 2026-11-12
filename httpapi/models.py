@@ -2937,6 +2937,7 @@ class FolderListing(ApiModel):
     folders: list[FolderEntry]
     files: list[FolderEntry]
     roots: list[FolderEntry]
+    withheld: bool = False
 
 
 class MediaSource(ApiModel):

@@ -84,6 +84,7 @@ tests = [
   "tests/theming/test_setup_back_drive.py",
   "tests/theming/test_setup_first_run_drive.py",
   "tests/theming/test_shape_suggestion_drive.py",
+  "tests/theming/test_source_picker_drive.py",
   "tests/theming/test_support_dialog_drive.py",
   "tests/theming/test_which_game_drive.py",
 ]
@@ -103,6 +104,7 @@ tests = [
   "tests/theming/test_grid_selection_drive.py",
   "tests/theming/test_list_columns_drive.py",
   "tests/theming/test_manager_back_button_drive.py",
+  "tests/theming/test_source_picker_drive.py",
   "tests/theming/test_manager_pages_drive.py",
   "tests/theming/test_media_fill_drive.py",
   "tests/theming/test_pane_reopen_drive.py",

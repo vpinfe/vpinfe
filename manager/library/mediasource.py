@@ -13,6 +13,7 @@ displaced was named before it went.
 from __future__ import annotations
 
 import asyncio
+import base64
 import inspect
 import logging
 import mimetypes
@@ -23,7 +24,7 @@ from functools import partial
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import background_tasks, run, ui
 
 from common import apps, i18n, icons
 from common.capture.run import FILL
@@ -45,19 +46,17 @@ from manager.kit import (
     art,
     busy,
     candidates,
-    confirm,
     deeplink,
     folder_picker,
-    game_tables,
     kind_words,
-    media_ownership,
     offload,
     panel,
+    pick_pane,
     verbs,
 )
 from manager.kit import dialog as frame
 from manager.kit.on_page import on_page
-from manager.library import picker_memory, picker_online, record, uploads
+from manager.library import mediaview, picker_memory, picker_online, record, uploads
 from manager.settings import recording
 
 logger = logging.getLogger("vpinfe.manager.library.mediasource")
@@ -110,6 +109,21 @@ def _suffix(item: dict[str, Any]) -> str:
     return PurePosixPath(_file_name(str(item.get("name") or ""))).suffix.lower()
 
 
+# A dropped picture bigger than this is shown as a file card: it travels to the browser
+# inside the page.
+_PREVIEW_MAX = 4_000_000
+
+
+def _dropped_card(name: str, data: bytes) -> pick_pane.Card:
+    """New's card for a file that has arrived: the picture itself where it is small enough
+    to show, else the file's name and size."""
+    served = mimetypes.guess_type(name)[0] or ""
+    if served.startswith("image/") and len(data) <= _PREVIEW_MAX:
+        src = f"data:{served};base64,{base64.b64encode(data).decode()}"
+        return pick_pane.card_for("image", src, name, _size(len(data)))
+    return pick_pane.card_for("", "", name, _size(len(data)))
+
+
 @dataclass(frozen=True)
 class _Target:
     """What the dialog fills: the calls that fill it, and the files that can."""
@@ -152,14 +166,46 @@ def _host_name(library: Any) -> str:
     return str(library.discovery().get("display_name") or "")
 
 
-class _Sources:
-    """One Add dialog: its tabs, its drop, and the host's folders.
+class _Entry:
+    """Something a list row, a drop or the file button has offered, waiting for the verb.
 
-    A subclass says what is being filled - the title, where the host tab starts, which
-    files there can fill it, and what happens to a file once it arrives.
+    A click on a row picks it, which fills New and wakes the verb; the verb, or a
+    double-click, runs `commit`. `discard` gives back what the offer took, such as an
+    upload nobody went on to use.
     """
 
-    uploads = True
+    def __init__(self, sources: _Sources, card: pick_pane.Card | None,
+                 commit: Callable[[], Any], discard: Callable[[], Any] | None = None,
+                 filename: str = "", arrives: bool = False) -> None:
+        self.sources = sources
+        self.card = card
+        self.commit = commit
+        self.discard = discard
+        self.filename = filename
+        # Whether this is a file that came from outside the list (a drop or the file
+        # button), which is how the file fetched from a VPS page arrives.
+        self.arrives = arrives
+        self.row: Any = None
+
+    def bind(self, row: Any) -> Any:
+        self.row = row
+        return row
+
+    def pick(self) -> None:
+        self.sources.choose(self)
+
+    async def use(self) -> None:
+        self.sources.choose(self)
+        await self.sources.go()
+
+
+class _Sources:
+    """One picker dialog: its tabs, the pane beside them, and the host's folders.
+
+    A subclass says what is being filled - the title, where the host tab starts, which
+    files there can fill it, and what happens to a file once it is chosen.
+    """
+
     online = False
     games = False
     keyed = False
@@ -173,6 +219,9 @@ class _Sources:
     # The game this dialog fills, which the host tab opens on the folder of. Empty where it
     # fills no one game.
     game_id = ""
+    drop_key = "manager.mediasource.drop_file"
+    # Whether the pane is New alone, for a dialog that fills nothing already there.
+    pane_alone = False
 
     def __init__(self, library: Any, label: str, done: Callable, current: str = "") -> None:
         self.library = library
@@ -183,14 +232,41 @@ class _Sources:
         self.current = current
         self.dialog: Any = None
         self.tabs: Any = None
-        # Whether the host tab is also where a file is dropped, because the browser is
-        # on the device VPinFE runs on.
+        self.pane: pick_pane.Pane = None  # type: ignore[assignment]
+        self.verb: Any = None
+        self.pending: _Entry | None = None
+        self.committing = False
+        # Whether the browser is on the device VPinFE runs on, which has one device: the
+        # host tab is then also where the file button reads from.
         self.merged = False
         # Filled when the host tab loads: where a file shown from the library is served.
         self.browse_roots: list[dict[str, Any]] = []
 
     def title(self) -> str:
         raise NotImplementedError
+
+    def verb_label(self) -> str:
+        """The one verb the footer ends on, named for the job."""
+        raise NotImplementedError
+
+    def now_card(self) -> pick_pane.Card | None:
+        """What is in use now, or None where nothing is."""
+        return None
+
+    @staticmethod
+    def enlarge(card: pick_pane.Card) -> None:
+        mediaview.open_viewer(card.src, "", card.name,
+                              family="video" if card.shape == pick_pane.VIDEO else "image")
+
+    def empty_words(self) -> str:
+        return t("manager.pane.no_picture")
+
+    def tall(self) -> bool:
+        """Whether Now and New sit side by side, for a kind that is taller than wide."""
+        return False
+
+    def drop_words(self) -> str:
+        return t(self.drop_key)
 
     def shown(self) -> bool:
         """False once a dialog that was opened has closed: a read that comes back after
@@ -227,25 +303,25 @@ class _Sources:
     def file_row(self, item: dict[str, Any]) -> None:
         raise NotImplementedError
 
-    def folder_use(self, path: str) -> Callable | None:
-        """What Use does on a folder row, or None where a folder is only a way down."""
+    def folder_entry(self, path: str) -> _Entry | None:
+        """What picking a folder row offers, or None where a folder is only a way down."""
         return None
 
     def before(self) -> None:
         """Drawn ahead of the tabs, so it is there whichever tab is open."""
 
-    def zone(self, card: Any) -> None:
-        """The Upload tab's words and pickers, and what a drop on the card does."""
+    def drops(self, card: Any) -> None:
+        """What a drop on the dialog does."""
+
+    def take_button(self) -> None:
+        """The file button, drawn under New."""
         raise NotImplementedError
 
     def choices(self) -> None:
-        """Drawn above the host tab's folders, outside the part of it that scrolls."""
+        """Drawn in the pane under Now and New."""
 
-    def strip(self) -> None:
-        """Drawn between the space over the tabs and the tabs."""
-
-    def opened(self, above: ui.column) -> None:
-        """Called once the dialog is up, with the space over the tabs."""
+    def opened(self, extra: ui.column) -> None:
+        """Called once the dialog is up, with the pane's place for what a picker adds."""
 
     async def online_tab(self, body: ui.column) -> None:
         return None
@@ -265,6 +341,80 @@ class _Sources:
     def picked(self, tab: str) -> None:
         """`tab` was opened."""
 
+    # --- the pick ---------------------------------------------------------------
+
+    def entry(self, card: pick_pane.Card | None, commit: Callable[[], Any], *,
+              discard: Callable[[], Any] | None = None, filename: str = "",
+              arrives: bool = False) -> _Entry:
+        return _Entry(self, card, commit, discard, filename, arrives)
+
+    def choose(self, entry: _Entry) -> None:
+        """Make `entry` the pick: New shows it and the verb is ready. Ignored while the
+        verb is running, which holds the pick it is working on."""
+        if self.committing:
+            if entry.discard is not None:
+                entry.discard()
+            return
+        self._let_go(entry)
+        self.pending = entry
+        self.pane.show(entry.card)
+        self.pane.mark(entry.row)
+        self.verb.enable()
+
+    def choose_trip(self, trip: pick_pane.Trip | None, row: Any) -> None:
+        """Make a trip the pick: New says where to fetch the file, and the verb waits for it.
+        A file with no page to fetch it from leaves New empty and still waiting."""
+        if self.committing:
+            return
+        self._let_go(None)
+        if trip is None:
+            self.pane.reset()
+        else:
+            self.pane.go_to(trip)
+        self.pane.mark(row)
+        self.verb.disable()
+
+    def forget_trip(self) -> None:
+        """The page New sent the person to is no longer a pick: back to an empty New."""
+        if self.pane.trip is not None:
+            self.choose_trip(None, None)
+
+    def _let_go(self, keep: _Entry | None) -> None:
+        held, self.pending = self.pending, None
+        if held is not None and held is not keep and held.discard is not None:
+            held.discard()
+
+    @on_page
+    async def go(self) -> None:
+        """The verb: do what the pick offers."""
+        entry = self.pending
+        if entry is None or self.committing:
+            return
+        self.committing = True
+        self.verb.disable()
+        kept = False
+        try:
+            await entry.commit()
+        except Exception:
+            # A path can be tried again; an upload is spent by the attempt.
+            kept = entry.discard is None
+            raise
+        finally:
+            self.committing = False
+            if self.pending is entry:
+                self.pending = entry if kept else None
+            if self.shown():
+                if kept:
+                    self.verb.enable()
+                else:
+                    self.pane.reset()
+                    self.pane.mark(None)
+
+    def _closed(self) -> None:
+        # The verb's own commit closes the dialog and owns the pick it is using.
+        if not self.committing:
+            self._let_go(None)
+
     def open(self) -> ui.dialog:
         """Show the dialog and answer it: a walk awaits it, which resolves when it closes."""
         with frame.opened(self.title(), classes="manager-sources-card") as box:
@@ -273,19 +423,13 @@ class _Sources:
             if self.walk_place:
                 ui.label(self.walk_place).classes("manager-help px-3")
             self.before()
-            above = ui.column().classes("w-full gap-0 px-3")
-            self.strip()
 
-            # Ordered by how far the file has to travel: your own device, this library,
-            # the machine VPinFE runs on, then the internet.
+            # Ordered by how far the file has to travel: this library, the machine
+            # VPinFE runs on, then the internet.
             host = _host_name(self.library)
-            # A browser on the device VPinFE runs on has one device: the tab for its files
-            # is the one that takes a drop, and Upload is not a second way in.
-            merged = self.merged = self.uploads and acting.browser_is_here()
-            with ui.tabs().props("dense no-caps align=left").classes("w-full px-3") as tabs:
-                if self.uploads and not merged:
-                    ui.tab("upload", label=t("manager.mediasource.upload"),
-                           icon=verbs.FROM_FILE)
+            merged = self.merged = acting.browser_is_here()
+            with ui.tabs().props("dense no-caps align=left inline-label") \
+                    .classes("w-full px-3") as tabs:
                 if self.backglass:
                     ui.tab("backglass", label=t("manager.mediasource.backglass_file"),
                            icon=verbs.FROM_BACKGLASS_FILE)
@@ -313,52 +457,54 @@ class _Sources:
             keyed_body: ui.column | None = None
             record_body: ui.column | None = None
             backglass_body: ui.column | None = None
-            first = self.first or ("upload" if self.uploads and not merged else "host")
-            with ui.tab_panels(tabs, value=first).classes("w-full manager-sources-panels"):
-                if self.uploads and not merged:
-                    with ui.tab_panel("upload"), \
-                            ui.column().classes("manager-slot-blank manager-source-zone "
-                                                "items-center gap-2"):
-                        ui.icon(verbs.FROM_FILE).classes("manager-slot-blank-icon")
-                        self.zone(card)
-                if self.backglass:
-                    with ui.tab_panel("backglass"):
-                        backglass_body = ui.column().classes("w-full gap-2 manager-source-fill")
-                if self.games:
-                    with ui.tab_panel("games"):
-                        games_body = ui.column().classes("w-full gap-2 manager-source-fill")
-                with ui.tab_panel("host"):
+            first = self.first or "host"
+            with ui.element("div").classes("manager-sources-body"):
+                with ui.tab_panels(tabs, value=first).classes("manager-sources-panels"):
+                    if self.backglass:
+                        with ui.tab_panel("backglass"):
+                            backglass_body = ui.column() \
+                                .classes("w-full gap-2 manager-source-fill")
+                    if self.games:
+                        with ui.tab_panel("games"):
+                            games_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                    with ui.tab_panel("host"):
+                        host_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                    if self.online:
+                        with ui.tab_panel("online"):
+                            online_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                    if self.keyed:
+                        with ui.tab_panel("keyed"):
+                            keyed_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                    if self.records:
+                        with ui.tab_panel("record"):
+                            record_body = ui.column().classes("w-full gap-2 manager-source-fill")
+                self.pane = pick_pane.Pane(now=self.now_card(), empty=self.empty_words(),
+                                           tall=self.tall(), drop=self.drop_words(),
+                                           choose=self.take_button,
+                                           single=self.pane_alone,
+                                           enlarge=self.enlarge)
+                self.pane.draw()
+                with self.pane.extra:
                     self.choices()
-                    host_body = ui.column().classes("w-full gap-2 manager-source-fill")
-                    if merged:
-                        with ui.column().classes("w-full manager-online-base"), \
-                                ui.row().classes("w-full items-center gap-x-3 gap-y-1 "
-                                                 "manager-dropbox"):
-                            self.zone(card)
-                if self.online:
-                    with ui.tab_panel("online"):
-                        online_body = ui.column().classes("w-full gap-2 manager-source-fill")
-                if self.keyed:
-                    with ui.tab_panel("keyed"):
-                        keyed_body = ui.column().classes("w-full gap-2 manager-source-fill")
-                if self.records:
-                    with ui.tab_panel("record"):
-                        record_body = ui.column().classes("w-full gap-2 manager-source-fill")
             with frame.footer().classes("manager-dialog-footer--ruled"):
                 if self.walk_place:
                     frame.leave(box, True)
                 else:
                     frame.cancel(box.close)
-        if self.uploads:
-            card.on("dragover", js_handler=_LIGHT)
-            card.on("dragleave", js_handler=_DIM)
+                self.verb = frame.answer(self.verb_label(), self.go, icon=verbs.ACCEPT)
+                self.verb.disable()
+            frame.enter_presses(self.verb)
+        card.on("dragover", js_handler=_LIGHT)
+        card.on("dragleave", js_handler=_DIM)
+        self.drops(card)
+        box.on("hide", self._closed)
 
         box.open()
-        self.opened(above)
+        self.opened(self.pane.extra)
 
-        # Each tab reads when it is opened rather than up front: two of the three make a
-        # request, and a dialog that fetches everything before showing anything would be
-        # slowest at the thing people do most, which is drop a file on the first tab.
+        # Each tab reads when it is opened rather than up front: most make a request, and
+        # a dialog that fetches everything before showing anything would be slowest at
+        # the thing people do most, which is choose a file on the first tab.
         loaded: set[str] = set()
 
         async def load(event: Any) -> None:
@@ -429,7 +575,7 @@ class _Sources:
                 take=self.use_file,
                 places=picker_memory.places(self.memory_kind(), self.kinds_word(),
                                             _places(starts)),
-                file_row=self.file_row, keep=self.fits, folder_extra=self._folder_extra,
+                file_row=self.file_row, keep=self.fits, pickable=self.folder_entry,
                 empty=self.nothing_here(), limit=_LIST_MAX, embedded=True)
 
     def nothing_here(self) -> str:
@@ -450,15 +596,6 @@ class _Sources:
             return self.current
         return next((str(one["path"]) for one in starts
                      if one.get("source") in ("game", "library")), "")
-
-    def _folder_extra(self, path: str) -> Callable[[], Any] | None:
-        use = self.folder_use(path)
-        if use is None:
-            return None
-        if path == self.current:
-            return panel.state(t("word.current"), "on")
-        return panel.action(t("manager.candidates.use"), use, icon=verbs.ACCEPT,
-                            hint=t("manager.candidates.use.help"))
 
 
 class _OneFile(_Sources):
@@ -506,12 +643,10 @@ class _OneFile(_Sources):
         self.uploader.on("finish", js_handler=f"() => getElement({self.uploader.id})"
                                               ".$refs.qRef.reset()")
 
-    def zone(self, card: Any) -> None:
-        ui.label(t("manager.mediasource.drop_file")).classes("manager-help manager-drop-only")
-        self.pick_button()
+    def drops(self, card: Any) -> None:
         card.on("drop", self._dropped_wrong, js_handler=_one(self.uploader.id))
 
-    def pick_button(self) -> None:
+    def take_button(self) -> None:
         panel.action(t("manager.mediasource.choose_file"), None, icon=verbs.FROM_FILE,
                      hint=t("manager.mediasource.choose_file.help"),
                      js=f"() => getElement({self.uploader.id}).$refs.qRef.pickFiles()")()
@@ -550,7 +685,9 @@ class _OneFile(_Sources):
             data = await event.file.read()
         finally:
             self._read()
-        await self.took(event.file.name, data)
+        name = event.file.name
+        self.choose(self.entry(_dropped_card(name, data), partial(self.took, name, data),
+                               filename=name, arrives=True))
 
 
 class _OnlineTab(_Sources):
@@ -559,7 +696,6 @@ class _OnlineTab(_Sources):
     built_in = False
     glyph = ""
     family = ""
-    drop_key = "manager.picker.drop_file"
     context: dict[str, Any]
     kind: str
     # What an extension source calls this slot, which differs from `kind` where a media
@@ -577,19 +713,18 @@ class _OnlineTab(_Sources):
         self.online = first_page and (self.listing.offered()
                                       or self.library.offers_online(self.source_kind))
         self.view = picker_online.Online(self)
+        # The VPS file whose page the person was sent to, which the next file to arrive is
+        # matched to. Taken when that file is picked, so a later pick from a list is not.
+        self.vps_for: picker_online.VpsPick | None = None
 
     async def online_tab(self, body: ui.column) -> None:
         await self.view.draw(body)
 
-    def strip(self) -> None:
-        if self.online:
-            self.view.strip()
-
-    def show_online(self) -> None:
-        self.tabs.set_value("online")
-
-    def take_button(self) -> None:
-        raise NotImplementedError
+    def choose(self, entry: _Entry) -> None:
+        if not self.committing:
+            self.vps_for = self.view.pick if entry.arrives and self.pane.trip is not None \
+                else None
+        super().choose(entry)
 
     async def take_offer(self, offer: dict[str, Any], source_name: str, vps_id: str) -> None:
         """Save a file a built-in catalog has. Only a slot has somewhere to put one."""
@@ -597,11 +732,6 @@ class _OnlineTab(_Sources):
 
     async def finish_plain(self, message: str) -> None:
         await _Sources.finish(self, message)
-
-    async def agreed_to_replace(self) -> bool:
-        """Whether a file may go where the pick will put one; asked before an extension's
-        row is taken."""
-        return True
 
     @property
     def destination(self) -> str:
@@ -621,7 +751,7 @@ class _Slot(_OnlineTab, _OneFile):
                          _on_host(context, current))
         self.target = target
         # A page past 1 follows page 1 to whichever tier holds it, so there is no name
-        # to choose and the dialog has no destination row.
+        # to choose and the dialog has no For line.
         self.page = page
         self.kind = kind
         self.source_kind = source_registry.file_kind(kind) if target.file else kind
@@ -634,14 +764,10 @@ class _Slot(_OnlineTab, _OneFile):
         self.context = context
         self.game_id = context["game_id"]
         self.table_id = context["lens"]
-        # Where a file could land, which of those is chosen, and the extension the
-        # chosen file will bring - the three things that decide what it gets called.
+        # Where a file could land, and which of those is chosen.
         self.placements: list[dict[str, Any]] = []
-        self.extensions: list[str] = []
         self.placed_at: dict[str, Any] | None = None
-        self.chosen_extension = ""
-        self.filename_note: Any = None
-        self._marks: dict[str, Any] = {}
+        self.where: Any = None
 
     def memory_kind(self) -> str:
         return self.source_kind
@@ -650,10 +776,32 @@ class _Slot(_OnlineTab, _OneFile):
         return kind_words.plural(self.kind, not self.target.file)
 
     def title(self) -> str:
-        return t("manager.mediasource.title_table" if self.table_id
-                 else "manager.mediasource.title_game", kind=self.label)
+        return t("manager.mediasource.choose_for",
+                 kind=kind_words.with_article(self.kind, not self.target.file),
+                 name=str((self.context.get("game") or {}).get("name") or ""))
 
-    def opened(self, above: ui.column) -> None:
+    def verb_label(self) -> str:
+        return t("manager.mediasource.use_this", kind=self.label)
+
+    def tall(self) -> bool:
+        # Imported here: the media map imports the dialogs that open this one.
+        from manager.library import mediamap
+        return mediamap.TILE_AR.get(self.kind, 1.6) < 1
+
+    def now_card(self) -> pick_pane.Card | None:
+        if not self.current:
+            return None
+        name = _file_name(self.current)
+        if self.target.file:
+            return pick_pane.card_for("", "", name)
+        return pick_pane.card_for(
+            self.target.family,
+            art.media(self.game_id, self.kind, self.table_id, size=art.PANEL, page=self.page),
+            name)
+
+    def opened(self, extra: ui.column) -> None:
+        self.pane.backs_up(bool(self.current))
+
         async def start() -> None:
             if self.page > 1:
                 return
@@ -663,10 +811,10 @@ class _Slot(_OnlineTab, _OneFile):
             await self.load_placements()
             if not self.shown():
                 return
-            with above:
+            with extra:
                 self._destination_row()
 
-        busy.fill(above, start)
+        busy.fill(extra, start)
 
     async def load_placements(self) -> None:
         """Where a file could land here, so it can be chosen rather than inferred."""
@@ -676,7 +824,6 @@ class _Slot(_OnlineTab, _OneFile):
             logger.debug("No placements for %s", self.kind, exc_info=True)
             return
         self.placements = list(body.get("placements") or [])
-        self.extensions = list(body.get("extensions") or [])
         # The lens preselects rather than decides. Looking at one build is a good guess
         # that art is for that build, and a guess is all it should be.
         wanted = next((item for item in self.placements
@@ -696,72 +843,50 @@ class _Slot(_OnlineTab, _OneFile):
         return {"page": self.page} if self.page > 1 else {}
 
     def _destination_row(self) -> None:
-        """The one decision every way in shares, so it is made once and above them.
-
-        Every option on screen rather than behind a select: there are rarely more than
-        a few, and what they differ by is the name the file gets - which a closed
-        control shows one of at a time.
-        """
-        if not self.placements:
+        """Who sees the file: the whole game or this table only. Two placements are a
+        choice; one is not, so nothing is drawn."""
+        if len(self.placements) < 2:
+            self._describe_placement()
             return
-        with ui.column().classes("w-full gap-0 manager-destination"):
-            ui.label(t("manager.mediasource.save")).classes("manager-card-title")
-            for item in self.placements:
-                self._placement_choice(item)
-            self.filename_note = ui.label("").classes("manager-help manager-destination-name")
+        names = {str(item.get("table") or ""): t("manager.picker.this_table"
+                                                 if item.get("table")
+                                                 else "manager.picker.game")
+                 for item in self.placements}
+        with ui.column().classes("w-full gap-1 manager-destination"):
+            ui.label(t("manager.picker.applies_to")).classes("manager-pair-label")
+            self.where = ui.radio(
+                names, value=self.destination,
+                on_change=lambda event: self._choose_placement(str(event.value or ""))) \
+                .props("inline dense")
         self._describe_placement()
-
-    def _placement_choice(self, item: dict[str, Any]) -> None:
-        """One name the file could be given, under the scope that name carries.
-
-        The chip is the media map's own, so the choice made here is labelled with the
-        words the map will use about the file afterwards.
-        """
-        table = str(item.get("table") or "")
-        row = ui.column().classes("gap-0 w-full manager-placement")
-        with row:
-            with ui.row().classes("items-start gap-2 w-full no-wrap manager-placement-line"):
-                mark = ui.icon("radio_button_unchecked").classes("manager-placement-mark")
-                tier = media_ownership.tier_for(
-                    media_ownership.TABLE if table else media_ownership.GAME)
-                ui.label(t("manager.picker.this_table" if table
-                           else "manager.picker.this_game")) \
-                    .classes(f"manager-tier {tier.css}")
-                ui.label(str(item.get("base") or "")).classes("manager-placement-name")
-            going = list(item.get("displaces") or [])
-            if going:
-                ui.label(t("manager.mediasource.overwrites", count=len(going))) \
-                    .classes("manager-destination-conflict manager-placement-note")
-        self._marks[table] = mark
-        row.on("click", lambda t=table: self._choose_placement(t))
 
     def _choose_placement(self, table: str) -> None:
         self.placed_at = next((item for item in self.placements
                                if item.get("table") == (table or "")), self.placed_at)
         self._describe_placement()
 
-    def _describe_placement(self) -> None:
-        """Which name is taken, and the one thing the name on screen cannot say."""
-        for table, mark in self._marks.items():
-            picked = table == self.destination
-            mark.props(f'name={"radio_button_checked" if picked else
-                                "radio_button_unchecked"}')
-            mark.classes(replace="manager-placement-mark"
-                         + (" manager-placement-mark--on" if picked else ""))
-        # The extension comes from the file, which on the upload tab is not chosen yet.
-        sure = self.chosen_extension or (self.extensions[0] if len(self.extensions) == 1
-                                         else "")
-        self.filename_note.text = (
-            t("manager.mediasource.saved", chosen_extension=sure) if sure
-            else t("manager.mediasource.extension_hint"))
+    def choose(self, entry: _Entry) -> None:
+        super().choose(entry)
+        self._describe_placement()
 
-    def note_extension(self, filename: str) -> None:
-        """The picked file's extension, so the name shown is the name it will get."""
-        suffix = ("." + filename.rsplit(".", 1)[1].lower()) if "." in filename else ""
-        if suffix != self.chosen_extension:
-            self.chosen_extension = suffix
-            if self.filename_note is not None:
-                self._describe_placement()
+    def choose_trip(self, trip: pick_pane.Trip | None, row: Any) -> None:
+        super().choose_trip(trip, row)
+        self._describe_placement()
+
+    def _file_name(self) -> str:
+        """The name the pick would be saved under: the placement's base and the picked file's
+        extension, which the file decides. Empty until a pick names a file with one."""
+        base = str((self.placed_at or {}).get("base") or "")
+        picked = self.pending.filename if self.pending is not None else ""
+        extension = PurePath(picked).suffix.lower()
+        return base + extension if base and re.fullmatch(r"\.[a-z0-9]{1,5}", extension) else ""
+
+    def _describe_placement(self) -> None:
+        """Say what name it gets, and whether it takes a place."""
+        chosen = self.placed_at or {}
+        going = list(chosen.get("displaces") or [])
+        self.pane.save_as(self._file_name() if self.pending is not None else "")
+        self.pane.backs_up(bool(going) or bool(self.current and not self.placements))
 
     async def finish(self, message: str) -> None:
         await super().finish(self.said_where(message))
@@ -793,41 +918,7 @@ class _Slot(_OnlineTab, _OneFile):
         return not self.destination and not (own or {}).get("displaces")
 
     @on_page
-    async def confirmed(self, filename: str) -> bool:
-        """Ask before a write that deletes something, naming what goes.
-
-        Asked again here rather than trusted from the list: the dropdown's count was
-        read when the dialog opened, and the answer that matters is the one at the
-        moment of the write.
-        """
-        self.note_extension(filename)
-        return await self._agreed(filename)
-
-    @on_page
-    async def agreed_to_replace(self) -> bool:
-        """Ask before an extension's row takes the place of files, naming those the
-        chosen name would replace. What arrives is not known yet, so its extension is not
-        either: the family of the kind answers for any of them."""
-        return await self._agreed("file" + (self.target.accept or ("",))[0])
-
-    async def _agreed(self, filename: str) -> bool:
-        try:
-            going = await offload.io(partial(
-                self.target.displaced, self.game_id, self.destination, self.kind,
-                filename, **self._of_page()))
-        except Exception as exc:
-            ui.notify(t("manager.mediasource.slot_failed"), caption=why(exc),
-                      type="negative")
-            return False
-        return not going or await confirm.replace(self.label, going)
-
-    def take_button(self) -> None:
-        self.pick_button()
-
-    @on_page
     async def take_offer(self, offer: dict[str, Any], source_name: str, vps_id: str) -> None:
-        if not await self.confirmed(str(offer.get("name") or "")):
-            return
         # Held: an ongoing notification never times out, so one nothing dismisses
         # outlives the answer it was waiting for.
         fetching = ui.notification(
@@ -846,20 +937,8 @@ class _Slot(_OnlineTab, _OneFile):
         await self.finish(t("manager.mediasource.saved_2", label=self.label,
                             source_name=source_name))
 
-    def candidate(self, src: str, name: str, meta: str | Callable[[], None], tag: str,
-                  take: Callable, current: bool = False) -> None:
-        """A candidate row carrying what this dialog knows: how to draw a file of the
-        kind being replaced."""
-        candidates.row(src, name, meta, tag, take, family=self.target.family,
-                       line=not self.target.family, current=current)
-
     @on_page
     async def took(self, name: str, data: bytes) -> None:
-        if await self.confirmed(name):
-            await self.place(name, data)
-
-    @on_page
-    async def place(self, name: str, data: bytes) -> None:
         try:
             placed = await run.io_bound(partial(
                 self.target.place, self.game_id, self.destination, self.kind, name, data,
@@ -873,9 +952,10 @@ class _Slot(_OnlineTab, _OneFile):
 
     @on_page
     async def _matched(self, placed: Any) -> None:
-        """Match the saved file to the VPS file picked on the Online tab, if one was. The
-        file is saved either way, so a match that fails is said and the save stands."""
-        pick = self.view.pick
+        """Match the saved file to the VPS file whose page the person was sent to, if there
+        was one. The file is saved either way, so a match that fails is said and the save
+        stands."""
+        pick = self.vps_for
         saved = str(placed.get("written") or "") if isinstance(placed, dict) else ""
         if pick is None or not saved:
             return
@@ -888,11 +968,6 @@ class _Slot(_OnlineTab, _OneFile):
 
     @on_page
     async def use_file(self, path: str) -> None:
-        name = _file_name(path)
-        # Asked before the file is read: a video is hundreds of megabytes, and a
-        # replacement somebody declines should not have cost the read.
-        if not await self.confirmed(name):
-            return
         try:
             data = await self.contents(path)
         except Exception as exc:
@@ -900,45 +975,45 @@ class _Slot(_OnlineTab, _OneFile):
                       type="negative")
             return
         self.remember(path)
-        await self.place(name, data)
+        await self.took(_file_name(path), data)
 
     def file_row(self, item: dict[str, Any]) -> None:
-        current = item["path"] == self.current
-        self.candidate(self.preview(item["path"]), item["name"], "",
-                       "" if current else self._in_use(item["name"]),
-                       lambda: self.use_file(item["path"]), current)
+        path, name = item["path"], item["name"]
+        src = self.preview(path)
+        taken = self.entry(pick_pane.card_for(self.target.family, src, name),
+                           partial(self.use_file, path), filename=name)
+        used, here = self._in_use(path, name)
+        taken.bind(candidates.row(
+            src, name, "", used, taken.pick, family=self.target.family,
+            line=not self.target.family, use=taken.use, tag_here=here))
 
-    def _in_use(self, name: str) -> str:
-        """Whether this file is already serving one of the game's slots.
+    def _in_use(self, path: str, name: str) -> tuple[str, bool]:
+        """What this file already is for the game, and whether that is the kind being
+        chosen.
 
         In a game's own folder most files are already somebody's, and the interesting
         ones are the strays. Said per row rather than by hiding the rest, so the folder
         still looks like the folder.
         """
+        if path == self.current:
+            return t("manager.mediasource.used_as", kind=self.label), True
         for kind, entry in (self.context.get("media") or {}).items():
             if entry.get("file") == name:
-                return t("manager.mediasource.already", kind=media_label_map().get(kind, kind))
-        return ""
+                return (t("manager.mediasource.used_as",
+                          kind=media_label_map().get(kind, kind)), kind == self.kind)
+        return "", False
 
-    # --- recorded on this device --------------------------------------------------
-
-    def picked(self, tab: str) -> None:
-        if self.records:
-            made = record.MADE_AS.get(media_family(self.kind), "")
-            self.note_extension(made if tab == "record" else "")
-        if self.backglass:
-            self.note_extension(BACKGLASS_PICTURE if tab == "backglass" else "")
+    # --- the backglass file's own picture -----------------------------------------
 
     async def backglass_tab(self, body: ui.column) -> None:
-        """The picture each of the game's backglass files draws, as a candidate apiece."""
-        for offer in self.backglass_files:
-            self._backglass_candidate(body, offer)
+        """The picture each of the game's backglass files draws, as a row apiece."""
+        with body:
+            for offer in self.backglass_files:
+                self._backglass_candidate(offer)
 
-    def _backglass_candidate(self, body: ui.column, offer: dict[str, Any]) -> None:
+    def _backglass_candidate(self, offer: dict[str, Any]) -> None:
         @on_page
-        async def take() -> None:
-            if not await self.confirmed(BACKGLASS_PICTURE):
-                return
+        async def draw() -> None:
             try:
                 await run.io_bound(self.library.draw_backglass_picture, self.game_id,
                                    self.destination, str(offer.get("asset_kind") or ""))
@@ -953,10 +1028,13 @@ class _Slot(_OnlineTab, _OneFile):
                                  version=offer.get("version"), size=size,
                                  grill=bool(offer.get("grill")))
 
-        with body:
-            candidates.row(src(art.CELL), str(offer.get("file") or ""),
-                           t("manager.mediasource.backglass_grill") if offer.get("grill")
-                           else "", "", take, peek=src(art.PANEL))
+        name = str(offer.get("file") or "")
+        detail = t("manager.mediasource.backglass_grill") if offer.get("grill") else ""
+        taken = self.entry(pick_pane.card_for("image", src(art.PANEL), name, detail), draw)
+        taken.bind(candidates.row(src(art.CELL), name, detail, "", taken.pick,
+                                  use=taken.use, peek=src(art.PANEL)))
+
+    # --- recorded on this device --------------------------------------------------
 
     async def record_tab(self, body: ui.column) -> None:
         """This kind recorded on its own: Record and what it made, then the settings."""
@@ -980,14 +1058,15 @@ class _Slot(_OnlineTab, _OneFile):
         with body:
             top = ui.column().classes("w-full gap-2")
             made = ui.column().classes("w-full gap-1")
-            tuning = ui.column().classes("w-full gap-0")
+            tuning = ui.column().classes(
+                "w-full gap-0 manager-source-offers manager-record-settings")
 
         def draw_top() -> None:
             top.clear()
             with top:
                 if now["stop"]:
                     _attention(now["stop"])
-                with ui.row().classes("items-center gap-2 no-wrap min-w-0"):
+                with ui.row().classes("items-center w-full no-wrap min-w-0 manager-source-head"):
                     panel.action(t("manager.record.record"), go, icon=verbs.RECORD,
                                  enabled=not now["stop"] and not now["busy"],
                                  hint=t("manager.mediasource.record_this.help"))()
@@ -1064,12 +1143,6 @@ class _Slot(_OnlineTab, _OneFile):
             draw_top()
             await review(ran)
 
-        async def decided(use: bool) -> None:
-            if use:
-                await self.finish(t("manager.mediasource.label_saved", label=self.label))
-            else:
-                made.clear()
-
         async def review(ran: dict[str, Any]) -> None:
             made.clear()
             kept = {str(one.get("id") or "") for one in ran.get("proposed") or []}
@@ -1086,8 +1159,7 @@ class _Slot(_OnlineTab, _OneFile):
                 row = next((one for one in listing.get("proposals") or []
                             if one.get("id") in kept), None)
                 if row is not None:
-                    with made:
-                        record.proposal(library, row, decided, titled=False)
+                    self._offer_recording(row)
                     return
             mine = [one for one in ran.get("failed") or [] if one.get("kind") == self.kind]
             if mine:
@@ -1107,9 +1179,115 @@ class _Slot(_OnlineTab, _OneFile):
             with body:
                 ui.timer(_RECHECK_S, look_again)
 
+    def _offer_recording(self, row: dict[str, Any]) -> None:
+        """A finished recording becomes the pick, for the verb to use. One nobody uses
+        stays waiting on the device, as it does for the page that lists them."""
+        @on_page
+        async def use() -> None:
+            try:
+                await offload.io(self.library.use_proposal, str(row["id"]), True)
+            except Exception as exc:  # noqa: BLE001 - it still waits on the device
+                ui.notify(t("manager.record.could_not_use"), caption=why(exc),
+                          type="negative")
+                return
+            await self.finish(t("manager.mediasource.label_saved", label=self.label))
 
-class _Folder(_OnlineTab):
+        self.choose(self.entry(
+            pick_pane.card_for(self.target.family, str(row.get("url") or ""),
+                               str(row.get("file") or ""),
+                               record.size(int(row.get("size") or 0))), use))
+
+
+def _list_file(sources: _Sources, item: dict[str, Any], commit: Callable[[], Any],
+               glyph: str, *, said: str = "", here: bool = False) -> _Entry:
+    """A file of a host folder as a list row that picks it, with its name and size on the
+    card New shows."""
+    name, size = item["name"], _size(item.get("size_bytes"))
+    taken = sources.entry(pick_pane.Card(name=name, shape=pick_pane.FILE, detail=size,
+                                         glyph=glyph), commit, filename=name)
+    taken.bind(candidates.row("", name, size, said, taken.pick, family="", glyph=glyph,
+                              line=True, use=taken.use, tag_here=here))
+    return taken
+
+
+def _keep_it(copies: bool, chosen: Callable[[bool], None]) -> None:
+    """How a table file is kept, as radios with their descriptions: the descriptions are
+    what the choice is made on. `chosen` hears each pick, the first included."""
+    marks: dict[bool, Any] = {}
+
+    def pick(copying: bool) -> None:
+        chosen(copying)
+        for key, mark in marks.items():
+            mark.props(f'name={"radio_button_checked" if key == copying else
+                                "radio_button_unchecked"}')
+            mark.classes(replace="manager-placement-mark"
+                         + (" manager-placement-mark--on" if key == copying else ""))
+
+    with ui.column().classes("w-full gap-0 manager-destination"):
+        ui.label(t("manager.mediasource.keep_it")).classes("manager-pair-label")
+        for option, name, help_ in (
+                (True, t("manager.mediasource.copy_in"),
+                 t("manager.mediasource.copy_in.help")),
+                (False, t("manager.mediasource.use_where"),
+                 t("manager.mediasource.use_where.help"))):
+            row = ui.row().classes("items-start gap-2 w-full no-wrap manager-placement")
+            with row:
+                marks[option] = ui.icon("radio_button_unchecked") \
+                    .classes("manager-placement-mark")
+                with ui.column().classes("gap-0 min-w-0 grow"):
+                    ui.label(name).classes("manager-placement-name")
+                    ui.label(help_).classes("manager-help")
+            row.on("click", lambda c=option: pick(c))
+    pick(copies)
+
+
+class _ManyFiles(_Sources):
+    """A dialog whose drop and file button take files or a folder. What arrives is the pick:
+    New shows it and the verb imports it, so an upload nobody goes on to use is given back."""
+
+    # Whether the file button takes several files, or one with a folder behind its caret.
+    several = True
+    _heard: Callable[[Any], None] | None = None
+
+    def _hear(self) -> Callable[[Any], None]:
+        """One listener per dialog, made on first use: it holds the client it is made in."""
+        if self._heard is None:
+            self._heard = uploads.listener(self.arrived)
+        return self._heard
+
+    def drops(self, card: Any) -> None:
+        card.on("drop", self._hear(), js_handler=_MANY)
+
+    def take_button(self) -> None:
+        _choose(self.several, self._hear())
+
+    def drop_card(self, drop: uploads.Drop) -> pick_pane.Card:
+        if drop.count > 1:
+            return pick_pane.Card(name=drop.name, shape=pick_pane.FOLDER,
+                                  detail=t("manager.mediasource.n_files", count=drop.count))
+        return pick_pane.Card(name=drop.name, shape=pick_pane.FILE)
+
+    async def arrived(self, drop: uploads.Drop) -> None:
+        if not self.shown():
+            self._give_back(drop.upload_id)
+            return
+        self.choose(self.entry(self.drop_card(drop), partial(self.use_drop, drop),
+                               discard=partial(self._give_back, drop.upload_id), arrives=True))
+
+    async def use_drop(self, drop: uploads.Drop) -> None:
+        raise NotImplementedError
+
+    def _give_back(self, upload_id: str) -> None:
+        background_tasks.create(run.io_bound(self.library.abort_upload, upload_id))
+
+    def folder_card(self, path: str) -> pick_pane.Card:
+        return pick_pane.Card(name=_file_name(path), shape=pick_pane.FOLDER)
+
+
+class _Folder(_OnlineTab, _ManyFiles):
     """A kind that arrives as many files - a PUP pack, a color set, a sound bank, music."""
+
+    drop_key = "manager.mediasource.drop_files"
 
     def __init__(self, context: dict[str, Any], kind: str, label: str,
                  done: Callable, current: str = "") -> None:
@@ -1117,10 +1295,10 @@ class _Folder(_OnlineTab):
         self.context = context
         self.kind = kind
         self.source_kind = kind
-        self.drop_key = ("manager.picker.drop_pack" if kind in _ONE_OR_FOLDER
-                         else "manager.picker.drop_files")
+        self.several = kind not in _ONE_OR_FOLDER
         self.setup_online(False)
         self.game_id = context["game_id"]
+        self.game_name = str(context["game"].get("name") or "")
         self.game_dir = str(context["game"].get("folder") or "")
         specs = specs_named(kind)
         self.extensions = {extension for spec in specs for extension in spec.extensions}
@@ -1138,7 +1316,20 @@ class _Folder(_OnlineTab):
         return kind_words.plural(self.kind)
 
     def title(self) -> str:
-        return t("manager.mediasource.title_game", kind=self.label)
+        return t("manager.mediasource.choose_for", kind=kind_words.with_article(self.kind),
+                 name=self.game_name)
+
+    def verb_label(self) -> str:
+        return t("manager.mediasource.use_this", kind=self.label)
+
+    def empty_words(self) -> str:
+        return t("manager.pane.nothing_yet")
+
+    def now_card(self) -> pick_pane.Card | None:
+        if not self.current:
+            return None
+        return pick_pane.Card(name=_file_name(self.current), shape=pick_pane.FILE,
+                              glyph=self.glyph)
 
     def starts(self) -> list[dict[str, Any]]:
         return self.library.disk_starts(self.game_id)
@@ -1152,36 +1343,23 @@ class _Folder(_OnlineTab):
     async def use_file(self, path: str) -> None:
         await self._take(path)
 
-    def folder_use(self, path: str) -> Callable | None:
-        return lambda: self._take(path)
+    def folder_entry(self, path: str) -> _Entry | None:
+        return self.entry(self.folder_card(path), partial(self._take, path))
 
     def _opens_at(self, starts: list[dict[str, Any]]) -> str:
-        """Beside what fills this, so its own row, with Current and Use, is on screen."""
+        """Beside what fills this, so its own row is on screen."""
         return folder_picker.enclosing(self.current) if self.current \
             else super()._opens_at(starts)
 
     def file_row(self, item: dict[str, Any]) -> None:
         archive = _suffix(item) in ARCHIVE_EXTENSIONS
-        candidates.row("", item["name"], _size(item.get("size_bytes")), "",
-                       lambda: self._take(item["path"]), family="",
-                       glyph="folder_zip" if archive else self.glyph, line=True,
-                       current=item["path"] == self.current)
+        here = item["path"] == self.current
+        _list_file(self, item, partial(self._take, item["path"]),
+                   "folder_zip" if archive else self.glyph,
+                   said=t("manager.mediasource.used_as", kind=self.label) if here else "",
+                   here=here)
 
-    def zone(self, card: Any) -> None:
-        heard = uploads.listener(self.arrived)
-        ui.label(t("manager.mediasource.drop_files")).classes("manager-help manager-drop-only")
-        self.choose(heard)
-        card.on("drop", heard, js_handler=_MANY)
-
-    def choose(self, heard: Callable[[Any], Any]) -> None:
-        """The one button this kind is taken with: files or one file with a folder behind
-        its caret, never two buttons."""
-        _choose(self.kind not in _ONE_OR_FOLDER, heard)
-
-    def take_button(self) -> None:
-        self.choose(uploads.listener(self.arrived))
-
-    async def arrived(self, drop: uploads.Drop) -> None:
+    async def use_drop(self, drop: uploads.Drop) -> None:
         await self._import(drop.upload_id, drop.name, drop.count)
 
     @on_page
@@ -1221,54 +1399,62 @@ class _Folder(_OnlineTab):
         await self.done()
 
 
+_TEXT_NOTES = (".txt", ".md")
+# How much of a notes file is read to show its first lines.
+_TEXT_READ = 4000
+
+
 class _Notes(_Folder):
+    """Notes files for a game. A game may have several, so there is nothing to compare
+    against and New stands alone; the folder lists everything, with what is not notes dimmed."""
+
+    drop_key = "manager.mediasource.drop_file"
+    pane_alone = True
+
     def __init__(self, context: dict[str, Any], label: str, done: Callable) -> None:
         super().__init__(context, "readme", label, done)
         self.reads_names = False
+        self.several = False
+        self.accept = tuple(DOC_FAMILY)
+
+    def verb_label(self) -> str:
+        return t("manager.mediasource.use_notes")
 
     def suffixes(self) -> tuple[str, ...]:
-        return tuple(DOC_FAMILY)
+        return ()
 
-    def folder_use(self, path: str) -> Callable | None:
+    def fits(self, item: dict[str, Any]) -> bool:
+        return True
+
+    def folder_entry(self, path: str) -> _Entry | None:
         return None
 
-    def zone(self, card: Any) -> None:
-        heard = uploads.listener(self.arrived)
-        ui.label(t("manager.mediasource.drop_file")).classes("manager-help manager-drop-only")
-        panel.action(t("manager.mediasource.choose_file"), heard, icon=verbs.FROM_FILE,
+    def take_button(self) -> None:
+        panel.action(t("manager.mediasource.choose_file"), self._hear(), icon=verbs.FROM_FILE,
                      hint=t("manager.mediasource.choose_file.help"),
                      js="() => window.__managerChoose(false, emit, true)")()
-        card.on("drop", heard, js_handler=_MANY)
 
+    def file_row(self, item: dict[str, Any]) -> None:
+        if _suffix(item) not in DOC_FAMILY:
+            candidates.row("", item["name"], "", "", lambda: None, family="",
+                           glyph=self.glyph, line=True) \
+                .classes("manager-source-row--dim")
+            return
+        taken = _list_file(self, item, partial(self._take, item["path"]), self.glyph)
+        if _suffix(item) in _TEXT_NOTES:
+            taken.row.on("click", lambda: background_tasks.create(self._show_text(taken, item)))
 
-def _copy_or_use(copies: bool, chosen: Callable[[bool], None]) -> None:
-    """Copy or reference, as radios with their descriptions: the descriptions are what
-    the choice is made on. `chosen` hears each pick, the first included."""
-    marks: dict[bool, Any] = {}
-
-    def pick(copying: bool) -> None:
-        chosen(copying)
-        for key, mark in marks.items():
-            mark.props(f'name={"radio_button_checked" if key == copying else
-                                "radio_button_unchecked"}')
-            mark.classes(replace="manager-placement-mark"
-                         + (" manager-placement-mark--on" if key == copying else ""))
-
-    with ui.column().classes("w-full gap-0 manager-destination"):
-        for option, name, help_ in (
-                (True, t("manager.mediasource.copy_in"),
-                 t("manager.mediasource.copy_in.help")),
-                (False, t("manager.mediasource.use_where"),
-                 t("manager.mediasource.use_where.help"))):
-            row = ui.row().classes("items-start gap-2 w-full no-wrap manager-placement")
-            with row:
-                marks[option] = ui.icon("radio_button_unchecked") \
-                    .classes("manager-placement-mark")
-                with ui.column().classes("gap-0 min-w-0 grow"):
-                    ui.label(name).classes("manager-placement-name")
-                    ui.label(help_).classes("manager-help")
-            row.on("click", lambda c=option: pick(c))
-    pick(copies)
+    async def _show_text(self, taken: _Entry, item: dict[str, Any]) -> None:
+        """The first lines of the picked notes, in place of a file card, once read."""
+        try:
+            data = await offload.io(self.library.disk_file, item["path"], self.accept)
+        except Exception:  # noqa: BLE001 - the file card stays
+            return
+        text = data[:_TEXT_READ].decode("utf-8", errors="replace")
+        taken.card = pick_pane.Card(name=item["name"], shape=pick_pane.TEXT, text=text,
+                                    detail=_size(item.get("size_bytes")))
+        if self.pending is taken and self.shown():
+            self.pane.show(taken.card)
 
 
 class _Table(_Folder):
@@ -1276,17 +1462,23 @@ class _Table(_Folder):
     launcher starts it from."""
 
     keyed = True
+    drop_key = "manager.mediasource.drop_table"
+    pane_alone = True
 
     def __init__(self, context: dict[str, Any], done: Callable) -> None:
         super().__init__(context, "table", t("asset.kind.table.label"), done)
-        self.drop_key = "manager.picker.drop_table"
-        self.game_name = str(context["game"].get("name") or "")
         self.narrows_to = ""
         self.adds_table = True
         self.copies = True
 
     def title(self) -> str:
         return t("manager.mediasource.add_table", name=self.game_name)
+
+    def verb_label(self) -> str:
+        return t("manager.mediasource.table_verb")
+
+    def now_card(self) -> pick_pane.Card | None:
+        return None
 
     def starts(self) -> list[dict[str, Any]]:
         return [root for root in self.library.disk_starts(self.game_id)
@@ -1302,23 +1494,14 @@ class _Table(_Folder):
         inside = _under(self.game_dir, str(item.get("path") or ""))
         return _suffix(item) in self.extensions and not inside
 
-    def folder_use(self, path: str) -> Callable | None:
+    def folder_entry(self, path: str) -> _Entry | None:
         return None
 
     def file_row(self, item: dict[str, Any]) -> None:
-        candidates.row("", item["name"], _size(item.get("size_bytes")), "",
-                       lambda: self._chosen(item["path"]), family="", glyph=self.glyph,
-                       line=True)
-
-    def zone(self, card: Any) -> None:
-        heard = uploads.listener(self.arrived)
-        ui.label(t("manager.mediasource.drop_table")).classes("manager-help manager-drop-only")
-        ui.label(t("manager.mediasource.drop_table.help")).classes("manager-help manager-drop-only")
-        self.choose(heard)
-        card.on("drop", heard, js_handler=_MANY)
+        _list_file(self, item, partial(self._chosen, item["path"]), self.glyph)
 
     def choices(self) -> None:
-        _copy_or_use(self.copies, lambda copies: setattr(self, "copies", copies))
+        _keep_it(self.copies, lambda copies: setattr(self, "copies", copies))
 
     @on_page
     async def _chosen(self, path: str) -> None:
@@ -1330,7 +1513,7 @@ class _Table(_Folder):
             ui.notify(t("said.add_failed"), caption=why(exc), type="negative")
             return
         self.remember(path)
-        pick = self.view.pick
+        pick = self.vps_for
         table = str(made.get("id") or "") if isinstance(made, dict) else ""
         if pick is not None and table:
             try:
@@ -1408,7 +1591,7 @@ class _Table(_Folder):
                 await self._imported()
 
             with ui.row().classes("items-center gap-2 w-full manager-slot-actions"):
-                panel.action(t("word.add"), add, icon=verbs.ADD,
+                panel.action(t("manager.mediasource.table_verb"), add, icon=verbs.ADD,
                              hint=t("manager.mediasource.add_keyed_table.help"))()
             held["typed"].on("keydown.enter", add)
 
@@ -1436,9 +1619,12 @@ class _Table(_Folder):
         ui.navigate.to(wanted)
 
 
-class _Library(_Sources):
+class _Library(_ManyFiles):
     """The Add dialog of a library page. What it takes goes where a file dropped on the
     page's empty space goes: a table makes a game, anything else asks which game."""
+
+    drop_key = "manager.mediasource.drop_files"
+    pane_alone = True
 
     def __init__(self, library: Any, name: str, took: Callable[[uploads.Drop], Any], *,
                  tables: bool, referenced: Callable[[str], Any] | None = None,
@@ -1455,6 +1641,10 @@ class _Library(_Sources):
 
     def title(self) -> str:
         return self.label.removesuffix("…")
+
+    def verb_label(self) -> str:
+        return t("manager.mediasource.table_verb" if self.tables
+                 else "manager.mediasource.file_verb")
 
     def memory_kind(self) -> str:
         return "library"
@@ -1487,31 +1677,23 @@ class _Library(_Sources):
         if inspect.isawaitable(answer):
             await answer
 
-    def zone(self, card: Any) -> None:
-        heard = uploads.listener(self.arrived)
-        ui.label(t("manager.mediasource.drop_files")).classes("manager-help manager-drop-only")
-        _choose(True, heard)
-        card.on("drop", heard, js_handler=_MANY)
-
     def choices(self) -> None:
         if self.tables and self.referenced is not None:
-            _copy_or_use(self.copies, lambda copies: setattr(self, "copies", copies))
+            _keep_it(self.copies, lambda copies: setattr(self, "copies", copies))
 
-    def folder_use(self, path: str) -> Callable | None:
-        return lambda: self._take(path)
+    def folder_entry(self, path: str) -> _Entry | None:
+        return self.entry(self.folder_card(path), partial(self._take, path))
 
     async def use_file(self, path: str) -> None:
         await self._chosen(path)
 
     def file_row(self, item: dict[str, Any]) -> None:
         archive = _suffix(item) in ARCHIVE_EXTENSIONS
-        candidates.row("", item["name"], _size(item.get("size_bytes")), "",
-                       lambda: self._chosen(item["path"]), family="",
-                       glyph="folder_zip" if archive else icons.TABLES
-                       if _suffix(item) in apps.table_suffixes() else verbs.FROM_FILE,
-                       line=True)
+        glyph = "folder_zip" if archive else icons.TABLES \
+            if _suffix(item) in apps.table_suffixes() else verbs.FROM_FILE
+        _list_file(self, item, partial(self._chosen, item["path"]), glyph)
 
-    async def arrived(self, drop: uploads.Drop) -> None:
+    async def use_drop(self, drop: uploads.Drop) -> None:
         self.dialog.close()
         await self.took(drop)
 
@@ -1535,7 +1717,7 @@ class _Library(_Sources):
             ui.notify(t("manager.uploads.read_failed"), caption=why(exc), type="negative")
             return
         self.remember(path)
-        await self.arrived(uploads.Drop(upload_id=upload_id, name=_file_name(path)))
+        await self.use_drop(uploads.Drop(upload_id=upload_id, name=_file_name(path)))
 
 
 class _Image(_OneFile):
@@ -1543,9 +1725,12 @@ class _Image(_OneFile):
 
     games = True
 
-    def __init__(self, library: Any, name: str, label: str, done: Callable) -> None:
+    def __init__(self, library: Any, name: str, label: str, done: Callable,
+                 now: str = "") -> None:
         super().__init__(library, label, done, IMAGE_FAMILY)
         self.name = name
+        # Where the browser fetches the picture in use, or "" where there is none.
+        self.now = now
 
     def memory_kind(self) -> str:
         return "picture"
@@ -1554,7 +1739,13 @@ class _Image(_OneFile):
         return t("word.pictures")
 
     def title(self) -> str:
-        return t("manager.mediasource.title_collection", kind=self.label)
+        return t("manager.mediasource.choose_for_collection", name=self.name)
+
+    def verb_label(self) -> str:
+        return t("manager.mediasource.use_this", kind=self.label)
+
+    def now_card(self) -> pick_pane.Card | None:
+        return pick_pane.card_for("image", self.now, "") if self.now else None
 
     @on_page
     async def use_file(self, path: str) -> None:
@@ -1568,8 +1759,11 @@ class _Image(_OneFile):
         await self.took(_file_name(path), data)
 
     def file_row(self, item: dict[str, Any]) -> None:
-        candidates.row(self.preview(item["path"]), item["name"], "", "",
-                       lambda: self.use_file(item["path"]))
+        path, name = item["path"], item["name"]
+        src = self.preview(path)
+        taken = self.entry(pick_pane.card_for("image", src, name),
+                           partial(self.use_file, path), filename=name)
+        taken.bind(candidates.row(src, name, "", "", taken.pick, use=taken.use))
 
     async def games_tab(self, body: ui.column) -> None:
         body.clear()
@@ -1579,52 +1773,56 @@ class _Image(_OneFile):
             with body:
                 panel.line(t("manager.mediasource.games_failed"), hint=why(exc))
             return
-        wheeled = [entry for entry in entries if "wheel" in (entry.get("media") or [])]
+        pictures = [(entry, kind) for entry in entries
+                    for kind in (entry.get("media") or []) if media_family(kind) == "image"]
         with body:
-            if not wheeled:
-                ui.label(t("manager.mediasource.no_game_wheels")).classes("manager-help")
+            if not pictures:
+                ui.label(t("manager.mediasource.no_game_pictures")).classes("manager-help")
                 return
-            find = None
-            if len(wheeled) > _FIND_FROM:
-                with ui.element("div").classes("w-full"):
-                    find = frame.field(placeholder=t("manager.mediasource.find_game"))
+            games = {str((entry.get("game") or {}).get("id") or "") for entry, _ in pictures}
+            ui.label(t("manager.mediasource.pictures_games", count=len(games))) \
+                .classes("manager-pair-label")
+            with ui.element("div").classes("w-full"):
+                find = frame.field(placeholder=t("manager.folder_picker.filter"))
             listing = ui.column().classes("w-full gap-1 manager-source-list")
 
         def draw() -> None:
-            typed = str(find.value or "").strip().casefold() if find is not None else ""
-            found = [entry for entry in wheeled
+            typed = str(find.value or "").strip().casefold()
+            found = [(entry, kind) for entry, kind in pictures
                      if typed in str((entry.get("game") or {}).get("name") or "").casefold()]
             listing.clear()
             with listing:
                 if not found:
                     ui.label(t("manager.mediasource.find_empty")).classes("manager-help")
-                for entry in found:
-                    self._wheel_row(entry)
+                for entry, kind in found:
+                    self._picture_row(entry, kind)
 
-        if find is not None:
-            find.on_value_change(draw)
+        find.on_value_change(draw)
         draw()
 
-    def _wheel_row(self, entry: dict[str, Any]) -> None:
+    def _picture_row(self, entry: dict[str, Any], kind: str) -> None:
         game = entry.get("game") or {}
         game_id = str(game.get("id") or "")
         table_id = str((entry.get("table") or {}).get("id") or "")
         name = str(game.get("name") or "")
+        label = media_label_map().get(kind, kind)
+        whole = art.media(game_id, kind, table_id, size=art.PANEL)
 
         @on_page
         async def take() -> None:
             try:
                 data, served = await offload.io(self.library.media_file, game_id, table_id,
-                                                "wheel")
+                                                kind)
             except Exception as exc:  # noqa: BLE001
                 ui.notify(t("manager.mediasource.image_failed"), caption=why(exc),
                           type="negative")
                 return
             await self.took(_named_for(name, served), data)
 
-        candidates.row(art.media(game_id, "wheel", table_id, size=art.CELL), name,
-                       game_tables.made(game), "", take,
-                       peek=art.media(game_id, "wheel", table_id, size=art.PANEL))
+        taken = self.entry(pick_pane.card_for("image", whole, name, label), take,
+                           filename=name)
+        taken.bind(candidates.row(art.media(game_id, kind, table_id, size=art.CELL), name,
+                                  label, "", taken.pick, use=taken.use, peek=whole))
 
     @on_page
     async def took(self, name: str, data: bytes) -> None:
@@ -1639,20 +1837,20 @@ class _Image(_OneFile):
 
 class _PlayerPicture(_Image):
     """A player's picture: a file from your device or from the host. A player has no
-    games to borrow a wheel from."""
+    games to borrow a picture from."""
 
     games = False
 
     def __init__(self, library: Any, label: str, save: Callable,
                  services: Sequence[dict[str, Any]] = (),
-                 use_service: Callable | None = None) -> None:
-        super().__init__(library, "", label, save)
+                 use_service: Callable | None = None, now: str = "") -> None:
+        super().__init__(library, "", label, save, now)
         self.services = list(services)
         self.use_service = use_service
         self.online = bool(self.services and use_service)
 
     def title(self) -> str:
-        return t("manager.mediasource.title_player", kind=self.label)
+        return t("manager.mediasource.choose_picture")
 
     async def online_tab(self, body: ui.column) -> None:
         """One button per account whose service has a picture for this player."""
@@ -1832,16 +2030,20 @@ def take_drops(element: Any, arrived: Callable[[uploads.Drop], Any]) -> None:
     element.on("drop", uploads.listener(arrived), js_handler=_MANY)
 
 
-def open_image_sources(library: Any, name: str, label: str, done: Callable) -> None:
-    _Image(library, name, label, done).open()
+def open_image_sources(library: Any, name: str, label: str, done: Callable,
+                       now: str = "") -> None:
+    """`now` is where the browser fetches the picture the collection has, if it has one."""
+    _Image(library, name, label, done, now).open()
 
 
 def open_player_picture_sources(library: Any, label: str, save: Callable, *,
                                 services: Sequence[dict[str, Any]] = (),
-                                use_service: Callable | None = None) -> None:
+                                use_service: Callable | None = None,
+                                now: str = "") -> None:
     """`save(name, data)` keeps the file and raises with its reason if it cannot.
 
     `services` are the accounts whose service has a picture; `use_service(extension)` copies
-    that one and returns the redraw, raising with its reason where it cannot.
+    that one and returns the redraw, raising with its reason where it cannot. `now` is where
+    the browser fetches the picture the player has, if there is one.
     """
-    _PlayerPicture(library, label, save, services, use_service).open()
+    _PlayerPicture(library, label, save, services, use_service, now).open()

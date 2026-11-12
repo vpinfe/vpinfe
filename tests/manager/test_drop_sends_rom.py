@@ -102,7 +102,7 @@ class EveryWayOntoAGameSendsIt(_Dropping):
         context = {"library": self.library, "game_id": "g-1", "game": WITH_ROM}
         sources = mediasource._Folder(context, "alt_color", "Alt Color", AsyncMock())
 
-        await press(sources.arrived, uploads.Drop(upload_id="u-1", name="mm_109c.cRZ"))
+        await press(sources.use_drop, uploads.Drop(upload_id="u-1", name="mm_109c.cRZ"))
 
         self.assertEqual(("mm_109c", "mm_109c"), (self.planned_rom(), self.imported_rom()))
 

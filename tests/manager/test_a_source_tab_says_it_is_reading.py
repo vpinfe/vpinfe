@@ -31,6 +31,12 @@ class _Probe(mediasource._Sources):
     def title(self) -> str:
         return "Probe"
 
+    def verb_label(self) -> str:
+        return "Use"
+
+    def take_button(self) -> None:
+        ui.button("Choose a File")
+
     async def _read(self, tab: str, body: ui.column) -> None:
         self.seen[tab] = _busy(body)
         await self.gate.wait()

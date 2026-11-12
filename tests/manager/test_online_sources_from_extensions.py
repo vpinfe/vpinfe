@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from nicegui import background_tasks, events, ui
+from nicegui import ui
 
 from common.i18n import t
 from manager.kit.data import Library
@@ -86,24 +85,21 @@ def _offered(library: Mock) -> list[tuple[str, ...]]:
     return [call.args for call in library.source_offers.call_args_list]
 
 
-async def _press(button: ui.button) -> None:
-    started: list[Any] = []
-    with patch.object(background_tasks, "create_or_defer",
-                      lambda awaitable, **_: started.append(awaitable)):
-        for listener in button._event_listeners.values():
-            if listener.type == "click" and listener.handler is not None:
-                listener.handler(events.ClickEventArguments(sender=button, client=button.client))
-    await asyncio.gather(*started)
-
-
-def _use(element: ui.element, after: str) -> ui.button:
-    """The Use button of the row named `after`."""
+def _row(element: ui.element, after: str) -> ui.row:
+    """The pickable row naming `after`."""
     for row in (one for one in element.descendants() if isinstance(one, ui.row)):
-        inside = list(row.descendants())
-        buttons = [one for one in inside if isinstance(one, ui.button)]
-        if buttons and any(getattr(one, "text", "") == after for one in inside):
-            return buttons[0]
+        if "manager-source-row--pick" in row.classes and any(
+                getattr(one, "text", "") == after for one in row.descendants()):
+            return row
     raise AssertionError(f"no row named {after}")
+
+
+def _click(row: ui.element, event: str = "click") -> Any:
+    """What a person's click, or double-click, on `row` does; a double-click is a coroutine."""
+    for listener in row._event_listeners.values():
+        if listener.type == event and listener.handler is not None:
+            return listener.handler()
+    raise AssertionError(f"nothing listens for {event}")
 
 
 class _Drawn(unittest.IsolatedAsyncioTestCase):
@@ -166,11 +162,11 @@ class Rows(_Drawn):
         tips = [one.text for one in shown.descendants() if isinstance(one, ui.tooltip)]
         self.assertIn(t("manager.discovery.page_hint", site="example.com"), tips)
 
-    async def test_a_row_the_slot_already_holds_says_current_and_is_not_a_button(self) -> None:
+    async def test_a_row_the_slot_already_holds_says_so_and_no_row_has_a_button(self) -> None:
         shown = await self.drawn(_slot(_library(BUILT_IN, FILES)))
 
-        self.assertEqual(1, _seen(shown).count(t("word.current")))
-        self.assertEqual(1, _seen(shown).count(t("manager.candidates.use")))
+        self.assertEqual(1, _seen(shown).count(t("manager.mediasource.used_as", kind="Wheel")))
+        self.assertEqual([], [one for one in shown.descendants() if isinstance(one, ui.button)])
 
     async def test_what_the_source_says_under_its_rows_is_drawn(self) -> None:
         shown = await self.drawn(_slot(_library(BUILT_IN, FILES)))
@@ -366,11 +362,30 @@ class Taking(_Drawn):
         self.target = Mock(online=True, file=False, accept=(".png", ".jpg"),
                            displaced=Mock(return_value=[]))
         self.probe = _slot(self.library, target=self.target)
+        self.probe.pane, self.probe.verb = Mock(), Mock()
         self.shown = await self.drawn(self.probe)
 
     async def pick(self, answer: Any) -> None:
+        """Click the row, then press the verb: the pick is complete only at the verb."""
         self.library.source_take.return_value = answer
-        await _press(_use(self.shown, "Wheel A"))
+        _click(_row(self.shown, "Wheel A"))
+        with _PAGE:
+            await self.probe.go()
+
+    async def test_a_click_picks_and_asks_nothing_of_the_source(self) -> None:
+        _click(_row(self.shown, "Wheel A"))
+
+        self.library.source_take.assert_not_called()
+        self.assertEqual("Wheel A", self.probe.pending.card.name if self.probe.pending else "")
+        self.probe.verb.enable.assert_called_once()
+
+    async def test_a_double_click_picks_and_takes(self) -> None:
+        self.library.source_take.return_value = {"message": "Nothing to do"}
+
+        with _PAGE:
+            await _click(_row(self.shown, "Wheel A"), "dblclick")
+
+        self.library.source_take.assert_called_once()
 
     async def test_the_pick_names_the_row_the_kind_and_the_game(self) -> None:
         await self.pick({"message": "Nothing to do"})
@@ -422,60 +437,56 @@ class Taking(_Drawn):
         opened.assert_awaited_once_with({"name": "ext"}, "get", ["a"], who={
             "game_id": "g-1", "vps_id": "own", "name": "Own Game", "table_id": ""})
 
-    async def test_a_pick_the_person_declines_to_replace_takes_nothing(self) -> None:
-        self.probe.agreed_to_replace = AsyncMock(return_value=False)  # type: ignore[method-assign]
-
-        await self.pick({"message": "Nothing to do"})
-
-        self.library.source_take.assert_not_called()
-
     async def test_a_source_that_refuses_the_pick_says_so_and_does_nothing_more(self) -> None:
         self.library.source_take.side_effect = RuntimeError("no")
 
         with patch.object(mediasource.ui, "notify") as notify:
-            await _press(_use(self.shown, "Wheel A"))
+            await self.pick({})
 
         self.assertEqual(t("manager.mediasource.fetch_failed"), notify.call_args.args[0])
 
-    async def agreed(self, going: list[str]) -> tuple[bool, AsyncMock]:
-        self.target.displaced = Mock(return_value=going)
-        with patch.object(mediasource.confirm, "replace",
-                          new=AsyncMock(return_value=True)) as ask:
-            with _PAGE:
-                agreed = self.probe.agreed_to_replace()
-            return await agreed, ask
+    def _described(self, going: list[str], current: str = "", placements: bool = True) -> Mock:
+        self.probe.current = current
+        self.probe.placements = [{"table": ""}] if placements else []
+        self.probe.placed_at = {"table": "", "base": "wheel", "displaces": going}
+        self.probe.pending = None
+        self.probe.pane = Mock()
+        self.probe._describe_placement()
+        return self.probe.pane
 
-    async def test_a_slot_names_the_files_a_pick_would_replace(self) -> None:
-        agreed, ask = await self.agreed(["wheel.png"])
+    async def test_a_slot_that_would_overwrite_says_so_under_the_pair(self) -> None:
+        pane = self._described(["wheel.png"])
 
-        self.assertTrue(agreed)
-        ask.assert_awaited_once_with("Wheel", ["wheel.png"])
+        pane.backs_up.assert_called_once_with(True)
 
-    async def test_what_would_go_is_asked_again_when_the_pick_is_taken(self) -> None:
-        self.probe.placed_at = {"displaces": []}
+    async def test_the_name_a_pick_would_take_carries_the_files_extension(self) -> None:
+        self._described([])
+        self.probe.pending = Mock(filename="Party.PNG")
 
-        agreed, ask = await self.agreed(["wheel.jpg"])
+        self.assertEqual("wheel.png", self.probe._file_name())
+        self.probe.pending = None
+        self.assertEqual("", self.probe._file_name())
+        self.probe.pending = Mock(filename="1.0 Someone")
+        self.assertEqual("", self.probe._file_name())
 
-        self.assertTrue(agreed)
-        ask.assert_awaited_once_with("Wheel", ["wheel.jpg"])
-        self.assertEqual(("g-1", "", "wheel", "file.png"),
-                         self.target.displaced.call_args.args)
+    async def test_new_is_named_for_the_file_it_becomes_once_something_is_picked(self) -> None:
+        pane = self._described([])
+        pane.save_as.assert_called_once_with("")
 
-    async def test_a_slot_with_nothing_there_does_not_ask(self) -> None:
-        agreed, ask = await self.agreed([])
+        self.probe.pending = Mock(filename="Party.PNG")
+        self.probe._describe_placement()
 
-        self.assertTrue(agreed)
-        ask.assert_not_awaited()
+        pane.save_as.assert_called_with("wheel.png")
 
-    async def test_a_slot_that_cannot_say_what_would_go_takes_nothing(self) -> None:
-        self.target.displaced = Mock(side_effect=RuntimeError("no"))
+    async def test_a_slot_with_nothing_there_says_nothing_goes_to_backups(self) -> None:
+        pane = self._described([])
 
-        with patch.object(mediasource.ui, "notify") as notify:
-            with _PAGE:
-                agreed = self.probe.agreed_to_replace()
-            self.assertFalse(await agreed)
+        pane.backs_up.assert_called_once_with(False)
 
-        self.assertEqual(t("manager.mediasource.slot_failed"), notify.call_args.args[0])
+    async def test_a_file_in_use_with_no_placement_to_read_still_goes_to_backups(self) -> None:
+        pane = self._described([], current="/x/wheel.png", placements=False)
+
+        pane.backs_up.assert_called_once_with(True)
 
 
 class OnlineKinds(unittest.TestCase):

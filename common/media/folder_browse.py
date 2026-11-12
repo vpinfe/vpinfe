@@ -113,9 +113,11 @@ def _wanted_file(entry: os.DirEntry, kind: str, suffixes: tuple[str, ...]) -> bo
 
 
 def _entries(path: Path, private: tuple[Path, ...], kind: str,
-             suffixes: tuple[str, ...], hidden: bool) -> tuple[list[dict], list[dict]]:
+             suffixes: tuple[str, ...], hidden: bool) -> tuple[list[dict], list[dict], bool]:
+    """The folders and the files of `path`, and whether a private folder was left out."""
     folders: list[dict] = []
     files: list[dict] = []
+    withheld = False
     try:
         with os.scandir(path) as scanned:
             for entry in scanned:
@@ -127,6 +129,7 @@ def _entries(path: Path, private: tuple[Path, ...], kind: str,
                     continue
                 if is_dir:
                     if _is_private(Path(entry.path), private):
+                        withheld = True
                         continue
                     if kind == "exe" and _is_bundle(Path(entry.path)):
                         files.append({"name": entry.name, "path": entry.path})
@@ -138,7 +141,7 @@ def _entries(path: Path, private: tuple[Path, ...], kind: str,
         raise service_errors.RefusedError(t("error.folders.cannot_read")) from exc
     folders.sort(key=lambda item: item["name"].lower())
     files.sort(key=lambda item: item["name"].lower())
-    return folders, files
+    return folders, files, withheld
 
 
 def _home() -> Path:
@@ -308,9 +311,10 @@ def listing(path: str = "", kind: str = "dir", suffixes: tuple[str, ...] = (),
     if _is_private(here, private):
         raise service_errors.RefusedError(t("error.folders.private"))
     parent = here.parent
-    folders, files = _entries(here, private, kind, suffixes, hidden)
+    folders, files, withheld = _entries(here, private, kind, suffixes, hidden)
     return {"path": str(here), "parent": "" if parent == here else str(parent),
-            "folders": folders, "files": files, "roots": _roots(kind)}
+            "folders": folders, "files": files, "roots": _roots(kind),
+            "withheld": withheld}
 
 
 def _resolved(path: str) -> Path:

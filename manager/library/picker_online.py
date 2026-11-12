@@ -18,7 +18,7 @@ from nicegui import run, ui
 
 from common import icons
 from common.failures import why
-from common.games import asset_origin, asset_registry, asset_resolver, opened_pages
+from common.games import asset_registry, asset_resolver, opened_pages
 from common.i18n import t
 from common.media.media_specs import canonical_kind
 from common.online import sources as source_registry
@@ -32,6 +32,7 @@ from manager.kit import (
     kind_words,
     offload,
     panel,
+    pick_pane,
     verbs,
 )
 from manager.kit.on_page import on_page
@@ -49,7 +50,6 @@ SIZE_NAMES = {"4k": "config.media.playfield_resolution.choice.4k",
               "1k": "config.media.playfield_resolution.choice.1k"}
 
 FULL = panel.FULL
-HEADING = panel.HEADING
 
 # The kinds whose resolution the Playfield Video setting decides, not the picture's.
 _VIDEOS = frozenset({"playfield_video", "scoreview_video"})
@@ -137,18 +137,19 @@ class Host(Protocol):
     built_in: bool
     glyph: str
     family: str
-    drop_key: str
 
     @property
     def destination(self) -> str: ...
 
     def shown(self) -> bool: ...
-    def show_online(self) -> None: ...
-    def take_button(self) -> None: ...
-    async def agreed_to_replace(self) -> bool: ...
+    def entry(self, card: pick_pane.Card | None, commit: Callable[[], Any], *,
+              discard: Callable[[], Any] | None = None, filename: str = "",
+              arrives: bool = False) -> Any: ...
+    def choose(self, entry: Any) -> None: ...
+    def choose_trip(self, trip: pick_pane.Trip | None, row: Any) -> None: ...
+    def forget_trip(self) -> None: ...
     async def finish_plain(self, message: str) -> None: ...
     async def take_offer(self, offer: dict[str, Any], source_name: str, vps_id: str) -> None: ...
-
 
 def _guarded(call: Callable[..., Any], default: Any, *args: Any) -> Any:
     try:
@@ -210,25 +211,6 @@ def _origin_of(slot: dict[str, Any], name: str) -> str:
         else ""
 
 
-def held_line(file: HeldFile, record: dict[str, Any] | None, listing: Listing) -> str:
-    """Where a held file is from, in the words under its name."""
-    vps = kind_words.vps_name(listing.ours, listing.media)
-    if file.file_id:
-        told = vps_records.told(record) if record else ""
-        return t("manager.picker.matched_to", vps=vps, told=told).strip()
-    if file.origin == "vpinmediadb":
-        return t("manager.picker.from_vpinmediadb")
-    if file.origin == asset_origin.RECORDED:
-        return t("manager.picker.recorded")
-    if listing.listed_as:
-        return t("manager.picker.unmatched", vps=vps)
-    return t("manager.picker.own_entry") if file.origin in ("", asset_origin.UNKNOWN) else ""
-
-
-def drop_words(key: str, told: str) -> str:
-    return t(key, told=told)
-
-
 class Online:
     """The tab, for one picker: it draws the game's match to VPS, what the game has and
     what else is available, and holds the VPS file picked."""
@@ -237,52 +219,17 @@ class Online:
         self.host = host
         self.pick: VpsPick | None = None
         self.found = Found()
-        self.band: Any = None
+        self.head: Any = None
         self.well: Any = None
-        self.base: Any = None
-        self.strip_box: Any = None
         self.known: list[dict[str, Any]] | None = None
-        self.opened_now: set[str] = set()
         self._asked = 0
-
-    # --- the strip over the tabs ----------------------------------------------------
-
-    def strip(self) -> None:
-        """Where the picked VPS file is said, above whichever tab is open."""
-        self.strip_box = ui.row().classes("w-full items-center gap-2 px-3 no-wrap "
-                                          "manager-pick-strip")
-        self.strip_box.set_visibility(False)
-
-    def _draw_strip(self) -> None:
-        if self.strip_box is None:
-            return
-        self.strip_box.clear()
-        self.strip_box.set_visibility(self.pick is not None)
-        if self.pick is None:
-            return
-        vps = kind_words.vps_name(self.host.listing.ours, self.host.listing.media)
-        with self.strip_box:
-            ui.label(t("manager.picker.strip", vps=vps, told=self.pick.label)) \
-                .classes("manager-help grow min-w-0")
-            panel.action(t("manager.picker.change"), self.host.show_online, icon=verbs.REPLACE,
-                         inline=True, hint=t("manager.picker.change.help", vps=vps))()
-            panel.action(t("manager.picker.clear"), self.clear, icon=verbs.CLEAR, inline=True,
-                         hint=t("manager.picker.clear.help", vps=vps))()
 
     def choose(self, record: dict[str, Any]) -> None:
         self.pick = VpsPick(str(record.get("vps_file_id") or ""), vps_records.told(record),
                             str(record.get("img_url") or ""))
-        self.repaint()
 
     def clear(self) -> None:
         self.pick = None
-        self.repaint()
-
-    def repaint(self) -> None:
-        self._draw_strip()
-        if self.well is not None and self.host.shown():
-            self._paint_well()
-            self._paint_base()
 
     # --- the file taken ---------------------------------------------------------------
 
@@ -349,9 +296,8 @@ class Online:
     async def draw(self, body: ui.column) -> None:
         body.clear()
         with body:
-            self.band = ui.column().classes("w-full gap-1 manager-online-band")
+            self.head = ui.column().classes("w-full gap-1")
             self.well = ui.column().classes("w-full gap-1 manager-source-offers")
-            self.base = ui.column().classes("w-full gap-1 manager-online-base")
         try:
             self.known = await offload.io(self.host.library.media_sources)
         except Exception:  # noqa: BLE001 - the names label the rows; the rows still draw
@@ -373,26 +319,42 @@ class Online:
         if self.pick and not any(str(one.get("vps_file_id")) == self.pick.file_id
                                  for one in found.records):
             self.pick = None
-        self._draw_strip()
-        self._paint_band()
+            self.host.forget_trip()
+        self._paint_head()
         self._paint_well()
-        self._paint_base()
 
-    # --- the band: the game's match -------------------------------------------------
+    # --- the head: which game this is the list of ------------------------------------
 
-    def _paint_band(self) -> None:
-        self.band.clear()
+    def _paint_head(self) -> None:
+        self.head.clear()
         game = self.game()
         vps_id = str(game.get("vps_id") or "")
         declared = (game.get("overrides") or {}).get("alt_vps_id", "") is None
-        entries: list[tuple[Any, ...]] = [(HEADING, t("manager.workbench.vps_game"))]
-        entries += match_group.match_rows(self.found.entry, vps_id, declared,
-                                          bool(self.found.entry), game_tables.how_matched(game))
-        with self.band:
-            panel.facts(ui, entries)
+        with self.head:
+            if self.found.entry.get("name"):
+                self._named_head(game)
+                return
+            panel.facts(ui, match_group.unmatched(
+                match_group.game_match_gap(vps_id, declared, bool(self.found.entry))))
             if not vps_id and self.found.guess:
                 self._looks_like()
             match_group.change_match(self._match_another, matched=bool(vps_id) or declared)()
+
+    def _named_head(self, game: dict[str, Any]) -> None:
+        """"A band naming the game the list is of, with the way to a different one at its end."""
+        entry = self.found.entry
+        made = game_tables.made(entry) or game_tables.made(game)
+        named = str(entry.get("name") or game.get("name") or "")
+        with ui.row().classes("items-start gap-2 w-full no-wrap manager-source-head"):
+            with ui.column().classes("gap-0 min-w-0 grow"):
+                ui.label(t("manager.picker.head_for", kinds=self._kinds())) \
+                    .classes("manager-fact-heading")
+                ui.label(named).classes("manager-cell-named")
+                if made:
+                    ui.label(made).classes("manager-cell-said manager-cell-made")
+            ui.label(t("manager.picker.wrong_game")) \
+                .classes("manager-link cursor-pointer shrink-0") \
+                .on("click", self._match_another)
 
     def _looks_like(self) -> None:
         guess = self.found.guess
@@ -445,9 +407,6 @@ class Online:
                 else "media" if listing.manifest and not listing.listed_as else "other"
         return f"manager.picker.{which}_{where}"
 
-    def _heading(self, key: str) -> None:
-        ui.label(t(key, kinds=self._kinds())).classes("manager-fact-heading")
-
     def _paint_well(self) -> None:
         self.well.clear()
         game = self.game()
@@ -456,31 +415,21 @@ class Online:
             if not str(game.get("vps_id") or ""):
                 ui.label(t(self._said("waits"), kinds=sentence)).classes("manager-help")
                 return
-            held = self.found.held
-            by_id = {str(one.get("vps_file_id") or ""): one for one in self.found.records}
-            if held:
-                self._heading("manager.picker.have")
-                for file in held:
-                    self._held_row(file, by_id.get(file.file_id))
+            used = {file.file_id for file in self.found.held if file.file_id}
             offers = self._database_offers()
-            tied = {file.file_id for file in held if file.file_id}
             rows = [one for one in vps_records.newest_first(self.found.records)
-                    if str(one.get("vps_file_id") or "") not in tied and self._playable(one)]
-            if held and (offers or rows):
-                self._heading("manager.picker.other")
-            elif offers or rows:
-                self._heading("manager.picker.kinds")
+                    if self._playable(one)]
             for offer, source in offers:
                 self._database_row(offer, source)
             for record, nested in release_match.in_lineage(rows):
-                self._vps_row(record, nested)
+                self._vps_row(record, nested, str(record.get("vps_file_id") or "") in used)
             if self.found.unread:
                 panel.line(t("manager.picker.vps_unread"))
             failed = self._catalog_failed()
             if failed:
                 panel.line(t("manager.mediasource.sources_failed"))
             drew = self._extension_sections(game)
-            if not (held or offers or rows or self.found.unread or self.found.offers_error
+            if not (offers or rows or self.found.unread or self.found.offers_error
                     or failed or drew):
                 ui.label(t(self._said("none"), kinds=sentence)).classes("manager-help")
 
@@ -489,54 +438,43 @@ class Online:
             return True
         return vps_formats.fits(record.get("format"), self.found.formats)
 
-    def _held_row(self, file: HeldFile, record: dict[str, Any] | None) -> None:
-        picture = str((record or {}).get("img_url") or "")
-        pressed = self.pick is not None and bool(file.file_id) \
-            and file.file_id == self.pick.file_id
-        pick = partial(self.choose, record) if record else None
-        trailing = self._page_link(record) if record else None
-        candidates.choice(picture, file.name, held_line(file, record, self.host.listing),
-                          pick, glyph=self.host.glyph or icons.GAMES, chosen=pressed,
-                          trailing=trailing, missing=vps_match.NO_PICTURE)
+    def _used_as(self) -> str:
+        listing = self.host.listing
+        return t("manager.mediasource.used_as",
+                 kind=kind_words.label(listing.ours, listing.media))
 
-    def _vps_row(self, record: dict[str, Any], nested: bool) -> None:
-        file_id = str(record.get("vps_file_id") or "")
+    def _vps_row(self, record: dict[str, Any], nested: bool, used: bool) -> None:
+        """A file VPS lists. Picking it says where to fetch it: the file itself comes from
+        the other site, so the pick is complete only once the person has dropped it."""
         features = self.host.listing.listed_as == "tableFiles"
         detail = game_tables.JOIN.join(part for part in (
             _day(record), vps_records.site_of(record)[0],
             vps_records.what_it_is(record, features=features)) if part)
         site, page = vps_records.site_of(record)
-        more = ((t("manager.picker.opened_now"),) if file_id in self.opened_now else
-                () if page else (t("manager.picker.no_page"),))
+
+        def pick() -> None:
+            self.choose(record)
+            self.host.choose_trip(
+                pick_pane.Trip(site, page, partial(self._opened, record)) if page else None,
+                row)
+
         row = candidates.choice(
             str(record.get("img_url") or ""),
-            vps_records.told(record) or t("manager.discovery.unnamed_file"), detail,
-            partial(self.choose, record), glyph=self.host.glyph or icons.GAMES,
-            chosen=self.pick is not None and self.pick.file_id == file_id,
-            trailing=self._page_link(record) if page else None, more=more,
-            missing=vps_match.NO_PICTURE)
+            vps_records.told(record) or t("manager.discovery.unnamed_file"), detail, pick,
+            glyph=self.host.glyph or icons.GAMES, slot=True, use=None,
+            more=() if page else (t("manager.picker.no_page"),),
+            tag=self._used_as() if used else "", tag_here=used, missing=vps_match.NO_PICTURE)
         if nested:
             row.classes(add="manager-source-row--under")
 
-    def _page_link(self, record: dict[str, Any]) -> Callable[[], None] | None:
-        site, page = vps_records.site_of(record)
-        if not page:
-            return None
-        return panel.out(
-            to=page, on_click=partial(self._opened, record),
-            hint=t("manager.discovery.link_broken") if vps_records.page_is_broken(record)
-            else t("manager.discovery.open_on", site=site))
-
     @on_page
     async def _opened(self, record: dict[str, Any]) -> None:
-        """The page was opened: that file is the one picked, and the row says so."""
-        file_id = str(record.get("vps_file_id") or "")
-        self.opened_now.add(file_id)
-        self.choose(record)
+        """The page was opened, which VPS keeps track of so the game's files can say it."""
         listed = self.host.listing.listed_as
         if listed:
             vps_id = str(self.game().get("vps_id") or "")
-            await run.io_bound(_guarded, opened_pages.note, None, vps_id, listed, file_id,
+            await run.io_bound(_guarded, opened_pages.note, None, vps_id, listed,
+                               str(record.get("vps_file_id") or ""),
                                vps_records.site_of(record)[1])
 
     # VPinMediaDB's own files, first within the others.
@@ -549,8 +487,7 @@ class Online:
                 continue
             for each in one.get("kinds") or ():
                 for offer in each.get("offers") or ():
-                    if not self._is_current(offer):
-                        found.append((offer, named.get(str(offer["source"]), {})))
+                    found.append((offer, named.get(str(offer["source"]), {})))
         return found
 
     def _catalog_failed(self) -> bool:
@@ -575,24 +512,34 @@ class Online:
         vps_id = str(self.game().get("vps_id") or "")
         meta = " · ".join(part for part in (
             name, t(SIZE_NAMES[size]) if size in SIZE_NAMES else size) if part)
-        take = partial(self.host.take_offer, offer, name, vps_id)
+        used = self._is_current(offer)
+        src = str(offer.get("url") or "")
+        taken = self.host.entry(
+            pick_pane.card_for(self.host.family or "image", src, str(offer.get("name") or ""),
+                               meta),
+            partial(self.host.take_offer, offer, name, vps_id),
+            filename=str(offer.get("name") or ""))
+
+        def pick() -> None:
+            self.clear()
+            taken.pick()
+
+        async def use() -> None:
+            self.clear()
+            await taken.use()
 
         def trailing() -> None:
+            if not root:
+                return
+            from urllib.parse import quote
             with ui.element("span").classes("shrink-0").on("click.stop", js_handler="() => {}"):
-                panel.action(t("manager.candidates.use"), lambda: self._started(take),
-                             icon=verbs.ACCEPT, hint=t("manager.picker.use.help", source=name))()
-            if root:
-                from urllib.parse import quote
                 panel.out(to=f"{root}/tree/main/{quote(vps_id, safe='')}",
                           hint=t("manager.discovery.folder_hint", site=name))()
 
-        candidates.choice(str(offer.get("url") or ""), str(offer.get("name") or ""), meta,
-                          lambda: self._started(take), family=self.host.family or "image",
-                          glyph=self.host.glyph, trailing=trailing)
-
-    @on_page
-    async def _started(self, take: Callable[[], Any]) -> None:
-        await take()
+        taken.bind(candidates.choice(
+            src, str(offer.get("name") or ""), meta, pick, family=self.host.family or "image",
+            glyph=self.host.glyph, slot=True, use=use, trailing=trailing,
+            tag=self._used_as() if used else "", tag_here=used))
 
     # --- extension sources ----------------------------------------------------------
 
@@ -659,8 +606,6 @@ class Online:
                     who: dict[str, str]) -> None:
         @on_page
         async def take() -> None:
-            if not await self.host.agreed_to_replace():
-                return
             taking = {**who, "table_id": self.host.destination}
             try:
                 answer = await offload.io(
@@ -680,9 +625,25 @@ class Online:
                           if row.get("page") else row["site"])
         if row.get("note"):
             pieces.append(row["note"])
-        candidates.row(row.get("picture") or "", row["name"], candidates.credits(*pieces),
-                       row.get("tag") or "", take, family="image", glyph=self.host.glyph,
-                       current=bool(row.get("current")))
+        here = bool(row.get("current"))
+        picture = str(row.get("picture") or "")
+        taken = self.host.entry(
+            pick_pane.card_for("image", picture, str(row["name"]),
+                               " · ".join(str(one) for one in pieces if isinstance(one, str))),
+            take)
+
+        async def use() -> None:
+            self.clear()
+            await taken.use()
+
+        def pick() -> None:
+            self.clear()
+            taken.pick()
+
+        taken.bind(candidates.row(
+            picture, row["name"], candidates.credits(*pieces),
+            str(row.get("tag") or "") or (self._used_as() if here else ""), pick,
+            family="image", glyph=self.host.glyph, use=use, tag_here=here))
 
     @on_page
     async def _taken(self, source: dict[str, Any], row_key: str, answer: dict[str, Any],
@@ -701,17 +662,6 @@ class Online:
                 "manager.mediasource.ext_started", source_name=source["name"])))
         elif answer.get("message"):
             ui.notify(str(answer["message"]))
-
-    # --- the base: where the file is dropped -----------------------------------------
-
-    def _paint_base(self) -> None:
-        self.base.clear()
-        if self.pick is None:
-            return
-        with self.base, ui.row().classes("w-full items-center gap-3 no-wrap manager-dropbox"):
-            ui.label(drop_words(self.host.drop_key, self.pick.label)) \
-                .classes("manager-help manager-drop-only grow min-w-0")
-            self.host.take_button()
 
 
 _FILE_ACTIONS = ("copy", "replace_b2s", "zip_rom", "replace_media")

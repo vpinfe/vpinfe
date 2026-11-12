@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from nicegui import ui
 
 from common.i18n import t
+from manager.kit import kind_words
 from manager.kit.kind_words import in_a_sentence
 from manager.library import import_dialog, picker_online
 from tests.support.game_offers import answer_from
@@ -31,6 +32,36 @@ def _record(file_id: str, version: str, author: str = "Ann", url: str = "") -> d
             "updated_at": f"2026-0{int(version[0])}-01T00:00:00Z"}
 
 
+class _Entry:
+    """What a picker's `entry` hands back: a row binds to it and a press picks it."""
+
+    def __init__(self, card: Any, commit: Any) -> None:
+        self.card = card
+        self.commit = commit
+
+    def bind(self, row: Any) -> Any:
+        return row
+
+    def pick(self) -> None:
+        pass
+
+    async def use(self) -> None:
+        pass
+
+
+def _press(row: ui.element) -> None:
+    """The click a person makes on `row`."""
+    for listener in row._event_listeners.values():
+        if listener.type == "click":
+            listener.handler()
+
+
+def _row_named(body: ui.element, text: str) -> ui.element:
+    return next(row for row in body.descendants()
+                if isinstance(row, ui.row) and "manager-source-row--pick" in row.classes
+                and text in _texts(row))
+
+
 class _Host:
     """What a picker gives its Online tab."""
 
@@ -45,7 +76,7 @@ class _Host:
         self.built_in = False
         self.glyph = ""
         self.family = ""
-        self.drop_key = "manager.picker.drop_file"
+        self.trips: list[Any] = []
         self.took: list[tuple[Any, ...]] = []
 
     @property
@@ -55,14 +86,15 @@ class _Host:
     def shown(self) -> bool:
         return True
 
-    def show_online(self) -> None:
-        self.took.append(("show_online",))
+    def entry(self, card: Any, commit: Any, *, discard: Any = None,
+              filename: str = "") -> _Entry:
+        return _Entry(card, commit)
 
-    def take_button(self) -> None:
-        ui.button("Choose a File")
+    def choose(self, entry: Any) -> None:
+        self.took.append(("choose", entry))
 
-    async def agreed_to_replace(self) -> bool:
-        return True
+    def choose_trip(self, trip: Any, row: Any) -> None:
+        self.trips.append(trip)
 
     async def finish_plain(self, message: str) -> None:
         self.took.append(("finish", message))
@@ -140,7 +172,6 @@ class TheOnlineTab(unittest.IsolatedAsyncioTestCase):
         view = picker_online.Online(host)
         with _PAGE:
             body = ui.column()
-            view.strip()
         await view.draw(body)
         return view, body
 
@@ -153,7 +184,6 @@ class TheOnlineTab(unittest.IsolatedAsyncioTestCase):
         _, body = await self._drawn(host)
         said = _texts(body)
 
-        self.assertIn(t("manager.workbench.vps_game"), said)
         self.assertIn(t("manager.workbench.not_matched"), said)
         self.assertIn("Guessed Game", said)
         self.assertIn(t("manager.picker.match"), said)
@@ -161,50 +191,50 @@ class TheOnlineTab(unittest.IsolatedAsyncioTestCase):
         self.assertFalse([one for one in said if "1.0" in one])
         self.assertFalse([one for one in said if "another game" in one.lower()])
 
-    async def test_the_list_has_two_headings_and_does_not_repeat_what_the_game_has(self) -> None:
+    async def test_the_files_are_one_list_and_the_one_the_game_has_says_so(self) -> None:
         held = {"kinds": [{"kind": "romFiles", "files": [
             {"name": "sttng_l7", "vps_file_id": "f1"}]}]}
         library = _library([_record("f1", "1.0"), _record("f2", "2.0", "Bea")], held)
         _, body = await self._drawn(_Host(library, _library_game(library)))
-        said = _texts(body)
+        used = t("manager.mediasource.used_as", kind=kind_words.label("rom", False))
 
-        self.assertIn(t("manager.picker.have", kinds="ROMs"), said)
-        self.assertIn(t("manager.picker.other", kinds="ROMs"), said)
-        self.assertIn("sttng_l7", said)
-        self.assertEqual(1, said.count("sttng_l7"))
-        self.assertNotIn("1.0 · Ann", said)
-        self.assertIn("2.0 · Bea", said)
-
-    async def test_one_heading_when_the_game_has_none(self) -> None:
-        library = _library([_record("f1", "1.0")])
-        _, body = await self._drawn(_Host(library, _library_game(library)))
-        said = _texts(body)
-
-        self.assertIn(t("manager.picker.kinds", kinds="ROMs"), said)
-        self.assertNotIn(t("manager.picker.have", kinds="ROMs"), said)
+        first = _row_named(body, "1.0 · Ann")
+        second = _row_named(body, "2.0 · Bea")
+        self.assertIn(used, _texts(first))
+        self.assertNotIn(used, _texts(second))
+        self.assertEqual(1, [one for one in _texts(body)].count("1.0 · Ann"))
 
     async def test_the_word_release_is_nowhere_on_the_tab(self) -> None:
         library = _library([_record("f1", "1.0")])
         view, body = await self._drawn(_Host(library, _library_game(library)))
         view.choose(_record("f1", "1.0"))
-        for one in _texts(body) + _texts(view.strip_box):
+        for one in _texts(body):
             self.assertNotIn("release", one.lower())
 
-    async def test_a_press_picks_the_file_and_the_strip_and_drop_strip_say_which(self) -> None:
+    async def test_a_press_picks_the_file_and_sends_the_person_to_its_page(self) -> None:
+        record = _record("f1", "1.0", "Ann", url="https://example.org/page")
+        library = _library([record])
+        host = _Host(library, _library_game(library))
+        view, body = await self._drawn(host)
+        self.assertIsNone(view.pick)
+
+        _press(_row_named(body, "1.0 · Ann"))
+
+        self.assertEqual("f1", view.pick.file_id if view.pick else "")
+        self.assertEqual(1, len(host.trips))
+        self.assertEqual("https://example.org/page", host.trips[0].to)
+
+    async def test_a_file_with_no_page_is_picked_and_sends_nowhere(self) -> None:
         library = _library([_record("f1", "1.0", "Ann")])
         host = _Host(library, _library_game(library))
         view, body = await self._drawn(host)
-        self.assertFalse(view.strip_box.visible)
-        self.assertEqual([], _texts(view.base))
+        row = _row_named(body, "1.0 · Ann")
+        self.assertIn(t("manager.picker.no_page"), _texts(row))
 
-        view.choose(_record("f1", "1.0", "Ann"))
+        _press(row)
 
-        self.assertTrue(view.strip_box.visible)
-        self.assertIn(t("manager.picker.strip", vps="VPS ROM", told="1.0 · Ann"),
-                      _texts(view.strip_box))
-        self.assertIn(t("manager.picker.change"), _texts(view.strip_box))
-        self.assertIn(t("manager.picker.clear"), _texts(view.strip_box))
-        self.assertIn(t("manager.picker.drop_file", told="1.0 · Ann"), _texts(view.base))
+        self.assertEqual("f1", view.pick.file_id if view.pick else "")
+        self.assertEqual([None], host.trips)
 
     async def test_clear_takes_the_pick_back(self) -> None:
         library = _library([_record("f1", "1.0")])
@@ -213,18 +243,17 @@ class TheOnlineTab(unittest.IsolatedAsyncioTestCase):
         view.clear()
 
         self.assertIsNone(view.pick)
-        self.assertFalse(view.strip_box.visible)
-        self.assertEqual([], _texts(view.base))
 
-    async def test_opening_a_page_picks_the_file_and_the_row_says_so(self) -> None:
+    async def test_opening_a_page_is_noted_for_the_file(self) -> None:
         record = _record("f1", "1.0", url="https://example.org/page")
         library = _library([record])
-        view, body = await self._drawn(_Host(library, _library_game(library)))
-        with patch.object(picker_online.opened_pages, "note"), _PAGE:
+        view, _ = await self._drawn(_Host(library, _library_game(library)))
+        with patch.object(picker_online.opened_pages, "note") as note, \
+                patch("manager.library.picker_online.run.io_bound", new=_now), _PAGE:
             await view._opened(record)
 
-        self.assertEqual("f1", view.pick.file_id if view.pick else "")
-        self.assertIn(t("manager.picker.opened_now"), _texts(body))
+        note.assert_called_once()
+        self.assertEqual(("own", "romFiles", "f1"), note.call_args.args[0:3])
 
     async def test_a_file_dropped_before_any_pick_is_matched_to_nothing(self) -> None:
         library = _library([_record("f1", "1.0")])
@@ -248,7 +277,6 @@ class TheOnlineTab(unittest.IsolatedAsyncioTestCase):
                             {**_record("f2", "2.0"), "format": "FP"}])
         library.tables_for.return_value = [{"vps_formats": ["VPX"]}]
         host = _Host(library, _library_game(library), kind="table")
-        host.drop_key = "manager.picker.drop_table"
         _, body = await self._drawn(host)
         said = _texts(body)
 

@@ -71,7 +71,7 @@ class Uploaded(unittest.IsolatedAsyncioTestCase):
 
     async def _dropped(self) -> Mapping[str, Any]:
         sources = mediasource._Table(_context(Mock()), self.done)
-        await press(sources.arrived, uploads.Drop(upload_id="u-1", name="Other.vpx"))
+        await press(sources.use_drop, uploads.Drop(upload_id="u-1", name="Other.vpx"))
         assert self.confirmed.await_args is not None
         return self.confirmed.await_args.kwargs
 

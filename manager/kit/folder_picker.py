@@ -89,6 +89,10 @@ def join(folder: str, name: str) -> str:
     return folder.rstrip("\\/") + sep + name
 
 
+def _filter_box(placeholder: str) -> ui.input:
+    return ui.input(placeholder=placeholder).props("dense outlined clearable clear-icon=close")
+
+
 def _typed_path(text: str, here: str) -> str:
     """What was typed or pasted as a path: quotes dropped, as Windows' Copy as path adds
     them, and a bare name taken as inside the folder you are in."""
@@ -230,7 +234,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
                  places: Sequence[dict[str, Any]] | None = None,
                  file_row: Callable[[dict[str, Any]], None] | None = None,
                  keep: Callable[[dict[str, Any]], bool] | None = None,
-                 folder_extra: Callable[[str], Callable[[], Any] | None] | None = None,
+                 pickable: Callable[[str], Any] | None = None,
                  empty: str = "", limit: int = 0, embedded: bool = False,
                  notes: Callable[[str], str] | None = None,
                  saving: str | None = None,
@@ -240,10 +244,12 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     `take(path)` is called with the path chosen. `on_ready(enabled)` says whether Choose
     has something to take. `places` replaces the places the listing names, so a dialog can
     put its own first. `file_row(item)` draws a file's row where it is more than a name,
-    `keep(item)` drops the files it refuses and `folder_extra(path)` answers what to draw on
-    the end of a folder's row, or None. `limit` caps the rows drawn and `empty` words an
-    empty folder. `embedded` is a browser in a tab: it fills the tab, opens with nothing
-    chosen, and takes a typed file at once as there is no Choose to press.
+    `keep(item)` drops the files it refuses and `pickable(path)` answers what picking that
+    folder offers (something with `bind(row)` and `pick()`), or None where a folder is only
+    a way down. `limit` caps the rows drawn and `empty` words an empty folder. `embedded` is
+    a browser in a tab: it fills the tab, opens with nothing chosen and takes a typed file at
+    once, as there is no Choose to press. A pickable folder is picked on a click and opened
+    on a double-click.
 
     `lead` is places to put before the ones the listing names, Home and Downloads among them.
     `notes(path)` says a word to show at the end of a file's row, or "". `saving` turns the
@@ -273,10 +279,8 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     with ui.column().classes("manager-picker-head gap-2"):
         path_row = ui.row().classes("items-center gap-2 w-full no-wrap")
         with ui.row().classes("items-center gap-x-4 w-full no-wrap"):
-            term = ui.input(placeholder=t("manager.folder_picker.filter_folders"
-                                          if kind == "dir"
-                                          else "manager.folder_picker.filter")) \
-                .props("dense outlined clearable clear-icon=close").classes("grow")
+            term = _filter_box(t("manager.folder_picker.filter_folders" if kind == "dir"
+                                 else "manager.folder_picker.filter")).classes("grow")
             shown = ui.checkbox(t("manager.folder_picker.show_hidden"), value=False) \
                 .props("dense").classes("whitespace-nowrap")
     with ui.column().classes("manager-picker-well gap-0"
@@ -286,7 +290,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
                                else "manager-folder-list"
                                + (" manager-folder-list--saving" if saving is not None
                                   else "")))
-        ui.label(t("manager.folder_picker.private_note")).classes(
+        private_note = ui.label(t("manager.folder_picker.private_note")).classes(
             "manager-help manager-picker-note")
 
     def _final_name() -> str:
@@ -523,6 +527,7 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
 
     def draw_listing() -> None:
         listing_col.clear()
+        private_note.visible = not embedded or bool(state["here"].get("withheld"))
         wanted = (term.value or "").strip().lower()
         folders = [f for f in state["here"]["folders"] if wanted in f["name"].lower()]
         files = [f for f in state["here"].get("files") or []
@@ -550,16 +555,19 @@ def draw_browser(first: Start, list_entries: Callable[..., dict], *, kind: str =
     def _folder_row(folder: dict[str, Any]) -> None:
         row = ui.row().classes("items-center gap-2 w-full no-wrap manager-source-row "
                                "manager-source-row--pick manager-source-row--line")
+        offer = pickable(folder["path"]) if pickable is not None else None
         with row:
             ui.icon("folder").classes("shrink-0")
             ui.label(folder["name"]).classes("manager-source-name grow")
-            extra = folder_extra(folder["path"]) if folder_extra is not None else None
-            if extra is not None:
-                # The row opens the folder; what is drawn here acts on it instead.
-                with ui.element("div").classes("shrink-0") \
-                        .on("click", js_handler="(e) => e.stopPropagation()"):
-                    extra()
-        row.on("click", lambda p=folder["path"]: _go(p))
+            if offer is not None:
+                panel.open_row(t("manager.folder_picker.open_folder"),
+                               lambda p=folder["path"]: _go(p))
+        if offer is None:
+            row.on("click", lambda p=folder["path"]: _go(p))
+            return
+        offer.bind(row)
+        row.on("click", offer.pick)
+        row.on("dblclick", lambda p=folder["path"]: _go(p))
 
     def _file_row(one: dict[str, Any]) -> None:
         classes = ("items-center gap-2 w-full no-wrap manager-source-row "
