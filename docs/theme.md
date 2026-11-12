@@ -878,6 +878,11 @@ has lasted `vpin.scrubAfterMs` (1000), core stops all of it, and brings it up to
 
 `core_scrub` turns all of it off, and every step of a hold is announced as it always was.
 
+A held page button does not speed up the way a held step button does. After the same wait it
+repeats at one steady pace, `vpin.pageRepeatMs` (350), so each group stays up long enough to
+read. Once the hold passes `vpin.scrubAfterMs` it travels as described above, a group per
+repeat, at the same pace.
+
 ### Lists core holds
 
 Core can descend into a list of its own and move that instead of the wheel. Today that is

@@ -182,6 +182,9 @@ function configValue(config, key) {
 const REPEATING_ACTIONS = new Set(
   ["previous", "next", "page_previous", "page_next"]);
 
+// A held one of these repeats at a flat `pageRepeatMs`, with no ramp.
+const PAGING_ACTIONS = new Set(["page_previous", "page_next"]);
+
 // What the page still answers while a table runs, and only by handing it to core, which
 // knows whether the table is frozen. `IN_PLAY` in common/config/input_registry.py.
 const PLAY_ACTIONS = new Set(["take_picture", "back"]);
@@ -920,6 +923,7 @@ class VPinFECore {
     this.repeatStartMs = 260;   // the first repeat: a comfortable browse
     this.repeatAccel = 0.82;    // each repeat is this much shorter than the last
     this.repeatFloorMs = 70;    // as fast as this goes: quick, still trackable
+    this.pageRepeatMs = 350;    // a held page button: one group per this, never faster
     // One at a time. You cannot ask to go left and right at once, and a wheel that tried
     // would answer neither.
     this._hold = null;
@@ -3678,7 +3682,7 @@ class VPinFECore {
     if (this._hold !== held) return;
     // Muted, not cancelled, while a complete chord owns this input: what the player
     // asked for is the chord's action. Letting go of the other member brings the walk
-    // back, because still holding this one is still asking for it - and the ramp starts
+    // back, because still holding this one is still asking for it - and the interval starts
     // again rather than resuming at whatever speed it had reached.
     const muted = held.token && this.#heldByChord(held.token);
     // Wait for the step to be handled before pacing the next one. Without this the ramp
@@ -3691,8 +3695,8 @@ class VPinFECore {
     if (!muted) await this.#dispatchAction(held.action);
     if (this._hold !== held) return;
 
-    held.interval = muted
-      ? this.repeatStartMs
+    held.interval = PAGING_ACTIONS.has(held.action) ? this.pageRepeatMs
+      : muted ? this.repeatStartMs
       : Math.max(this.repeatFloorMs, held.interval * this.repeatAccel);
     const left = Math.max(0, held.interval - (Date.now() - started));
     held.timer = setTimeout(() => this.#onRepeat(held), left);

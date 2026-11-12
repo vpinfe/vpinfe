@@ -265,6 +265,30 @@ describe("a held control repeats, and the repeat is ours", () => {
 
     assert.equal(seen.filter(one => one === "select").length, 1);
   });
+
+  test("a held page button keeps its own steady pace while a step button speeds up", async () => {
+    const { vpin, press, release, seen } = handler();
+    quickly(vpin);
+    vpin.pageRepeatMs = 40;
+    const times = { page_next: [], next: [] };
+    vpin.inputHandlers.push((action) => { if (times[action]) times[action].push(Date.now()); });
+
+    await press("PageDown");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    await release("PageDown");
+    await press("ArrowRight");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    await release("ArrowRight");
+
+    // Leave out the press itself: the gap after it is the hold delay, not the pace.
+    const repeats = times.page_next.slice(1);
+    const gaps = repeats.slice(1).map((at, i) => at - repeats[i]);
+    assert.ok(gaps.length >= 3, `a held page button has to keep going: ${gaps}`);
+    assert.ok(gaps.every(gap => gap >= 30), `a page repeat came faster than its pace: ${gaps}`);
+    assert.ok(times.next.length > times.page_next.length * 2,
+      "the step button should still repeat much faster than the page button");
+    assert.ok(seen.includes("page_next") && seen.includes("next"));
+  });
 });
 
 describe("defaults agree across the boundary", () => {
@@ -868,6 +892,7 @@ function quickly(vpin) {
   vpin.repeatDelayMs = 5;
   vpin.repeatStartMs = 5;
   vpin.repeatFloorMs = 5;
+  vpin.pageRepeatMs = 5;
 }
 
 // Long enough for several repeats at the compressed interval.
