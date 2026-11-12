@@ -1,4 +1,5 @@
-"""Where a file-taking picker opens: the folder the last file of its kind came from."""
+"""Where a file-taking picker opens: a dialog for one game, that game's own folder;
+elsewhere the folder the last file of its kind came from."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from typing import Any
 from unittest.mock import patch
 
 from manager.kit import folder_picker
-from manager.library import picker_memory
+from manager.library import mediasource, picker_memory
 
 
 class _Store:
@@ -109,6 +110,53 @@ class PlacesTests(unittest.TestCase):
             ordered = picker_memory.places("backglass", "Backglasses", listed)
 
         self.assertEqual([one["path"] for one in ordered], ["/home/player/Downloads", "/games/y"])
+
+
+class WhereADialogOpensTests(unittest.TestCase):
+    OWN = [{"path": "/games/second", "source": "game"}, {"path": "/games", "source": "library"}]
+    LIBRARY_ONLY = [{"path": "/games", "source": "library"}]
+
+    def dialog(self, game_id: str, current: str = "") -> mediasource._Library:
+        one = mediasource._Library(object(), "Add", lambda drop: None, tables=False)
+        one.game_id = game_id
+        one.current = current
+        return one
+
+    def test_a_dialog_for_one_game_opens_on_its_own_folder_not_the_last_used_one(self) -> None:
+        with _Store():
+            picker_memory.record("library", "/games/first/file.png")
+
+            self.assertEqual(self.dialog("second")._first_folder("/games/second", self.OWN),
+                             "/games/second")
+
+    def test_a_dialog_replacing_a_file_opens_on_that_files_folder(self) -> None:
+        with _Store():
+            picker_memory.record("library", "/downloads/file.png")
+
+            self.assertEqual(
+                self.dialog("second", "/games/second/medias")._first_folder(
+                    "/games/second/medias", self.LIBRARY_ONLY),
+                "/games/second/medias")
+
+    def test_a_dialog_for_no_one_game_opens_on_the_last_used_folder(self) -> None:
+        with _Store():
+            picker_memory.record("library", "/downloads/file.png")
+
+            self.assertEqual(self.dialog("")._first_folder("/games", self.LIBRARY_ONLY),
+                             "/downloads")
+
+    def test_a_game_whose_own_folder_is_not_offered_opens_on_the_last_used_one(self) -> None:
+        with _Store():
+            picker_memory.record("library", "/downloads/file.png")
+
+            self.assertEqual(self.dialog("second")._first_folder("/games", self.LIBRARY_ONLY),
+                             "/downloads")
+
+    def test_a_game_with_no_folder_of_its_own_still_opens_on_the_last_used_one(self) -> None:
+        with _Store():
+            picker_memory.record("library", "/downloads/file.png")
+
+            self.assertEqual(self.dialog("second")._first_folder("", []), "/downloads")
 
 
 class _Listings:

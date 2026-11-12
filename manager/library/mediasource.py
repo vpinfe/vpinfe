@@ -170,6 +170,9 @@ class _Sources:
     # Where this dialog is in a walk over several files ("2 of 5"), which turns Cancel into
     # Skip and Stop. Empty outside one.
     walk_place = ""
+    # The game this dialog fills, which the host tab opens on the folder of. Empty where it
+    # fills no one game.
+    game_id = ""
 
     def __init__(self, library: Any, label: str, done: Callable, current: str = "") -> None:
         self.library = library
@@ -406,7 +409,7 @@ class _Sources:
             starts = await offload.io(self.starts)
             today = self._opens_at(starts)
             first = await folder_picker.read_start(
-                self.library.folders, picker_memory.last(self.memory_kind()) or today,
+                self.library.folders, self._first_folder(today, starts),
                 kind="file", suffixes=suffixes, nearest=True, fallback=today)
         except Exception as exc:
             if self.shown():
@@ -431,6 +434,13 @@ class _Sources:
 
     def nothing_here(self) -> str:
         return t("manager.mediasource.nothing_use", kind=self.label)
+
+    def _first_folder(self, today: str, starts: list[dict[str, Any]]) -> str:
+        """Where the host tab opens: the game's own folder where this dialog is for one game."""
+        own = self.current or any(one.get("source") == "game" for one in starts)
+        if self.game_id and today and own:
+            return today
+        return picker_memory.last(self.memory_kind()) or today
 
     def _opens_at(self, starts: list[dict[str, Any]]) -> str:
         """The folder of what fills this now, else the game's own folder or the library's,
