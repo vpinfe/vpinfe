@@ -190,15 +190,16 @@ jobs:
         env:
           HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
 
-      # Sign, strip the quarantine attributes a runner leaves behind, and wrap the .app
-      # in the DMG a user actually downloads. Identical for the full and slim builds,
-      # so it is written once and run twice.
+      # Strip the quarantine and Finder attributes a runner leaves behind, sign, and wrap
+      # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
+      # copied out of its DMG carries Finder info, which codesign refuses to sign over.
+      # Identical for the full and slim builds, so it is written once and run twice.
       - name: Package the .app as a signed DMG (macOS)
         if: runner.os == 'macOS'
         run: |
+          sudo xattr -rc dist
           codesign --force --deep --sign - dist/VPinFE.app
           codesign --verify --verbose dist/VPinFE.app
-          sudo xattr -rc dist
           create-dmg \
             --volname "VPinFE" \
             --volicon "packaging/VPinFE.icns" \
@@ -278,15 +279,16 @@ jobs:
           retention-days: 30
 
 
-      # Sign, strip the quarantine attributes a runner leaves behind, and wrap the .app
-      # in the DMG a user actually downloads. Identical for the full and slim builds,
-      # so it is written once and run twice.
+      # Strip the quarantine and Finder attributes a runner leaves behind, sign, and wrap
+      # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
+      # copied out of its DMG carries Finder info, which codesign refuses to sign over.
+      # Identical for the full and slim builds, so it is written once and run twice.
       - name: Package the .app as a signed DMG (macOS Slim)
         if: runner.os == 'macOS'
         run: |
+          sudo xattr -rc dist
           codesign --force --deep --sign - dist/VPinFE.app
           codesign --verify --verbose dist/VPinFE.app
-          sudo xattr -rc dist
           create-dmg \
             --volname "VPinFE" \
             --volicon "packaging/VPinFE.icns" \
