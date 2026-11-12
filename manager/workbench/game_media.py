@@ -624,16 +624,12 @@ def _details(context: dict[str, Any], kind: str, entry: dict[str, Any],
     shape = str(detail.get("format") or "") or PurePosixPath(path).suffix.lstrip(".").upper()
     if shape:
         entries.append((t("word.format"), shape))
+    origin = str(detail.get("origin") or entry.get("origin") or "")
+    entries.append((t("word.source"),
+                    media_ownership.source_name(origin) or media_ownership.UNKNOWN))
     panel.facts(ui, entries)
 
-    origin = str(detail.get("origin") or entry.get("origin") or "")
     with ui.column().classes("w-full gap-0 manager-slot-facts"):
-        # "unknown" is the ledger's honest answer and a useless line to read:
-        # most files predate the ledger, so it would be on nearly every slot.
-        if origin and origin not in ("unknown", "user"):
-            ui.label(t("manager.workbench.source",
-                       source_name=media_ownership.source_name(origin))) \
-                .classes("manager-help")
         # Only when somebody has said - "not matched" is true of nearly every
         # file, and the button below is where the unanswered case belongs.
         if matched:

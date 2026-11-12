@@ -5185,7 +5185,6 @@
     "other": "{count:n} games"
   },
   "manager.workbench.all_games.paging": "Paging follows Page By and Games per Page in Settings",
-  "manager.workbench.source": "Source: {source_name}",
   "manager.workbench.spreadsheet_differs": "The spreadsheet says something different",
   "manager.workbench.start_from": "Start from",
   "manager.workbench.start_from.help": "Fills the rules from this, as a draft you still need to save",

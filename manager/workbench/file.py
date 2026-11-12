@@ -271,8 +271,8 @@ def _match_row(said: str, auto: bool = False) -> None:
 
 def _asset_details(context: dict[str, Any], detail: dict[str, Any],
                    glass: dict[str, Any] | None) -> list[tuple[Any, Any]]:
-    """The Details heading and its facts: size and who made it, and for a ROM the tables
-    that read it. Empty where none of them is known."""
+    """The Details heading and its facts: size, who placed it, and for a ROM the tables
+    that read it."""
     facts: list[tuple[Any, Any]] = []
     if detail.get("folder"):
         facts.append((t("word.size"), t("manager.workbench.files_in_folder",
@@ -291,6 +291,9 @@ def _asset_details(context: dict[str, Any], detail: dict[str, Any],
         names = rom_acts.users_of(context["row"], context["tables"])
         if names:
             facts.append((t("word.used_by"), ", ".join(names)))
+    origin = str(context["row"].get("origin") or "")
+    facts.append((t("word.source"),
+                  media_ownership.source_name(origin) or media_ownership.UNKNOWN))
     return [(panel.HEADING, t("manager.workbench.details")),
             *((panel.READ, one) for one in facts)] if facts else []
 
@@ -343,11 +346,6 @@ async def _asset_file_block(context: dict[str, Any]) -> None:
         said = _asset_said(context, tier)
         if said:
             ui.label(said).classes("manager-help")
-        origin = str(row.get("origin") or "")
-        if origin and origin not in ("unknown", "user"):
-            ui.label(t("manager.workbench.source",
-                       source_name=media_ownership.source_name(origin))) \
-                .classes("manager-help")
         _outside_lines(links)
 
     def acts() -> None:
