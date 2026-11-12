@@ -1417,6 +1417,9 @@ missing, a link to the newer release for a table with an update.
   table's panel carries its own, and the game's section above it does not repeat them.
   A finding several tables share, fixed by one act, is one notice that says which tables
   it is about. A finding fixed table by table stays one notice per table.
+- **Two notices sit over the page rather than on a panel**: the restart bar (*A setting says
+  when it takes effect*) and **Setup isn't finished**, which ends in Continue and stays until
+  Setup finishes. Both take this block, above the page title.
 
 ### A kind switched off is on no surface
 

@@ -24,7 +24,7 @@ CARD = ".manager-wizard-card"
 TITLE = f"{CARD} .manager-wizard-title"
 ASIDE = f"{CARD} .manager-dialog-aside"
 FORWARD = f"{CARD} .manager-wizard-forward"
-CONTINUE = ".manager-action--inline"
+CONTINUE = ".manager-attention .manager-action"
 # The card has finished its entrance: Quasar scales it in, and a click on the way lands
 # somewhere else.
 CARD_UP = ("[...document.querySelectorAll('.manager-wizard-card')].some(card =>"
@@ -33,9 +33,9 @@ CARD_UP = ("[...document.querySelectorAll('.manager-wizard-card')].some(card =>"
 CARD_SHOWN = f"!!document.querySelector({json.dumps(CARD)})"
 CARD_GONE = f"!document.querySelector({json.dumps(CARD)})"
 TEXT_OF = "(() => { const el = document.querySelector(%s); return el ? el.innerText : null; })()"
-LINE = ("[...document.querySelectorAll('.manager-help')]"
+LINE = ("[...document.querySelectorAll('.manager-attention-line')]"
         f".some(el => el.innerText.trim() === {json.dumps(t('manager.setup.not_finished'))})")
-CONTINUE_SHOWN = ("[...document.querySelectorAll('.manager-action--inline')]"
+CONTINUE_SHOWN = ("[...document.querySelectorAll('.manager-attention .manager-action')]"
                   f".some(el => el.innerText.includes({json.dumps(t('word.continue'))}))")
 # Up to the address, which is wherever this machine is reached.
 FROM_ELSEWHERE = t("manager.setup.address_note", address="\0", action="").split("\0")[0].strip()

@@ -81,6 +81,8 @@ tests = [
   "tests/theming/test_primary_nav_drive.py",
   "tests/theming/test_pseudo_locale.py",
   "tests/theming/test_remote_stars_drive.py",
+  "tests/theming/test_setup_back_drive.py",
+  "tests/theming/test_setup_first_run_drive.py",
   "tests/theming/test_shape_suggestion_drive.py",
   "tests/theming/test_support_dialog_drive.py",
   "tests/theming/test_which_game_drive.py",

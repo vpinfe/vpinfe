@@ -21,7 +21,10 @@ from tests.support.manager_walk import ManagerWalk
 CARD = ".manager-wizard-card"
 TITLE = f"{CARD} .manager-wizard-title"
 FORWARD = f"{CARD} .manager-wizard-forward"
-CONTINUE = ".manager-action--inline"
+CONTINUE = ".manager-attention .manager-action"
+CONTINUE_AT = ("(() => { const i = [...document.querySelectorAll("
+               f"{json.dumps(CONTINUE)})].findIndex(el => el.innerText.includes("
+               f"{json.dumps(t('word.continue'))})); return i >= 0 ? i + 1 : 0; }})()")
 TITLE_NOW = f"((document.querySelector({json.dumps(TITLE)}) || {{}}).innerText || '').trim()"
 CARDS = f"document.querySelectorAll({json.dumps(CARD)}).length"
 SETTLE_S = 1.5
@@ -53,10 +56,7 @@ class SetupBackDrive(unittest.TestCase):
             # A page address that names a place, so Setup does not open by itself and
             # Continue is what opens it.
             await walk.visit("/?view=overview")
-            await browser.wait_for(
-                "[...document.querySelectorAll('.manager-action--inline')]"
-                f".some(el => el.innerText.includes({json.dumps(t('word.continue'))}))")
-            await browser.click(CONTINUE)
+            await browser.click(CONTINUE, nth=int(await browser.wait_for(CONTINUE_AT)) - 1)
             await cls._walk(browser, seen, "setup")
 
             await walk.visit("/?view=about")

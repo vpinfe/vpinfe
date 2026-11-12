@@ -426,12 +426,12 @@ def _read_shell(client: ApiClient | None = None) -> dict[str, Any]:
 
 
 def setup_line(*, window: bool) -> None:
-    """The line over every page while Setup is unfinished, and the way back into it."""
-    with ui.row().classes("items-center gap-2"):
-        ui.label(t("manager.setup.not_finished")).classes("manager-help")
+    """The notice over every page while Setup is unfinished, and the way back into it."""
+    with ui.element("div").classes("manager-attention w-full mb-2"):
+        ui.icon("error_outline").classes("manager-attention-icon")
+        ui.label(t("manager.setup.not_finished")).classes("manager-attention-line grow")
         panel_parts.action(t("word.continue"), lambda: setup_page.open_setup(window=window),
-                           icon=verbs.GO, inline=True,
-                           hint=t("manager.setup.open.help"))()
+                           icon=verbs.GO, hint=t("manager.setup.open.help"))()
 
 
 def arrives_in_setup(pending: bool, view: str) -> bool:
