@@ -6,6 +6,7 @@ the words endpoint) and through a test client where the caller has to be someone
 
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -17,11 +18,13 @@ from typing import Any
 from unittest import mock
 
 from fastapi import FastAPI
+from PIL import Image
 from starlette.testclient import TestClient
 
 from common import i18n
 from common.games.export_bundle import bundle_paths
 from common.games.library_folders import Location
+from common.media import sized_media
 from frontend import theme_routes
 from httpapi import scopes
 from tests.support.library import fake_game, game_info, write_game
@@ -270,6 +273,40 @@ class OtherDeviceTests(unittest.TestCase):
         self._as()
 
         self.assertEqual(self.client.get("/media/anything/wheel").status_code, 403)
+
+
+class SizedMediaTests(unittest.TestCase):
+    """The route a theme's pictures come from answers the small copy a wheel draws."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.wheel = root / "wheel.png"
+        Image.new("RGB", (600, 600), (200, 40, 40)).save(self.wheel)
+        patches = [
+            mock.patch("common.games.media_lookup.media_path", return_value=self.wheel),
+            mock.patch("common.games.game_repository.all_games", return_value=[]),
+            mock.patch.object(sized_media, "ROOT", root / "sized"),
+            mock.patch.object(theme_routes.auth, "caller_is_local", return_value=True),
+        ]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        app = FastAPI()
+        theme_routes.register(app, {})
+        self.client = TestClient(app)
+
+    def test_a_picture_without_a_size_is_the_file_itself(self) -> None:
+        self.assertEqual(self.client.get("/media/t1/wheel").content, self.wheel.read_bytes())
+
+    def test_a_size_sends_a_copy_no_longer_than_that(self) -> None:
+        response = self.client.get("/media/t1/wheel?size=256")
+
+        self.assertEqual(Image.open(io.BytesIO(response.content)).size, (256, 256))
+
+    def test_a_size_nobody_draws_is_refused(self) -> None:
+        self.assertEqual(self.client.get("/media/t1/wheel?size=300").status_code, 400)
 
 
 if __name__ == "__main__":

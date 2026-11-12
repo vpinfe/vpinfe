@@ -162,6 +162,12 @@ const CAPABILITIES = {
     config: ["hold_ring.enabled"],
     describe: "Core draws a ring while a key or button with a hold is kept down.",
   },
+  core_scrub: {
+    default: true,
+    config: ["scrub.enabled"],
+    describe: "After about a second of holding, core leaves every screen and side effect "
+            + "alone, and brings them up to date once the wheel has stopped.",
+  },
 };
 
 // Read a possibly-dotted key out of a theme's config.
@@ -917,6 +923,16 @@ class VPinFECore {
     // One at a time. You cannot ask to go left and right at once, and a wheel that tried
     // would answer neither.
     this._hold = null;
+    // A hold that has gone on this long is a scrub: the wheel is travelling, not choosing.
+    // It ends this long after the key comes up, so a player who lets go and presses again
+    // does not make every screen redraw twice.
+    this.scrubAfterMs = 1000;
+    this.scrubSettleMs = 200;
+    this._scrub = null;
+    // A theme that draws the wheel while it scrubs says so (`vpin.scrubAware = true`) and
+    // is sent a `TableIndexUpdate` with `scrubbing: true` for every step. One that does
+    // not is sent nothing until the scrub ends.
+    this.scrubAware = false;
     // How long after a move the wheel still counts as travelling, which is what the
     // `moving` flag on an index message tells a theme. Its own constant now: it used to
     // borrow the keyboard repeat throttle, which no longer exists.
@@ -1240,6 +1256,14 @@ class VPinFECore {
 
   getMediaURL(index, kind) {
     return this.getMedia(index, kind).url;
+  }
+
+  // A picture at the 256 pixel size, for a wheel that draws many of them small. A
+  // contract 1 theme has file paths rather than table ids, which the server cannot
+  // resize, so it gets the picture whole.
+  getThumbnailURL(index, kind) {
+    const url = this.getImageURL(index, kind);
+    return url.includes("/media/") ? `${url}${url.includes("?") ? "&" : "?"}size=256` : url;
   }
 
   // URL of the game manufacturer's logo, or null when none is installed
@@ -1664,6 +1688,8 @@ class VPinFECore {
 
   // Launch a game
   async launchTable(index) {
+    // The windows and the audio catch up before the launch stops them, not after.
+    this.#settleScrub();
     this.#setFrontendInputEnabled(false);
     try {
       await this.call("launch_table", index);
@@ -1893,13 +1919,19 @@ class VPinFECore {
       // The index the data change carried is in the list it just rebuilt.
       if (!this.isController() && this._followedId === "") this.#followIndex();
     }
+    // A step of a scrub is for the theme's wheel and nothing else: the media, the audio
+    // and everything that follows the selection wait for the settle.
+    if (message.scrubbing) return this.#runEventHandlers(message);
     this.#syncSelectionFromMessage(message);
     this.#applyLaunchDim(message.type);
     this.#applyLaunchIndicator(message.type);
     if (VPinFECore.SELECTION_MESSAGES.has(message.type)) this.#renderWindowMedia();
     await this.#handleCoreAudioEvent(message);
+    await this.#runEventHandlers(message);
+  }
 
-    // Call any custom handlers registered by the theme
+  // Call any custom handlers registered by the theme
+  async #runEventHandlers(message) {
     if (this.eventHandlers[message.type]) {
       for (const handler of this.eventHandlers[message.type]) {
         await handler(message);
@@ -2225,6 +2257,10 @@ class VPinFECore {
   // in both directions; small enough that forgetting all of them costs one page.
   static PRELOAD_MEMORY = 300;
 
+  // How many wheel pictures are fetched ahead of the direction of travel and behind it.
+  static SCRUB_AHEAD = 14;
+  static SCRUB_BEHIND = 3;
+
   #syncSelectionFromMessage(message) {
     if (!message || typeof message !== "object") return;
     if (!this.isController()) return;
@@ -2429,6 +2465,17 @@ class VPinFECore {
     for (const index of [at - 1, at, at + 1]) {
       if (index < 0 || index >= this.tableData.length) continue;
       for (const kind of this._preloadKinds) this.#preload(this.getImageURL(index, kind));
+    }
+  }
+
+  // The small wheel pictures on both sides of the wheel, further in the direction it is
+  // travelling, so the cards it is about to show are there before it gets to them. A
+  // theme that sets scrubAware draws its wheel from these.
+  #preloadAround(at, direction) {
+    const list = this.activeList();
+    const sign = direction === "previous" ? -1 : 1;
+    for (let step = -VPinFECore.SCRUB_BEHIND; step <= VPinFECore.SCRUB_AHEAD; step++) {
+      this.#preload(this.getThumbnailURL(list.indexAfter(sign * step), "wheel"));
     }
   }
 
@@ -3225,6 +3272,8 @@ class VPinFECore {
    */
   pushList(list) {
     if (!(list instanceof NavigableList)) return this.activeList();
+    // The settle is announced for the wheel, so it goes out before the wheel is covered.
+    this.#settleScrub();
     this._listStack.push(list);
     this.#announceIndex(list.cursor, { previous: list.cursor, reason: "enter" });
     return list;
@@ -3325,17 +3374,74 @@ class VPinFECore {
     // Only the wheel has a selected game. Moving a picker's cursor must not fetch a
     // rating, re-render window media or tell the backend a game was selected - every one
     // of those follows `_currentTableIndex`, and this is the one place it is assigned.
+    // Asked before the assignment: a settle forced by this press reports where the wheel
+    // stopped, not where this press is taking it.
+    const scrubbing = this.atRoot && this.#scrubbing();
     if (this.atRoot) this._currentTableIndex = at;
+    if (this.atRoot && this.scrubAware) {
+      this.#preloadAround(at, direction || this._scrub?.direction || "next");
+    }
+    if (scrubbing) {
+      this.#scrubTo(at, { previous, direction, reason, source });
+      return at;
+    }
     this.#announceIndex(at, { previous, direction, reason, source });
     if (this.atRoot) this.#selectionChanged();
     return at;
   }
 
+  // True from the first repeat after `scrubAfterMs` of holding until the wheel settles.
+  // A press that arrives while the settle is still waiting ends the scrub first, so its
+  // own step is announced in full.
+  #scrubbing() {
+    if (!this._scrub) return false;
+    if (this._scrub.released) {
+      this.#settleScrub();
+      return false;
+    }
+    return true;
+  }
+
+  #beginScrub(held) {
+    if (!this.enabled("core_scrub") || !this.isController() || !this.atRoot) return;
+    this._scrub = { released: false, timer: null, from: this._currentTableIndex,
+                    source: "user", held,
+                    direction: held.action.endsWith("previous") ? "previous" : "next" };
+  }
+
+  // Every step of a scrub goes to this window alone, and only if the theme draws it:
+  // the other windows and everything that follows the selection wait for the settle.
+  #scrubTo(at, { previous, direction, reason, source }) {
+    this._scrub.source = source;
+    if (!this.scrubAware) return;
+    this.#announceIndex(at, { previous, direction, reason, source, scrubbing: true });
+  }
+
+  #releaseScrub(held) {
+    const scrub = this._scrub;
+    if (!scrub || scrub.held !== held) return;
+    scrub.released = true;
+    scrub.timer = setTimeout(() => this.#settleScrub(), this.scrubSettleMs);
+  }
+
+  // One announcement to every window, which is what the other windows, the audio, the
+  // backend and the preload each take as the selection having changed.
+  #settleScrub() {
+    const scrub = this._scrub;
+    if (!scrub) return;
+    clearTimeout(scrub.timer);
+    this._scrub = null;
+    if (!this.atRoot) return;
+    this.#announceIndex(this._currentTableIndex,
+      { previous: scrub.from, reason: "settle", source: scrub.source });
+  }
+
   // One shape for every index message, whichever list moved.
   #announceIndex(at, { previous = at, direction = "", reason = "step",
-                       source = "user", to = "", others = false } = {}) {
+                       source = "user", to = "", others = false, scrubbing = false } = {}) {
     const list = this.activeList();
     const item = this.atRoot ? (this.tableData[at] || {}) : {};
+    if (scrubbing) to = this._windowName;
     const send = to ? (message) => this.#sendToWindow(to, message)
                     : others ? (message) => this.sendMessageToAllWindows(message)
                     : (message) => this.sendMessageToAllWindowsIncSelf(message);
@@ -3353,7 +3459,11 @@ class VPinFECore {
       // load full art or wait. It cannot serve as a jump signal: it is time-based, so one
       // distant jump reports false.
       // An answer to one window is not a move, so it neither reads nor restarts the clock.
-      moving: to ? false : this.#stillMoving(),
+      // The settle is the end of a move, so it is not one either.
+      moving: scrubbing ? true : (to || reason === "settle") ? false : this.#stillMoving(),
+      // Present only while the wheel is being scrubbed, so a theme that never looks for
+      // it sees the message it always did.
+      ...(scrubbing ? { scrubbing: true } : {}),
     });
   }
 
@@ -3522,7 +3632,7 @@ class VPinFECore {
   #startHold(action, token = "") {
     if (!REPEATING_ACTIONS.has(action)) return;
     this.#endHold();
-    const held = { action, token, interval: this.repeatStartMs, timer: null };
+    const held = { action, token, interval: this.repeatStartMs, timer: null, since: Date.now() };
     held.timer = setTimeout(() => this.#onRepeat(held), this.repeatDelayMs);
     this._hold = held;
   }
@@ -3533,6 +3643,7 @@ class VPinFECore {
     if (!this._hold) return;
     if (action && this._hold.action !== action) return;
     clearTimeout(this._hold.timer);
+    this.#releaseScrub(this._hold);
     this._hold = null;
   }
 
@@ -3547,6 +3658,9 @@ class VPinFECore {
     // outruns the theme's animation, the theme drops what arrives mid-move, and the
     // wheel travels in lurches instead of accelerating.
     const started = Date.now();
+    if (!muted && !this._scrub && started - held.since >= this.scrubAfterMs) {
+      this.#beginScrub(held);
+    }
     if (!muted) await this.#dispatchAction(held.action);
     if (this._hold !== held) return;
 

@@ -176,6 +176,7 @@ it itself.
 | `core_media_window` | `media_window.enabled` | on | on | Shows each display window the media named for it. | A window with no element for it shows nothing of its own. |
 | `core_waiting` | `waiting.enabled` | on | on | Covers each window with what an empty library is waiting for. | You read `vpin.libraryWaiting` and draw it. |
 | `core_hold_ring` | `hold_ring.enabled` | on | on | Draws a ring while a key with a hold is kept down. | You draw your own from `vpin.enabled("core_hold_ring")`. |
+| `core_scrub` | `scrub.enabled` | on | on | After about a second of holding a movement key, leaves every other window, the audio and the backend alone until the wheel settles. | Every step of a hold is announced to every window, as before. See [Holding the wheel](#holding-the-wheel). |
 
 Every key is an `enabled` flag in a block named after the capability, in `config.json`:
 
@@ -809,7 +810,7 @@ Events are sent between windows via `receiveEvent()`. These are the built-in eve
 
 | Event Type | Properties | Description |
 |------------|------------|-------------|
-| `TableIndexUpdate` | `index`, `previous`, `direction`, `reason`, `source`, `moving`, `group`, `groupKind`, `list`, `kind` | The selection moved. Sent by the controller to every window, on every path, and to one window alone when it asks with `SelectionRequest`. Also sent to the other windows, with `reason` `"restore"`, when a data change the backend raised takes the controller's game out of its list and the wheel lands on another. |
+| `TableIndexUpdate` | `index`, `previous`, `direction`, `reason`, `source`, `moving`, `scrubbing`, `group`, `groupKind`, `list`, `kind` | The selection moved. Sent by the controller to every window, on every path, and to one window alone when it asks with `SelectionRequest`. Also sent to the other windows, with `reason` `"restore"`, when a data change the backend raised takes the controller's game out of its list and the wheel lands on another. |
 | `TableLaunching` | — | A game is about to launch. Frontend keyboard/gamepad routing is suspended until `TableLaunchComplete`; use this to fade out, stop audio, etc. |
 | `TableRunning` | — | The launched game has finished loading and is now running. Sent when the table process outputs "Startup done". |
 | `TableLaunchComplete` | — | The launched game has exited and frontend input routing is restored. Use this to fade back in, resume audio. |
@@ -824,9 +825,10 @@ a page and a startup restore all announce themselves the same way:
 | `id` | which game that is: the table id (`table.id` on contract 2, `meta.VPXFile.id` on contract 1), or the game id or folder name for a row with no table id. Present on the wheel and absent for a picker, and for a row with no id. A window that is not the controller finds the game by this and not by `index`; when its list does not hold the game, core draws nothing, marks the window held (`data-vpinfe-held`) and hands it no `TableIndexUpdate` until a reload brings it |
 | `previous` | where it was. A local diff cannot tell a wrap from a jump: 149 → 0 is either one step forward or 149 back |
 | `direction` | `"previous"` or `"next"`, empty when the move had no direction |
-| `reason` | how far and why — `"step"` for one item, `"page"` for a page press, `"restore"` at startup and when a window opens after the wheel has moved, `"enter"` and `"leave"` when core descends into a list or comes back out. A page press moves to the next group when group paging is on and a fixed number of rows otherwise; both report `"page"`, because both want the same treatment |
+| `reason` | how far and why — `"step"` for one item, `"page"` for a page press, `"restore"` at startup and when a window opens after the wheel has moved, `"settle"` when a [long hold](#holding-the-wheel) has ended, `"enter"` and `"leave"` when core descends into a list or comes back out. A page press moves to the next group when group paging is on and a fixed number of rows otherwise; both report `"page"`, because both want the same treatment |
 | `source` | who moved it — `"user"`, or `"attract"` when core's [attract mode](#attract-mode) moved it on its own. A theme that animates differently for a move nobody pressed reads this |
 | `moving` | true while the wheel is still settling, so you can defer full-resolution art. Time-based, so a single distant move reports `false` — use `reason` to tell a page from a step |
+| `scrubbing` | present, and true, only on a step of a [long hold](#holding-the-wheel), and only for a theme that has set `vpin.scrubAware`. Absent otherwise |
 | `group` | the group the selection is in - `"T"`, `"1985"`, `"#"`. Empty when the list's order has no groups |
 | `groupKind` | what kind of group that is — `"letter"`, `"year"`, `"rating"`. Empty alongside `group`, so you can tell "no grouping here" from "the group happens to be empty" |
 | `list` | which list this index is in — the collection name for the wheel, `"collections"` for the picker |
@@ -840,6 +842,36 @@ produces the two-wheels-stacked artifact.
 `group` and `groupKind` are what you draw a "now in the Ts" badge from. They ride on every
 index message, not just a page, so the badge stays right when the user steps across a
 boundary too. Both are empty while a picker is open — the groups belong to the wheel.
+
+### Holding the wheel
+
+A movement key held for about a second turns from browsing into travelling, and nobody
+reads the screens while it does. Redrawing every window, restarting the table's audio and
+telling the backend about each table passed costs a lot and shows nothing. So once a hold
+has lasted `vpin.scrubAfterMs` (1000), core stops all of it, and brings it up to date once,
+`vpin.scrubSettleMs` (200) after the key comes up:
+
+- The other windows, the media in this one, the audio, the selected-game notification to the
+  backend and the extensions' selection events all wait. They see one `TableIndexUpdate`
+  with `reason` `"settle"`, and nothing for the steps in between.
+- A theme that has not said anything is sent nothing for those steps either, so it draws
+  one update at the end. `"settle"` is not `"step"`, so a theme that cuts on every reason
+  but `"step"` cuts.
+- A theme that draws the wheel while it travels sets `vpin.scrubAware = true` before
+  `vpin.init()`. It then gets a `TableIndexUpdate` for every step, to its own window alone,
+  with `scrubbing` true, `moving` true and `group` filled in. Draw the wheel and where it
+  is - the group (`"T"`, `"1985"`), and `vpin.activeList().cursor + 1` of
+  `vpin.activeList().length` - and nothing else. Core's handlers do not run for these
+  messages and the other windows never hear them. Anything that follows the selection reads
+  the settle.
+- A theme that sets `scrubAware` has the small wheel pictures fetched on every move, 14
+  steps ahead of the wheel in its direction of travel and 3 behind it.
+  `vpin.getThumbnailURL(index, "wheel")` gives the URL for one: the picture at 256 pixels,
+  which is what a wheel card is drawn at. A theme that draws its cards from it finds them
+  already loaded, on a single press as much as in a hold. A theme that has not set
+  `scrubAware` has nothing fetched for it.
+
+`core_scrub` turns all of it off, and every step of a hold is announced as it always was.
 
 ### Lists core holds
 
@@ -1498,6 +1530,9 @@ Returns an HTTP URL for a table's image, the still, whatever the player's media 
 
 #### getVideoURL(index, kind)
 Returns an HTTP URL for a table's video. `kind` can be `"playfield"`, `"backglass"`, or `"scoreview"`. Returns a fallback `/core/images/file_missing.png` URL if no video exists or `index` is outside the list, never `null`. See [Video Support](#video-support).
+
+#### getThumbnailURL(index, kind)
+Returns the URL of `getImageURL(index, kind)` at 256 pixels on its longest side, as a WebP the server makes once and keeps. Use it where a picture is drawn small, such as a wheel card. A contract 1 theme's pictures are file paths the server cannot resize, so it gets the whole picture back. Returns the same fallback as `getImageURL` when there is no picture.
 
 #### getMediaURL(index, kind)
 Returns an HTTP URL using the user's configured media priority from Settings > Frontend > Presentation in the Manager (Playfield, Backglass, Score View and Real DMD Media Priority). For `"playfield"`, `"backglass"`, and `"scoreview"`, VPinFE chooses image or video first based on the setting and falls back to the alternate when the preferred file is missing. So `getMediaURL(i, "playfield")` returns the video when the game has one and the priority is video, which is the default, and `getImageURL(i, "playfield")` returns the still. A `<img>` given the first of those shows nothing for a game with a video; ask `getMedia` which it got, or use `getImageURL` for an `<img>`. For `"real_dmd"`, VPinFE chooses `realdmd-color.png` or `realdmd.png` first based on the setting and falls back to the other frame. It answers with a picture; a theme that wants the video asks for `"real_dmd_video"` or `"real_dmd_color_video"` by their own names. Returns `/core/images/file_missing.png` when neither exists or `index` is outside the list, never `null`.

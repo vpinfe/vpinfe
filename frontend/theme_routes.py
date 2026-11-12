@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
 
+from common.media import sized_media
 from common.security.http_client import get_text
 from frontend.theme_windows import window_title
 from httpapi import auth, scopes
@@ -69,8 +70,12 @@ def register(app: FastAPI, mount_points: dict[str, str]) -> None:
         except Exception:
             logger.exception("Media lookup failed for %s/%s", table_id, kind)
             return PlainTextResponse("Media lookup failed", status_code=500)
-        return _file(request, path) if path else PlainTextResponse("No such media",
-                                                                  status_code=404)
+        if not path:
+            return PlainTextResponse("No such media", status_code=404)
+        size = _requested_size(request)
+        if size is None:
+            return PlainTextResponse("Unknown size", status_code=400)
+        return _file(request, sized_media.served(path, size).path if size else path)
 
     @app.get("/manufacturers/{slug}/logo", include_in_schema=False)
     def manufacturer_logo(request: Request, slug: str) -> Response:
@@ -120,6 +125,15 @@ def _requested_page(request: Request) -> int:
     if not asked:
         return 1
     return int(asked) if asked.isdecimal() and len(asked) < 9 else 0
+
+
+def _requested_size(request: Request) -> int | None:
+    """The `size` in the query: 0 when it is absent, one of `sized_media.SIZES` when it
+    names one, and None for anything else."""
+    asked = request.query_params.get("size")
+    if not asked:
+        return 0
+    return int(asked) if asked.isdecimal() and int(asked) in sized_media.SIZES else None
 
 
 def _game_file(request: Request, folder: str, rest: str) -> Response:
