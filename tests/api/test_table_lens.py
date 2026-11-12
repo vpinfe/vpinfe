@@ -8,7 +8,6 @@ it, choosing the default and taking it out of play, do what they say.
 
 from __future__ import annotations
 
-import json
 import subprocess
 import unittest
 from typing import Any
@@ -18,10 +17,12 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common.games import launchers, table_lens, ties
+from common.games.info_file import INFO_SCHEMA
 from common.host import launch
 from common.i18n import t
 from tests.support.launchers_api import put_launcher
 from tests.support.library import TempTree, fake_game, own_launchers, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Lens00000001"
 FOLDER = "Cactus Canyon (Bally 1998)"
@@ -30,7 +31,7 @@ VR = f"{FOLDER} - VR.vpx"
 
 INFO: dict[str, Any] = {
     "Info": {"Name": "Cactus Canyon", "Manufacturer": "Bally", "Year": "1998"},
-    "VPinFE": {"game_id": GAME_ID},
+    "vpinfe": {"game_id": GAME_ID, "schema": INFO_SCHEMA},
     "tables": {
         "tbl0000001": {"id": "tbl0000001", "filename": DESKTOP,
                        "version": "1.0", "authors": ["someone"]},
@@ -59,7 +60,7 @@ class _Lens(TempTree):
         return response.json()["tables"]
 
     def _info(self) -> dict:
-        return json.loads((self.folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
+        return saved_record(self.folder / f"{FOLDER}.info")
 
 
 class TableLensTests(_Lens):
@@ -198,7 +199,7 @@ class HidingTheDefaultTests(_Lens):
 class HidingADefaultNamedByFileTests(_Lens):
     """A 2.x library records the default by filename."""
 
-    info = {**INFO, "vpinfe": {"default_table": VR}}
+    info = {**INFO, "vpinfe": {**INFO["vpinfe"], "default_table": VR}}
 
     def test_hiding_it_clears_the_choice(self) -> None:
         response = self.client.put(f"/games/{GAME_ID}/tables/tbl0000002/hidden",
@@ -397,7 +398,7 @@ class TableRatingTests(_Lens):
         must not disturb the other - the block is created by whichever comes first."""
         self.client.put(f"/games/{GAME_ID}/tables/tbl0000002/rating", json={"rating": 2})
 
-        stored = json.loads((self.folder / f"{FOLDER}.info").read_text())
+        stored = self._info()
         user = stored["tables"]["tbl0000002"]["user"]
         self.assertEqual(user["rating"], 2)
         self.assertEqual(user["start_count"], 0)

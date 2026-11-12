@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from common.config import path_state
+from common.games import info_codec
 from common.games.collection_store import CollectionStore, restorable_collections_backup
 from common.games.game_parser import GameParser
 from common.games.info_maintenance import (
@@ -57,7 +58,7 @@ class UpgradeTests(LibraryTestCase):
         self.assertEqual(result["failed"], 0)
         for name in ("Dr. Dude", "Taxi", "Whirlwind"):
             after = self._info(self.root / name)
-            self.assertEqual(after["vpinfe"]["schema"], 2)
+            self.assertEqual(after["vpinfe"]["schema"], INFO_SCHEMA)
             self.assertNotIn("VPXFile", after)
 
     def test_it_keeps_a_restore_point_for_each_game(self):
@@ -190,17 +191,18 @@ class RestoreTests(LibraryTestCase):
         self.assertIn(upgraded, [b.read_text(encoding="utf-8") for b in backups])
 
     def test_a_backup_this_build_cannot_read_is_passed_over_not_treated_as_the_end(self):
-        """A 2.x build must not restore a schema 2 file, but the unversioned copy sitting
+        """A 2.x build must not restore a schema 3 file, but the unversioned copy sitting
         behind it is still exactly what it wants. Newer backups are stepped over, not a
         dead end."""
         game = self._game("Dr. Dude")
         upgrade_library(self.root)
-        restore_library(self.root)          # back to 2.x, and the schema 2 copy is kept
+        restore_library(self.root)          # back to 2.x, and the schema 3 copy is kept
 
         as_2x = restorable_backup(game, max_schema=0)
         self.assertIsNotNone(as_2x)
         self.assertIsNone(backup_schema(as_2x), "2.x takes the unversioned copy")
-        self.assertEqual(backup_schema(restorable_backup(game, max_schema=2)), 2)
+        newest = restorable_backup(game, max_schema=INFO_SCHEMA)
+        self.assertEqual(backup_schema(newest), INFO_SCHEMA)
 
     def test_the_newest_readable_backup_wins(self):
         game = self._game("Dr. Dude")
@@ -324,11 +326,13 @@ class WhatThePageSaysTests(LibraryTestCase):
     """
 
     def _game_at(self, schema, with_backup=True):
-        live = {"Info": {}, "User": {"Rating": 4}, "vpinfe": {"schema": schema, "game_id": "a"},
-                "tables": {"Dr. Dude.vpx": {"rom": "dd"}}}
+        record = {"Info": {}, "User": {"Rating": 2}, "vpinfe": {"game_id": "a"},
+                  "tables": {"Dr. Dude.vpx": {"rom": "dd"}}}
+        live = info_codec.encode(record)
+        live["vpinfe"]["schema"] = schema
         files = {}
         if with_backup:
-            older = {**live, "vpinfe": {"schema": INFO_SCHEMA, "game_id": "a"}}
+            older = info_codec.encode(record)
             files["Dr. Dude.info.vpinfe-20260901T000000Z"] = json.dumps(older).encode()
         return write_game(self.root, "Dr. Dude", info=live, files=files)
 

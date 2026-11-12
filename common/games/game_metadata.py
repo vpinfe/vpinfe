@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
 
 from common import events
-from common.games import high_scores, ties, unwritten
+from common.games import high_scores, info_files, ties, unwritten
 from common.games.game import Game, GameRecord
 from common.games.info_file import GAME_ID_KEY, VPINFE_SECTION, MetaConfig
 from common.games.info_migration import MATCHED_BY_USER, MATCHED_ON_IMPORT, VPS_MATCHED_BY_KEY
@@ -842,8 +841,8 @@ def set_asset_source(game: Game, path: str, vps_file_id: str) -> dict[str, Any]:
     if source:
         entry[SOURCE_KEY] = source
     else:
-        # An entry with no source left says nothing the folder does not, and leaving it
-        # would read as "examined, nothing found" - which is a different state.
+        # A line with no source is the person's own and the next scan lists it again,
+        # so dropping it here and keeping an empty one come to the same file.
         entries.pop(key, None)
 
     persist_game_meta(game, config)
@@ -920,7 +919,8 @@ def guides_on_wire(config: Any, *, hidden: bool = False) -> list[dict[str, Any]]
     from common.games.info_migration import FROM_CATALOG, GUIDE_ORIGIN
 
     held = normalize_meta(config).get(GUIDES_KEY)
-    return [{**one, "url": guide_address(one), "source": guide_source(one),
+    return [{**{k: v for k, v in one.items() if k != "vps_file_id"},
+             "url": guide_address(one), "source": guide_source(one),
              GUIDE_ORIGIN: FROM_CATALOG if is_catalog_guide(one) else "user",
              "hidden": bool(one.get("hidden"))}
             for one in (held if isinstance(held, list) else [])
@@ -1072,19 +1072,15 @@ def get_or_create_table_user(config: dict[str, Any], native: str) -> dict[str, A
     return user
 
 
-def meta_file_path(game: Game) -> Path:
-    return Path(str(game.full_path_game)) / f"{game.game_dir_name}.info"
-
-
 def load_game_meta(game: Game) -> dict[str, Any]:
-    meta_path = meta_file_path(game)
+    meta_path = info_files.info_path_of(game)
     if meta_path.exists():
         return normalize_meta(MetaConfig(str(meta_path)).data)
     return normalize_meta(getattr(game, "meta_config", {}))
 
 
 def persist_game_meta(game: Game, config: dict[str, Any]) -> None:
-    meta_file = MetaConfig(str(meta_file_path(game)))
+    meta_file = MetaConfig(str(info_files.info_path_of(game)))
     upgraded = meta_file.pending_migration
     meta_file.data = config
     meta_file.write_config()
@@ -1106,7 +1102,7 @@ def keep_game_meta(game: Game, config: dict[str, Any]) -> None:
     try:
         persist_game_meta(game, config)
     except Exception as exc:
-        unwritten.hold(meta_file_path(game), config, exc)
+        unwritten.hold(info_files.info_path_of(game), config, exc)
         game.meta_config = config
 
 

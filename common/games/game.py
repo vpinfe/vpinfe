@@ -91,6 +91,15 @@ class Game:
     # the disk a second time would be the expensive half of that job for nothing.
     table_files: list[str] | None = None
 
+    # The `.info` files in the folder's root, lower-cased, from the same scan: what discovery
+    # needs to see that a game with two tables has a table that lacks one. None where the scan
+    # did not read the folder.
+    info_names: frozenset[str] | None = None
+
+    # The paths the manifest lists for this folder, from the same scan. None means the
+    # scan could not read the folder in full, and discovery then leaves the manifest alone.
+    file_listing: frozenset[str] | None = None
+
     # The same resolution, run once per .vpx in the folder: {filename: {kind: path}}.
     # The attributes above answer for the default table only, which is all a contract 1
     # theme can ask about; this is what lets /media/<table id>/<kind> answer for the

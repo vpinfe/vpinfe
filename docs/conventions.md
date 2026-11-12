@@ -579,9 +579,12 @@ reading both had to invert twice.
 - **Media** — artwork VPinFE shows *about* a game while you browse: playfield, backglass,
   DMD, wheel, logo, cab, FSS, flyer, instruction card, topper, loading video, launch audio,
   rulesheet, their video variants, audio. The logo is the game's title art - usually what a
-  wheel is derived from, which is why a wheel-less game shows its logo in the wheel slot. This is `common/media/media_specs.py` and nothing else. Instruction card
+  wheel is derived from, which is why a wheel-less game shows its logo in the wheel slot. This is `common/media/media_specs.py` and the guides list. Instruction card
   (the apron card image), game flyer (promo art) and rulesheet (a document you
   read) are three different things - keep the words apart.
+- **Guide** — media you read or watch to learn a game: tutorials, rule sheets, manuals,
+  online or saved, kept in a list of their own because their order is the person's and
+  most are links. In the `.info` it is `vpinfe.manifest.guides`.
 - **Asset** — content a game needs to *play* as intended, beyond its table:
   `.directb2s`, ROM, alt color, alt sound, PUP pack, music, the per-table `.ini`.
   The per-table `.ini` is config-shaped but is still an asset: without it the table

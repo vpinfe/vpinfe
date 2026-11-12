@@ -12,7 +12,6 @@ it as one.
 from __future__ import annotations
 
 import copy
-import json
 import unittest
 from unittest.mock import patch
 
@@ -20,7 +19,8 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common.games.game_metadata import set_table_source, table_source
-from tests.support.library import TempTree, fake_game, write_game
+from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import save_record, saved_record
 
 GAME_ID = "Sourced001"
 FOLDER = "The Addams Family (Bally 1992)"
@@ -29,11 +29,8 @@ TABLE_ID = "tbl0000001"
 RELEASE = "Wq40ng8f"
 FUTURE_RELEASE = "FpRelease1"
 
-INFO = {
-    "Info": {"Title": "The Addams Family", "VPSId": "aT_GONvw"},
-    "vpinfe": {"game_id": GAME_ID},
-    "tables": {TABLE_ID: {"id": TABLE_ID, "filename": VPX, "version": "2.3.1"}},
-}
+INFO = game_info("The Addams Family", vps_id="aT_GONvw", game_id=GAME_ID,
+                 tables={TABLE_ID: {"id": TABLE_ID, "filename": VPX, "version": "2.3.1"}})
 
 CATALOG = [{
     "id": "aT_GONvw", "name": "The Addams Family", "manufacturer": "Bally", "year": 1992,
@@ -73,16 +70,15 @@ class TableSourceTests(TempTree):
                                  raise_server_exceptions=False)
 
     def _stored(self) -> dict:
-        written = json.loads((self.folder / f"{FOLDER}.info").read_text())
-        return written["tables"][TABLE_ID]
+        return saved_record(self.folder / f"{FOLDER}.info")["tables"][TABLE_ID]
 
     def _write_source(self, source: dict) -> None:
         """Onto the file, not the in-memory copy: the writer re-reads from disk first,
         exactly so that a surface holding an older copy cannot win."""
         path = self.folder / f"{FOLDER}.info"
-        written = json.loads(path.read_text())
+        written = saved_record(path)
         written["tables"][TABLE_ID]["source"] = source
-        path.write_text(json.dumps(written))
+        save_record(path, written)
 
     def _table(self) -> dict:
         response = self.client.get(f"/games/{GAME_ID}/tables")

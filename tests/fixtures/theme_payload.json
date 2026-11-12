@@ -35,7 +35,8 @@
           "Year": "1995"
         },
         "User": {
-          "Rating": 4
+          "Rating": 4,
+          "RunTime": 0
         },
         "VPXFile": {
           "altColorExists": false,
@@ -58,8 +59,9 @@
           "default_table": "afmtable01",
           "game_id": "afm0000001",
           "pluginprofile": "",
-          "schema": 2
-        }
+          "schema": 3
+        },
+        "guides": []
       },
       "pupPackExists": false,
       "realDMDColorImagePath": "/library/Attack from Mars (Bally 1995)/medias/realdmd-color.png",
@@ -103,7 +105,8 @@
           "Year": "1980"
         },
         "User": {
-          "Rating": 0
+          "Rating": 0,
+          "RunTime": 0
         },
         "VPXFile": {
           "altColorExists": false,
@@ -123,8 +126,9 @@
           "altlauncher": "",
           "game_id": "bar0000001",
           "pluginprofile": "",
-          "schema": 2
-        }
+          "schema": 3
+        },
+        "guides": []
       },
       "pupPackExists": false,
       "realDMDColorImagePath": null,
@@ -168,7 +172,8 @@
           "Year": "1995"
         },
         "User": {
-          "Rating": 0
+          "Rating": 0,
+          "RunTime": 0
         },
         "VPXFile": {
           "altColorExists": false,
@@ -190,8 +195,9 @@
           "default_table": "cngtable01",
           "game_id": "cng0000001",
           "pluginprofile": "",
-          "schema": 2
-        }
+          "schema": 3
+        },
+        "guides": []
       },
       "pupPackExists": false,
       "realDMDColorImagePath": null,
@@ -235,7 +241,8 @@
           "Year": "1997"
         },
         "User": {
-          "Rating": 5
+          "Rating": 5,
+          "RunTime": 0
         },
         "VPXFile": {
           "altColorExists": false,
@@ -257,8 +264,9 @@
           "default_table": "mmtable001",
           "game_id": "mm00000001",
           "pluginprofile": "",
-          "schema": 2
-        }
+          "schema": 3
+        },
+        "guides": []
       },
       "pupPackExists": false,
       "realDMDColorImagePath": null,

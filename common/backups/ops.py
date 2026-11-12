@@ -22,13 +22,13 @@ from common.games import (
     config_backups,
     game_lens,
     game_repository,
+    info_files,
     info_maintenance,
     launcher_ops,
     launchers,
     library_folders,
     media_ops,
 )
-from common.games.game_metadata import meta_file_path
 from common.games.info_file import MetaConfig
 from common.games.info_migration import copied_from
 from common.host import launch_state
@@ -125,7 +125,7 @@ def restore(copy_id: str) -> Restored:
 
 def _restore_game(one: Copy, path: Path) -> Restored:
     folder = path.parent
-    target = folder / f"{folder.name}.info"
+    target = info_files.game_info_path(folder)
     try:
         with track(KIND_LIBRARY_SCAN, title=t("said.title_backup_restore")):
             kept = info_maintenance.restore_file(target, path, keep_id=True)
@@ -155,7 +155,7 @@ def _restore_file(one: Copy, place: str, path: Path) -> Restored:
     except OSError as exc:
         raise service_errors.RefusedError(why(exc)) from exc
     if place == PLACE_TABLE and (record := table_entry.beside(path)) is not None:
-        MetaConfig(str(meta_file_path(game))).restore_table(record)
+        MetaConfig(str(info_files.info_path_of(game))).restore_table(record)
     media_ops.reread(game_dir)
     asset_ops.settle_if_backglass(held.game_id, target)
     return Restored(one, _kept(_kept_copy(str(replaced) if replaced else None, place)))
@@ -217,7 +217,7 @@ def _put_game(path: Path, member: archive.Member) -> Copy | None:
     library_folders.writable_game_folder(folder)
     with tempfile.TemporaryDirectory() as scratch:
         staged = archive.extract(path, member, Path(scratch))
-        kept = info_maintenance.restore_file(folder / f"{folder.name}.info", staged,
+        kept = info_maintenance.restore_file(info_files.game_info_path(folder), staged,
                                              keep_id=True)
     return _kept_copy(kept, PLACE_GAME)
 

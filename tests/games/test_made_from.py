@@ -4,7 +4,6 @@ from it before it goes."""
 from __future__ import annotations
 
 import hashlib
-import json
 import zipfile
 
 from common.games import table_lens
@@ -59,9 +58,9 @@ class MadeFrom(_PatchedGame):
                 for row in table_lens.table_rows(game, {"game_dir": str(self.folder)})}
 
     def _rehash_base(self, base_hash: str) -> None:
-        data = json.loads((self.folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
-        data["tables"][BASE_ID]["file_hash"] = base_hash
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(data), encoding="utf-8")
+        meta = MetaConfig(str(self.folder / f"{FOLDER}.info"))
+        meta.data["tables"][BASE_ID]["file_hash"] = base_hash
+        meta.write_config()
 
     def test_a_patched_table_names_the_table_it_was_made_from(self) -> None:
         rows = self._rows()

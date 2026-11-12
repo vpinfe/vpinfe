@@ -7,13 +7,13 @@ file - so what it *skips* matters as much as what it reads.
 
 from __future__ import annotations
 
-import json
 import unittest
 from unittest.mock import patch
 
 from common.games.library_enrichment import enrich, pending
 from common.games.tables import entry_filename, table_entries
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 
 FOLDER = "Cactus Canyon (Bally 1998)"
 DESKTOP = f"{FOLDER}.vpx"
@@ -38,7 +38,7 @@ class EnrichmentTests(TempTree):
                          table_files=[DESKTOP, VR])
 
     def _stored(self) -> dict:
-        data = json.loads((self.folder / f"{FOLDER}.info").read_text())
+        data = saved_record(self.folder / f"{FOLDER}.info")
         return {entry_filename(e).lower(): e
                 for e in table_entries(data).values()}
 

@@ -30,7 +30,7 @@ from common.backups import folder as backup_folder
 from common.backups import media as backups_media
 from common.backups.copies import REASON_DELETE, REASON_MOVE, REASON_REPLACE
 from common.failures import why
-from common.games import game_lens, media_ops, media_placement, table_lens
+from common.games import game_lens, info_files, media_ops, media_placement, table_lens
 from common.games.asset_registry import spec_for
 from common.games.asset_resolver import VPX_ASSET_KINDS
 from common.games.game import Game
@@ -302,7 +302,7 @@ def _reverse(op: _Op) -> None:
 
 
 def _info(game_dir: Path) -> Path | None:
-    info = game_dir / f"{game_dir.name}.info"
+    info = info_files.game_info_path(game_dir)
     return info if info.is_file() else None
 
 

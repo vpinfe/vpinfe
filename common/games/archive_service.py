@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from common import service_errors
+from common.games import info_files
 from common.games.export_bundle import bundle_paths, prune_info
 from common.i18n import t
 
@@ -42,7 +43,7 @@ def create_vpxz_archive(game_dir: Path, *, everything: bool = False,
     contents = list(bundle_paths(game_dir, everything=everything, table=table))
     # Forward slashes: an arcname carries the OS separator, an assets key never does.
     bundled_arcnames = {str(arcname).replace(os.sep, "/") for _, arcname in contents}
-    info_name = f"{game_dir.name}.info"
+    info_name = info_files.info_name(game_dir.name)
 
     with zipfile.ZipFile(vpxz_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path, arcname in contents:

@@ -14,14 +14,17 @@ import os
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from common.games import identity_claims, ties, unwritten
+from common.games import identity_claims, info_codec, table_files, ties, unwritten
 from common.games.info_migration import (
     FROM_CATALOG,
     GUIDE_ORIGIN,
     GUIDES_KEY,
+    INFO_SCHEMA,
     migrate,
     needs_migration,
+    schema_of,
     write_json_atomic,
+    written_by_beta,
 )
 from common.games.tables import (
     ABSENT_SINCE_KEY,
@@ -51,7 +54,7 @@ from common.games.tables import (
 )
 from common.i18n import t
 from common.ids import new_id
-from common.kept_copies import write_backup
+from common.kept_copies import AGAIN, BETA, REASON_2X, write_backup
 from common.timestamps import utc_now_iso
 
 logger = logging.getLogger("vpinfe.common.games.info_file")
@@ -61,7 +64,7 @@ logger = logging.getLogger("vpinfe.common.games.info_file")
 #   1  original shape (deletedNVRamOnClose, altlauncher, pluginprofile, alttitle,
 #      altvpsid). Implied when no version is recorded.
 #   2  adds `game_id`, the stable local game id (see common/games/game_identity.py).
-INFO_SCHEMA = 2
+#   3  the manifest, and FileLayout.md's units in `User` (common/games/info_codec.py).
 VPINFE_SCHEMA_KEY = "schema"
 
 # Named for what it identifies, because this section holds ids at more than one scope:
@@ -145,7 +148,9 @@ def _guide(record: dict, url: object) -> dict[str, Any] | None:
     if not said and not video:
         return None
     authors = record.get("authors")
+    file_id = str(record.get("id") or "").strip()
     return {
+        **({"vps_file_id": file_id} if file_id else {}),
         "kind": GUIDE_TUTORIAL,
         GUIDE_ORIGIN: FROM_CATALOG,
         "title": str(record.get("title") or "").strip(),
@@ -230,8 +235,18 @@ def read_record(path: str | os.PathLike[str]) -> tuple[str, dict[str, Any]]:
 
 
 def read_info(path: str | os.PathLike[str]) -> dict[str, Any]:
-    """What `read_record` finds, without its text."""
-    return read_record(path)[1]
+    """What `read_record` finds, without its text, as the in-memory record: a schema 3
+    file decoded, an older one as stored, with the tables' own files folded in. Write one
+    back through `MetaConfig`."""
+    where = os.fspath(path)
+    data = info_codec.decode(read_record(where)[1])
+    table_files.fold(data, table_files.discover(where, data))
+    return data
+
+
+def record_of(stored: dict[str, Any]) -> dict[str, Any]:
+    """The in-memory record for a parsed file of any schema, as `MetaConfig` reads it."""
+    return migrate(stored) if needs_migration(stored) else info_codec.decode(stored)
 
 
 def _later_of_same_release(existing: dict[str, Any], new: dict[str, Any]) -> bool:
@@ -240,6 +255,13 @@ def _later_of_same_release(existing: dict[str, Any], new: dict[str, Any]) -> boo
     release = new.get(ties.FILE_KEY)
     return bool(release and existing.get(ties.FILE_KEY) == release
                 and ties.update_available({**existing, "version": new.get(ties.VERSION_KEY)}))
+
+
+def migration_backup_reason(stored: dict[str, Any]) -> str:
+    """The word on the copy taken before a file that needs migrating is first rewritten."""
+    if not written_by_beta(stored):
+        return REASON_2X
+    return AGAIN if (schema_of(stored) or 0) >= INFO_SCHEMA else BETA
 
 
 class MetaConfig:
@@ -252,19 +274,31 @@ class MetaConfig:
         self.data: dict[str, Any] = {}
         # The file as it was found, held only until a write backs it up.
         self._pre_migration = ""
+        self._pre_migration_reason = REASON_2X
+        # The tables' own `.info` files found beside the game's, and what the game's file
+        # held before this write, for the split.
+        self._own_files: dict[str, table_files.OwnFile] = {}
+        self._before = table_files.Before(False, frozenset(), frozenset(), frozenset())
 
         if os.path.exists(configfilepath):
-            original, self.data = read_record(configfilepath)
-            if needs_migration(self.data):
+            original, stored = read_record(configfilepath)
+            if needs_migration(stored):
                 self._pre_migration = original
-                self.data = migrate(self.data)
+                self._pre_migration_reason = migration_backup_reason(stored)
+                self.data = record_of(stored)
                 logger.debug("Migrated %s to schema %s in memory", configfilepath,
                              INFO_SCHEMA)
+            else:
+                self.data = info_codec.decode(stored)
         else:
-            self.data = {}
+            self.data = table_files.seed(configfilepath)
         held = unwritten.held(configfilepath)
         if held is not None:
             self.data = held
+        self._own_files = table_files.discover(configfilepath, self.data)
+        self._before = table_files.snapshot(self.data, configfilepath, self._own_files,
+                                            "VPX" in self.data)
+        table_files.fold(self.data, self._own_files)
         self._normalize_detection_flags()
         self._migrate_vpinfe()
 
@@ -417,10 +451,19 @@ class MetaConfig:
             # per schema bump, not one per rebuild. A failure here stops the write - the
             # backup exists for the person who needs to go back, so proceeding without
             # one would take away the only thing that makes this reversible.
-            saved = write_backup(self.config_file_path, self._pre_migration)
+            saved = write_backup(self.config_file_path, self._pre_migration,
+                                 reason=self._pre_migration_reason)
             self._pre_migration = ""
             logger.info("Kept the pre-migration metadata at %s", saved)
-        write_json_atomic(self.config_file_path, self.data)
+            converting = True
+        else:
+            converting = False
+        split = table_files.write(self.config_file_path, self.data, self._own_files,
+                                  self._before, converting=converting)
+        write_json_atomic(self.config_file_path, info_codec.encode(self.data, split.slim))
+        self._own_files = split.registry
+        self._before = table_files.snapshot(self.data, self.config_file_path,
+                                            self._own_files, False, split.slim)
         unwritten.release(self.config_file_path)
 
     def get_config(self) -> dict[str, Any]:

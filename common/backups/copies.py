@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from common.games.info_migration import needs_migration, written_by_beta
 from common.i18n import t
 
 # What a copy is of.
@@ -54,6 +55,14 @@ REASON_DELETE = "delete"
 # Who wrote the file the copy holds. Empty where the file is not VPinFE's own.
 BY_2X = "2.x"
 BY_3X = "3.0"
+BY_BETA = "beta"
+
+def writer_of_info(data: object) -> str:
+    """Which series wrote the `.info` held in `data`."""
+    if written_by_beta(data):
+        return BY_BETA
+    return BY_2X if needs_migration(data) else BY_3X
+
 
 # Where it is kept. Part of the id, so a path is only ever read in the place it came from.
 PLACE_GAME = "game"

@@ -24,6 +24,7 @@ from common.config.paths import COLLECTIONS_PATH, CONFIG_DIR, VPINFE_INI_PATH, V
 from common.games import (
     game_index_service,
     game_repository,
+    info_files,
     info_maintenance,
     metadata_service,
     tables,
@@ -42,7 +43,7 @@ from common.games.game_metadata import (
     vpinfe_section,
 )
 from common.games.game_repository import refresh_game
-from common.games.info_file import VPINFE_SECTION, read_info
+from common.games.info_file import VPINFE_SECTION
 from common.games.info_maintenance import RestoreResult, UpgradeResult
 from common.games.tables import (
     TABLES_KEY,
@@ -128,10 +129,9 @@ def add_game_to_collection(game_id: str, collection_name: str) -> bool:
 
 def update_info_section(game_dir: Path, section: str, key: str, value: Any) -> None:
     """Raises OSError or ValueError when the .info cannot be read or written."""
-    info_file = game_dir / f"{game_dir.name}.info"
-    data = read_info(info_file)
-    data.setdefault(section, {})[key] = value
-    info_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    record = info_files.open_for_writing(game_dir)
+    record.data.setdefault(section, {})[key] = value
+    record.write_config()
     refresh_game(game_dir)
 
 
@@ -154,14 +154,13 @@ def update_table_vpinfe_setting(game_dir: Path, table_id: str, key: str,
     Raises OSError or ValueError when the .info cannot be read or written, and
     LookupError when it holds no such table.
     """
-    info_file = game_dir / f"{game_dir.name}.info"
-    data = read_info(info_file)
-    entry = (data.get(TABLES_KEY) or {}).get(table_id)
+    record = info_files.open_for_writing(game_dir)
+    entry = (record.data.get(TABLES_KEY) or {}).get(table_id)
     if entry is None:
         raise LookupError(t("error.games.table_id_unknown", table_id=table_id,
                             game=game_dir.name))
     entry.setdefault(VPINFE_SECTION, {})[key] = value
-    info_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    record.write_config()
     refresh_game(game_dir)
 
 
@@ -370,7 +369,7 @@ def _stored_meta(game_dir: Path) -> dict:
     """The folder's record, or {} where it has none that reads."""
     from common.games.info_file import MetaConfig
 
-    meta_path = game_dir / f"{game_dir.name}.info"
+    meta_path = info_files.game_info_path(game_dir)
     if not meta_path.exists():
         return {}
     try:
@@ -509,7 +508,7 @@ def associate_vps_to_folder(
     if not game_dir.exists():
         raise FileNotFoundError(t("error.games.folder_missing"))
 
-    meta_path = game_dir / f"{game_dir.name}.info"
+    meta_path = info_files.game_info_path(game_dir)
     vpx_file = _find_vpx_file(game_dir)
     parser = VPXParser()
     vpxdata = parser.single_file_extract(str(vpx_file))
@@ -715,11 +714,12 @@ def set_details(game_dir: Path, values: dict) -> dict:
 
     Writes no `Info`, so a rebuild and an adopt both leave what is stored here alone.
     """
-    record = game_dir / f"{game_dir.name}.info"
-    if not record.is_file():
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(record))
+    path = info_files.game_info_path(game_dir)
+    if not path.is_file():
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(path))
 
-    held = read_info(record)
+    record = info_files.open_for_writing(game_dir)
+    held = record.data
     ours = held.setdefault(VPINFE_SECTION, {})
     if not isinstance(ours, dict):
         ours = held[VPINFE_SECTION] = {}
@@ -736,7 +736,7 @@ def set_details(game_dir: Path, values: dict) -> dict:
         else:
             ours.pop(key, None)
 
-    record.write_text(json.dumps(held, indent=4), encoding="utf-8")
+    record.write_config()
     refresh_game(game_dir)
     return {name: ours.get(GAME_OVERRIDES[name][0], "")
             for name in DETAIL_FIELDS}
@@ -837,9 +837,7 @@ def add_table_file(game_dir: Path, source: Path, table_id: str, move: bool = Fal
     if landing.exists():
         raise _already(landing)
 
-    from common.games.info_file import MetaConfig
-
-    listed = MetaConfig(str(game_dir / f"{game_dir.name}.info")).listed_table_id(source.name)
+    listed = info_files.open_record(game_dir).listed_table_id(source.name)
     carry = shutil.move if move else shutil.copy2
     companions = companions_beside(source)
     try:
@@ -887,9 +885,7 @@ def record_arrived_table(game_dir: Path, landing: Path, table_id: str,
     file was missing, so nothing is added and the file is described under that id. Leaves
     the refresh to the caller.
     """
-    from common.games.info_file import MetaConfig
-
-    meta = MetaConfig(str(game_dir / f"{game_dir.name}.info"))
+    meta = info_files.open_record(game_dir)
     if not listed and not meta.add_contained_table(landing.name, table_id):
         if not keep:
             landing.unlink(missing_ok=True)
@@ -955,7 +951,7 @@ def create_game(name: str, location_id: str = "") -> Path:
 
     folder.mkdir(parents=True)
     try:
-        MetaConfig(str(folder / f"{wanted}.info")).write_config_meta({})
+        MetaConfig(str(folder / info_files.info_name(wanted))).write_config_meta({})
     except Exception:
         # A folder with no record is not an entry, so leaving one behind would put a
         # directory in the library that nothing can see and nothing will clean up.

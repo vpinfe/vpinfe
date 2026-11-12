@@ -23,6 +23,7 @@ from common.games import (
     asset_resolver,
     derived_tags,
     game_repository,
+    info_files,
     launchers,
     library_discovery,
     media_service,
@@ -166,7 +167,7 @@ def table_settings(game_dir: Path) -> dict:
     settings mean everything is visible, which is what an older library looks like.
     """
     try:
-        info = game_dir / f"{game_dir.name}.info"
+        info = info_files.game_info_path(game_dir)
         if info.is_file():
             return MetaConfig(str(info)).game_file_settings()
     except Exception:  # noqa: BLE001 - settings are advisory; never block the listing
@@ -559,7 +560,8 @@ def game_stamp(game_dir: Path) -> tuple:
     game's rows still describe it."""
     stamps: list[tuple[int, int] | None] = []
     base = os.fspath(game_dir)
-    for path in (base, os.path.join(base, "medias"), os.path.join(base, f"{game_dir.name}.info")):
+    record = os.fspath(info_files.game_info_path(game_dir))
+    for path in (base, os.path.join(base, "medias"), record):
         try:
             stat = os.stat(path)
         except OSError:

@@ -11,7 +11,8 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
-from common.games.info_file import MetaConfig
+from common.games.info_codec import encode
+from common.games.info_file import MetaConfig, record_of
 from common.games.info_migration import (
     MATCHED_BY_USER,
     VPS_MATCHED_BY_KEY,
@@ -59,8 +60,14 @@ class DetectionTests(unittest.TestCase):
     def test_a_2x_file_is_recognized(self):
         self.assertTrue(needs_migration(LEGACY))
 
-    def test_a_stamped_file_is_left_alone(self):
-        self.assertFalse(needs_migration({"vpinfe": {"schema": 2}, "tables": {}}))
+    def test_a_current_file_is_left_alone(self):
+        self.assertFalse(needs_migration({"vpinfe": {"schema": 3}}))
+
+    def test_a_schema_2_file_from_the_beta_is_migrated(self):
+        self.assertTrue(needs_migration({"vpinfe": {"schema": 2}, "tables": {}}))
+
+    def test_a_beta_that_wrote_to_a_current_file_is_migrated_again(self):
+        self.assertTrue(needs_migration({"vpinfe": {"schema": 3}, "tables": {}}))
 
     def test_a_stamped_file_2x_wrote_again_is_migrated_again(self):
         """We never write VPXFile, so finding one in a stamped file means a 2.x build
@@ -94,10 +101,12 @@ class DetectionTests(unittest.TestCase):
                          "the id this build already minted wins over the old one")
 
     def test_a_file_we_wrote_is_not_migrated_again(self):
-        self.assertFalse(needs_migration(migrate(LEGACY)))
+        self.assertFalse(needs_migration(encode(migrate(LEGACY))))
 
     def test_migrating_twice_changes_nothing(self):
-        self.assertEqual(migrate(migrate(LEGACY)), migrate(LEGACY))
+        once = encode(migrate(LEGACY))
+
+        self.assertEqual(encode(record_of(once)), once)
 
     def test_junk_is_not_a_2x_file(self):
         for value in (None, [], "", {}, {"Info": {}}):
@@ -383,7 +392,7 @@ class BackupTests(TempTree):
         backups = self._backups()
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(encoding="utf-8"), original)
-        self.assertEqual(json.loads(self.info.read_text(encoding="utf-8"))["vpinfe"]["schema"], 2)
+        self.assertEqual(json.loads(self.info.read_text(encoding="utf-8"))["vpinfe"]["schema"], 3)
 
     def test_later_writes_do_not_pile_up_restore_points(self):
         """One per schema bump over the app's lifetime, not one per rebuild."""

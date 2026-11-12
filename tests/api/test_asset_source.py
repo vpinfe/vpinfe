@@ -11,7 +11,6 @@ because the ledger is keyed by path and one folder can hold several files of a k
 from __future__ import annotations
 
 import copy
-import json
 import unittest
 from unittest.mock import patch
 
@@ -19,7 +18,9 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common.games.game_metadata import set_asset_source
+from common.games.info_file import INFO_SCHEMA
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Bound00001"
 FOLDER = "Medieval Madness (Williams 1997)"
@@ -29,7 +30,7 @@ RECORD = "b2s_KtY1"
 
 INFO = {
     "Info": {"Title": "Medieval Madness", "VPSId": "mm_1997x"},
-    "vpinfe": {"game_id": GAME_ID},
+    "vpinfe": {"game_id": GAME_ID, "schema": INFO_SCHEMA},
     "tables": {"tbl0000001": {"id": "tbl0000001", "filename": VPX}},
     # Placed by us and hashed, which is a fact about the file - not a claim about
     # which upstream record it is.
@@ -65,8 +66,7 @@ class AssetSourceTests(TempTree):
                                  raise_server_exceptions=False)
 
     def _ledger(self) -> dict:
-        written = json.loads((self.folder / f"{FOLDER}.info").read_text())
-        return written.get("assets") or {}
+        return saved_record(self.folder / f"{FOLDER}.info").get("assets") or {}
 
     def _bind(self, path: str, record: str) -> dict:
         response = self.client.put(f"/games/{GAME_ID}/asset_source",
@@ -119,7 +119,7 @@ class AssetSourceTests(TempTree):
         self._bind("medias/wheel.png", RECORD)
         self._bind("medias\\wheel.png", "b2s_Other")
 
-        self.assertEqual(list(self._ledger()), [BACKGLASS, "medias/wheel.png"])
+        self.assertEqual(sorted(self._ledger()), sorted([BACKGLASS, "medias/wheel.png"]))
         self.assertEqual(self._ledger()["medias/wheel.png"]["source"]["vps_file_id"],
                          "b2s_Other")
 

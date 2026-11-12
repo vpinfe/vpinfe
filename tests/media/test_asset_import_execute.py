@@ -16,6 +16,7 @@ from common.uploads.asset_import_service import (
     select_plan_items,
 )
 from tests.support.library import fake_game, game_info
+from tests.support.saved import save_record, saved_record
 from tests.support.swaps import library_of
 from tests.support.uploads import make_zip
 
@@ -84,7 +85,6 @@ class GameInfoImportTests(unittest.TestCase):
         return zip_path
 
     def test_new_game_adopts_and_renames_info(self):
-        import json
         from pathlib import Path
         from tempfile import TemporaryDirectory
         with mock.patch.object(asset_import_service, "refresh_game"):
@@ -96,7 +96,7 @@ class GameInfoImportTests(unittest.TestCase):
                 execute_import_plan(plan, zip_path)
                 dest = Path(tmp) / "New Name (Mfg 2000)" / "New Name (Mfg 2000).info"
                 self.assertTrue(dest.exists())
-                data = json.loads(dest.read_text())
+                data = saved_record(dest)
                 self.assertEqual(data["User"]["Rating"], 5)
 
     def test_a_renamed_plan_names_the_files_the_import_writes(self):
@@ -143,16 +143,38 @@ class GameInfoImportTests(unittest.TestCase):
                 plan = build_import_plan(analysis, game_dir=game_dir)
                 execute_import_plan(plan, zip_path)
 
-                data = json.loads(info_path.read_text())
+                data = saved_record(info_path)
                 self.assertEqual(data["Info"]["VPSId"], "local-id")     # association kept
                 self.assertEqual(data["User"]["Rating"], 3)             # history kept
                 self.assertEqual(data["User"]["StartCount"], 12)
                 copies = sorted(game_dir.glob("Foo (Bar 1999).info.vpinfe-*-import"))
                 self.assertEqual(len(copies), 1)
-                kept = json.loads(copies[0].read_text())
-                kept.pop("tables")
-                self.assertEqual(kept, local)
+                kept = saved_record(copies[0])
+                self.assertEqual(kept["Info"], local["Info"])
+                self.assertEqual({key: kept["User"][key] for key in local["User"]}, local["User"])
                 self.assertFalse((game_dir / "Foo (Bar 1999).info.bak").exists())
+
+    def test_a_2x_file_is_kept_as_it_was_before_an_import_rewrites_it(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with mock.patch.object(asset_import_service, "refresh_game"):
+            with TemporaryDirectory() as tmp:
+                game_dir = Path(tmp) / "Foo (Bar 1999)"
+                game_dir.mkdir()
+                (game_dir / "Foo.vpx").write_bytes(b"x")
+                library_of(self)
+                local = {"Info": {"VPSId": "local-id"}, "User": {"Rating": 3}, "VPXFile": {}}
+                info_path = game_dir / "Foo (Bar 1999).info"
+                info_path.write_text(json.dumps(local))
+                zip_path = self._bundle(tmp, {"Info": {"VPSId": "x"}})
+                plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
+                execute_import_plan(plan, zip_path)
+
+                kept = sorted(game_dir.glob("Foo (Bar 1999).info.vpinfe-????????T??????Z"))
+                self.assertEqual(len(kept), 1)
+                self.assertEqual(json.loads(kept[0].read_text()), local)
+                self.assertEqual(saved_record(info_path)["User"]["Rating"], 3)
 
 
 class ImportExecuteTests(unittest.TestCase):
@@ -250,19 +272,17 @@ class ImportExecuteTests(unittest.TestCase):
               **sections) -> None:
         """Write the game's .info with `tables` keyed by file name, and have the library
         hold it. A table that is named but given no file is given an entry of its own."""
-        import json
         by_id = {f"t{index}": {"id": f"t{index}", "filename": name, **entry}
                  for index, (name, entry) in enumerate((tables or {}).items())}
         info = game_info(game_dir.name, game_id="Game00000001", tables=by_id)
         for section, values in sections.items():
             info.setdefault(section, {}).update(values)
-        (game_dir / f"{game_dir.name}.info").write_text(json.dumps(info))
+        save_record(game_dir / f"{game_dir.name}.info", info)
         library_of(self, {"Game00000001": fake_game(game_dir, game_dir.name, meta=info)},
                    parsed=parsed)
 
     def _replace_game(self, tmp, game_dir, info: dict, new_name: str, parsed):
         """Drop new_name onto an existing game, and hand back the resulting .info."""
-        import json
         from pathlib import Path
         (game_dir / "Old.vpx").write_bytes(b"old")
         info_path = game_dir / f"{game_dir.name}.info"
@@ -274,7 +294,7 @@ class ImportExecuteTests(unittest.TestCase):
         plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
         with mock.patch.object(asset_import_service, "refresh_game"):
             execute_import_plan(plan, zip_path)
-        return json.loads(info_path.read_text())
+        return saved_record(info_path)
 
     def test_a_replaced_game_is_described_and_the_old_entry_dropped(self):
         """The new .vpx had no entry until the next metadata build, and the old one kept
@@ -358,7 +378,6 @@ class AddTableExecuteTests(unittest.TestCase):
     """What adding a table to a game writes."""
 
     def setUp(self) -> None:
-        import json
         from pathlib import Path
         from tempfile import TemporaryDirectory
         held = TemporaryDirectory()
@@ -369,7 +388,8 @@ class AddTableExecuteTests(unittest.TestCase):
         (self.game_dir / "Foo.vpx").write_bytes(b"old")
         (self.game_dir / "Foo.directb2s").write_bytes(b"old-b2s")
         self.info = self.game_dir / "Foo (Bar 1999).info"
-        self.info.write_text(json.dumps({"tables": {"t-old": {"filename": "Foo.vpx"}}}))
+        save_record(self.info, game_info("Foo", tables={
+            "t-old": {"id": "t-old", "filename": "Foo.vpx"}}))
         for patched in (mock.patch.object(asset_import_service, "refresh_game"),
                         mock.patch("common.games.library_enrichment.read_one",
                                    return_value={"rom": "foo_12", "version": "1.2"})):
@@ -377,13 +397,12 @@ class AddTableExecuteTests(unittest.TestCase):
             self.addCleanup(patched.stop)
 
     def _added(self, names, declared=None):
-        import json
         zip_path = self.tmp / "drop.zip"
         make_zip(zip_path, names)
         plan = build_import_plan(analyze_path(zip_path), game_dir=self.game_dir,
                                  add_table=True)
         report = execute_import_plan(plan, zip_path, declared=declared)
-        return report, json.loads(self.info.read_text())
+        return report, saved_record(self.info)
 
     def test_the_game_keeps_its_table_and_gains_one(self):
         report, saved = self._added(["Foo 1.2.vpx", "Foo 1.2.directb2s"])
@@ -433,7 +452,6 @@ class FirstTableGetsThePovTests(unittest.TestCase):
     GAME_ID = "Pov0000001"
 
     def setUp(self) -> None:
-        import json
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
@@ -446,12 +464,12 @@ class FirstTableGetsThePovTests(unittest.TestCase):
         self.game_dir = self.tmp / "Foo"
         self.game_dir.mkdir()
         self.info = self.game_dir / "Foo.info"
-        self.info.write_text(json.dumps(game_info("Foo", game_id=self.GAME_ID)))
+        save_record(self.info, game_info("Foo", game_id=self.GAME_ID))
         (self.game_dir / "Foo.pov").write_bytes(b"pov")
 
         def current():
             return {self.GAME_ID: fake_game(self.game_dir, "Foo",
-                                            meta=json.loads(self.info.read_text()))}
+                                            meta=saved_record(self.info))}
 
         for patched in (mock.patch.object(game_repository, "catalog", side_effect=current),
                         mock.patch.object(asset_import_service, "refresh_game"),

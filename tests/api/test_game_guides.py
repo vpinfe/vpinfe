@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
 
 import httpapi
-from tests.support.library import TempTree, fake_game, write_game
+from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Guides0001"
 PRIMER = "https://pinballprimer.github.io/afm.html"
 
 
 def _info() -> dict:
-    return {"Info": {"Name": "Attack from Mars"}, "VPinFE": {"game_id": GAME_ID},
-            "guides": [{"kind": "tutorial", "origin": "vps", "title": "AFM",
-                        "authors": [], "url": PRIMER, "youtube_id": ""}]}
+    info = game_info("Attack from Mars", game_id=GAME_ID)
+    info["guides"] = [{"kind": "tutorial", "origin": "vps", "title": "AFM",
+                       "authors": [], "url": PRIMER, "youtube_id": ""}]
+    return info
 
 
 class SettingGuides(TempTree):
@@ -36,7 +37,7 @@ class SettingGuides(TempTree):
         return self.client.put(f"/games/{GAME_ID}/guides", json={"guides": guides})
 
     def _on_disk(self) -> list[dict]:
-        return json.loads(self.info_path.read_text()).get("guides") or []
+        return saved_record(self.info_path).get("guides") or []
 
     def test_the_list_reaches_the_info_file(self) -> None:
         response = self._put([{"url": "https://rules.example/", "kind": "rule_sheet",

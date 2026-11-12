@@ -161,13 +161,15 @@ def is_game_folder(path: str | Path) -> bool:
     it described, and discovery writes one for a folder that arrived holding only a
     table.
     """
+    from common.games import info_files
+
     here = Path(path).expanduser()
     try:
         with os.scandir(here) as found:
             names = [one.name for one in found if not one.is_dir()]
     except OSError:
         return False
-    return bool(table_names(names)) or f"{here.name}.info" in names
+    return bool(table_names(names)) or info_files.info_name(here.name) in names
 
 
 def survey(path: str | Path) -> dict[str, list[str]]:

@@ -30,6 +30,7 @@ from common.uploads.asset_import_service import (
     select_plan_items,
 )
 from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import save_record
 from tests.support.skips import needs_posix_permissions
 from tests.support.swaps import library_of
 
@@ -186,7 +187,7 @@ class RenamedOnlyInCaseTests(TempTree):
             archive.writestr("Example.vpx", b"new")
         info = game_info(self.folder.name, game_id="Game00000001",
                          tables={"t1": {"id": "t1", "filename": "example.vpx"}})
-        (self.folder / f"{self.folder.name}.info").write_text(json.dumps(info))
+        save_record(self.folder / f"{self.folder.name}.info", info)
         library_of(self, {"Game00000001": fake_game(self.folder, self.folder.name, meta=info)})
         plan = build_import_plan(analyze_path(drop), game_dir=self.folder)
 

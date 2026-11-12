@@ -36,6 +36,7 @@ from common.games.game_metadata import (
     game_year,
     guides_on_wire,
     normalize_meta,
+    normalize_rating,
     play_record,
     reorder_leading_article,
     section,
@@ -90,6 +91,9 @@ def _legacy_row(game: Game, logo_cache: dict[str, str | None]) -> dict:
     # rebuild.
     meta = dict(normalize_meta(game.meta_config))
     info = section(meta, "Info")
+    held_user = meta.get("User")
+    if isinstance(held_user, dict) and isinstance(held_user.get("Rating"), float):
+        meta["User"] = {**held_user, "Rating": normalize_rating(held_user["Rating"])}
 
     # This shape has one slot per field, so a user's answer is resolved into it here.
     # A theme on this contract would otherwise read the catalog's value while every

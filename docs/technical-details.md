@@ -323,7 +323,7 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
         "Tags": []
     },
     "vpinfe": {
-        "schema": 2,
+        "schema": 3,
         "id": "tuF3WogthK",
         "default_table": "123(Talleres de Llobregat 1973) v601.vpx",
         "delete_nvram_on_close": false,
@@ -332,54 +332,74 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
         "alt_title": "",
         "alt_vpsid": "",
         "frontend_dof_event": "",
-        "run_time_seconds": 0
-    },
-    "tables": {
-        "123(Talleres de Llobregat 1973) v601.vpx": {
-            "file_hash": "d685ce54d659fadcafd90a296473fb126754aa23b1145f457c6626aa5baa75d9",
-            "vbs_hash": "bd6dcb7e0c618e4553d230095e73c7ca8e17f31def4595c38a8439b279977b45",
-            "version": "6.0.1",
-            "release_date": "2026-01-25",
-            "save_date": "2026-01-25T22:24:36",
-            "save_rev": "91",
-            "manufacturer": "",
-            "year": "",
-            "type": "",
-            "rom": "TlD_123",
-            "authors": [
-                "jpsalas",
-                "akiles50000",
-                "Loserman76"
+        "manifest": {
+            "tables": [
+                {
+                    "file": "123(Talleres de Llobregat 1973) v601.vpx",
+                    "file_hash": "d685ce54d659fadcafd90a296473fb126754aa23b1145f457c6626aa5baa75d9",
+                    "vbs_hash": "bd6dcb7e0c618e4553d230095e73c7ca8e17f31def4595c38a8439b279977b45",
+                    "version": "6.0.1",
+                    "release_date": "2026-01-25",
+                    "save_date": "2026-01-25T22:24:36",
+                    "save_rev": "91",
+                    "manufacturer": "",
+                    "year": "",
+                    "type": "",
+                    "rom": "TlD_123",
+                    "authors": [
+                        "jpsalas",
+                        "akiles50000",
+                        "Loserman76"
+                    ],
+                    "detect_nfozzy": false,
+                    "detect_fleep": false,
+                    "detect_ssf": true,
+                    "detect_lut": true,
+                    "detect_scorbit": false,
+                    "detect_fastflips": false,
+                    "detect_flex": false,
+                    "user": {
+                        "last_run": null,
+                        "start_count": 0,
+                        "run_time_seconds": 0
+                    }
+                }
             ],
-            "detect_nfozzy": false,
-            "detect_fleep": false,
-            "detect_ssf": true,
-            "detect_lut": true,
-            "detect_scorbit": false,
-            "detect_fastflips": false,
-            "detect_flex": false,
-            "user": {
-                "last_run": null,
-                "start_count": 0,
-                "run_time_seconds": 0
-            }
-        }
-    },
-    "assets": {
-        "medias/bg.png": {
-            "source": {
-                "host": "vpinmediadb",
-                "hash": "d80f67a370ebce2edd19febdc3fd7636"
-            }
-        },
-        "medias/wheel.png": {
-            "source": {
-                "host": "vpinmediadb",
-                "hash": "a88bcaf2ade6b9614417fc18a8782f78"
-            }
-        },
-        "medias/cab.png": {
-            "source": {"host": "user"}
+            "media": [
+                {
+                    "file": "medias/bg.png",
+                    "source": {
+                        "host": "vpinmediadb",
+                        "hash": "d80f67a370ebce2edd19febdc3fd7636"
+                    }
+                },
+                {
+                    "file": "medias/cab.png"
+                },
+                {
+                    "file": "medias/wheel.png",
+                    "source": {
+                        "host": "vpinmediadb",
+                        "hash": "a88bcaf2ade6b9614417fc18a8782f78"
+                    }
+                }
+            ],
+            "assets": [
+                {
+                    "file": "123(Talleres de Llobregat 1973) v601.directb2s"
+                }
+            ],
+            "guides": [
+                {
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "kind": "tutorial",
+                    "title": "Playing 1-2-3",
+                    "authors": [],
+                    "source": {
+                        "vps_file_id": "kV3fAmQ2"
+                    }
+                }
+            ]
         }
     }
 }
@@ -403,14 +423,12 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
 - User
 
   Stores per-user data for the game. Preserved across `--buildmeta --update-all`:
-  - Rating: User rating (0–10)
-  - Favorite: Favorite flag (0/1)
-  - LastRun: Timestamp of last play
+  - Rating: User rating, 0 (unrated) to 10. VPinFE shows it as five stars, so a half star
+    is an odd number.
+  - Favorite: Favorite flag, `1` or `0`
+  - LastRun: ISO 8601 UTC timestamp of the last play, or `null`
   - StartCount: How many times played
-  - RunTime: Total playtime in minutes, rounded down. Derived from
-    `vpinfe.run_time_seconds`, which is what actually accumulates — a key fixed by the
-    VPX spec cannot hold the seconds, and adding whole minutes per session charged a
-    few seconds at a table the same as a few minutes.
+  - RunTime: Total playtime in seconds
   - Tags: Array of custom tags
   - HighScores: the machine's high score table as last read, one record per ROM, since a
     ROM is the machine and two tables on it share one table. Each is `read_at`,
@@ -419,9 +437,9 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
     last game put there. 2.x kept one reading as `Score`; the migration moves it under the
     ROM it names.
 
-- tables
+- vpinfe.manifest.tables
 
-  One entry per `.vpx` in the folder, keyed by filename. A game folder can hold a desktop
+  One entry per `.vpx` in the folder, with its filename as `file`. A game folder can hold a desktop
   build, a VR build and a patched one, and every visible entry is independently launchable —
   they are peers, not a primary with alternates. Each entry holds what that file says about
   itself:
@@ -443,8 +461,8 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
 - vpinfe
 
   VPinFE-specific settings for the game, preserved across `--buildmeta --update-all`:
-  - schema: the version of this file's shape. Absent means a 2.x file, which is migrated on
-    first read — see below.
+  - schema: the version of this file's shape, `3` here. Absent means a 2.x file and `2` a
+    3.0 beta file, and both are migrated on first read — see below.
   - id: the game's stable local identity, used in the API, in events and in collections
   - default_table: which table a consumer that can only take one should get. With none
     recorded, or when the recorded one is hidden or missing, it is the most recently added
@@ -455,9 +473,6 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
     instead of `vpinfe.ini` `Settings.vpxbinpath`.
   - private: (true/false) Never sent to VPinPlay or any other community service, whoever
     plays the game. Absent is false.
-  - run_time_seconds: total play time. This is the counter that accumulates; `User.RunTime`
-    is it rounded down to whole minutes. Written on the first play after upgrading, seeded
-    from whatever `User.RunTime` already held.
   - plugin_profile, alt_title, alt_vpsid, frontend_dof_event
 
   `alt_vpsid` is a manual VPS match: automatic matching got the game wrong, and somebody
@@ -476,29 +491,99 @@ When you run VPinFE with the `--buildmeta` option it recursively scans your game
   somebody matched keeps `Info` and its guides as they are: the rebuild reads its tables
   again and fetches art for the entry in force.
 
-- assets
+- A table's own `.info`
 
-  One entry per file VPinFE placed in the game folder, keyed by the file's path relative to that folder, with forward slashes. Preserved across `--buildmeta --update-all`. Replaces the old `Medias` section, which was keyed by media type and so could hold only one entry per type — no way to describe artwork belonging to one specific table, and the same question applies to backglasses, ROMs and colorizations. Each entry holds a `source`:
-  - host: who supplied the bytes — a remote such as "vpinmediadb", or "user" for a file uploaded through the Manager
+  A game folder with two or more tables gives each table that is not named like the folder a
+  file of its own, `<table>.info`, beside its `.vpx`. Visual Pinball reads that file before the
+  folder's, and writes its own section into it. The game's file stays the one record the app
+  reads, and a one-table game has only that file.
+
+  A table's file is complete on its own, so a program that reads nothing else shows the right
+  values: `Info` holds the game's facts and the table's `Authors`; `User` holds the table's own
+  `Rating` where it has one and the game's where it does not, the game's `Favorite`, the game's
+  tags and the table's own, and the table's own `LastRun`, `StartCount` and `RunTime` in the
+  units above. What only VPinFE needs is in `vpinfe.table`: the table's id and its facts as
+  in `manifest.tables`, with its own rating and tags under `own`. A table named like the
+  folder keeps its facts in the game's file.
+
+  The game's `manifest.tables` keeps only `file`, `id`, `hidden` and `absent_since` for a
+  table that has a file. Tables referenced by path or keyed by an app never get one.
+
+  A table's file follows its table: it is renamed with it, goes with it to a swapped file,
+  and is removed with a copy kept when the table is deleted or forgotten. The VPX and `Info`
+  sections of a file VPinFE did not write are left as they were found, with a copy kept
+  first (`-adopt`), and the first split of a game's file keeps the original (`-split`). An
+  export of one table carries both files, with the game's manifest trimmed to what ships.
+  Back at one table, the table that remains keeps its file and its own rating and tags
+  become the game's.
+
+- vpinfe.manifest.media, assets and guides
+
+  Every file VPinFE recognizes as the game's, and the guides, in four lists with `tables`.
+  A line says where the thing is, with one vocabulary throughout: `file` (in this folder,
+  relative, forward slashes), `url` (online), and for a table `path` (anywhere else) or
+  `app` and `key` (an app looks it up).
+
+  - **media** is what you look at while browsing: the artwork and video in `medias/`.
+  - **assets** is what the game needs to play: its backglass, `.ini`, script and the rest,
+    and a pack folder (PUP, alt color, alt sound, music) as one line.
+  - **guides** is media you read or watch to learn the game: tutorials, rule sheets, manuals,
+    online (`url`) or saved (`file`). The list's order is the order shown.
+
+  VPinFE puts a file in its list by its name when it writes, the way it reads a file's kind
+  from its name everywhere else, so a line moved to another list by hand goes back on the
+  next write. `tables`, `media` and `assets` are written sorted by location; `guides` keeps
+  its order.
+
+  The manifest is kept current on each scan. A recognized file with no line gets one, and a
+  line for a file that is gone is dropped when it has no `source`, or kept and marked
+  `absent_since` when it has one (it is cleared if the file comes back), the way a table is.
+  A game whose folder could not be read in full is left alone, so a share that mounts late
+  does not read as every file gone. A removed line comes back on the next scan without its
+  `source`; for guides the list decides. A ROM archive is not listed by the scan, since
+  telling which ROM a table wants takes reading the table.
+
+  A line may carry a `source`, which says where the bytes came from:
+  - host: who supplied them — a remote such as "vpinmediadb", or "user" for a file uploaded through the Manager
   - hash: the MD5 the host published, when it published one. Absent for a user upload, since a hash is only meaningful compared against a remote.
+  - vps_file_id, on a guide: the catalog record it came from
 
-  Nothing else is stored. Which media kind a file is, and which table it belongs to, are read off its name every time media resolves, so a stored copy could only agree or be wrong.
+  Nothing else is stored for a file. Which media kind a file is, and which table it belongs to, are read off its name every time media resolves, so a stored copy could only agree or be wrong.
 
-  **A file with no entry is not ours.** Ownership is not decided from this section — the downloader hashes what is already on disk and compares it to the MD5 vpinmediadb publishes, so your own artwork is safe whether or not it appears here.
+  **`source` present means the catalog or a download; absent means yours.** The downloader hashes what is already on disk and compares it to the MD5 vpinmediadb publishes, so your own artwork is safe whether or not it has a `source`.
 
-#### Upgrading from a 2.x file
+
+#### Upgrading from an earlier file
 
 Files written before schema 2 have no `schema` key, and are migrated the first time VPinFE
 reads them: `VPXFile` becomes the first `tables` entry, `VPinFE` becomes `vpinfe` with
 snake_case keys, `User.FrontendDOFEvent` moves to `vpinfe.frontend_dof_event`, and `Medias`
-is dropped.
+is dropped. The same read then takes the file to schema 3: `tables`, `assets` and `guides`
+move under `vpinfe.manifest`, and `User` is converted to the units the Visual Pinball
+[FileLayout.md](https://github.com/vpinball/vpinball/blob/master/docs/FileLayout.md) names.
+
+| Value | 2.x | 3.0 |
+|-------|-----|-----|
+| `Rating` | 0 to 5 | 0 to 10 |
+| `Favorite` | 0 or 1 | `1` or `0` |
+| `LastRun` | Unix seconds | ISO 8601 UTC |
+| `RunTime` | minutes | seconds |
+
+A table's own `user.rating` is doubled the same way. A game with one table that holds a
+rating or tags of its own on that table, and none on the game, takes them as the game's.
+A 3.0 beta file (schema 2) has `tables`, `assets` and `guides` at the top and
+`vpinfe.run_time_seconds`, which becomes `RunTime`; a schema 3 file with any of those three
+at the top was written again by a beta, and its plays are folded in by taking the larger
+count and the later date.
 
 Nothing is written until something would have written anyway, and when it does, the original
-is kept first as `<Game>.info.vpinfe-<timestamp>` — for example
+is kept first as `<Game>.info.vpinfe-<timestamp>` for a 2.x file, or
+`<Game>.info.vpinfe-<timestamp>-beta` for a 3.0 beta one — for example
 `Table Name (Bally 1995).info.vpinfe-20260729T143022Z`. The timestamp is UTC, so restore
 points sort and accumulate rather than overwriting each other. **To go back, rename one over
 the `.info`.** Which schema a backup holds is read from its contents, not its name: no
-`schema` key means it is a 2.x file.
+`schema` key means it is a 2.x file. Only the newest 2.x copy, the newest beta copy and the
+newest of any kind are kept.
 
 After that file is created it then attempts to download the media artwork for that game from [VPinMediaDB](https://github.com/superhac/vpinmediadb). All media images are stored in a `medias/` subfolder within each game's directory:
 

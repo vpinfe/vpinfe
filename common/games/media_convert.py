@@ -27,7 +27,7 @@ from common.backups import folder as backup_folder
 from common.backups import media as backup_media
 from common.backups.copies import REASON_CONVERT
 from common.failures import why
-from common.games import convert_preferences, game_lens, media_ops, media_service
+from common.games import convert_preferences, game_lens, info_files, media_ops, media_service
 from common.games import media_encode as encode
 from common.games.media_files import SkipError, Target, inside, stamp
 from common.host import frontend_browser, launch_state, tools
@@ -790,7 +790,7 @@ def _make(item: Item, source: Path, staged: Path, chosen: Choices, ffmpeg: Ffmpe
 def _record(game_dir: Path, old: str, new: str, dropped: bool = True) -> None:
     """The new file is the person's, whoever made the one it came from, and the old name is
     no longer anyone's."""
-    info = game_dir / f"{game_dir.name}.info"
+    info = info_files.game_info_path(game_dir)
     if not info.is_file():
         return
     try:

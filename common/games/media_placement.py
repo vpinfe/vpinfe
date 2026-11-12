@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
+from common.games import info_files
 from common.i18n import t
 from common.media.media_specs import (
     MEDIA_SPECS,
@@ -222,7 +223,7 @@ def _holding(game_dir: Path, going: list[Path]) -> tuple[str, list[Path]]:
         return "", []
     from common.games.info_maintenance import game_id_in
 
-    game_id = game_id_in(game_dir / f"{game_dir.name}.info")
+    game_id = game_id_in(info_files.game_info_path(game_dir))
     return (game_id, held) if game_id else ("", [])
 
 
@@ -381,7 +382,7 @@ def record_origin(game_dir: str | Path, path: Path, host: str = "user",
     publisher's own hash: while the file still matches it, the file is ours to update.
     """
     game_dir = Path(game_dir)
-    info = game_dir / f"{game_dir.name}.info"
+    info = info_files.game_info_path(game_dir)
     if not info.is_file():
         return
     try:

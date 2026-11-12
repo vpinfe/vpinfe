@@ -11,7 +11,6 @@ caller names a tier or learns what one is.
 from __future__ import annotations
 
 import io
-import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -19,8 +18,10 @@ from unittest.mock import patch
 from starlette.testclient import TestClient
 
 import httpapi
+from common.games.info_file import INFO_SCHEMA
 from common.online import sources
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 from tests.support.skips import needs_posix_permissions
 
 GAME_ID = "Placed00001"
@@ -30,7 +31,7 @@ VR = f"{FOLDER} - VR.vpx"
 
 INFO = {
     "Info": {"Name": "Cactus Canyon"},
-    "VPinFE": {"game_id": GAME_ID},
+    "vpinfe": {"game_id": GAME_ID, "schema": INFO_SCHEMA},
     "tables": {"tbl0000001": {"id": "tbl0000001", "filename": DESKTOP},
                "tbl0000002": {"id": "tbl0000002", "filename": VR}},
 }
@@ -237,7 +238,7 @@ class MediaWriteTests(TempTree):
         self.assertEqual(response.status_code, 200, response.text)
 
     def _recorded(self) -> dict:
-        info = json.loads((self.folder / f"{FOLDER}.info").read_text())
+        info = saved_record(self.folder / f"{FOLDER}.info")
         return info["assets"][f"medias/(Wheel) {FOLDER}.png"]["source"]
 
     def test_the_catalog_s_hash_is_recorded_beside_the_source(self) -> None:

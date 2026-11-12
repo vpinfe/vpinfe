@@ -20,6 +20,7 @@ from common.runtime import jobs
 from frontend import config_api, theme_api
 from tests.support.accepted import owner_accepts_theme
 from tests.support.library import own_registry, write_game
+from tests.support.saved import saved_record
 
 
 class FrontendServiceTests(unittest.TestCase):
@@ -311,7 +312,7 @@ class FrontendServiceTests(unittest.TestCase):
             )
 
             self.assertEqual(set_game_rating(game, 5), 5)
-            saved = json.loads(info_path.read_text(encoding="utf-8"))
+            saved = saved_record(info_path)
             self.assertEqual(saved["User"]["Rating"], 5)
             self.assertEqual(saved["User"]["StartCount"], 7)
             self.assertEqual(saved["User"]["RunTime"], 15)
@@ -351,7 +352,7 @@ class FrontendServiceTests(unittest.TestCase):
 
             game_play_service.increment_start_count(game)
 
-            saved = json.loads(info_path.read_text(encoding="utf-8"))
+            saved = saved_record(info_path)
             self.assertEqual(saved["User"]["Rating"], 4)
             self.assertEqual(saved["User"]["StartCount"], 1)
 
@@ -392,7 +393,7 @@ class FrontendServiceTests(unittest.TestCase):
             game_play_service.keep_high_scores(
                 game, "vpx_rom", reading, None, "/nv")  # type: ignore[arg-type]
 
-            saved = json.loads(info_path.read_text(encoding="utf-8"))["User"]
+            saved = saved_record(info_path)["User"]
             self.assertEqual((saved["Rating"], saved["StartCount"]), (4, 2))
             self.assertEqual(saved["HighScores"]["vpx_rom"]["entries"], reading["entries"])
             self.assertNotIn("Score", saved)

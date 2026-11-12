@@ -4,7 +4,6 @@ and the one picked of several, and a request that leaves them out plans exactly 
 from __future__ import annotations
 
 import io
-import json
 import unittest
 import zipfile
 from pathlib import Path
@@ -16,6 +15,7 @@ import httpapi
 from common.games import media_placement
 from tests.support.drops import png_bytes
 from tests.support.library import fake_game, game_info
+from tests.support.saved import save_record
 from tests.support.swaps import library_of
 
 GAME = "Multi00000001"
@@ -44,7 +44,7 @@ class _Api(unittest.TestCase):
             (self.folder / f"{stem}.vpx").write_bytes(b"x")
         info = game_info("Alpha", game_id=GAME, tables=tables)
         info["vpinfe"]["default_table"] = "t1"
-        (self.folder / f"{self.folder.name}.info").write_text(json.dumps(info))
+        save_record(self.folder / f"{self.folder.name}.info", info)
         library_of(self, {GAME: fake_game(self.folder, self.folder.name, meta=info)},
                    parsed=self.PARSED)
         self.client = TestClient(httpapi.create_api_app(), raise_server_exceptions=False)

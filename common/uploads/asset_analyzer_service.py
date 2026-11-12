@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from common.failures import why
+from common.games import info_codec, table_files
 from common.games.asset_registry import (
     is_readme,
     match_media_kind,
@@ -86,6 +87,9 @@ class DetectedAsset:
     # Set by the arrival engine for a picture, sound or video the install converts: what it
     # is written as. None for every file placed as it arrived.
     convert: Conversion | None = None
+    # A `.info` that is one table's own file, found by what it says: its name tells nothing
+    # in a bundle with no folder around it. Set by the analyzer.
+    own_table: bool = False
 
 
 @dataclass(frozen=True)
@@ -663,8 +667,8 @@ def _readme_preview(source: AssetSource, asset: DetectedAsset) -> str:
     return text
 
 
-def _read_bundle_info(source: AssetSource, asset: DetectedAsset) -> dict | None:
-    """Extract and parse a bundle's .info; None if oversized, unreadable, or not a JSON dict."""
+def _read_info_json(source: AssetSource, asset: DetectedAsset) -> dict | None:
+    """A bundle's .info as stored; None if oversized, unreadable, or not a JSON dict."""
     import json
 
     entry = asset.entries[0]
@@ -733,12 +737,16 @@ def analyze_members(
               for a in assets]
 
     bundle_info = None
-    info_assets = [a for a in assets if a.kind == "game_info"]
-    if info_assets:
-        bundle_info = _read_bundle_info(source, info_assets[0])
+    infos = [(a, _read_info_json(source, a)) for a in assets if a.kind == "game_info"]
+    own = {a.entries[0].path for a, raw in infos if table_files.is_ours(raw)}
+    assets = [replace(a, own_table=True) if a.entries[0].path in own else a for a in assets]
+    game_infos = [(a, raw) for a, raw in infos if a.entries[0].path not in own]
+    if game_infos:
+        first, raw = game_infos[0]
+        bundle_info = info_codec.decode(raw) if raw is not None else None
         if bundle_info is None:
-            assets = [a for a in assets if a.kind != "game_info"]
-            unrecognized = unrecognized + tuple(e.arcname for e in info_assets[0].entries)
+            assets = [a for a in assets if a.kind != "game_info" or a.own_table]
+            unrecognized = unrecognized + tuple(e.arcname for e in first.entries)
             notes = list(notes) + [t("asset.analysis.info_skipped")]
     return assets, tuple(notes), has_game, unrecognized, bundle_info
 

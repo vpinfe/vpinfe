@@ -78,7 +78,8 @@ REASON_WORDS = {
     kept_copies.REASON_REPLACE: "manager.backups.reason.replace",
     kept_copies.REASON_DELETE: "manager.backups.reason.delete",
 }
-BY_WORDS = {kept_copies.BY_2X: "manager.backups.by.2x", kept_copies.BY_3X: "manager.backups.by.3x"}
+BY_WORDS = {kept_copies.BY_2X: "manager.backups.by.2x", kept_copies.BY_3X: "manager.backups.by.3x",
+            kept_copies.BY_BETA: "manager.backups.by.beta"}
 
 # What a Back up now press can cover from here. Some games is chosen where the games are.
 SCOPE_ALL_GAMES = "all_games"
@@ -730,7 +731,7 @@ def kept_said(row: dict[str, Any]) -> str:
         return t("manager.backups.kept.theme_update")
     if row["file"].endswith(".bak"):
         return t("manager.backups.kept.until_deleted")
-    if row["written_by"] == kept_copies.BY_3X:
+    if row["written_by"] in (kept_copies.BY_3X, kept_copies.BY_BETA):
         return t("manager.backups.kept.next_copy")
     if row["written_by"] == kept_copies.BY_2X:
         return t("manager.backups.kept.upgraded_again")

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from unittest import mock
 
 from starlette.testclient import TestClient
 
 import httpapi
 from common.uploads import asset_import_service, upload_ops
-from tests.support.library import TempTree
+from tests.support.library import TempTree, game_info
+from tests.support.saved import save_record, saved_record
 
 
 class AddTableRouteTests(TempTree):
@@ -19,7 +19,8 @@ class AddTableRouteTests(TempTree):
         self.game.mkdir()
         (self.game / "Foo.vpx").write_bytes(b"old")
         self.info = self.game / "Foo (Bar 1999).info"
-        self.info.write_text(json.dumps({"tables": {"t-old": {"filename": "Foo.vpx"}}}))
+        save_record(self.info, game_info("Foo", tables={
+            "t-old": {"id": "t-old", "filename": "Foo.vpx"}}))
         incoming = self.root / "incoming"
         incoming.mkdir()
         (incoming / "Foo 1.2.vpx").write_bytes(b"new")
@@ -49,7 +50,7 @@ class AddTableRouteTests(TempTree):
 
         self.assertEqual(200, response.status_code, response.text)
         added = response.json()["added_tables"]
-        saved = json.loads(self.info.read_text())["tables"]
+        saved = saved_record(self.info)["tables"]
         self.assertEqual(1, len(added))
         self.assertEqual("Foo 1.2.vpx", saved[added[0]]["filename"])
         self.assertEqual(b"old", (self.game / "Foo.vpx").read_bytes())

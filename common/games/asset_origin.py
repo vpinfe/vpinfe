@@ -10,10 +10,11 @@ vpinmediadb publishes means hashing it, which belongs in a pass that can take it
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
+
+from common.games import info_files
 
 logger = logging.getLogger("vpinfe.common.games.asset_origin")
 
@@ -33,12 +34,10 @@ def _key(game_dir: Path, path: Path) -> str:
 
 def sources(game_dir: str | Path) -> dict[str, dict]:
     """Every recorded path in this folder and the `source` block against it. Read
-    straight from the file: MetaConfig migrates and can rewrite, and this wants one
+    from the file as it is: MetaConfig migrates and can rewrite, and this wants one
     section."""
-    game_dir = Path(game_dir)
-    info = game_dir / f"{game_dir.name}.info"
     try:
-        data = json.loads(info.read_text(encoding="utf-8"))
+        data = info_files.load(game_dir)
     except Exception:
         return {}
     entries = data.get(ASSETS_KEY)

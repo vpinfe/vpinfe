@@ -7,7 +7,6 @@ a table target means the game there.
 
 from __future__ import annotations
 
-import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,6 +15,7 @@ from common.games import media_placement
 from common.i18n import t
 from common.uploads import arrival
 from tests.support.library import fake_game, game_info
+from tests.support.saved import save_record
 from tests.support.swaps import library_of
 from tests.support.uploads import make_zip, plan_kinds_by_action
 
@@ -54,7 +54,7 @@ class _Games(unittest.TestCase):
         folder.mkdir()
         for stem in stems:
             (folder / f"{stem}.vpx").write_bytes(b"x")
-        (folder / f"{name}.info").write_text(json.dumps(self._info(game_id, stems)))
+        save_record(folder / f"{name}.info", self._info(game_id, stems))
         return folder
 
     def _picture(self, name: str = "IMG_0001.png") -> Path:

@@ -16,12 +16,18 @@ from pathlib import Path
 from common.atomic_write import STAGED_PREFIX, STAGED_SUFFIX
 from common.devices import serving
 from common.devices.device_registry import DeviceRegistry
+from common.failures import why
+from common.games import info_files, table_files
 from common.games.collection_store import COLLECTIONS_NAME, COLLECTIONS_NAME_INI
 from common.games.info_file import ASSETS_KEY, VPINFE_SECTION
 from common.games.info_maintenance import game_dirs, restore_library
-from common.games.info_migration import needs_migration, restorable_backup
+from common.games.info_migration import (
+    needs_migration,
+    restorable_backup,
+    written_by_beta,
+)
 from common.games.tables import TABLES_KEY
-from common.kept_copies import RESET, backup_names, backup_reason, copy_aside
+from common.kept_copies import ADOPT, BACKUP_MARKER, RESET, backup_names, backup_reason, copy_aside
 from common.runtime.jobs import JobReporter, LogCallback, ProgressCallback
 from common.security import http_client, pinned_certificates
 
@@ -151,11 +157,46 @@ def _reset_library(game_root: str | Path | None, result: dict, reporter: JobRepo
     result["failures"] += outcome["failures"]
 
     for game_dir in ours:
-        _remove(game_dir / f"{game_dir.name}.info", result)
+        _remove(info_files.game_info_path(game_dir), result)
     # After the restore, not before: the unversioned copy is what it reads, and
     # replace_atomic copies rather than moves, so its source is still here afterwards.
     for game_dir in game_dirs(game_root):
-        result["removed_backups"] += _sweep(game_dir, f"{game_dir.name}.info", result)
+        _remove_table_files(game_dir, result)
+        result["removed_backups"] += _sweep(game_dir, info_files.info_name(game_dir.name), result)
+
+
+def _remove_table_files(folder: Path, result: dict) -> None:
+    """Take the tables' own files out of a folder, with every copy taken beside them. A file
+    that was another program's before VPinFE wrote to it goes back to what it was."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    game_file = info_files.info_name(folder.name).lower()
+    own = [name for name in names
+           if name.lower().endswith(".info") and name.lower() != game_file]
+    for name in own:
+        path = folder / name
+        try:
+            ours = table_files.is_ours(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            continue
+        if not ours:
+            continue
+        original = next((one for one in backup_names(names, name)
+                         if backup_reason(one) == ADOPT), None)
+        try:
+            if original:
+                shutil.copy2(folder / original, path)
+            else:
+                path.unlink()
+        except OSError as exc:
+            result["failed"] += 1
+            result["failures"].append((name, why(exc)))
+    for name in names:
+        base = name.split(BACKUP_MARKER, 1)[0]
+        if BACKUP_MARKER in name and base in own:
+            result["removed_backups"] += _remove(folder / name, result)
 
 
 def _reset_config(config_dir: Path, state_dir: Path, result: dict, dry_run: bool) -> None:
@@ -210,7 +251,7 @@ def _library_plan(game_root: str | Path | None) -> tuple[list[Path], list[Path]]
     """
     restorable, ours = [], []
     for game_dir in game_dirs(game_root):
-        info_path = game_dir / f"{game_dir.name}.info"
+        info_path = info_files.game_info_path(game_dir)
         if not info_path.exists():
             continue
         if restorable_backup(game_dir, MAX_2X_SCHEMA):
@@ -234,7 +275,9 @@ def _written_by_3x(info_path: Path) -> bool:
     except (OSError, ValueError):
         logger.warning("Could not read %s; leaving it alone", info_path)
         return False
-    if not isinstance(data, dict) or needs_migration(data):
+    if not isinstance(data, dict):
+        return False
+    if needs_migration(data) and not written_by_beta(data):
         return False        # 2.x has written this since, so its own shape is in there
     return any(name in data for name in OUR_SECTIONS)
 

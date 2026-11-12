@@ -12,6 +12,7 @@ from common.games import exact_ties, identity_claims, ties
 from common.games.game_metadata import set_table_source, table_source
 from common.runtime import jobs as job_registry
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Exact00001"
 FOLDER = "Space Station (Williams 1987)"
@@ -110,7 +111,7 @@ class TieTheLibraryTests(TempTree):
         self.addCleanup(patcher.stop)
 
     def _stored(self, table_id: str = "tbl0000001") -> dict:
-        written = json.loads((self.folder / f"{FOLDER}.info").read_text())
+        written = saved_record(self.folder / f"{FOLDER}.info")
         return written["tables"][table_id]
 
     def test_a_sure_table_is_tied_and_records_the_version_listed(self) -> None:

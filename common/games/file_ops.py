@@ -26,11 +26,12 @@ from common.games import (
     file_move,
     game_lens,
     game_repository,
+    info_files,
     table_swap,
     tables,
 )
 from common.games.game import Game
-from common.games.game_metadata import load_game_meta, meta_file_path
+from common.games.game_metadata import load_game_meta
 from common.games.info_file import MetaConfig
 from common.i18n import t
 
@@ -65,7 +66,7 @@ class _Plan:
 
 def _record(game_dir: Path, file: Path) -> bool:
     """The game's own `.info`, which is not a file to change."""
-    return file.parent == game_dir and file.name.lower() == f"{game_dir.name}.info".lower()
+    return file.parent == game_dir and info_files.is_game_info(file)
 
 
 def _name_or_refuse(name: str) -> None:
@@ -374,7 +375,7 @@ def _rename_table(plan: _Plan, resolve: list[str], keep_copy: bool) -> None:
     answered = set(resolve)
     carried = [(path, to) for impact, path, to in plan.followers
                if impact["answers"][0] != RESOLVE_BREAK and impact["answers"][0] in answered]
-    record = str(meta_file_path(plan.game))
+    record = str(info_files.info_path_of(plan.game))
     try:
         file_move.rename_table_in_place(
             plan.game_id, plan.game_dir, plan.source, plan.target, carried,

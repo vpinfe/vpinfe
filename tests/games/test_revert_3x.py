@@ -20,7 +20,7 @@ from typing import cast
 from common.config.config_store import ConfigStore
 from common.devices import install_setup
 from common.devices.device_registry import DeviceRegistry
-from common.games import revert_3x
+from common.games import library_discovery, revert_3x
 from common.games.collection_migration import ensure_last_played, ensure_order_direction
 from common.games.collection_store import CollectionStore
 from common.games.game_identity import ensure_unique_ids, game_id
@@ -30,6 +30,7 @@ from common.games.table_identity import ensure_unique_table_ids
 from common.games.tables import TABLES_KEY, table_id
 from tests.support.browser_session import free_port
 from tests.support.library import TempTree, write_game
+from tests.support.saved import saved_record
 
 LEGACY_INFO = {
     "Info": {"Title": "Dr. Dude", "VPSId": "vps-dude", "Rom": "dd_l2",
@@ -73,7 +74,7 @@ def table_id_count(games_root: Path) -> int:
     return sum(
         1
         for path in games_root.glob("*/*.info")
-        for entry in (json.loads(path.read_text(encoding="utf-8")).get(TABLES_KEY)
+        for entry in (saved_record(path).get(TABLES_KEY)
                       or {}).values()
         if isinstance(entry, dict) and table_id(entry))
 
@@ -436,6 +437,39 @@ class LibraryTests(RevertTestCase):
 
         self.assertEqual((untouched / "Fresh Import.info").read_bytes(), before)
         self.assertEqual(result["deleted_info"], [])
+
+    def _two_table_game(self) -> Path:
+        folder = self.games_root / "Taxi"
+        (folder / "Taxi Night.vpx").write_bytes(b"night")
+        (folder / "Taxi Day.vpx").write_bytes(b"day")
+        return folder
+
+    def _discover(self) -> None:
+        library_discovery.discover(GameParser(str(self.games_root)).get_all_games())
+
+    def test_a_table_file_3x_made_goes_with_the_reset(self):
+        folder = self._two_table_game()
+        self._migrate()
+        self._discover()
+        self.assertTrue((folder / "Taxi Night.info").exists())
+
+        self._reset()
+
+        self.assertEqual(sorted(path.name for path in folder.glob("*.info")), ["Taxi.info"])
+        self.assertEqual(self.original["Taxi.info"], (folder / "Taxi.info").read_bytes())
+        self.assertEqual([path for path in folder.iterdir() if ".vpinfe-" in path.name], [])
+
+    def test_a_table_file_another_program_wrote_comes_back_as_it_was(self):
+        folder = self._two_table_game()
+        foreign = json.dumps({"User": {"StartCount": 4}}).encode()
+        (folder / "Taxi Night.info").write_bytes(foreign)
+        self._migrate()
+        self._discover()
+        self.assertNotEqual(foreign, (folder / "Taxi Night.info").read_bytes())
+
+        self._reset()
+
+        self.assertEqual(foreign, (folder / "Taxi Night.info").read_bytes())
 
     def test_a_file_too_broken_to_read_is_left_alone(self):
         self._migrate()

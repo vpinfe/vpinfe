@@ -10,6 +10,7 @@ from common.games.game_repository import game_to_row
 from common.games.info_file import MetaConfig
 from common.games.library_folders import KIND_GAME, KIND_ROOT, Location
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import save_record, saved_record
 
 
 def _game(root: Path, name: str = "Example", meta: dict | None = None):
@@ -37,7 +38,7 @@ class MintedIdTests(TempTree):
         info = self.root / "Example.info"
         MetaConfig(str(info)).write_config_meta({"vpsdata": {}, "vpxdata": {"filename": "x.vpx"}})
 
-        minted = json.loads(info.read_text(encoding="utf-8"))["vpinfe"]["game_id"]
+        minted = saved_record(info)["vpinfe"]["game_id"]
         self.assertEqual(len(minted), game_identity.ID_LENGTH)
         self.assertTrue(set(minted) <= set(game_identity.ID_ALPHABET))
 
@@ -196,7 +197,7 @@ class GameIdTests(TempTree):
 
         minted = game_identity.ensure_id(game)
         info = Path(game.full_path_game) / "Example.info"
-        on_disk = json.loads(info.read_text(encoding="utf-8"))
+        on_disk = saved_record(info)
 
         self.assertTrue(minted)
         self.assertEqual(on_disk["vpinfe"]["game_id"], minted)
@@ -229,7 +230,7 @@ class GameIdTests(TempTree):
 
         game_identity.ensure_id(game)
         info = Path(game.full_path_game) / "Example.info"
-        on_disk = json.loads(info.read_text(encoding="utf-8"))
+        on_disk = saved_record(info)
 
         self.assertEqual(on_disk["User"]["Rating"], 4)
         self.assertEqual(on_disk["vpinfe"]["alt_title"], "My Example")
@@ -254,7 +255,7 @@ class IdentityOutlivesVpsIdTests(TempTree):
                         "detect_lut": False, "detect_scorbit": False, "detect_fastflips": False,
                         "detect_flex": False},
         })
-        return json.loads(path.read_text(encoding="utf-8"))
+        return saved_record(path)
 
     def test_a_metadata_rebuild_mints_an_id(self) -> None:
         info = self.root / "Example.info"
@@ -270,9 +271,9 @@ class IdentityOutlivesVpsIdTests(TempTree):
         first = self._rebuild(info, "hash-a")
         game_id = first["vpinfe"]["game_id"]
 
-        data = json.loads(info.read_text(encoding="utf-8"))
+        data = saved_record(info)
         data["vpinfe"]["alt_vpsid"] = "vps-override"
-        info.write_text(json.dumps(data), encoding="utf-8")
+        save_record(info, data)
         after = self._rebuild(info, "hash-b")["vpinfe"]
 
         self.assertEqual(after["alt_vpsid"], "vps-override")
@@ -282,9 +283,9 @@ class IdentityOutlivesVpsIdTests(TempTree):
         info = self.root / "Example.info"
         self._rebuild(info, "hash-a")
 
-        data = json.loads(info.read_text(encoding="utf-8"))
+        data = saved_record(info)
         data["vpinfe"]["alt_vpsid"] = "vps-override"
-        info.write_text(json.dumps(data), encoding="utf-8")
+        save_record(info, data)
         after = self._rebuild(info, "hash-a")["vpinfe"]
 
         self.assertEqual(after["alt_vpsid"], "vps-override")

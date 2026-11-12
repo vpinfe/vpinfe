@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +14,7 @@ from common.host import launch_state
 from common.security import api_tokens, sign_in
 from httpapi import auth
 from tests.api.test_create_game import CreateGameCase
+from tests.support.saved import save_record, saved_record
 
 
 class DeleteFolderCase(CreateGameCase):
@@ -48,9 +48,9 @@ class WhatDeletingDoesTests(DeleteFolderCase):
         self.addCleanup(patcher.stop)
         (self.folder / "Taxi.vpx").write_bytes(b"table")
         info = self.folder / "Taxi.info"
-        held = json.loads(info.read_text(encoding="utf-8"))
+        held = saved_record(info)
         held["tables"] = {"tx0000000001": {"id": "tx0000000001", "filename": "Taxi.vpx"}}
-        info.write_text(json.dumps(held), encoding="utf-8")
+        save_record(info, held)
         self.client.get(f"/games/{self.game['id']}/tables")
         table_id = "tx0000000001"
         order_record.keep({table_id: pair, "other": pair})
@@ -66,9 +66,9 @@ class WhatDeletingDoesTests(DeleteFolderCase):
         self.addCleanup(patcher.stop)
         (self.folder / "Taxi.vpx").write_bytes(b"table")
         info = self.folder / "Taxi.info"
-        held = json.loads(info.read_text(encoding="utf-8"))
+        held = saved_record(info)
         held["tables"] = {"tx0000000001": {"id": "tx0000000001", "filename": "Taxi.vpx"}}
-        info.write_text(json.dumps(held), encoding="utf-8")
+        save_record(info, held)
         game_repository.refresh_game(self.folder)
         order_record.keep({"tx0000000001": pair, "other": pair})
         info.write_bytes(damage)

@@ -29,6 +29,7 @@ from common.runtime import job_details, jobs
 from common.uploads import upload_ops
 from httpapi import models
 from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import saved_record
 
 FOLDER = "Fathom (Bally 1981)"
 
@@ -222,7 +223,7 @@ class RebuildTests(TempTree):
                 patch.object(metadata_service, "VPXParser", return_value=parser):
             metadata_service.build_metadata(
                 update_all=True, iniconfig=config)  # type: ignore[arg-type]
-        return json.loads((folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
+        return saved_record(folder / f"{FOLDER}.info")
 
     def art_fetched_for(self) -> list[str]:
         download = cast(MagicMock, self.vps.download_media_for_game)
@@ -274,7 +275,7 @@ class AssociateTests(TempTree):
                 patch.object(game_service, "refresh_game"):
             game_service.associate_vps_to_folder(
                 folder, _entry("chosen", "Fathom Deluxe", year=1983), **kwargs)
-        return json.loads((folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
+        return saved_record(folder / f"{FOLDER}.info")
 
     def test_a_pick_is_recorded_and_puts_an_override_aside(self) -> None:
         saved = self.associate(game_info(vps_id="fathom", vpinfe={"alt_vpsid": "other"}))
@@ -316,7 +317,7 @@ def _offline(case: TempTree, catalog: list[dict]) -> None:
 
 
 def _read(folder: Path) -> dict:
-    return json.loads((folder / f"{folder.name}.info").read_text(encoding="utf-8"))
+    return saved_record(folder / f"{folder.name}.info")
 
 
 NEW = "Fathom (Bally 1981)"

@@ -1093,6 +1093,7 @@
   },
   "manager.backups.by.2x": "VPinFE 2.x",
   "manager.backups.by.3x": "VPinFE 3.0",
+  "manager.backups.by.beta": "VPinFE 3.0 beta",
   "manager.backups.by.version": "VPinFE {version}",
   "manager.backups.delete_detail": "A deleted copy cannot be restored.",
   "manager.backups.delete_many": "Delete {count:n} copies?",

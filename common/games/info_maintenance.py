@@ -14,7 +14,7 @@ from typing import TypedDict
 from common import service_errors
 from common.config import path_state
 from common.failures import why
-from common.games import library_folders
+from common.games import info_files, library_folders
 from common.games.collection_store import restorable_collections_backup
 from common.games.info_file import (
     GAME_ID_KEY,
@@ -91,7 +91,7 @@ def _children(root: Path, game_name: str | None) -> list[Path]:
 
 
 def _info_path(game_dir: Path) -> Path:
-    return game_dir / f"{game_dir.name}.info"
+    return info_files.game_info_path(game_dir)
 
 
 def pending_upgrade(game_dir: str | Path) -> bool:

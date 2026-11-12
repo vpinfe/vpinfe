@@ -194,6 +194,13 @@ could previously be pinned by claiming it, and can no longer be pinned at all. C
 `Medias` becomes `assets`, the `VPinFE` section becomes `vpinfe` with snake_case keys, and
 `Info` gives up `Rom` and `Authors` to the game file that owns them. A 2.x file is migrated
 on read, keeping the original alongside it as `<Game>.info.vpinfe-<timestamp>`.
+Schema 3 then puts `tables`, `assets` and `guides` under `vpinfe.manifest` as lists, with
+`media` split out of `assets`, and stores `User` in the units Visual Pinball's `FileLayout.md`
+names: `Rating` 0 to 10, `LastRun` as an ISO date, `RunTime` in seconds. Every payload a
+theme, the API or VPinPlay receives is served as before, so none of it changes.
+A game with two or more tables also gets a `<table>.info` beside each table that is not
+named like the folder, which Visual Pinball reads first. A theme, the API or VPinPlay still
+reads the game's record, which folds those files in, so none of them sees the files.
 *Why:* the format described one game file per folder, which stopped being true the first
 time anybody patched a table. Themes are unaffected unless they opt in: the payload is
 served in the shape a theme's `min_vpinfe` implies, and absent means

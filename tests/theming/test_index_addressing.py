@@ -12,7 +12,6 @@ change without anything noticing.
 from __future__ import annotations
 
 import configparser
-import json
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +19,7 @@ from common.games.game_metadata import game_rating
 from frontend.api import API
 from tests.support.library import TempTree, fake_game, write_game
 from tests.support.library_loader import library_of, start_library_of
+from tests.support.saved import saved_record
 
 GAME_IDS = ["Aaaaaaaaa1", "Bbbbbbbbb2", "Ccccccccc3"]
 NAMES = ["Attack from Mars", "Congo", "Medieval Madness"]
@@ -56,7 +56,7 @@ class IndexAddressingTests(TempTree):
         self.api = API(_ini(), window_name="playfield")
 
     def _stored_rating(self, position: int) -> int:
-        user = json.loads(self.info_paths[position].read_text()).get("User") or {}
+        user = saved_record(self.info_paths[position]).get("User") or {}
         return int(user.get("Rating") or 0)
 
     # -- the conversion itself ------------------------------------------------

@@ -6,7 +6,6 @@ what the ledger says, and that a failure or an Undo leaves the folder as it was 
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +14,7 @@ from common.backups import folder as backup_folder
 from common.games import file_move, game_repository, media_ops
 from common.host import launch_state
 from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Moved000001"
 FOLDER = "Cactus"
@@ -67,7 +67,7 @@ class MoveCase(TempTree):
                       if path.is_file())
 
     def ledger(self) -> dict:
-        return json.loads((self.folder / f"{FOLDER}.info").read_text())["assets"]
+        return saved_record(self.folder / f"{FOLDER}.info")["assets"]
 
 
 class AssetToTablesTests(MoveCase):

@@ -8,18 +8,15 @@ from unittest.mock import patch
 from starlette.testclient import TestClient
 
 import httpapi
-from tests.support.library import TempTree, fake_game, write_game
+from tests.support.library import TempTree, fake_game, game_info, write_game
 from tests.support.skips import needs_posix_permissions
 
 GAME_ID = "Override001"
 FOLDER = "Medieval Madness (Williams 1997)"
 TABLE_ID = "tbl0000001"
 
-INFO = {
-    "Info": {"Title": "Medieval Madness"},
-    "VPinFE": {"game_id": GAME_ID},
-    "tables": {TABLE_ID: {"id": TABLE_ID, "filename": f"{FOLDER}.vpx"}},
-}
+INFO = game_info("Medieval Madness", game_id=GAME_ID,
+                 tables={TABLE_ID: {"id": TABLE_ID, "filename": f"{FOLDER}.vpx"}})
 
 
 @needs_posix_permissions

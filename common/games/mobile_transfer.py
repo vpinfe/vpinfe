@@ -32,6 +32,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from common.devices.device_client import PROBE_SECONDS, why_not
+from common.games import info_files
 from common.games.export_bundle import bundle_paths, prune_info
 from common.i18n import t
 from common.security import http_client
@@ -125,7 +126,7 @@ def _content_of(path: Path, arcname: str, contents: Iterable[tuple[Path, str]],
     carries, which is the same rule the downloadable archive follows and the same
     function that applies it.
     """
-    if arcname != f"{name}.info":
+    if arcname != info_files.info_name(name):
         return None
     allowed = {str(one).replace(os.sep, "/") for _, one in contents}
     return prune_info(path.read_text(encoding="utf-8", errors="replace"),

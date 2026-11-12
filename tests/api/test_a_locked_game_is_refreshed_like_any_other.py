@@ -30,6 +30,7 @@ from common.games.library_folders import KIND_ROOT, Location
 from common.i18n import t
 from common.online.vpsdb import VPSdb
 from tests.support.library import TempTree, game_info, write_game
+from tests.support.saved import save_record, saved_record
 from tests.support.skips import needs_posix_permissions
 
 KEPT = "Sample Game (Original 2024)"
@@ -173,7 +174,7 @@ class LockedGameRefreshTests(TempTree):
         info = write_game(self.games, MALFORMED) / f"{MALFORMED}.info"
         info.write_text('{"Info": {"Title": "broken",,,}', encoding="utf-8")
         library_refresh.refresh()
-        info.write_text(json.dumps(game_info("Malformed Info")), encoding="utf-8")
+        save_record(info, game_info("Malformed Info"))
 
         library_refresh.refresh()
 
@@ -210,7 +211,7 @@ class LockedGameRefreshTests(TempTree):
             for name in sorted(LOCKED)])
 
     def _on_disk(self, name: str) -> dict:
-        return json.loads((self.games / name / f"{name}.info").read_text(encoding="utf-8"))
+        return saved_record(self.games / name / f"{name}.info")
 
     def test_what_it_held_is_written_once_it_can_be(self) -> None:
         library_refresh.refresh()
@@ -238,8 +239,7 @@ class LockedUpgradeLogTests(TempTree):
         write_game(self.root, OLD, info=_legacy(OLD))
         (self.root / OLD).chmod(0o555)
         self.addCleanup((self.root / OLD).chmod, 0o755)
-        (self.root / KEPT / f"{KEPT}.info").write_text(
-            json.dumps(game_info("Sample Game")), encoding="utf-8")
+        save_record(self.root / KEPT / f"{KEPT}.info", game_info("Sample Game"))
 
     def _said(self) -> list[str]:
         lines: list[str] = []

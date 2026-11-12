@@ -5,7 +5,8 @@ from __future__ import annotations
 import unittest
 
 from common.games.game_metadata import contract_1_tutorial, vps_details_differ
-from common.games.info_file import GUIDES_KEY, PINBALL_PRIMER_PREFIX, guides_from_vps
+from common.games.info_codec import encode
+from common.games.info_file import GUIDES_KEY, PINBALL_PRIMER_PREFIX, guides_from_vps, record_of
 from common.games.info_migration import migrate
 
 
@@ -48,7 +49,7 @@ class FromA2xFile(unittest.TestCase):
     def test_running_it_twice_adds_nothing(self) -> None:
         once = migrate({"Info": {"PinballPrimerTut": "https://pinballprimer.github.io/x"},
                         "VPinFE": {"altvpsid": "1"}})
-        self.assertEqual(once[GUIDES_KEY], migrate(once)[GUIDES_KEY])
+        self.assertEqual(once[GUIDES_KEY], record_of(encode(once))[GUIDES_KEY])
 
     def test_a_file_with_no_tutorial_grows_no_block(self) -> None:
         self.assertNotIn(GUIDES_KEY, migrate({"Info": {}, "VPinFE": {"altvpsid": "1"}}))

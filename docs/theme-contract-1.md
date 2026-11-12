@@ -83,10 +83,11 @@ cached rating payload to the row; before that the property does not exist. See
 
 ## `meta` — the game's `.info`
 
-`meta` is the `.info` file passed through, with one adjustment: `Title` is display-ready
-rather than the stored value. Contract 2 does not serve `meta` at all, because passing
-storage through meant a storage change reached themes whether or not it meant anything to
-them.
+`meta` is the game's `.info` file passed through, with one adjustment: `Title` is display-ready
+rather than the stored value. A table's own `.info` beside its `.vpx` is read into the game's record and
+not passed through as a file of its own. Contract 2 does not serve `meta` at all, because
+passing storage through meant a storage change reached themes whether or not it meant
+anything to them.
 
 ### meta.Info
 
@@ -102,7 +103,7 @@ them.
 
 ### meta.User
 
-Per-user stats, stored in each game's `.info`.
+Per-user stats. The `.info` stores them in the units Visual Pinball's `FileLayout.md` names (rating 0 to 10, an ISO date, seconds); contract 1 serves them as 2.x did, in the units below.
 
 | Property | Type | Description |
 |----------|------|-------------|

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
@@ -11,6 +10,7 @@ import httpapi
 from common.games import library_ops
 from common.games.game_metadata import retag_library, table_tags
 from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "TblTags001"
 NAME = "Attack from Mars (Bally 1995)"
@@ -36,7 +36,7 @@ class TableTags(TempTree):
         self.client = TestClient(httpapi.create_api_app(), raise_server_exceptions=False)
 
     def _on_disk(self) -> dict:
-        return json.loads((self.folder / f"{NAME}.info").read_text())
+        return saved_record(self.folder / f"{NAME}.info")
 
     def _put(self, table: str, tags: list[str]):
         return self.client.put(f"/games/{GAME_ID}/tables/{table}/tags", json={"tags": tags})

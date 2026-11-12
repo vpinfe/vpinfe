@@ -14,6 +14,7 @@ from common.games.info_file import (
 from common.games.tables import entry_for_filename
 from common.i18n import t
 from tests.support.library import TempTree, write_game
+from tests.support.saved import saved_record
 
 
 class TestMetaConfig(unittest.TestCase):
@@ -56,7 +57,7 @@ class TestMetaConfig(unittest.TestCase):
                 },
             }
         )
-        return json.loads(info_path.read_text(encoding="utf-8"))
+        return saved_record(info_path)
 
     def test_write_config_meta_keeps_altvpsid_when_filehash_changes(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -278,7 +279,7 @@ class VPinFESchemaTests(TempTree):
     def test_writing_persists_the_stamp_and_mints_an_id(self) -> None:
         info = self.root / "Example.info"
         TestMetaConfig()._write_meta(info)
-        saved = json.loads(info.read_text(encoding="utf-8"))
+        saved = saved_record(info)
 
         self.assertEqual(saved["vpinfe"]["schema"], INFO_SCHEMA)
         self.assertTrue(saved["vpinfe"]["game_id"])
@@ -286,7 +287,7 @@ class VPinFESchemaTests(TempTree):
     def test_other_sections_are_not_versioned(self) -> None:
         info = self.root / "Example.info"
         TestMetaConfig()._write_meta(info)
-        saved = json.loads(info.read_text(encoding="utf-8"))
+        saved = saved_record(info)
 
         for name in ("Info", "User", "tables", "assets"):
             self.assertNotIn("schema", saved.get(name, {}),
@@ -303,7 +304,7 @@ class PatchSourceTests(TempTree):
         self.info = self.root / "Example Table.info"
 
     def _source(self, filename: str = "Example Table VPW Mod.vpx") -> dict:
-        saved = json.loads(self.info.read_text(encoding="utf-8"))
+        saved = saved_record(self.info)
         return entry_for_filename(saved["tables"], filename)[1]["source"]
 
     def test_the_base_is_named_and_hashed(self) -> None:
@@ -347,7 +348,7 @@ class AssetLedgerTests(TempTree):
         self.info = self.root / "Cactus Canyon (Bally 1998).info"
 
     def _saved(self) -> dict:
-        return json.loads(self.info.read_text(encoding="utf-8"))["assets"]
+        return saved_record(self.info)["assets"]
 
     def test_the_key_is_the_path_inside_the_folder(self) -> None:
         """Not a basename: medias/wheel.png and a wheel.png at the folder root are
@@ -388,7 +389,7 @@ class AssetLedgerTests(TempTree):
         meta.write_config()
 
         TestMetaConfig()._write_meta(self.info)
-        saved = json.loads(self.info.read_text(encoding="utf-8"))
+        saved = saved_record(self.info)
 
         self.assertIn("medias/bg.png", saved["assets"])
         self.assertNotIn("Medias", saved,
@@ -421,7 +422,7 @@ class ForgetTableTests(unittest.TestCase):
         return MetaConfig(str(self.info))
 
     def _stored(self) -> dict:
-        return json.loads(self.info.read_text())
+        return saved_record(self.info)
 
     def test_a_table_still_on_disk_is_refused(self) -> None:
         """Its entry holds stats and match records, and hiding is what takes it

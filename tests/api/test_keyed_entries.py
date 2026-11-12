@@ -8,7 +8,6 @@ kind of thing is second class is a library with two of everything.
 
 from __future__ import annotations
 
-import json
 import unittest
 from unittest.mock import patch
 
@@ -16,14 +15,16 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common.games import launchers
+from common.games.info_file import INFO_SCHEMA
 from tests.support.library import TempTree, fake_game, own_launchers, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Keyed0000001"
 FOLDER = "Medieval Madness (Williams 1997)"
 
 INFO = {
     "Info": {"Name": "Medieval Madness", "Manufacturer": "Williams", "Year": "1997"},
-    "VPinFE": {"game_id": GAME_ID},
+    "vpinfe": {"game_id": GAME_ID, "schema": INFO_SCHEMA},
     "tables": {},
 }
 
@@ -63,7 +64,7 @@ class _Keyed(TempTree):
         return got.json()["tables"]
 
     def _info(self) -> dict:
-        return json.loads((self.folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
+        return saved_record(self.folder / f"{FOLDER}.info")
 
 
 class AddingTests(_Keyed):

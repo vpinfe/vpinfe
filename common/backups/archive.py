@@ -25,9 +25,8 @@ from typing import Any
 from common import service_errors
 from common.atomic_write import staged_for
 from common.config.paths import CONFIG_DIR, STATE_DIR
-from common.games import game_repository, info_maintenance, launcher_ops, launchers
+from common.games import game_repository, info_files, info_maintenance, launcher_ops, launchers
 from common.games.collection_store import COLLECTIONS_NAME, COLLECTIONS_NAME_INI
-from common.games.info_migration import needs_migration
 from common.i18n import t
 from common.vpinfe_version import get_version
 
@@ -43,6 +42,7 @@ from .copies import (
     KIND_RECORDS,
     KIND_SETTINGS,
     VPINFE_NAME,
+    writer_of_info,
 )
 
 logger = logging.getLogger("vpinfe.common.backups.archive")
@@ -191,13 +191,13 @@ class _Gathered:
 
 def _info_writer(data: bytes) -> str:
     try:
-        return BY_2X if needs_migration(json.loads(data)) else BY_3X
+        return writer_of_info(json.loads(data))
     except ValueError:
         return ""
 
 
 def _game_member(index: int, folder: Path) -> _Gathered | None:
-    info = folder / f"{folder.name}.info"
+    info = info_files.game_info_path(folder)
     try:
         data = info.read_bytes()
     except OSError:

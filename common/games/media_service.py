@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from common.config.config_access import MediaConfig, cfg_get
 from common.config.paths import CACHE_DIR, get_ini_config
-from common.games import asset_origin, media_probe
+from common.games import asset_origin, info_files, media_probe
 from common.games.game import GameRecord
 from common.games.game_metadata import reorder_leading_article, vpinfe_section
 from common.games.game_repository import all_games
@@ -460,7 +460,7 @@ def replace_media_file(game_dir: Path, game_dir_name: str, kind: str,
 
     shutil.copy2(uploaded_path, target_path)
 
-    info_file = os.path.join(game_dir, f"{game_dir_name}.info")
+    info_file = os.path.join(game_dir, info_files.info_name(game_dir_name))
     if os.path.exists(info_file):
         mc = MetaConfig(info_file)
         # No hash: one is only meaningful as a comparison against a remote, and there

@@ -8,7 +8,7 @@ import os
 from common.config.config_access import cfg_bool
 from common.config.config_store import ConfigStore
 from common.config.paths import get_ini_config
-from common.games import game_identity, game_repository, media_fill
+from common.games import game_identity, game_repository, info_files, media_fill
 from common.games.formats.vpx_parser import VPXParser
 from common.games.game_metadata import effective_vps_id, record_vps_match, vps_matched_by
 from common.games.info_file import MetaConfig
@@ -63,7 +63,7 @@ def build_metadata(
         reporter.progress(0, total, t("said.starting"))
 
     for current, game in enumerate(games, 1):
-        info_path = os.path.join(game.full_path_game, f"{game.game_dir_name}.info")
+        info_path = str(info_files.info_path_of(game))
 
         if os.path.exists(info_path) and not update_all:
             if progress_cb:

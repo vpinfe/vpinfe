@@ -7,7 +7,6 @@ Backups, and a refusal leaves the folder as it was found.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +18,7 @@ from common.backups import table_entry
 from common.games import backglass_order, game_repository, table_ops, table_swap
 from common.host import launch_state
 from tests.support.library import TempTree, fake_game, game_info, write_game
+from tests.support.saved import save_record, saved_record
 
 GAME_ID = "Swapped0001"
 FOLDER = "Cactus"
@@ -68,7 +68,8 @@ class SwapCase(TempTree):
         return path
 
     def names(self) -> list[str]:
-        return sorted(path.name for path in self.folder.iterdir() if path.is_file())
+        return sorted(path.name for path in self.folder.iterdir()
+                      if path.is_file() and ".vpinfe-" not in path.name)
 
     def kept(self) -> list[str]:
         return sorted(path.name.split(".vpinfe-")[0] for path in self.backups.rglob("*")
@@ -86,7 +87,7 @@ class SwapCase(TempTree):
                       if path.is_file() and ".entry.json" not in path.name)
 
     def record(self) -> dict:
-        return json.loads((self.folder / f"{FOLDER}.info").read_text())
+        return saved_record(self.folder / f"{FOLDER}.info")
 
     def swap(self, **options) -> dict:
         return table_swap.replace(GAME_ID, "t1", str(self.arrives), **options)
@@ -110,7 +111,8 @@ class ReplaceTests(SwapCase):
     def test_the_new_file_is_in_place_and_the_old_one_is_in_backups_only(self) -> None:
         done = self.swap()
 
-        self.assertEqual(self.names(), [BEING, "Cactus Other.vpx", f"{FOLDER}.info"])
+        self.assertEqual(self.names(), [
+            "Cactus 1.2.info", BEING, "Cactus Other.info", "Cactus Other.vpx", f"{FOLDER}.info"])
         self.assertEqual((self.folder / BEING).read_bytes(), b"new")
         self.assert_kept(OLD)
         self.assertEqual([one["file"] for one in done["kept"]], [OLD])
@@ -155,7 +157,7 @@ class ReplaceTests(SwapCase):
     def test_a_file_that_cannot_be_read_leaves_the_entry_to_be_read_again(self) -> None:
         entry = self.info["tables"]["t1"]
         entry.update({"file_hash": "stale", "rom": "oldrom", "detect_pinmame": True})
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         with patch.object(table_swap, "read_one", return_value=None):
             self.swap()
@@ -167,7 +169,7 @@ class ReplaceTests(SwapCase):
 
     def test_a_default_stored_as_the_table_id_stays(self) -> None:
         self.info["vpinfe"]["default_table"] = "t1"
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         self.swap()
 
@@ -202,8 +204,8 @@ class CarryTests(SwapCase):
         done = self.swap()
 
         self.assertEqual(self.names(), [
-            "Cactus 1.2.directb2s", "Cactus 1.2.ini", "Cactus 1.2.pov", BEING,
-            "Cactus Other.vpx", "Cactus.directb2s", f"{FOLDER}.info"])
+            "Cactus 1.2.directb2s", "Cactus 1.2.info", "Cactus 1.2.ini", "Cactus 1.2.pov", BEING,
+            "Cactus Other.info", "Cactus Other.vpx", "Cactus.directb2s", f"{FOLDER}.info"])
         self.assertEqual((self.folder / "Cactus 1.2.directb2s").read_bytes(), b"glass")
         self.assert_kept(OLD, "Cactus 1.1.vbs")
         self.assertEqual(len(done["kept"]), 2)
@@ -212,8 +214,8 @@ class CarryTests(SwapCase):
         self.swap(instead=True)
 
         self.assertEqual(self.names(), [
-            "Cactus 1.2.directb2s", BEING, "Cactus Other.vpx", "Cactus.directb2s",
-            f"{FOLDER}.info"])
+            "Cactus 1.2.directb2s", "Cactus 1.2.info", BEING, "Cactus Other.info",
+            "Cactus Other.vpx", "Cactus.directb2s", f"{FOLDER}.info"])
         self.assert_kept(OLD, "Cactus 1.1.ini", "Cactus 1.1.pov", "Cactus 1.1.vbs")
 
     def test_what_is_ticked_is_what_is_carried(self) -> None:
@@ -323,7 +325,7 @@ class PlanTests(SwapCase):
 
     def test_a_table_patched_from_this_one_is_named(self) -> None:
         self.info["tables"]["t2"]["source"] = {"base": {"file": OLD, "hash": "x"}}
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         self.assertEqual(table_swap.plan(GAME_ID, "t1")["patched"], ["Cactus Other.vpx"])
 
@@ -369,7 +371,7 @@ class RefusalTests(SwapCase):
 
     def test_a_table_kept_outside_the_game_folder(self) -> None:
         self.info["tables"]["t1"]["path"] = "../elsewhere/Cactus.vpx"
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         with self.assertRaises(service_errors.RefusedError):
             table_swap.replace(GAME_ID, "t1", str(self.arrives))
@@ -430,7 +432,7 @@ class RestoreADeletedTableTests(SwapCase):
     def test_a_record_that_exists_is_left_as_it_is(self) -> None:
         copies = self.deleted()
         self.info["tables"] = {"t9": {"id": "t9", "filename": OLD, "rating": 1}}
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         backup_ops.restore(copies[OLD]["id"])
 
@@ -528,7 +530,7 @@ class DeleteTests(SwapCase):
 
     def test_a_default_stored_as_the_table_id_is_cleared(self) -> None:
         self.info["vpinfe"]["default_table"] = "t1"
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         table_swap.delete(GAME_ID, "t1")
 
@@ -609,7 +611,8 @@ class UndoTests(SwapCase):
         table_swap.undo(GAME_ID, "t1", [one["id"] for one in kept])
 
         self.assertEqual(self.names(), sorted([
-            OLD, "Cactus 1.1.ini", "Cactus 1.1.vbs", "Cactus Other.vpx", f"{FOLDER}.info"]))
+            OLD, "Cactus 1.1.info", "Cactus 1.1.ini", "Cactus 1.1.vbs", "Cactus Other.info",
+            "Cactus Other.vpx", f"{FOLDER}.info"]))
 
     def test_the_entry_is_the_same_one_throughout(self) -> None:
         kept = self.swap()["kept"]
@@ -675,7 +678,7 @@ class NamingTests(SwapCase):
     def test_the_tables_that_can_be_swapped_are_listed_with_the_one_the_game_plays_marked(
             self) -> None:
         self.info["tables"]["t1"]["hidden"] = False
-        (self.folder / f"{FOLDER}.info").write_text(json.dumps(self.info))
+        save_record(self.folder / f"{FOLDER}.info", self.info)
 
         listed = table_swap.choices(GAME_ID)
 

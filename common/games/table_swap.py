@@ -34,6 +34,7 @@ from common.games import (
     backglass_order,
     game_lens,
     game_repository,
+    info_files,
     info_maintenance,
     order_record,
     table_ops,
@@ -43,7 +44,6 @@ from common.games.asset_resolver import VPX_ASSET_KINDS as _PER_TABLE_KINDS
 from common.games.game import Game
 from common.games.game_metadata import (
     load_game_meta,
-    meta_file_path,
     set_table_source,
     table_source,
     vpinfe_section,
@@ -92,7 +92,7 @@ def _held(game_id: str, table_id: str, *, writing: bool = True) -> _Held:
     if not (folder / filename).is_file():
         raise service_errors.NotFoundError(t("error.games.table_not_found"),
                                            details={"table": table_id})
-    own_id = info_maintenance.game_id_in(meta_file_path(game))
+    own_id = info_maintenance.game_id_in(info_files.info_path_of(game))
     if not own_id:
         raise service_errors.RefusedError(t("error.games.swap_no_id"))
     return _Held(game, own_id, folder, filename, entry)
@@ -288,7 +288,7 @@ def replace(game_id: str, table_id: str, path: str, *, carry: Iterable[str] | No
     try:
         with atomic_write.staged_for(new) as staged:
             shutil.copy2(source, staged)
-        if not MetaConfig(str(meta_file_path(held.game))).swap_table(
+        if not MetaConfig(str(info_files.info_path_of(held.game))).swap_table(
                 table_id, new.name, read_one(new)):
             raise service_errors.RefusedError(t("error.games.swap_not_contained"),
                                               details={"table": table_id})
@@ -340,7 +340,7 @@ def delete(game_id: str, table_id: str) -> dict[str, Any]:
     try:
         for each in files:
             each.unlink(missing_ok=True)
-        MetaConfig(str(meta_file_path(held.game))).drop_table(table_id)
+        MetaConfig(str(info_files.info_path_of(held.game))).drop_table(table_id)
         order_record.drop([table_id])
     except OSError as exc:
         raise service_errors.BlockedError(why(exc)) from exc
@@ -375,7 +375,7 @@ def undo(game_id: str, table_id: str, copy_ids: Iterable[str],
         if path != back[0] and not target.exists():
             shutil.copy2(path, target)
     if source:
-        MetaConfig(str(meta_file_path(held.game))).restore_table_source(table_id, source)
+        MetaConfig(str(info_files.info_path_of(held.game))).restore_table_source(table_id, source)
     game = reread_game(held.game)
     return {**done, "table": table_ops.row_or_refuse(game, table_id)}
 

@@ -16,6 +16,8 @@ from common.i18n import t
 from common.uploads import asset_import_service
 from common.uploads.asset_analyzer_service import analyze_path
 from common.uploads.asset_import_service import build_import_plan, execute_import_plan
+from tests.support.library import game_info
+from tests.support.saved import save_record, saved_record
 from tests.support.uploads import kinds, make_zip
 
 
@@ -115,7 +117,6 @@ class PatchAssetTests(unittest.TestCase):
         """Construction is the one origin we witness, and the result cannot be rebuilt
         without the exact base it was made from."""
         import hashlib
-        import json
         import tempfile
         import zipfile
         from pathlib import Path
@@ -135,7 +136,7 @@ class PatchAssetTests(unittest.TestCase):
 
             patched = game_dir / "Mod.vpx"
             self.assertEqual(patched.read_bytes(), b"ABCDEF")
-            saved = json.loads((game_dir / "Foo (Bar 1999).info").read_text())
+            saved = saved_record(game_dir / "Foo (Bar 1999).info")
             source = entry_for_filename(saved["tables"], patched.name)[1]["source"]
             self.assertEqual(source["base"], {"file": "Table.vpx",
                                               "hash": hashlib.sha256(b"ABCDEF").hexdigest()})
@@ -165,7 +166,6 @@ class PatchAssetTests(unittest.TestCase):
     def test_the_patched_table_is_parsed_when_it_is_made(self):
         """Otherwise it sits with no version, ROM or authors until the next metadata
         game file - and it can be the folder's default straight away."""
-        import json
         import tempfile
         import zipfile
         from pathlib import Path
@@ -187,7 +187,7 @@ class PatchAssetTests(unittest.TestCase):
                 execute_import_plan(plan, zip_path)
 
             entry = entry_for_filename(
-                json.loads((game_dir / "Foo (Bar 1999).info").read_text())["tables"],
+                saved_record(game_dir / "Foo (Bar 1999).info")["tables"],
                 "Mod.vpx")[1]
             self.assertEqual(entry["rom"], "mod_rom")
             self.assertEqual(entry["version"], "1.2")
@@ -197,7 +197,6 @@ class PatchAssetTests(unittest.TestCase):
 
     def test_a_table_we_cannot_parse_is_not_recorded_as_empty(self):
         """"Nothing has read this table" is true; "it declares no ROM" is not."""
-        import json
         import tempfile
         import zipfile
         from pathlib import Path
@@ -217,7 +216,7 @@ class PatchAssetTests(unittest.TestCase):
                 execute_import_plan(plan, zip_path)
 
             entry = entry_for_filename(
-                json.loads((game_dir / "Foo (Bar 1999).info").read_text())["tables"],
+                saved_record(game_dir / "Foo (Bar 1999).info")["tables"],
                 "Mod.vpx")[1]
             # Identity and the name are bookkeeping; what must be absent is any
             # parsed field, which would read as "we opened it and it said nothing".
@@ -248,7 +247,6 @@ class PatchAssetTests(unittest.TestCase):
             self.assertTrue((game_dir / "Mod.vpx").exists())
 
     def test_the_report_names_the_table_the_patch_made(self):
-        import json
         import tempfile
         import zipfile
         from pathlib import Path
@@ -265,7 +263,7 @@ class PatchAssetTests(unittest.TestCase):
             plan = build_import_plan(analyze_path(zip_path), game_dir=game_dir)
             report = execute_import_plan(plan, zip_path)
 
-            saved = json.loads((game_dir / "Foo (Bar 1999).info").read_text())
+            saved = saved_record(game_dir / "Foo (Bar 1999).info")
             table_id = entry_for_filename(saved["tables"], "Mod.vpx")[0]
             self.assertEqual(report["patched_tables"], [table_id])
 
@@ -274,13 +272,12 @@ class PatchBaseTests(unittest.TestCase):
     """A .dif names nothing about the table it applies to, so the folder decides."""
 
     def _folder(self, tmp: str, tables: dict[str, bytes], entries: dict | None = None) -> Path:
-        import json
         game_dir = Path(tmp) / "Foo (Bar 1999)"
         game_dir.mkdir()
         for name, data in tables.items():
             (game_dir / name).write_bytes(data)
         if entries is not None:
-            (game_dir / "Foo (Bar 1999).info").write_text(json.dumps({"tables": entries}))
+            save_record(game_dir / "Foo (Bar 1999).info", game_info("Foo", tables=entries))
         return game_dir
 
     def _made(self, filename: str, base: str, data: bytes) -> dict:

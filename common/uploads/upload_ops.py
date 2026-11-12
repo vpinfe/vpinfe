@@ -17,7 +17,13 @@ from typing import IO, Any
 
 from common import atomic_write, service_errors
 from common.failures import why
-from common.games import identity_claims, media_browse, media_placement, media_service, table_swap
+from common.games import (
+    identity_claims,
+    media_browse,
+    media_placement,
+    media_service,
+    table_swap,
+)
 from common.games.asset_registry import spec_for
 from common.games.game_metadata import made_from
 from common.games.table_lens import table_settings
@@ -122,8 +128,7 @@ def _replaces(plan: ImportPlan, item: PlannedItem) -> str:
     if item.action == "write_info":
         if plan.new_game_dir_name:
             return t("asset.plan.adopts_info")
-        base = Path(plan.game_dir)
-        if (base / f"{base.name}.info").exists():
+        if Path(item.destination).exists():
             return t("asset.plan.merges_info")
         return t("asset.plan.adopts_info")
     if plan.new_game_dir_name:

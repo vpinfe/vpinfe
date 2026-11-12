@@ -17,7 +17,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from common.devices import device_registry
+from common.games import info_codec
 from common.games.game import Game
+from common.games.info_file import INFO_SCHEMA
 
 
 def own_registry(case: unittest.TestCase, path: Path | str) -> device_registry.DeviceRegistry:
@@ -113,16 +115,19 @@ def write_game(root: Path | str, name: str = "Example", *,
     """One game folder: a `.vpx`, its `.info`, and whatever media it needs.
 
     `info` is written as given, so a test that cares about the metadata says exactly
-    what it wants; omit it for a folder with none, which is its own case. `medias` go
-    under `medias/`, `files` anywhere under the folder - the two tiers media resolution
-    reads, plus whatever else a game carries.
+    what it wants, except that a record stamped with the current schema is the in-memory
+    shape and goes out as the app would save it; omit it for a folder with none, which is
+    its own case. `medias` go under `medias/`, `files` anywhere under the folder - the two
+    tiers media resolution reads, plus whatever else a game carries.
     """
     folder = Path(root) / name
     folder.mkdir(parents=True, exist_ok=True)
     if vpx:
         (folder / f"{name}.vpx").write_bytes(b"not really a vpx")
     if info is not None:
-        (folder / f"{name}.info").write_text(json.dumps(info), encoding="utf-8")
+        stamped = info.get("vpinfe", {}).get("schema") == INFO_SCHEMA
+        on_disk = info_codec.encode(info) if stamped else info
+        (folder / f"{name}.info").write_text(json.dumps(on_disk), encoding="utf-8")
     for rel, data in (files or {}).items():
         target = folder / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -136,8 +141,8 @@ def write_game(root: Path | str, name: str = "Example", *,
 
 def game_info(title: str = "Example", *, vps_id: str = "vps-1", game_id: str = "",
               tables: dict | None = None, **sections) -> dict:
-    """A `.info` at schema 2, with only the parts a test names filled in."""
-    info: dict = {"Info": {"Title": title, "VPSId": vps_id}, "vpinfe": {"schema": 2}}
+    """A current-schema record as held in memory, with only the parts a test names."""
+    info: dict = {"Info": {"Title": title, "VPSId": vps_id}, "vpinfe": {"schema": INFO_SCHEMA}}
     if game_id:
         info["vpinfe"]["game_id"] = game_id
     if tables is not None:

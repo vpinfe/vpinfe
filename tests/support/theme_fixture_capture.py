@@ -22,6 +22,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from common.games.info_file import INFO_SCHEMA
 from tests.support.library import write_game
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -50,7 +51,7 @@ def build_library(root: Path) -> None:
           info={"Info": {"Title": "Attack from Mars", "Manufacturer": "Bally",
                          "Year": "1995", "Type": "SS", "VPSId": "vps-afm"},
                 "User": {"Rating": 4},
-                "vpinfe": {"game_id": "afm0000001", "schema": 2,
+                "vpinfe": {"game_id": "afm0000001", "schema": INFO_SCHEMA,
                            "default_table": "afmtable01"},
                 "tables": {"afmtable01": {"id": "afmtable01",
                                           "filename": "Attack from Mars (Bally 1995).vpx",
@@ -67,7 +68,7 @@ def build_library(root: Path) -> None:
           info={"Info": {"Title": "Congo", "Manufacturer": "Williams",
                          "Year": "1995", "Type": "SS", "VPSId": "vps-congo"},
                 "User": {"Rating": 0},
-                "vpinfe": {"game_id": "cng0000001", "schema": 2,
+                "vpinfe": {"game_id": "cng0000001", "schema": INFO_SCHEMA,
                            "default_table": "cngtable01"},
                 "tables": {"cngtable01": {"id": "cngtable01",
                                           "filename": "Congo (Williams 1995).vpx"}}},
@@ -79,7 +80,7 @@ def build_library(root: Path) -> None:
           info={"Info": {"Title": "Medieval Madness", "Manufacturer": "Williams",
                          "Year": "1997", "Type": "SS", "VPSId": "vps-mm"},
                 "User": {"Rating": 5},
-                "vpinfe": {"game_id": "mm00000001", "schema": 2,
+                "vpinfe": {"game_id": "mm00000001", "schema": INFO_SCHEMA,
                            "default_table": "mmtable001"},
                 "tables": {"mmtable001": {"id": "mmtable001",
                                           "filename": "Medieval Madness (Williams 1997).vpx"}}},
@@ -93,7 +94,7 @@ def build_library(root: Path) -> None:
           info={"Info": {"Title": "Bare Table", "Manufacturer": "Gottlieb",
                          "Year": "1980", "Type": "EM", "VPSId": ""},
                 "User": {"Rating": 0},
-                "vpinfe": {"game_id": "bar0000001", "schema": 2}})
+                "vpinfe": {"game_id": "bar0000001", "schema": INFO_SCHEMA}})
 
 
 def _stabilize(value, real_root: str):

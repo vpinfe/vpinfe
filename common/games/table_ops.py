@@ -18,6 +18,7 @@ from common.failures import why
 from common.games import (
     derived_tags,
     game_lens,
+    info_files,
     library_folders,
     mods,
     order_record,
@@ -29,7 +30,6 @@ from common.games.game import Game
 from common.games.game_metadata import (
     game_title,
     load_game_meta,
-    meta_file_path,
     reset_table_play_record,
     set_table_rating,
     set_table_source,
@@ -94,7 +94,7 @@ def set_hidden(game_id: str, table_id: str, hidden: bool) -> dict:
     """
     game = game_lens.game_for_writing(game_id)
     filename = filename_or_refuse(game, table_id)
-    MetaConfig(str(meta_file_path(game))).set_table_hidden(filename, bool(hidden))
+    MetaConfig(str(info_files.info_path_of(game))).set_table_hidden(filename, bool(hidden))
     game = reread_game(game)
     return {"table": row_or_refuse(game, table_id), "default": _offered_first(game)}
 
@@ -227,7 +227,7 @@ def set_default(game_id: str, table_id: str) -> dict:
             raise service_errors.RefusedError(t("error.games.hidden_default"),
                                               details={"table": table_id})
     try:
-        MetaConfig(str(meta_file_path(game))).set_default_table(table_id)
+        MetaConfig(str(info_files.info_path_of(game))).set_default_table(table_id)
     except ValueError as exc:
         raise service_errors.RefusedError(why(exc),
                                           details={"table": table_id}) from exc
@@ -329,7 +329,7 @@ def add_keyed(game_id: str, app_id: str, key: str) -> dict:
         raise service_errors.RefusedError(t("error.games.id_needed"))
 
     table_id = new_id()
-    if not MetaConfig(str(meta_file_path(game))).add_keyed_table(app_id, key, table_id):
+    if not MetaConfig(str(info_files.info_path_of(game))).add_keyed_table(app_id, key, table_id):
         raise service_errors.BlockedError(t("error.games.duplicate"),
                                           details={"app": app_id, "key": key})
     game = reread_game(game)
@@ -364,7 +364,7 @@ def add_referenced(game_id: str, path: str) -> dict:
     # Relative where it survives the library moving, absolute where it would not.
     stored = library_folders.portable_reference(game_dir, target)
     table_id = new_id()
-    if not MetaConfig(str(meta_file_path(game))).add_referenced_table(stored, table_id):
+    if not MetaConfig(str(info_files.info_path_of(game))).add_referenced_table(stored, table_id):
         raise service_errors.BlockedError(t("error.games.already_linked"),
                                           details={"path": stored})
     game = reread_game(game)
@@ -401,7 +401,7 @@ def contain(game_id: str, table_id: str) -> dict:
     except OSError as exc:
         raise service_errors.BlockedError(why(exc)) from exc
 
-    if not MetaConfig(str(meta_file_path(game))).contain_referenced_table(table_id,
+    if not MetaConfig(str(info_files.info_path_of(game))).contain_referenced_table(table_id,
                                                                          source.name):
         # The copy landed and the record did not, which is the one state worth undoing: a
         # file in the folder with nothing describing it becomes a second table on the next
@@ -427,7 +427,7 @@ def forget(game_id: str, table_id: str) -> dict:
         raise service_errors.NotFoundError(
             t("error.games.table_not_found"),
             details={"game": game.game_dir_name, "table": table_id})
-    meta = MetaConfig(str(meta_file_path(game)))
+    meta = MetaConfig(str(info_files.info_path_of(game)))
     if tables.entry_key(entry) or tables.entry_reference(entry):
         # Nothing in this folder will mint one of these again, which is exactly why
         # forgetting it is safe where forgetting a table that is there is not. A reference

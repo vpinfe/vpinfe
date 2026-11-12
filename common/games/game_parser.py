@@ -15,6 +15,7 @@ from time import perf_counter
 from common.config.config_access import MediaConfig
 from common.config.config_store import ConfigStore
 from common.failures import why
+from common.games import file_listing
 from common.games import unreadable as unread_files
 from common.games.game import Game
 from common.games.game_metadata import vpinfe_section
@@ -167,6 +168,8 @@ class GameParser:
 
         game_contents = set()
         game_subdirs = set()
+        subdir_names: dict[str, str] = {}
+        folder_read = True
 
         # Search with scandir to avoid per-entry pathlib stat calls on slow volumes.
         try:
@@ -177,12 +180,17 @@ class GameParser:
                         # API's own listing: a folder someone named PUPVideos
                         # holds a PUP pack whatever the shift key was doing.
                         game_subdirs.add(entry.name.lower())
+                        subdir_names[entry.name.lower()] = entry.name
                         continue
                     game_contents.add(entry.name)
         except OSError:
+            folder_read = False
             logger.exception("Failed to enumerate game directory: %s", game_dir)
 
         game.table_files = table_names(game_contents)
+        game.info_names = (frozenset(name.lower() for name in game_contents
+                                     if name.lower().endswith(".info"))
+                           if folder_read else None)
         info_name = f"{game.game_dir_name}.info"
         # A record alone is enough: an entry keeps its media, its curation and its play
         # history whether or not there is something here to launch. A table alone has to
@@ -258,8 +266,11 @@ class GameParser:
             game,
             game_contents=game_contents,
             has_medias_dir="medias" in game_subdirs,
+            subdir_names=subdir_names,
             table_stem=Path(game.full_path_vpx_file).stem if game.full_path_vpx_file else None,
         )
+        if not folder_read:
+            game.file_listing = None
         # The folder when there is no table, so "recently added" still orders an entry
         # that has nothing to stat.
         stat_target = game.full_path_vpx_file or str(game_dir)
@@ -305,7 +316,8 @@ class GameParser:
 
     def load_image_paths(self, game: Game, game_contents: set[str] | None = None,
                          has_medias_dir: bool | None = None,
-                         table_stem: str | None = None) -> None:
+                         table_stem: str | None = None,
+                         subdir_names: dict[str, str] | None = None) -> None:
         game_dir = Path(str(game.full_path_game))
         medias_dir = game_dir / "medias"
 
@@ -317,15 +329,22 @@ class GameParser:
                 game_contents = set()
 
         medias_contents: set[str] = set()
+        unread: list[OSError] = []
+        walked = True
         if has_medias_dir if has_medias_dir is not None else medias_dir.is_dir():
             try:
-                for dirpath, _dirs, files in os.walk(str(medias_dir)):
+                for dirpath, _dirs, files in os.walk(str(medias_dir), onerror=unread.append):
                     rel = os.path.relpath(dirpath, str(medias_dir))
                     for fname in files:
                         medias_contents.add(
                             fname if rel == "." else f"{rel}/{fname}".replace(os.sep, "/"))
             except Exception:
                 medias_contents = set()
+                walked = False
+        walked = walked and not unread
+        if subdir_names is not None:
+            game.file_listing = file_listing.listing_of(
+                game_dir, game_contents, subdir_names, medias_contents if walked else None)
         apply_media_specs(game, game_contents, medias_contents, self.playfieldvariant,
                           table_stem, self.active_sets or None)
         # And again per table, off the same two listings. The walk is what costs; a

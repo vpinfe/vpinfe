@@ -22,6 +22,8 @@ from common.games import (
     asset_resolver,
     file_move,
     game_repository,
+    info_codec,
+    info_files,
     library_folders,
     media_placement,
     table_swap,
@@ -37,7 +39,8 @@ from common.games.game_service import (
     sanitize_dir_name,
 )
 from common.games.identity_claims import DeclaredIdentity
-from common.games.info_file import VPINFE_SECTION, MetaConfig
+from common.games.info_file import VPINFE_SECTION, migration_backup_reason, record_of
+from common.games.info_migration import needs_migration
 from common.games.tables import entry_filename, entry_for_filename, table_entries
 from common.i18n import t
 from common.ids import new_id
@@ -266,8 +269,9 @@ def _plan_asset(asset: DetectedAsset, base: Path, vpx_stem: str, rom_name: str,
             return BlockedItem(asset, t("error.games.file_exists"))
         return PlannedItem(asset, str(dest), game_kind_action)
     if kind == "game_info":
-        # Always written as <folder>.info — the parser matches it by folder name.
-        return PlannedItem(asset, str(_info_path(base)), "write_info")
+        # The game's is always written as <folder>.info - the parser matches it by folder
+        # name. A table's own file keeps its name, which is its table's.
+        return PlannedItem(asset, str(_info_destination(asset, base)), "write_info")
     own = PurePosixPath(_basename(asset.entries[0].arcname))
     stem = sidecar_stem or vpx_stem or base.name
     if kind == "backglass":
@@ -338,21 +342,29 @@ def _one_to_a_name(items: list[PlannedItem],
     """Two files that would take one name: the first stays, the rest are refused. A name is
     the same whatever its case, as it is on a case-insensitive disk."""
     taken: set[str] = set()
-    kept: list[PlannedItem] = []
     refused = list(blocked)
-    for item in items:
+    dropped: set[int] = set()
+    # A table's own file gives way to the game's where they would be one name.
+    for index, item in sorted(enumerate(items), key=lambda one: one[1].asset.own_table):
         name = item.destination.lower()
         if name in taken:
             refused.append(BlockedItem(item.asset, t(
                 "error.uploads.same_name", name=Path(item.destination).name)))
+            dropped.add(index)
             continue
         taken.add(name)
-        kept.append(item)
+    kept = [item for index, item in enumerate(items) if index not in dropped]
     return kept, refused
 
 
 def _info_path(base: Path) -> Path:
-    return base / f"{base.name}.info"
+    return info_files.game_info_path(base)
+
+
+def _info_destination(asset: DetectedAsset, base: Path) -> Path:
+    if asset.own_table:
+        return base / _safe_upload_name(_basename(asset.entries[0].arcname))
+    return _info_path(base)
 
 
 def _plan_media(asset: DetectedAsset, base: Path, stem: str = "", page: int = 1) -> PlannedItem:
@@ -675,6 +687,8 @@ def _moved(item: PlannedItem, old_base: str, new_base: Path) -> PlannedItem:
         moved = _plan_media(item.asset, new_base, stem, item.page)
         return replace(item, destination=moved.destination, stem=moved.stem)
     if item.action == "write_info":
+        if item.asset.own_table:
+            return replace(item, destination=str(new_base / Path(item.destination).name))
         return replace(item, destination=str(_info_path(new_base)))
     return replace(item, destination=item.destination.replace(old_base, str(new_base), 1))
 
@@ -748,6 +762,13 @@ def merge_info(incoming: dict, existing: dict) -> dict:
     return merged
 
 
+def _import_table_info(source: AssetSource, asset: DetectedAsset, dest: Path) -> None:
+    """A table's own file goes in as it came, after a copy of the one it replaces."""
+    if dest.exists():
+        copy_aside(dest, IMPORT)
+    _extract_replace(source, asset.entries[0], dest)
+
+
 def _import_game_info(source: AssetSource, asset: DetectedAsset, base: Path) -> None:
     import json
 
@@ -758,22 +779,29 @@ def _import_game_info(source: AssetSource, asset: DetectedAsset, base: Path) -> 
         incoming = json.loads(staged.read_text(encoding="utf-8"))
     if not isinstance(incoming, dict):
         raise ValueError(t("error.uploads.info_unreadable"))
+    try:
+        incoming = record_of(incoming)
+    except Exception as exc:
+        raise ValueError(t("error.uploads.info_unreadable")) from exc
 
     dest = _info_path(base)
     if dest.exists():
         try:
-            existing = json.loads(dest.read_text(encoding="utf-8"))
+            stored = json.loads(dest.read_text(encoding="utf-8"))
+            existing = record_of(stored)
         except Exception:
             logger.warning("Existing .info is unreadable; treating as empty: %s", dest)
-            existing = {}
+            stored, existing = None, {}
         if not isinstance(existing, dict):
             existing = {}
+        if isinstance(stored, dict) and needs_migration(stored):
+            copy_aside(dest, migration_backup_reason(stored))
         copy_aside(dest, IMPORT)
         payload = merge_info(incoming, existing)
     else:
         payload = incoming
 
-    write_atomic(dest, lambda handle: json.dump(payload, handle, indent=4))
+    write_atomic(dest, lambda handle: json.dump(info_codec.encode(payload), handle, indent=4))
 
 
 # --- Execution -------------------------------------------------------------
@@ -872,7 +900,7 @@ def _record_patched_table(game_dir: Path, vpx: Path, base_file: str, base_hash: 
     the table's id, or "" where the .info could not be written.
     """
     try:
-        meta = MetaConfig(str(game_dir / f"{game_dir.name}.info"))
+        meta = info_files.open_record(game_dir)
         parsed = VPXParser().single_file_extract(str(vpx))
         if parsed:
             # A failed parse leaves the entry unparsed rather than filled with empties.
@@ -894,7 +922,7 @@ def _patch_base(base: Path, dest: Path) -> Path | None:
     hashed as. Then the largest, since a folder can hold small helper .vpx files.
     """
     try:
-        entries = table_entries(MetaConfig(str(base / f"{base.name}.info")).data)
+        entries = table_entries(info_files.open_record(base).data)
     except Exception:  # noqa: BLE001 - an unreadable record leaves size to decide
         entries = {}
     made = {entry_filename(one): one["source"] for one in entries.values()
@@ -1004,7 +1032,10 @@ def execute_import_plan(plan: ImportPlan, source_path: Path,
             elif item.action == "extract_tree":
                 _extract_tree(source, item.asset, dest)
             elif item.action == "write_info":
-                _import_game_info(source, item.asset, base)
+                if item.asset.own_table:
+                    _import_table_info(source, item.asset, Path(item.destination))
+                else:
+                    _import_game_info(source, item.asset, base)
             elif item.action == "replace_media":
                 _import_media(source, item, base, converted or {})
                 media_kinds.append(item.asset.media_kind)
@@ -1088,7 +1119,7 @@ def record_declared_identities(
             continue
         if meta is None:
             # The .info is named for its folder, and MetaConfig wants the file.
-            meta = MetaConfig(str(base / f"{base.name}.info"))
+            meta = info_files.open_record(base)
         meta.add_asset(named.destination, identity.host or "declared",
                        identity=identity)
         written.append(named.destination)

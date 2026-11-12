@@ -8,7 +8,6 @@ the write half, addressed by id like the rest of the API.
 
 from __future__ import annotations
 
-import json
 import unittest
 from configparser import ConfigParser
 from unittest.mock import patch
@@ -19,6 +18,7 @@ import httpapi
 from common import events
 from common.players import players
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "RateMe0001"
 
@@ -56,7 +56,7 @@ class GameRatingTests(TempTree):
         updates that copy too, so asserting on it passes whether or not anything was
         ever written.
         """
-        user = json.loads(self.info_path.read_text()).get("User") or {}
+        user = saved_record(self.info_path).get("User") or {}
         return int(user.get("Rating") or 0)     # absent is unrated, not an error
 
     def test_the_rating_reaches_the_info_file(self) -> None:

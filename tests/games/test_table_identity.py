@@ -5,7 +5,6 @@ one, and both have to survive somebody tidying up a `.vpx` name. So the tests th
 are the ones about what happens when a file is renamed, copied, or rebuilt.
 """
 
-import json
 import os
 import unittest
 from pathlib import Path
@@ -26,6 +25,7 @@ from common.games.tables import (
 )
 from common.timestamps import epoch_to_iso, utc_now_iso
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import save_record, saved_record
 from tests.support.skips import needs_posix_permissions
 
 
@@ -59,7 +59,7 @@ class RebuildTests(TempTree):
     def _rebuild(self, *files: tuple[str, dict]) -> dict:
         MetaConfig(str(self.info)).write_config_meta(
             {"vpsdata": {}, "gamefiles": dict(files)})
-        return json.loads(self.info.read_text(encoding="utf-8"))[TABLES_KEY]
+        return saved_record(self.info)[TABLES_KEY]
 
     def test_every_table_gets_an_id(self) -> None:
         built = self._rebuild(("a.vpx", {"file_hash": "aaa"}),
@@ -83,10 +83,10 @@ class RebuildTests(TempTree):
         original = _by_name(built, "old.vpx")[TABLE_ID_KEY]
 
         # Whatever accumulated against the old name, as a rebuild would leave it.
-        stored = json.loads(self.info.read_text(encoding="utf-8"))
+        stored = saved_record(self.info)
         stored[TABLES_KEY][original].update(
             {"hidden": True, "user": {"start_count": 7}})
-        self.info.write_text(json.dumps(stored), encoding="utf-8")
+        save_record(self.info, stored)
 
         renamed = self._rebuild(("new.vpx", {"file_hash": "aaa"}))
 
@@ -122,7 +122,7 @@ class AddedStampTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads((self.root / "Found" / "Found.info").read_text(encoding="utf-8"))
+        stored = saved_record(self.root / "Found" / "Found.info")
         self.assertEqual(stored[TABLES_KEY]["tbl0000001"][ADDED_KEY],
                          epoch_to_iso(getattr(stat, "st_birthtime", stat.st_ctime)))
 
@@ -134,7 +134,7 @@ class AddedStampTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads((self.root / "Dated" / "Dated.info").read_text(encoding="utf-8"))
+        stored = saved_record(self.root / "Dated" / "Dated.info")
         self.assertEqual(stored[TABLES_KEY]["tbl0000001"][ADDED_KEY], "2020-01-01T00:00:00Z")
 
     def test_a_table_someone_adds_is_dated_now(self) -> None:
@@ -146,7 +146,7 @@ class AddedStampTests(TempTree):
         config.add_keyed_table("pinballfx", "123", "tbl0000003")
         config.add_referenced_table("../Elsewhere/c.vpx", "tbl0000004")
 
-        stored = json.loads((folder / "Added.info").read_text(encoding="utf-8"))[TABLES_KEY]
+        stored = saved_record(folder / "Added.info")[TABLES_KEY]
         for table in ("tbl0000002", "tbl0000003", "tbl0000004"):
             with self.subTest(table):
                 self.assertGreaterEqual(stored[table][ADDED_KEY], before)
@@ -160,7 +160,7 @@ class BackfillTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        on_disk = json.loads((self.root / "Old" / "Old.info").read_text(encoding="utf-8"))
+        on_disk = saved_record(self.root / "Old" / "Old.info")
         self.assertTrue(table_id(_by_name(on_disk[TABLES_KEY], "a.vpx")))
 
     def test_a_filename_keyed_file_is_rewritten_keyed_by_id(self) -> None:
@@ -172,8 +172,7 @@ class BackfillTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads(
-            (self.root / "Legacy" / "Legacy.info").read_text(encoding="utf-8"))[TABLES_KEY]
+        stored = saved_record(self.root / "Legacy" / "Legacy.info")[TABLES_KEY]
         self.assertEqual(list(stored), ["keepthisid"], "keyed by id, not by name")
         entry = stored["keepthisid"]
         self.assertEqual(entry[TABLE_FILENAME_KEY], "a.vpx")
@@ -190,8 +189,7 @@ class BackfillTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads(
-            (self.root / "Seeded" / "Seeded.info").read_text(encoding="utf-8"))
+        stored = saved_record(self.root / "Seeded" / "Seeded.info")
         self.assertEqual(stored["vpinfe"]["default_table"], "chosen1234")
 
     def test_a_default_already_an_id_is_left_alone(self) -> None:
@@ -214,8 +212,7 @@ class BackfillTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads(
-            (self.root / "Stale" / "Stale.info").read_text(encoding="utf-8"))
+        stored = saved_record(self.root / "Stale" / "Stale.info")
         self.assertEqual(stored["vpinfe"]["default_table"], "deleted.vpx")
 
     def test_a_game_with_no_tables_is_not_rewritten_every_startup(self) -> None:
@@ -237,8 +234,7 @@ class BackfillTests(TempTree):
 
         table_identity.ensure_unique_table_ids([game])
 
-        stored = json.loads(
-            (self.root / "Half" / "Half.info").read_text(encoding="utf-8"))[TABLES_KEY]
+        stored = saved_record(self.root / "Half" / "Half.info")[TABLES_KEY]
         self.assertEqual(stored, {})
 
     def test_a_copied_folder_does_not_leave_two_tables_sharing_an_id(self) -> None:
@@ -250,8 +246,8 @@ class BackfillTests(TempTree):
         by_id = table_identity.ensure_unique_table_ids([first, second])
 
         self.assertEqual(len(by_id), 2)
-        kept = json.loads((self.root / "First" / "First.info").read_text(encoding="utf-8"))
-        remixed = json.loads((self.root / "Second" / "Second.info").read_text(encoding="utf-8"))
+        kept = saved_record(self.root / "First" / "First.info")
+        remixed = saved_record(self.root / "Second" / "Second.info")
         self.assertEqual(table_id(_by_name(kept[TABLES_KEY], "a.vpx")), "dupdupdup1")
         self.assertNotEqual(table_id(_by_name(remixed[TABLES_KEY], "a.vpx")), "dupdupdup1")
 
@@ -309,7 +305,7 @@ class BackfillTests(TempTree):
 
         self.assertEqual(sorted(name for _game, name in by_id.values()),
                          ["a.vpx", "b.vpx"])
-        on_disk = json.loads((self.root / "Kept" / "Kept.info").read_text(encoding="utf-8"))
+        on_disk = saved_record(self.root / "Kept" / "Kept.info")
         self.assertTrue(table_id(_by_name(on_disk[TABLES_KEY], "b.vpx")))
         self.assertEqual([one.args[1] for one in logged.call_args_list], ["Locked"])
 
@@ -337,7 +333,7 @@ class BackfillTests(TempTree):
         (self.root / "Locked").chmod(0o755)
         write_held_meta()
 
-        on_disk = json.loads(info.read_text(encoding="utf-8"))
+        on_disk = saved_record(info)
         self.assertEqual(table_id(_by_name(on_disk[TABLES_KEY], "a.vpx")), first["a.vpx"])
 
     def test_a_game_that_needs_nothing_is_not_rewritten(self) -> None:

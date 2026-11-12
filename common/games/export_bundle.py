@@ -13,13 +13,16 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+from common.games import info_codec, info_files, table_files
 from common.games.asset_registry import (
     is_readme,  # noqa: F401  (one matcher, import and export)
 )
 from common.games.asset_resolver import resolve_for_table
-from common.games.game_metadata import vpinfe_section
+from common.games.game_metadata import VPINFE_SECTION, vpinfe_section
 from common.games.info_file import ASSETS_KEY
 from common.games.tables import (
+    DEFAULT_TABLE_KEY,
+    TABLES_KEY,
     default_entry,
     entry_filename,
     recorded_default,
@@ -50,9 +53,8 @@ def choose_table(game_dir: Path, table: str | None = None) -> str | None:
         return table if table in names else None
 
     meta: dict = {}
-    info_path = game_dir / f"{game_dir.name}.info"
     try:
-        meta = json.loads(info_path.read_text(encoding="utf-8"))
+        meta = info_files.load(game_dir)
     except (OSError, ValueError):
         pass
     entries = table_entries(meta)
@@ -62,10 +64,12 @@ def choose_table(game_dir: Path, table: str | None = None) -> str | None:
 
 
 def prune_info(info_text: str, bundled_arcnames: set[str]) -> str:
-    """The .info that ships: assets entries only for files actually in the bundle.
+    """The .info that ships: file records and tables only for what is actually in the bundle.
 
-    The manifest should describe the archive, in both modes. Everything else in
-    the file - authors, VPS identity, user data - passes through untouched.
+    The manifest should describe the archive, in both modes. A table whose file is not
+    in the bundle goes, and the default points at one that is; everything else in the
+    file - authors, VPS identity, user data - passes through untouched. A table's own file
+    describes one table and is shipped as it is.
 
     Both keys are folder-relative paths, so this is a direct comparison. Matching on
     basenames cannot tell medias/wheel.png from a wheel.png at the folder root.
@@ -74,12 +78,34 @@ def prune_info(info_text: str, bundled_arcnames: set[str]) -> str:
         data = json.loads(info_text)
     except ValueError:
         return info_text
-    assets = data.get(ASSETS_KEY)
+    section = data.get("vpinfe") if isinstance(data, dict) else None
+    if isinstance(section, dict) and table_files.TABLE_SECTION in section:
+        return info_text
+    record = info_codec.decode(data)
+    assets = record.get(ASSETS_KEY)
     if isinstance(assets, dict):
-        data[ASSETS_KEY] = {
+        record[ASSETS_KEY] = {
             path: entry for path, entry in assets.items() if path in bundled_arcnames
         }
-    return json.dumps(data, indent=2)
+    _keep_shipped_tables(record, bundled_arcnames)
+    return json.dumps(info_codec.encode(record) if info_codec.is_schema_3(data) else record,
+                      indent=2)
+
+
+def _keep_shipped_tables(record: dict, bundled_arcnames: set[str]) -> None:
+    """Drop the tables whose files are not in the bundle, unless none of them is."""
+    entries = table_entries(record)
+    kept = {key: entry for key, entry in entries.items()
+            if isinstance(entry, dict) and entry_filename(entry) in bundled_arcnames}
+    if not kept or len(kept) == len(entries):
+        return
+    record[TABLES_KEY] = kept
+    section = record.get(VPINFE_SECTION)
+    if not isinstance(section, dict):
+        return
+    ids = {str(entry.get("id") or key) for key, entry in kept.items()}
+    if section.get(DEFAULT_TABLE_KEY) not in ids and section.get(DEFAULT_TABLE_KEY):
+        section[DEFAULT_TABLE_KEY] = sorted(ids)[0]
 
 
 def mobile_settings_file(game_dir: Path, word: str, table: str | None = None) -> Path | None:
@@ -146,7 +172,10 @@ def bundle_paths(game_dir: Path, *, everything: bool = False, table: str | None 
         lower = name.lower()
         if chosen and name == chosen:
             yield entry, name
-        elif lower == f"{folder_stem}.info":
+        elif lower == info_files.info_name(folder_stem):
+            yield entry, name
+        elif (chosen and not table_files.shares_game_file(chosen, game_dir.name)
+              and lower == table_files.own_name(chosen).lower()):
             yield entry, name
         elif is_readme(name):
             yield entry, name

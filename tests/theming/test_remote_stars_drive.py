@@ -21,6 +21,7 @@ from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.library import game_info, write_game
 from tests.support.live_instance import LiveInstance
 from tests.support.manager_walk import ManagerWalk
+from tests.support.saved import saved_record
 
 TARGET = "Install B"
 PLAYED = {"LastRun": "2026-09-01T10:00:00Z", "StartCount": 1}
@@ -47,7 +48,7 @@ def _call(instance: LiveInstance, method: str, path: str, body: dict | None = No
 
 
 def _rating(root: Path) -> int:
-    info = json.loads((root / "Solo" / "Solo.info").read_text(encoding="utf-8"))
+    info = saved_record(root / "Solo" / "Solo.info")
     return int((info.get("User") or {}).get("Rating") or 0)
 
 

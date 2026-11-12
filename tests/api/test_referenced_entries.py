@@ -11,7 +11,6 @@ the entry.
 
 from __future__ import annotations
 
-import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,14 +20,16 @@ from starlette.testclient import TestClient
 
 import httpapi
 from common.games import launchers, library_folders, order_record
+from common.games.info_file import INFO_SCHEMA
 from tests.support.library import TempTree, fake_game, own_launchers, write_game
+from tests.support.saved import saved_record
 
 GAME_ID = "Ref000000001"
 FOLDER = "Attack from Mars (Bally 1995)"
 
 INFO = {
     "Info": {"Name": "Attack from Mars", "Manufacturer": "Bally", "Year": "1995"},
-    "VPinFE": {"game_id": GAME_ID},
+    "vpinfe": {"game_id": GAME_ID, "schema": INFO_SCHEMA},
     "tables": {},
 }
 
@@ -71,7 +72,7 @@ class _Referenced(TempTree):
         return got.json()["tables"]
 
     def _info(self) -> dict:
-        return json.loads((self.folder / f"{FOLDER}.info").read_text(encoding="utf-8"))
+        return saved_record(self.folder / f"{FOLDER}.info")
 
 
 class AddingTests(_Referenced):

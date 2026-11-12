@@ -14,9 +14,8 @@ from typing import Any
 
 from common import service_errors
 from common.failures import why
-from common.games import derived_tags, game_lens, game_service, launcher_ops
+from common.games import derived_tags, game_lens, game_service, info_files, launcher_ops
 from common.games.game_metadata import (
-    meta_file_path,
     set_game_favorite,
     set_game_private,
     set_game_rating,
@@ -112,7 +111,8 @@ def _write_one(game: Any, edit: dict[str, Any]) -> None:
     if "tags" in marks:
         set_table_tags(game, filename, list(marks["tags"]))
     if "hidden" in marks:
-        MetaConfig(str(meta_file_path(game))).set_table_hidden(filename, bool(marks["hidden"]))
+        MetaConfig(str(info_files.info_path_of(game))).set_table_hidden(
+            filename, bool(marks["hidden"]))
     if "delete_nvram_on_close" in marks:
         game_service.update_table_vpinfe_setting(
             Path(str(game.full_path_game)), table_id, "delete_nvram_on_close",

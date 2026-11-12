@@ -3,7 +3,6 @@ swap it back or delete it."""
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 from unittest import mock
@@ -14,6 +13,7 @@ import httpapi
 from common.games import table_ops
 from common.uploads import asset_import_service, upload_ops
 from tests.support.library import TempTree, fake_game, game_info
+from tests.support.saved import save_record, saved_record
 from tests.support.swaps import library_of
 
 GAME_ID = "Replaced0001"
@@ -34,7 +34,7 @@ class ReplaceCase(TempTree):
             "t-old": {"id": "t-old", "filename": "Foo 1.1.vpx", "rating": 4, "version": "1.1"},
             "t-other": {"id": "t-other", "filename": "Other.vpx"}})
         record["vpinfe"]["default_table"] = "t-old"
-        self.info.write_text(json.dumps(record))
+        save_record(self.info, record)
         incoming = self.root / "incoming"
         incoming.mkdir()
         (incoming / "Foo 1.2.vpx").write_bytes(b"new")
@@ -130,7 +130,7 @@ class ReplaceTableRouteTests(ReplaceCase):
         swapped = report["replaced_tables"][0]
         self.assertEqual("t-old", swapped["table"]["id"])
         self.assertTrue(swapped["kept"])
-        saved = json.loads(self.info.read_text())["tables"]["t-old"]
+        saved = saved_record(self.info)["tables"]["t-old"]
         self.assertEqual(("Foo 1.2.vpx", 4), (saved["filename"], saved["rating"]))
         self.assertFalse((self.game / "Foo 1.1.vpx").exists())
         self.assertTrue((self.game / "Foo 1.2.ini").exists())
@@ -279,4 +279,4 @@ class SwapRoutesTests(ReplaceCase):
         table = next(one for one in body["kept"] if one["file"] == "Foo 1.1.vpx")
         self.assertEqual("1.1", table["label"])
         self.assertFalse((self.game / "Foo 1.1.vpx").exists())
-        self.assertNotIn("t-old", json.loads(self.info.read_text())["tables"])
+        self.assertNotIn("t-old", saved_record(self.info)["tables"])

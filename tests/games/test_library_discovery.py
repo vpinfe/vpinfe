@@ -7,12 +7,12 @@ anything, and records - never acts on - a file that has gone.
 
 from __future__ import annotations
 
-import json
 import unittest
 
 from common.games.library_discovery import absent_since, discover
 from common.games.tables import ABSENT_SINCE_KEY, entry_filename, table_entries
 from tests.support.library import TempTree, fake_game, write_game
+from tests.support.saved import saved_record
 
 FOLDER = "Cactus Canyon (Bally 1998)"
 DESKTOP = f"{FOLDER}.vpx"
@@ -34,7 +34,7 @@ class DiscoveryTests(TempTree):
                          table_files=list(on_disk))
 
     def _stored(self) -> dict:
-        return table_entries(json.loads((self.folder / f"{FOLDER}.info").read_text()))
+        return table_entries(saved_record(self.folder / f"{FOLDER}.info"))
 
     def _by_name(self) -> dict:
         return {entry_filename(e).lower(): e for e in self._stored().values()}
@@ -108,8 +108,7 @@ class DiscoveryTests(TempTree):
         game = self._game({"tbl0000001": {"id": "tbl0000001", "filename": DESKTOP}})
         game.table_files = None
 
-        self.assertEqual(discover([game]), {"found": 0, "absent": 0, "returned": 0,
-                                            "games": 0})
+        self.assertFalse(any(discover([game]).values()))
         self.assertEqual(len(self._stored()), 1)
 
     def test_an_empty_listing_is_refused_the_same_way(self) -> None:

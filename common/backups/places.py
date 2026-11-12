@@ -20,6 +20,7 @@ from common.config import path_state
 from common.config.paths import ASIDE_SUFFIX, CONFIG_DIR, STATE_DIR, get_themes_dir
 from common.games import (
     game_repository,
+    info_files,
     info_maintenance,
     launcher_ops,
     launchers,
@@ -27,7 +28,7 @@ from common.games import (
 )
 from common.games.collection_store import COLLECTIONS_NAME, COLLECTIONS_NAME_INI
 from common.games.game_identity import game_id as game_id_of
-from common.games.info_migration import copied_from, is_importer_bak, needs_migration
+from common.games.info_migration import copied_from, is_importer_bak
 from common.i18n import t
 from common.kept_copies import (
     CONVERT,
@@ -99,6 +100,7 @@ from .copies import (
     make_member_id,
     read_id,
     read_member_id,
+    writer_of_info,
 )
 
 logger = logging.getLogger("vpinfe.common.backups.places")
@@ -150,7 +152,7 @@ def _written_by_info(path: Path) -> str:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return ""
-    return BY_2X if needs_migration(data) else BY_3X
+    return writer_of_info(data)
 
 
 # --- Game folders ----------------------------------------------------------------------
@@ -175,7 +177,7 @@ def _is_game_folder(folder: Path) -> bool:
 
 def game_copies(folder: Path) -> list[Copy]:
     """Every copy kept beside this game's `.info`."""
-    info_name = f"{folder.name}.info"
+    info_name = info_files.info_name(folder.name)
     try:
         names = os.listdir(folder)
     except OSError:

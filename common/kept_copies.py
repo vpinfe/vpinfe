@@ -33,6 +33,16 @@ EDIT = "edit"
 MOVE = "move"
 REPLACE = "replace"
 DELETE = "delete"
+# A game's file before the split moved the tables' records out of it, and a table's own file
+# that was there before VPinFE first wrote to it.
+SPLIT = "split"
+ADOPT = "adopt"
+# A copy of a file the 3.0 beta wrote: not a 2.x copy, so it has a word, and the cap holds
+# onto the newest one beside the newest 2.x copy.
+BETA = "beta"
+# A schema 3 file the beta has written to again: kept apart from BETA so the copy of the
+# beta's own schema 2 file is not what the cap removes in its place.
+AGAIN = "again"
 _COPY_TAIL = re.compile(
     re.escape(BACKUP_MARKER) + r"(?P<stamp>\d{8}T\d{6}Z)(?:-(?P<reason>[a-z]+))?$")
 
@@ -93,15 +103,15 @@ def _free_backup_path(info_path: str | Path, when: datetime | None = None,
 
 
 def write_backup(info_path: str | Path, original_text: str,
-                 when: datetime | None = None) -> str:
+                 when: datetime | None = None, reason: str = REASON_2X) -> str:
     """Copy the file aside before it is rewritten, and prove the copy is readable.
 
     A truncated backup is worse than none: it is the one file whose failure is only
-    discovered at the moment somebody needs it. The copy of a 2.x file, so no reason in
-    its name.
+    discovered at the moment somebody needs it. Without a `reason` it is the copy of a
+    2.x file, so none is in its name.
     """
     json.loads(original_text)
-    path = _free_backup_path(info_path, when)
+    path = _free_backup_path(info_path, when, reason)
     with naming_folder(info_path):
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(original_text)
@@ -133,7 +143,8 @@ def copy_aside(info_path: str | Path, reason: str, when: datetime | None = None,
 def keep_newest(info_path: str | Path, folder: str | Path | None = None,
                 spare: str | Path | None = None) -> list[str]:
     """The cap: remove the copies of this file that VPinFE took itself, keeping the newest
-    copy of a 2.x file and the newest of any kind. Returns what it removed.
+    copy of a 2.x file, the newest of a 3.0 beta file, the newest of a table file as another
+    program left it and the newest of any kind. Returns what it removed.
 
     Runs when a copy is written, never on a clock. A name that does not end in a stamp and
     at most one word is somebody else's and is left where it is.
@@ -145,8 +156,11 @@ def keep_newest(info_path: str | Path, folder: str | Path | None = None,
     except OSError:
         return []
     own = [n for n in backup_names(names, path.name) if _COPY_TAIL.search(n)]
-    keep_2x = next((n for n in own if backup_reason(n) == REASON_2X), None)
-    keep = set(own[:1]) | ({keep_2x} if keep_2x else set())
+    keep = set(own[:1])
+    for reason in (REASON_2X, BETA, ADOPT):
+        newest = next((n for n in own if backup_reason(n) == reason), None)
+        if newest:
+            keep.add(newest)
     if spare is not None:
         keep.add(Path(spare).name)
     removed = []
