@@ -179,6 +179,28 @@ class Row:
 
 
 @dataclass(frozen=True)
+class Words:
+    """The catalog keys of the sentences a table says about itself, for a program that maps
+    differently from VPinFE."""
+
+    how_title: str = "manager.binding_table.how_title"
+    how_body: str = "manager.binding_table.how_body"
+    how_step_1: str = "manager.binding_table.how_step_1"
+    how_step_2: str = "manager.binding_table.how_step_2"
+    how_step_3: str = "manager.binding_table.how_step_3"
+    relay_title: str = "manager.binding_table.relay_title"
+    how_relay: str = "manager.binding_table.how_relay"
+    send_events: str = "manager.binding_table.send_events"
+    send_events_help: str = "manager.binding_table.send_events.help"
+    where_here: str = "manager.binding_table.where_here"
+    where_device: str = "manager.binding_table.where_device"
+    where_browser: str = "manager.binding_table.where_browser"
+
+
+VPINFE_WORDS = Words()
+
+
+@dataclass(frozen=True)
 class Live:
     """The last press: what it was called, whether a controller made it, and what it does."""
 
@@ -332,6 +354,7 @@ class Table:
     `refuses` says why a press cannot be mapped, or "" where it can. With `pads_when_heard`
     the controller buttons are left undrawn until a controller is pressed. `how_open` puts
     How Mapping Works above the table, open or folded to its title; None leaves it out.
+    `words` swaps the sentences it and the switch say.
 
     Clicking a row's label or field has that row listen for the next press. Above the rows
     a line names whatever is pressed and what it does, and says what is
@@ -341,7 +364,9 @@ class Table:
     def __init__(self, rows: Sequence[Row], bound: Mapping[str, Any], *, write: Write,
                  source: str, writable: bool = True, shares: bool = False,
                  refuses: Callable[[str], str] | None = None,
-                 pads_when_heard: bool = False, how_open: bool | None = None) -> None:
+                 pads_when_heard: bool = False, how_open: bool | None = None,
+                 words: Words = VPINFE_WORDS) -> None:
+        self.words = words
         self.rows = tuple(rows)
         self.by_name = {row.name: row for row in self.rows}
         self.bound = {row.name: selectors(bound.get(row.name)) for row in self.rows}
@@ -547,24 +572,24 @@ class Table:
                 ui.label(after)
 
     def _draw_how(self, open_: bool) -> None:
-        with panel.disclosure(t("manager.binding_table.how_title")) \
+        with panel.disclosure(t(self.words.how_title)) \
                 .classes("manager-binding-how") as how:
             with ui.column().classes("gap-1 w-full"):
-                ui.label(t("manager.binding_table.how_body")).classes("manager-help")
+                ui.label(t(self.words.how_body)).classes("manager-help")
                 with ui.element("ol").classes("manager-help manager-binding-steps"):
                     with ui.element("li"):
-                        ui.label(t("manager.binding_table.how_step_1"))
+                        ui.label(t(self.words.how_step_1))
                     with ui.element("li"):
-                        ui.label(t("manager.binding_table.how_step_2"))
+                        ui.label(t(self.words.how_step_2))
                     with ui.element("li"):
-                        ui.label(t("manager.binding_table.how_step_3"))
+                        ui.label(t(self.words.how_step_3))
         how.value = open_
 
     def _draw_relay_words(self) -> None:
         """What the switch is for, closed under it."""
-        with panel.disclosure(t("manager.binding_table.relay_title")) \
+        with panel.disclosure(t(self.words.relay_title)) \
                 .classes("manager-binding-relay") as self._relay:
-            ui.label(t("manager.binding_table.how_relay", device=self._cab)) \
+            ui.label(t(self.words.how_relay, device=self._cab)) \
                 .classes("manager-help")
         self._say_relay()
 
@@ -576,10 +601,10 @@ class Table:
     def _where_words(self) -> str:
         """Where a press is heard from, by the state the switch below is in."""
         if not self.elsewhere:
-            return t("manager.binding_table.where_here")
+            return t(self.words.where_here)
         if self.sending and self._frontend_up and not self.opening and not self._playing:
-            return t("manager.binding_table.where_device", device=self._cab)
-        return t("manager.binding_table.where_browser")
+            return t(self.words.where_device, device=self._cab)
+        return t(self.words.where_browser)
 
     def _say_where(self) -> None:
         if self._where is not None and not self._where.is_deleted:
@@ -601,10 +626,10 @@ class Table:
                              hint=t("action.frontend.start.help"))()
                 words = t("manager.binding_table.frontend_closed", device=self._cab)
             else:
-                ui.label(t("manager.binding_table.send_events", device=self._cab)) \
+                ui.label(t(self.words.send_events, device=self._cab)) \
                     .classes("manager-fact-label")
                 panel.switch(self.sending, self._switched,
-                             hint=t("manager.binding_table.send_events.help",
+                             hint=t(self.words.send_events_help,
                                     device=self._cab))()
                 words = self._words()
             if words:

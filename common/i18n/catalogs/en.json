@@ -4698,6 +4698,13 @@
   "manager.vpx_input.other_key": "Other key",
   "manager.vpx_input.other_key.help": "A key this page has no name for - kept as it is",
   "manager.vpx_input.defaults": "Visual Pinball's defaults",
+  "manager.vpx_input.how_body": "Controller buttons can't be set here. Set them in Visual Pinball.",
+  "manager.vpx_input.how_relay": "Map {device}'s keys from this device. {device} stops using them while it's on.",
+  "manager.vpx_input.how_step_2": "Press the key you want, or two together for a chord. It's saved as you press.",
+  "manager.vpx_input.send_events": "Use {device}'s Keys",
+  "manager.vpx_input.send_events.help": "Hear {device}'s keys here instead of on {device}",
+  "manager.vpx_input.where_device": "Listening to {device}'s keys. Press one on it.",
+  "manager.vpx_input.where_here": "Listening to this device's keys.",
   "manager.waiting.changes": {
     "one": "1 change waiting",
     "other": "{count:n} changes waiting"

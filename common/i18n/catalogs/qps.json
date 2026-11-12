@@ -4698,6 +4698,13 @@
   "manager.vpx_input.other_key": "Öţĥèř ķèý",
   "manager.vpx_input.other_key.help": "À ķèý ţĥîš þàĝè ĥàš ñö ñàɱè ƒöř - ķèþţ àš îţ îš",
   "manager.vpx_input.defaults": "Ṽîšûàŀ Þîñƀàŀŀ'š đèƒàûŀţš",
+  "manager.vpx_input.how_body": "Çöñţřöŀŀèř ƀûţţöñš çàñ'ţ ƀè šèţ ĥèřè. Šèţ ţĥèɱ îñ Ṽîšûàŀ Þîñƀàŀŀ.",
+  "manager.vpx_input.how_relay": "Ḿàþ {device}'š ķèýš ƒřöɱ ţĥîš đèṽîçè. {device} šţöþš ûšîñĝ ţĥèɱ ŵĥîŀè îţ'š öñ.",
+  "manager.vpx_input.how_step_2": "Þřèšš ţĥè ķèý ýöû ŵàñţ, öř ţŵö ţöĝèţĥèř ƒöř à çĥöřđ. Îţ'š šàṽèđ àš ýöû þřèšš.",
+  "manager.vpx_input.send_events": "Ûšè {device}'š Ķèýš",
+  "manager.vpx_input.send_events.help": "Ĥèàř {device}'š ķèýš ĥèřè îñšţèàđ öƒ öñ {device}",
+  "manager.vpx_input.where_device": "Ŀîšţèñîñĝ ţö {device}'š ķèýš. Þřèšš öñè öñ îţ.",
+  "manager.vpx_input.where_here": "Ŀîšţèñîñĝ ţö ţĥîš đèṽîçè'š ķèýš.",
   "manager.waiting.changes": {
     "one": "1 çĥàñĝè ŵàîţîñĝ",
     "other": "{count:n} çĥàñĝèš ŵàîţîñĝ"

@@ -19,11 +19,17 @@ from common.failures import why
 from common.i18n import t
 from manager.kit import panel
 from manager.kit.on_page import on_page
-from manager.settings.binding_table import Kept, Row, Table
+from manager.settings.binding_table import Kept, Row, Table, Words
 
 Entries = list[tuple[Any, Any]]
 
 _DEVICE_KEY = "Key"
+
+_WORDS = Words(
+    how_body="manager.vpx_input.how_body", how_step_2="manager.vpx_input.how_step_2",
+    how_relay="manager.vpx_input.how_relay", send_events="manager.vpx_input.send_events",
+    send_events_help="manager.vpx_input.send_events.help",
+    where_here="manager.vpx_input.where_here", where_device="manager.vpx_input.where_device")
 
 
 def applies(group: Any) -> bool:
@@ -137,9 +143,12 @@ def entries(context: dict[str, Any], group: Any,
     page = Page(context["library"], context, group, flat)
 
     def draw() -> None:
-        Table(table_rows(group, flat), page.bound(), write=page.put,
-              source=t("manager.vpx_input.defaults"), shares=True,
-              refuses=page.refuse)
+        rows = table_rows(group, flat)
+        bound = page.bound()
+        mapped = any(not input_registry.same_bindings(bound[row.name], list(row.defaults))
+                     for row in rows)
+        Table(rows, bound, write=page.put, source=t("manager.vpx_input.defaults"),
+              shares=True, refuses=page.refuse, how_open=not mapped, words=_WORDS)
 
     return [panel.intro(t("manager.vpx_input.intro")), (panel.FULL, draw)]
 
