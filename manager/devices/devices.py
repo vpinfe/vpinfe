@@ -107,13 +107,32 @@ FRONTEND_ACTIONS = (OPEN_FRONTEND, CLOSE_FRONTEND, (lifecycle.FRONTEND, lifecycl
 # What a lifecycle action costs, which is what decides whether it is asked about first.
 _ASKED = {lifecycle.VPINFE, lifecycle.SYSTEM}
 
+# A device that did not answer, as against one that answered wrongly.
+SILENT = "silent"
+PROBLEM_REASONS = ("device.reason.certificate_changed", "device.reason.wrong_app",
+                   "device.reason.unreadable", "device.reason.rejected")
+
 # What a probe found, as the mark on a rail row and the chip on the page. Green for
 # answering, because that is the one a person scans the rail for.
 _REACH = {
     device_client.ANSWERING: ("manager.devices.answering", "on", "positive"),
-    device_client.UNREACHABLE: ("manager.devices.not_answering", "bad", "negative"),
+    SILENT: ("manager.devices.not_answering", "off", "grey"),
+    device_client.UNREACHABLE: ("manager.devices.problem", "bad", "negative"),
     device_client.UNASKABLE: ("manager.devices.cannot_asked", "unknown", "grey"),
 }
+
+
+def shown_state(probe: dict[str, Any] | None) -> str:
+    """A probe's state as the page shows it. The wire has one `unreachable`; here it splits.
+
+    Silence is off, asleep or VPinFE closed, and the app cannot tell which, so it is
+    quiet. A device that answered wrongly is a problem, and the only red. A reason the
+    list does not name counts as silence."""
+    state = str((probe or {}).get("state") or "")
+    if state == device_client.UNREACHABLE \
+            and str((probe or {}).get("reason_key") or "") not in PROBLEM_REASONS:
+        return SILENT
+    return state
 
 
 def capability_state(device: dict[str, Any], capability: str,
@@ -168,7 +187,7 @@ def own_address() -> str:
 def _state_rows(context: dict[str, Any]) -> list[tuple[Any, Any]]:
     """Whether it answers, and when it did not, why."""
     reach = context.get("reach")
-    found = _REACH.get(str((reach or {}).get("state") or ""))
+    found = _REACH.get(shown_state(reach))
     if found is None:
         return [(t("word.state"), panel.state(t("manager.devices.checking"), "unknown"))]
     label, level, _color = found
@@ -740,8 +759,10 @@ REACH = states.Table(
     states=(
         states.State(device_client.ANSWERING, t(_REACH[device_client.ANSWERING][0]),
                      t("manager.devices.state.answering"), glyph=states.TICK),
+        states.State(SILENT, t(_REACH[SILENT][0]),
+                     t("manager.devices.state.silent"), tone=states.QUIET),
         states.State(device_client.UNREACHABLE, t(_REACH[device_client.UNREACHABLE][0]),
-                     t("manager.devices.state.unreachable"), tone=states.BAD),
+                     t("manager.devices.state.problem"), tone=states.BAD),
         states.State(device_client.UNASKABLE, t(_REACH[device_client.UNASKABLE][0]),
                      t("manager.devices.state.unaskable"), tone=states.QUIET),
         states.State(UNASKED, t("manager.devices.not_asked"),
@@ -794,7 +815,8 @@ VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.devices.not_answering": views.Preset(
         columns=("name", "kind", "state", "last_seen", "address"),
         sort=(_SELF_FIRST, {"colId": "last_seen", "sort": "asc", "sortIndex": 1}),
-        filters={"state": {"values": [device_client.UNREACHABLE, device_client.UNASKABLE]}},
+        filters={"state": {"values": [SILENT, device_client.UNREACHABLE,
+                                      device_client.UNASKABLE]}},
         help=t("manager.devices.unreached_view.help")),
 }
 
@@ -813,7 +835,7 @@ def rows(devices: list[dict[str, Any]],
     for device in devices:
         device_id = str(device.get("device_id") or "")
         probe = found.get(device_id) or {}
-        state = str(probe.get("state") or "")
+        state = shown_state(probe)
         out.append({
             "id": device_id,
             "self": device_id == (local_device_id or ""),
@@ -886,7 +908,8 @@ def build(found: list[dict[str, Any]], library: Any, state: dict[str, Any],
             return grid.selection_said(table, len(selected), t(
                 "manager.devices.selected", picked=len(selected), shown=on_screen["rows"]))
         away = sum(1 for row in built
-                   if row["state"] in (device_client.UNREACHABLE, device_client.UNASKABLE))
+                   if row["state"] in (SILENT, device_client.UNREACHABLE,
+                                       device_client.UNASKABLE))
         if on_screen["rows"] != len(built):
             return t("manager.devices.devices_2", shown=(on_screen["rows"]),
                      count=(len(built)))
@@ -1273,7 +1296,8 @@ SETTINGS_NOTE = "manager.devices.settings_note"
 # What is wrong when the door will not open. Both halves matter: one is a machine to go
 # and switch on, the other is an entry with nothing to dial.
 NO_DOOR = {
-    device_client.UNREACHABLE: "manager.devices.open_refused",
+    SILENT: "manager.devices.open_refused",
+    device_client.UNREACHABLE: "manager.devices.open_problem",
     device_client.UNASKABLE: UNREACHABLE_NOTE,
 }
 
@@ -1298,7 +1322,7 @@ def door_reason(device: dict[str, Any], reach: dict[str, Any] | None,
     """
     if is_local:
         return ""
-    found = NO_DOOR.get(str((reach or {}).get("state") or ""))
+    found = NO_DOOR.get(shown_state(reach))
     if found:
         return found
     return "" if settings_url(device) else UNREACHABLE_NOTE
