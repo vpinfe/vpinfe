@@ -359,3 +359,65 @@ class ConvertedInstallTests(_Base):
         self.assertEqual(self.version_of("Revolution"), "2.0.0")
         self.assertEqual(sorted(p.name for p in self.themes.iterdir()),
                          sorted(["Revolution", f"Revolution{ASIDE_SUFFIX}", "slider"]))
+
+
+class StockAddressTests(_Base):
+    """The retired VPinFE Theme List address is replaced, and a list the person added is not."""
+
+    OLD = theme_upgrade.RETIRED_STOCK_LIST
+    MINE = "https://example.test/mine/themes.json"
+
+    def lists(self) -> list[str]:
+        return list(theme_sources.from_config(config_service.get_ini_config()).registries)
+
+    def hold(self, *addresses: str) -> None:
+        config_service.set_values({"themes": {"registries": list(addresses)}})
+
+    def test_the_retired_address_becomes_the_current_one_in_its_place(self) -> None:
+        self.hold(self.MINE, self.OLD)
+        self.assertTrue(theme_upgrade.move_stock_address())
+        self.assertEqual(self.lists(), [self.MINE, STOCK])
+
+    def test_the_retired_address_first_keeps_the_current_one_first(self) -> None:
+        self.hold(self.OLD, self.MINE)
+        self.assertTrue(theme_upgrade.move_stock_address())
+        self.assertEqual(self.lists(), [STOCK, self.MINE])
+
+    def test_lists_without_the_retired_address_are_never_rewritten(self) -> None:
+        for held in ([self.MINE], [STOCK, STOCK], [self.MINE, self.MINE, STOCK]):
+            with self.subTest(held=held):
+                self.hold(*held)
+                before = self.config_file.read_bytes()
+                self.assertFalse(theme_upgrade.move_stock_address())
+                self.assertEqual(self.config_file.read_bytes(), before)
+
+    def test_settings_that_cannot_be_read_or_written_change_nothing_and_do_not_raise(self) -> None:
+        self.hold(self.OLD)
+        with mock.patch.object(config_service, "get_ini_config", side_effect=OSError("locked")):
+            self.assertFalse(theme_upgrade.move_stock_address())
+        with mock.patch.object(config_service, "set_values", side_effect=OSError("locked")):
+            self.assertFalse(theme_upgrade.move_stock_address())
+        self.assertEqual(self.lists(), [self.OLD])
+
+    def test_another_spelling_of_the_retired_address_is_replaced_too(self) -> None:
+        self.hold("https://github.com/superhac/vpinfe-themes/blob/master/themes.json")
+        self.assertTrue(theme_upgrade.move_stock_address())
+        self.assertEqual(self.lists(), [STOCK])
+
+    def test_a_list_the_person_added_is_left_alone(self) -> None:
+        self.hold(self.MINE, STOCK)
+        before = self.config_file.read_bytes()
+        self.assertFalse(theme_upgrade.move_stock_address())
+        self.assertEqual(self.config_file.read_bytes(), before)
+
+    def test_the_current_address_already_there_is_not_listed_twice(self) -> None:
+        self.hold(STOCK, self.MINE, self.OLD)
+        self.assertTrue(theme_upgrade.move_stock_address())
+        self.assertEqual(self.lists(), [STOCK, self.MINE])
+
+    def test_a_second_start_changes_nothing(self) -> None:
+        self.hold(self.OLD)
+        theme_upgrade.move_stock_address()
+        before = self.config_file.read_bytes()
+        self.assertFalse(theme_upgrade.move_stock_address())
+        self.assertEqual(self.config_file.read_bytes(), before)

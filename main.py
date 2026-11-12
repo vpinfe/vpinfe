@@ -305,6 +305,8 @@ except Exception:
 
 # Initialize theme registry and auto-install default themes
 try:
+    if theme_upgrade.move_stock_address():
+        config_store.reread()
     theme_registry = ThemeRegistry()
     theme_registry.load_registry()
     theme_registry.load_theme_manifests(default_only=True, dates=False,

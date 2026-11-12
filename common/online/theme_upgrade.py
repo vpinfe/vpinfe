@@ -2,7 +2,8 @@
 
 `run` runs at every start, after the lists are read and before the default themes install,
 and moves an official theme to its 3.0 version and folds a merged twin into its target.
-Copying the 2.x folders over is `theme_seed`, which runs with the ini conversion.
+`move_stock_address` runs before the lists are read. Copying the 2.x folders over is
+`theme_seed`, which runs with the ini conversion.
 """
 
 from __future__ import annotations
@@ -45,6 +46,48 @@ TWINS = {
     "Slider Video": Twin("slider", None, "theme_slider_video"),
     "Texal-Flyer": Twin("Texal", "showFlyer", "theme_texal_flyer"),
 }
+
+# The VPinFE Theme List before it moved to the vpinfe organization. A config an earlier
+# 3.0 build wrote still holds it as `themes.registries`.
+RETIRED_STOCK_LIST = "https://raw.githubusercontent.com/superhac/vpinfe-themes/master/themes.json"
+
+
+def move_stock_address() -> bool:
+    """Point a config that holds the retired VPinFE Theme List at the current one, in the
+    same place in the order, and leave every other address as it is. Where the current list
+    is already there, the retired one is only dropped. True when the settings changed.
+
+    Runs before the registry reads its lists: `is_stock` is what lets a theme count as
+    official, so a registry built on the retired address would skip the 3.0 updates."""
+    try:
+        held = list(theme_sources.from_config(config_service.get_ini_config()).registries)
+    except Exception:  # noqa: BLE001 - retried at the next start
+        logger.warning("Could not read the theme lists, leaving the stock one for the next start")
+        return False
+    stock = theme_sources.stock_list()
+    retired = _fetched(RETIRED_STOCK_LIST)
+    moved: list[str] = []
+    for address in held:
+        if _fetched(address) == retired:
+            if stock in held:
+                continue
+            address = stock
+        moved.append(address)
+    if moved == held:
+        return False
+    try:
+        config_service.set_values({"themes": {"registries": moved}})
+    except Exception:  # noqa: BLE001 - retried at the next start
+        logger.warning("Could not move the theme list to the VPinFE Theme List's new address")
+        return False
+    logger.info("The VPinFE Theme List is now read from %s", stock)
+    return True
+
+
+def _fetched(address: str) -> str:
+    """The address VPinFE fetches for what was written, so spellings of one list compare equal."""
+    where = theme_sources.parse(address)
+    return where.url if where is not None else address.strip()
 
 
 def wanted(registry: ThemeRegistry) -> set[str]:
