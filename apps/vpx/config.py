@@ -80,9 +80,11 @@ FROM_THE_SCREEN = frozenset(
 FROM_THE_TABLE = areas.VIEW_MODES | {"TableOverride.Difficulty", "TableOverride.Exposure",
                                      "TableOverride.ToneMapper", "Player.EmissionScale"}
 # Settings this app's catalog names, over the label the program's own file gives them.
-NAMED_HERE = frozenset({"Player.ScreenInclination"})
+NAMED_HERE = frozenset({"Player.ScreenInclination", "Player.BGSet"})
 NAMED_VALUES = {"Player.MaxFramerate": (("-1", "match_the_display"), ("0", "no_limit"))}
 DISPLAYS = frozenset(f"{section}.{window}Display" for section, window in _WINDOWS)
+# Left empty, the program plays on the system's default output.
+SOUND_DEVICES = frozenset({"Player.SoundDevice", "Player.SoundDeviceBG"})
 
 # The sets whose members the program labels alike, each member's name by its number, and
 # the word a member's label may open with that its set's name already says.
@@ -803,7 +805,9 @@ class VPXConfig:
         """By key, the word in this app's catalog for what a blank value does, where that
         is not the declared default."""
         return {**dict.fromkeys(FROM_THE_SCREEN, "from_the_screen"),
-                **dict.fromkeys(FROM_THE_TABLE, "the_tables_own")}
+                **dict.fromkeys(FROM_THE_TABLE, "from_the_table"),
+                **dict.fromkeys(DISPLAYS, "main_display"),
+                **dict.fromkeys(SOUND_DEVICES, "system_default")}
 
     def label_word(self, key: str) -> str:
         """The word in this app's catalog that names a setting with no words of its own,

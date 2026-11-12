@@ -304,6 +304,14 @@ class AssetToGameTests(MoveCase):
         with self.assertRaises(service_errors.RefusedError):
             self.move(kind="pov")
 
+    def test_a_table_settings_file_does_not_go_to_the_game(self) -> None:
+        self.put("Cactus B.ini", b"[Player]")
+
+        with self.assertRaises(service_errors.RefusedError):
+            self.move(kind="ini")
+
+        self.assertEqual(self.files(".ini"), ["Cactus B.ini"])
+
     def test_the_table_named_like_the_folder_already_uses_the_games_file(self) -> None:
         with self.assertRaises(service_errors.RefusedError):
             self.move("t1")
@@ -510,6 +518,9 @@ class StateTests(MoveCase):
 
     def test_a_point_of_view_cannot_go_to_the_game(self) -> None:
         self.assertFalse(file_move.state(GAME_ID, file_move.ASSET, "pov")["to_game"])
+
+    def test_a_table_settings_file_cannot_go_to_the_game(self) -> None:
+        self.assertFalse(file_move.state(GAME_ID, file_move.ASSET, "ini")["to_game"])
 
     def test_it_says_when_a_table_is_playing(self) -> None:
         self.running = launch_state.LaunchState(launching=True, game_id=GAME_ID)

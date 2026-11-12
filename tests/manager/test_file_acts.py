@@ -122,6 +122,11 @@ class AssetFiles(unittest.TestCase):
                          [t("manager.files.replace"), t("word.delete")])
         self.assertTrue(made[-1].danger)
 
+    def test_a_table_settings_file_is_not_offered_move_to_game(self) -> None:
+        made = _asset_acts(_asset("a", kind="ini", table="t1", binding="table"))
+
+        self.assertNotIn(t("manager.file_move.to_game"), [one.label for one in made])
+
     def test_a_loose_asset_can_be_removed_but_not_placed(self) -> None:
         made = _asset_acts(_asset("a", binding="orphaned"))
 

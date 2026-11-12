@@ -85,6 +85,7 @@
   "field.Player.AutostartRetry.help": "Time before Start is pressed again if no game began, in hundredths of a second",
   "field.Player.AutostartRetry.label": "Autostart Retry",
   "field.Player.BGSet.help": "Which of the table's camera setups to use",
+  "field.Player.BGSet.label": "Default View Mode",
   "field.Player.CabinetAutofitMode.help": "Whether Visual Pinball fits the table to the screen for you",
   "field.Player.CabinetAutofitPos.help": "How high autofit puts the lower flippers - 0% is the bottom of the screen",
   "field.Player.EmissionScale.help": "Daylight to night time, while the table's light level is overridden",
@@ -298,8 +299,12 @@
   "leftover.hide_grill": "B2S shows the grill as B2S Legacy was set to",
   "leftover.scoreview_enable": "Nixie stays off, as Score View was",
   "leftover.scoreview_folder": "Nixie uses the layout folder Score View had",
+  "main_display": "Main display",
+  "main_display.help": "On the main display",
   "match_the_display": "Match the Display",
   "no_limit": "No Limit",
   "no_plugins": "This build has no plugins beside it.",
-  "the_tables_own": "The table's own"
+  "system_default": "System default",
+  "system_default.help": "Plays on the system's default output",
+  "from_the_table": "As the author set it"
 }

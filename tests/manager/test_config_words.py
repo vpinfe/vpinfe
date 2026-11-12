@@ -73,13 +73,13 @@ class ClearHintTests(unittest.TestCase):
     def test_a_blank_that_has_a_word_goes_back_to_that_word(self) -> None:
         class _ViewMode(_Choice):
             default = ""
-            blank = "The table's own"
+            blank = "As the author set it"
 
         for held, whose in (({}, "Visual Pinball X's default"),
                             ({"fallback_scope": "folder", "fallback": ""}, "This Game")):
             with self.subTest(whose=whose):
                 self.assertEqual(all_settings._clear_hint(held, _ViewMode, "Visual Pinball X"),
-                                 f"Back to The table's own - {whose}")
+                                 f"Back to As the author set it - {whose}")
 
 
 class SwitchedOffTests(unittest.TestCase):

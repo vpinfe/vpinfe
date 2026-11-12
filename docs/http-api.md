@@ -228,7 +228,7 @@ the documented entry point is a plain 200. Both spellings work.
 | POST | `/api/v1/games/{id}/media/{kind}/fetch` | Place a file from an online catalog, `{"source", "vps_id"}` with optional `size` and `table` |
 | GET | `/api/v1/games/{id}/moves/{family}/{kind}` | What a move of the game's file to its tables starts from: the game's file, each table's own file, whether the file can go to the game and whether a table of the game is playing. `family` is `media` or `asset`, which keeps the two kinds named `backglass` apart: the picture, and the `.directb2s` file |
 | POST | `/api/v1/games/{id}/moves/{family}/{kind}/to-tables` | Give the game's file to the tables in `{"tables"}`. The file stays on the game when every table without its own is chosen, replacing the own file of any chosen table that has one. Otherwise it is renamed for the one table chosen, or copied for each when several are, over their own files. A replaced file is kept in Backups. For a backglass, the game's tables are then settled for the draw order their files call for; a table that cannot be set is named in the log and set again the next time its game is settled. A table named like the folder cannot be chosen, and a result that leaves a file in use now with no table is refused. Answers what moved, what was replaced, which tables lost the file, which use it now, and an `undo` token |
-| POST | `/api/v1/games/{id}/moves/{family}/{kind}/to-game` | Make a table's own file, `{"table"}`, the game's. The game's file it replaces is kept in Backups. A script or a POV cannot go to the game. Answers as `to-tables` does, and settles a backglass the same way |
+| POST | `/api/v1/games/{id}/moves/{family}/{kind}/to-game` | Make a table's own file, `{"table"}`, the game's. The game's file it replaces is kept in Backups. A script, a POV or a Table INI cannot go to the game. Answers as `to-tables` does, and settles a backglass the same way |
 | POST | `/api/v1/games/{id}/moves/undo` | Put a move back, `{"undo"}`, once and only until the server restarts. Both files are as they were, and so is the ledger of where each came from; a backglass move settles the game's tables again |
 | POST | `/api/v1/games/{id}/media/{kind}/move` | Swap two pages of a flyer or instruction card. `{"table", "page", "to"}`: page `page` takes number `to` and the page there takes `page`; `table` is empty for the game's shared slot |
 | GET | `/api/v1/games/{id}/tables/{table_id}/media` | One table's media. `?codecs=true` as for the game's |
@@ -818,7 +818,7 @@ setting a later VPX adds appears without VPinFE changing. They are named `Sectio
 (`Player.FXAA`), because a key is only unique inside its section. Where VPX works out what
 a blank value means rather than using the default it declares, `default` is empty and
 `blank` names what it does instead, in a word that fits the box: every window's size reads
-*Auto* and each view mode *The table's own*. `left_empty` says it whole where the word does
+*Auto* and each view mode *As the author set it*. `left_empty` says it whole where the word does
 not, *From the screen* for a window's size, and is empty otherwise. `named` lists the values a number's app gives a meaning of
 their own, as `[value, label]` pairs in its words: Frame Limit's `-1` is *Match the
 Display* and its `0` *No Limit*, and any other value is a rate. `reported` lists the
@@ -882,8 +882,10 @@ for each that has one.
 **A setting is offered at the scopes VPX keeps it at**, listed in its `scopes`. The input,
 plunger, nudge and cabinet settings, and the ones VPX's menu writes straight to its own
 file, are `launcher` only. The point of view, table options, difficulty, exposure, tone
-mapper and scene lighting are `folder` and `entry` only. A scope leaves out a setting it
-does not offer unless its file already holds one, and a write of one is refused.
+mapper and scene lighting are `folder` and `entry` only. The launcher and folder scopes leave
+out a setting they do not offer unless their file already holds one. A table's lists every setting,
+so a client can point to where one it cannot hold is set; a write of one at a scope that
+does not offer it is refused.
 
 **Every value says which layer answered.** Somebody changing one layer of several has to
 see which one is in force:

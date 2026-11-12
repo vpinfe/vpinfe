@@ -743,7 +743,6 @@ tests/manager/test_selection_marks.py
 tests/manager/test_selection_panel.py
 tests/manager/test_send_checks_the_device.py
 tests/manager/test_setting_headings.py
-tests/manager/test_setting_picker.py
 tests/manager/test_setting_values.py
 tests/manager/test_settings_read_apart.py
 tests/manager/test_settings_refill_in_place.py

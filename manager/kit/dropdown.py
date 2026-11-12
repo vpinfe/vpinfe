@@ -42,6 +42,9 @@ class Select(ui.select):
     the open list and in the box, so the label stays the name alone. `shown` maps a value to
     the wording the closed box uses in place of the label, for a name that needs more than
     the open list's headings give it. Neither is for `multiple`.
+
+    `tags` maps an option's value to a word set quietly at the end of its row in the open
+    list only, for the choice the program makes when none is. Not for `multiple`.
     """
 
     LISTED = """
@@ -53,6 +56,9 @@ class Select(ui.select):
           <q-item-section v-if="props.opt.count" side>
             <q-item-label class="manager-select-count">{{ props.opt.count }}</q-item-label>
           </q-item-section>
+          <q-item-section v-if="props.opt.tag" side>
+            <q-item-label class="manager-select-tag">{{ props.opt.tag }}</q-item-label>
+          </q-item-section>
         </q-item>
     """
     BOXED = """
@@ -63,18 +69,20 @@ class Select(ui.select):
     def __init__(self, *args: Any, look: str = FIELD,
                  sections: Mapping[Any, str] | None = None,
                  counts: Mapping[Any, int] | None = None,
-                 shown: Mapping[Any, str] | None = None, **kwargs: Any) -> None:
+                 shown: Mapping[Any, str] | None = None,
+                 tags: Mapping[Any, str] | None = None, **kwargs: Any) -> None:
         # Before `super().__init__`, which builds the payload for the first time.
         self._sections = dict(sections or {})
         self._counts = dict(counts or {})
         self._shown = dict(shown or {})
+        self._tags = dict(tags or {})
         super().__init__(*args, **kwargs)
         self.classes(f"{MARK} {_CLASSES[look]}").props(_PROPS[look])
         if kwargs.get("multiple"):
             self.props("use-chips")
             if look == FIELD:
                 self.classes(_MANY)
-        if self._sections or self._counts:
+        if self._sections or self._counts or self._tags:
             self.add_slot("option", self.LISTED)
         if self._counts or self._shown:
             self.add_slot("selected-item", self.BOXED)
@@ -100,6 +108,8 @@ class Select(ui.select):
                                       if self._values[one["value"]] not in chosen]
         for one in (one for one in self._props["options"] if not one.get("section")):
             self._annotated(one)
+            if (tag := self._tags.get(self._values[one["value"]])) is not None:
+                one["tag"] = tag
         if self._sections:
             options: list[dict[str, Any]] = []
             heading = None

@@ -737,12 +737,11 @@
     "other": "Removed {count:n} games from “{name}”"
   },
   "manager.api.api_answered": "The API answered {status_code}",
-  "manager.app_settings.add": "Add a Setting",
   "manager.app_settings.launcher_only": "Works only for the launcher",
+  "manager.app_settings.launcher_page_link": "Set on the Launcher's Page",
   "manager.app_settings.camera": "Camera",
   "manager.app_settings.camera.help": "Adjust it in Visual Pinball while the table runs, from its menu's Point Of View page",
   "manager.app_settings.camera_reset.help": "Back to its author's camera",
-  "manager.app_settings.common_heading": "Commonly Set per Table",
   "manager.app_settings.copied_from_game": {
     "one": "Copied 1 setting",
     "other": "Copied {count:n} settings"
@@ -752,7 +751,6 @@
   "manager.app_settings.copy_from_game.follows_help": "Gives this table a file of its own with the same values",
   "manager.app_settings.back_to_game": "Then it follows the game's settings, which also changes:\n{rows}",
   "manager.app_settings.follows_game": "No file of its own, so it follows its game's settings",
-  "manager.app_settings.everything_else": "Everything Else",
   "manager.app_settings.table_title": "{app} for This Table",
   "manager.app_settings.from_game": {
     "one": "1 of this game's settings does not apply to this table with its own file",
@@ -821,11 +819,12 @@
     "one": "Changes here also apply to the other table, unless it has its own",
     "other": "Changes here also apply to the other {count:n} tables, unless they have their own"
   },
-  "manager.app_settings.show_all": "Show Every Setting",
-  "manager.app_settings.show_all.help": "Opens every setting for this table, not just the ones shown here",
-  "manager.app_settings.the_tables_own": "The table's own",
+  "manager.app_settings.all_settings.help": "Opens every setting for this table, not just the ones shown here",
+  "manager.app_settings.change_button": "Add or Change Settings",
+  "manager.app_settings.from_the_table": "As the author set it",
   "manager.app_settings.ignored": "Ignored",
   "manager.app_settings.window_row": "{window} {label}",
+  "manager.app_settings.area_heading": "{area} - {heading}",
   "manager.devices.windows_closed": "Frontend closed",
   "manager.devices.windows_closed_many": {
     "one": "Frontend closed on {count:n} device",
@@ -5082,6 +5081,9 @@
   },
   "manager.workbench.keep_none": "Keep none of its games",
   "manager.workbench.the_launcher": "The Launcher",
+  "manager.workbench.matches_default": "Same as default",
+  "manager.workbench.matches_launcher": "Same as launcher",
+  "manager.workbench.matches_game": "Same as game",
   "manager.workbench.cause_both": "Both tables",
   "manager.workbench.cause_all": "All {count:n} tables",
   "manager.workbench.launcher": "Launcher",

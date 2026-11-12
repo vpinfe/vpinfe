@@ -1370,7 +1370,7 @@ class ViewModeTests(_Case):
                      if f.key == CAB_MODE)
 
         self.assertEqual(field.default, "")
-        self.assertEqual(self.config.blank_words()[CAB_MODE], "the_tables_own")
+        self.assertEqual(self.config.blank_words()[CAB_MODE], "from_the_table")
 
     def test_a_view_mode_is_offered_first_at_a_table(self) -> None:
         field = next(f for g in self.config.groups(self.settings) for f in g.settings

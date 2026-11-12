@@ -666,8 +666,9 @@ def field(value: str, on_save: Callable[[str], Any], *, lines: int = 0,
         changed = marks and bool(current) and current != default
         if marked:
             parts["dot"].set_visibility(changed)
-        parts["row"].classes(add=None if changed else "manager-field-row--default",
-                             remove="manager-field-row--default" if changed else None)
+        parts["row"].classes(
+            add="manager-field-row--held" if changed else "manager-field-row--default",
+            remove="manager-field-row--default" if changed else "manager-field-row--held")
         tip.say(t("manager.workbench.changed_from", value=default, whose=whose)
                 if changed and marked else whose)
         if not marked or parts.get("changed") is changed:
@@ -1042,6 +1043,9 @@ class DescribedSelect(dropdown.Select):
           <q-item-section>
             <q-item-label>{{ props.opt.label }}</q-item-label>
           </q-item-section>
+          <q-item-section v-if="props.opt.tag" side>
+            <q-item-label class="manager-select-tag">{{ props.opt.tag }}</q-item-label>
+          </q-item-section>
           <q-tooltip v-if="props.opt.help" class="manager-menu-tip"
                      anchor="center right" self="center left">
             {{ props.opt.help }}
@@ -1052,10 +1056,12 @@ class DescribedSelect(dropdown.Select):
     def __init__(self, options: Any, *, value: Any, label: str | None = None,
                  describes: dict[str, str] | None = None,
                  on_change: Callable[[Any], Any] | None = None,
-                 look: str = dropdown.FIELD) -> None:
+                 look: str = dropdown.FIELD,
+                 tags: dict[Any, str] | None = None) -> None:
         # Before `super().__init__`, which builds the payload for the first time.
         self.describes: dict[str, str] = dict(describes or {})
-        super().__init__(options, value=value, label=label, on_change=on_change, look=look)
+        super().__init__(options, value=value, label=label, on_change=on_change, look=look,
+                         tags=tags)
         self.add_slot("option", self.SLOT)
 
     def _update_options(self) -> None:
@@ -1252,51 +1258,6 @@ class GamePicker(dropdown.Select):
             option["held"] = option["disable"] = game in self.held
             if self.art is not None:
                 option[thumbnails.FIELD] = self.art.get(game, "")
-
-
-class SettingPicker(dropdown.Select):
-    """One setting, typed into, each option with its area under it and a heading above
-    the option in `headings` that starts a run. An option's `also` is its key, for
-    `workbench.core._ADD_BOX`'s filter.
-
-    A heading is an option of its own with an empty label, so anything typed filters it
-    out: a heading left above a filtered list would claim a run that is no longer whole."""
-
-    HEADING = "heading:"
-    SLOT = """
-        <q-item-label v-if="props.opt.heading" header class="manager-menu-header">
-          {{ props.opt.heading }}</q-item-label>
-        <q-item v-else v-bind="props.itemProps">
-          <q-item-section>
-            <q-item-label>{{ props.opt.label }}</q-item-label>
-            <q-item-label caption v-if="props.opt.area" class="manager-cell-made">
-              {{ props.opt.area }}</q-item-label>
-          </q-item-section>
-        </q-item>
-    """
-
-    def __init__(self, options: dict[str, str], *, areas: dict[str, str],
-                 headings: dict[str, str], label: str) -> None:
-        # Before `super().__init__`, which builds the payload for the first time.
-        self.areas = dict(areas)
-        self.headings = {}
-        listed: dict[str, str] = {}
-        for key, text in options.items():
-            if key in headings:
-                listed[self.HEADING + key] = ""
-                self.headings[self.HEADING + key] = headings[key]
-            listed[key] = text
-        super().__init__(listed, with_input=True, label=label, look=dropdown.OUTLINED)
-        self.add_slot("option", self.SLOT)
-
-    def _update_options(self) -> None:
-        super()._update_options()
-        for option in self._props["options"]:
-            key = str(self._values[option["value"]])
-            if key in self.headings:
-                option.update(heading=self.headings[key], disable=True)
-            else:
-                option.update(area=self.areas.get(key, ""), also=key)
 
 
 def hint(control: Any, said: str) -> None:
@@ -1508,9 +1469,12 @@ def select(options: Any, value: str, on_change: Callable[[Any], Any], *,
            describes: dict[str, str] | None = None,
            unavailable: dict[str, str] | None = None,
            status: Callable[[Any], Any] | None = None,
-           on_control: Callable[[Any], Any] | None = None) -> Callable[[], None]:
+           on_control: Callable[[Any], Any] | None = None,
+           tags: dict[Any, str] | None = None) -> Callable[[], None]:
     """A list to pick from, where the reader already knows what the names mean, or
     `describes` says, by label, on each option.
+
+    `tags` maps an option's value to a quiet word at the end of its row in the open list.
 
     `unavailable` maps an option's value to why it cannot be picked now; it stays in the
     list, greyed, with the reason under it. It cannot be combined with `describes`.
@@ -1530,12 +1494,14 @@ def select(options: Any, value: str, on_change: Callable[[Any], Any], *,
         with ui.element("div").classes("manager-fact-edit"):
             if describes:
                 control: dropdown.Select = DescribedSelect(
-                    options, value=value, describes=describes, on_change=on_change)
+                    options, value=value, describes=describes, on_change=on_change,
+                    tags=tags)
             elif unavailable:
                 control = ReasonedSelect(options, value=value, reasons=unavailable,
                                          on_change=on_change)
             else:
-                control = dropdown.Select(options, value=value, on_change=on_change)
+                control = dropdown.Select(options, value=value, on_change=on_change,
+                                          tags=tags)
             if status is not None:
                 with control.add_slot("append"):
                     status(control)
@@ -1762,7 +1728,7 @@ def number(value: Any, on_change: Callable[[Any], Any], *,
            low: Any = None, high: Any = None, step: Any = None,
            placeholder: str = "", unit: str = "", hint: str = "",
            on_control: Callable[[Any], Any] | None = None,
-           on_leave: bool = False) -> Callable[[], None]:
+           on_leave: bool = False, select_at: Any = None) -> Callable[[], None]:
     """A number. Narrow, because a four-digit box in a full-width field says the value
     might be long.
 
@@ -1776,6 +1742,9 @@ def number(value: Any, on_change: Callable[[Any], Any], *,
 
     Bounds are the control's, not a check afterwards: a spinner that will not go past
     the limit says what the limit is without anybody being told off for passing it.
+
+    `select_at` is a value the box selects whole when it is focused showing it, so typing
+    replaces it instead of landing beside it.
 
     `on_control` is handed the control once it exists, for a caller that needs it back -
     the wizard's own first-field focus and per-field refusals among them.
@@ -1800,6 +1769,10 @@ def number(value: Any, on_change: Callable[[Any], Any], *,
 
                 control.on("blur", leave)
                 control.on("keydown.enter", lambda: control.run_method("blur"))
+            if select_at not in (None, ""):
+                control.on("focus", js_handler=(
+                    f"(e) => {{ if (Number(e.target.value) === {float(select_at)!r}) "
+                    "e.target.select() }"))
             if placeholder:
                 control.style(f"--blank: {len(placeholder) + 1}ch")
             if disabled:

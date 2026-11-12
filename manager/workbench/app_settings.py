@@ -2,7 +2,7 @@
 launcher runs does differently for this table.
 
 The program's rows are the table's differences and nothing else. Every setting, at this
-table, is one step further: Show Every Setting.
+table, is one step further: All Settings, the launcher's page opened at the table.
 """
 
 from __future__ import annotations
@@ -10,9 +10,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import html
-import json
 import os
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
 from types import SimpleNamespace
@@ -31,30 +30,12 @@ from manager.workbench import launcher as wb_launcher
 
 SCOPE_ENTRY = "entry"
 SCOPE_LAUNCHER = "launcher"
-ADDED = "added_settings"
 # Past this many launchers a selection's "uses the launchers' settings" line counts them.
 MOST_LAUNCHERS_NAMED = 3
 # How long a read of a selection runs before the section says it is reading.
 READING_NOTICE_S = 1.0
 # How often a write into several tables is asked how far it has got.
 JOB_POLL_S = 0.4
-
-_SHOW_ADDED = """
-(() => {
-  let tries = 0;
-  const show = () => {
-    const label = [...document.querySelectorAll('.manager-workbench-body .manager-fact-label')]
-      .find(el => el.textContent.trim() === %s);
-    const value = label && label.nextElementSibling;
-    if (!value) { if (++tries < 40) setTimeout(show, 25); return; }
-    value.scrollIntoView({block: 'center'});
-    (value.querySelector('input:not(.hidden), textarea')
-      || value.querySelector('[tabindex="0"]'))?.focus();
-  };
-  show();
-})()
-"""
-
 
 def title_for(game_name: str, table_name: str, launcher_name: str,
               folder_tables: int) -> str:
@@ -177,10 +158,8 @@ async def _selection_entries(context: dict[str, Any],
         return [*entries, panel.intro(t("said.settings_unreadable"), hint=why(exc))]
     inner["config_values"] = values
     entries.append(panel.intro(t("manager.app_settings.selection_writes", count=len(tables))))
-    added = _added(context["state"], "selection:" + ",".join(
-        sorted(str(one.get("id") or "") for one in tables)))
-    blocks = differences(groups, values, added)
-    view = point_of_view(groups, values, added)
+    blocks = differences(groups, values)
+    view = point_of_view(groups, values)
     options = table_options(groups, values)
     if not blocks and view is None and options is None:
         entries.append(_uses_launcher(context, tables))
@@ -188,20 +167,18 @@ async def _selection_entries(context: dict[str, Any],
         blocks.append((view.label, view.rows))
     entries += await all_settings._setting_entries(
         inner, [(label, "", fields) for label, fields in blocks], curated=True, sub=True,
-        pairs=named_pairs(groups))
+        pairs=all_settings.curated_pairs(groups))
     remove = partial(_remove, inner)
     if view is not None:
         entries += _camera_entries(view, remove, inner["playing"])
     if options is not None:
         entries += _option_entries(options, values, remove, inner["playing"])
-    if offered := addable(groups, values, added):
-        entries.append((panel.FULL, partial(_add_picker, context, added, offered)))
     entries.append((panel.FULL, panel.action(
-        t("manager.app_settings.show_all"),
+        t("manager.workbench.all_settings"),
         partial(_every, context, inner, t("manager.app_settings.selection_all",
                                           count=len(tables),
                                           launcher_name=launcher.get("display_name") or "")),
-        icon=verbs.DRILL, hint=t("manager.app_settings.show_all.help"))))
+        icon=verbs.DRILL, hint=t("manager.app_settings.all_settings.help"))))
     return entries
 
 
@@ -315,10 +292,8 @@ async def _program_entries(context: dict[str, Any],
     }
     if shared := shared_note(found, len(context.get("tables") or []) or 1):
         entries.append(shared)
-    if reach := dict(found.get("from_game") or {}):
-        entries += _from_game_entries(inner, reach)
-    elif follows := dict(found.get("follows_game") or {}):
-        entries += _follows_game_entries(inner, follows)
+    inner["above_for"] = _game_note_now
+    entries += _game_note(inner, found)
     going = partial(going_back, groups, dict(found.get("from_game") or {}))
     back = partial(going, inner)
     inner["clear_note"] = going
@@ -326,9 +301,8 @@ async def _program_entries(context: dict[str, Any],
         inner["config_more"] = ForAll(inner, others, bool(found.get("shared_with_game")),
                                       list(context.get("tables") or []),
                                       _for_every_table(groups), inner["rebuild"])
-    added = _added(context["state"], table_id)
-    blocks = differences(groups, values, added)
-    view = point_of_view(groups, values, added)
+    blocks = differences(groups, values)
+    view = point_of_view(groups, values)
     options = table_options(groups, values)
     if not blocks and view is None and options is None:
         entries.append(_uses_launcher(context, [table]))
@@ -336,43 +310,45 @@ async def _program_entries(context: dict[str, Any],
         blocks.append((view.label, view.rows))
     entries += await all_settings._setting_entries(
         inner, [(label, "", fields) for label, fields in blocks], curated=True, sub=True,
-        pairs=named_pairs(groups))
+        pairs=all_settings.curated_pairs(groups))
     remove = partial(_remove, inner)
     if view is not None:
         entries += _camera_entries(view, remove, inner["playing"], back)
     if options is not None:
         entries += _option_entries(options, values, remove, inner["playing"], back)
-    if offered := addable(groups, values, added):
-        entries.append((panel.FULL, partial(_add_picker, context, added, offered)))
     entries.append((panel.FULL, panel.action(
-        t("manager.app_settings.show_all"),
+        t("manager.app_settings.change_button"),
         partial(_every_setting, context, table, inner), icon=verbs.DRILL,
-        hint=t("manager.app_settings.show_all.help"))))
+        hint=t("manager.app_settings.all_settings.help"))))
     return entries
 
 
-def differences(groups: Sequence[Any], values: dict[str, Any],
-                added: Collection[str] = ()) -> list[tuple[str, list[Any]]]:
-    """What this table's file sets, what reaches it from its game's and what was just
-    added, by area: the rows an area curates first, in its order, then the rest in the
-    program's. A plugin's rows lead with the plugin's name, which is all that tells five
-    Enables apart, and a window's rows lead with the window's."""
+def differences(groups: Sequence[Any], values: dict[str, Any]) -> list[tuple[str, list[Any]]]:
+    """What this table's file sets and what reaches it from its game's, under the area and
+    the heading its launcher's page draws it under, the rows in that page's order and named
+    as it names them. What no heading draws follows its area, named by its plugin."""
     names = all_settings._plugin_names(groups)
-    found = []
+    found: dict[str, list[Any]] = {}
     for group in groups:
         if group.summarized or getattr(group, "read_only", False):
             continue
-        order = {key: at for at, key in
-                 enumerate(key for heading in group.curated for key in heading.keys)}
         shown = _whole(group, {field.key for field in group.settings
-                               if _differs(values.get(field.key) or {}) or field.key in added})
-        paired = {key for pair in _pairs_of(group) for key in pair.keys}
-        fields = sorted((field for field in group.settings if field.key in shown),
-                        key=lambda field: order.get(field.key, len(order)))
-        if fields:
-            found.append((group.label, [field if field.key in paired
-                                        else _named(field, group, names) for field in fields]))
-    return found
+                               if _differs(values.get(field.key) or {})})
+        by_key = {field.key: field for field in group.settings if field.key in shown}
+        for heading in group.curated:
+            if fields := [by_key.pop(key) for key in heading.keys if key in by_key]:
+                found.setdefault(heading_title(group, heading), []).extend(fields)
+        if by_key:
+            found.setdefault(str(group.label), []).extend(
+                _named(field, group, names) for field in by_key.values())
+    return list(found.items())
+
+
+def heading_title(group: Any, heading: Any) -> str:
+    """Where a heading's rows are found away from its page: `Displays - Backglass`."""
+    if not heading.label or heading.label == group.label:
+        return str(group.label)
+    return t("manager.app_settings.area_heading", area=group.label, heading=heading.label)
 
 
 def _pairs_of(group: Any) -> list[Any]:
@@ -403,84 +379,24 @@ def _pair_name(heading: Any, pair: Any, names: dict[str, str]) -> str:
     if section.startswith(all_settings.PLUGIN_SECTION):
         return all_settings.plugin_row(section, pair.label, names)
     if heading.label:
-        return t("manager.app_settings.window_row", window=heading.label, label=pair.label)
+        return window_row(heading.label, pair.label)
     return pair.label
+
+
+def window_row(window: str, label: str) -> str:
+    """A setting's label led by its window's name, unless it already starts with it:
+    `Playfield Volume` under Playfield stays that."""
+    if label.casefold().startswith(window.casefold()):
+        return label
+    return t("manager.app_settings.window_row", window=window, label=label)
 
 
 def _differs(held: dict[str, Any]) -> bool:
     return bool(held.get("set_here")) or held.get("scope") == "folder"
 
 
-def _shown(group: Any, values: dict[str, Any], added: Collection[str]) -> bool:
-    return any(_differs(values.get(field.key) or {}) or field.key in added
-               for field in group.settings)
-
-
-def _added(state: dict[str, Any], table_id: str) -> list[str]:
-    """The settings Add a Setting drew at this table, forgotten when another is open."""
-    held = state.get(ADDED) or {}
-    if held.get("table") != table_id:
-        held = state[ADDED] = {"table": table_id, "keys": []}
-    return list(held["keys"])
-
-
-def addable(groups: Sequence[Any], values: dict[str, Any],
-            added: Collection[str]) -> list[tuple[Any, str]]:
-    """What this table could be given a value of its own for and is not showing yet, each
-    with its area: the settings commonly set per table first, then the rest. Of the point
-    of view, only the view modes it would draw."""
-    names = all_settings._plugin_names(groups)
-    pairs = {pair.keys[0]: pair for pair in named_pairs(groups)}
-    first: list[tuple[Any, str]] = []
-    rest: list[tuple[Any, str]] = []
-    for group in groups:
-        if getattr(group, "read_only", False) or (
-                group.summarized and _shown(group, values, added)):
-            continue
-        shown = _whole(group, {field.key for field in group.settings
-                               if field.key in added or _differs(values.get(field.key) or {})})
-        later = {key for pair in _pairs_of(group) for key in pair.keys[1:]}
-        for field in group.settings:
-            if (field.key in shown or field.key in later
-                    or SCOPE_ENTRY not in (field.scopes or (SCOPE_ENTRY,))
-                    or (group.summarized and field.key not in group.rows)):
-                continue
-            pair = pairs.get(field.key)
-            (first if field.per_table else rest).append(
-                (SimpleNamespace(**{**vars(field), "label": pair.label}) if pair is not None
-                 else _named(field, group, names), str(group.label)))
-    return first + rest
-
-
-def _add_picker(context: dict[str, Any], added: list[str],
-                offered: list[tuple[Any, str]]) -> None:
-    """Picking one draws its row, with the value the table uses now, and focuses it."""
-    headings = {}
-    lead = offered[0][0]
-    rest = next((field.key for field, _area in offered if not field.per_table), None)
-    if lead.per_table:
-        headings[lead.key] = t("manager.app_settings.common_heading")
-        if rest is not None:
-            headings[rest] = t("manager.app_settings.everything_else")
-    labels = {field.key: str(field.label) for field, _area in offered}
-    picker = panel.SettingPicker(
-        labels, areas={field.key: area for field, area in offered}, headings=headings,
-        label=t("manager.app_settings.add")) \
-        .props('input-debounce=0 hide-selected fill-input '
-               'popup-content-class="manager-picker-popup"') \
-        .classes("w-full mt-2")
-
-    @on_page
-    async def pick() -> None:
-        key = str(picker.value or "")
-        if key not in labels:
-            return
-        context["state"][ADDED]["keys"] = [*added, key]
-        await context["settings_region"].refilled()
-        ui.run_javascript(_SHOW_ADDED % json.dumps(labels[key]))
-
-    picker.on_value_change(pick)
-    ui.run_javascript(core._ADD_BOX % (picker.id, "false"))
+def _shown(group: Any, values: dict[str, Any]) -> bool:
+    return any(_differs(values.get(field.key) or {}) for field in group.settings)
 
 
 def _named(field: Any, group: Any, names: dict[str, str]) -> Any:
@@ -488,7 +404,7 @@ def _named(field: Any, group: Any, names: dict[str, str]) -> Any:
     if section.startswith(all_settings.PLUGIN_SECTION):
         label = all_settings.plugin_row(section, field.label, names)
     elif window := _window_of(field.key, group):
-        label = t("manager.app_settings.window_row", window=window, label=field.label)
+        label = window_row(window, field.label)
     else:
         return field
     return SimpleNamespace(**{**vars(field), "label": label})
@@ -509,19 +425,18 @@ def _window_of(key: str, group: Any) -> str:
     return ""
 
 
-def point_of_view(groups: Sequence[Any], values: dict[str, Any],
-                  added: Collection[str] = ()) -> SimpleNamespace | None:
-    """A summarized group, where anything in it differs at this table or was just added:
-    the rows it draws, each named by its view, and the headings the rest is saved
-    under."""
+def point_of_view(groups: Sequence[Any], values: dict[str, Any], *,
+                  always: bool = False) -> SimpleNamespace | None:
+    """A summarized group, where anything in it differs at this table, or `always`: the
+    rows it draws, each named by its view, and the headings the rest is saved under."""
     group = next((one for one in groups if one.summarized), None)
-    if group is None or not _shown(group, values, added):
+    if group is None or not (always or _shown(group, values)):
         return None
     fields = {field.key: field for field in group.settings}
     drawn = [key for key in getattr(group, "rows", ()) if key in fields]
     camera = {key: values.get(key) or {} for key in fields if key not in drawn}
     return SimpleNamespace(
-        label=group.label, rows=[_named(fields[key], group, {}) for key in drawn],
+        key=group.key, label=group.label, rows=[_named(fields[key], group, {}) for key in drawn],
         views=[str(heading.label) for heading in group.curated
                if any(_differs(camera.get(key) or {}) for key in heading.keys)],
         own=[key for key, held in camera.items() if held.get("set_here")],
@@ -546,7 +461,7 @@ def _camera_entries(view: SimpleNamespace, remove: Callable[[list[str]], Any],
 def camera_said(view: SimpleNamespace) -> str:
     said = t("manager.workbench.saved_table" if view.own
              else "manager.app_settings.saved_game" if view.reaching
-             else "manager.app_settings.the_tables_own")
+             else "manager.app_settings.from_the_table")
     if view.views and view.reaching:
         return t("manager.app_settings.saved_in_views", saved=said,
                  views=", ".join(view.views))
@@ -624,9 +539,13 @@ def _dotted(text: str, own: bool) -> Callable[[], None]:
 
 def _reset(label: str, on_click: Callable[[], Any], hint: str, playing: bool, *,
            inline: bool = True) -> Callable[[], None]:
-    return panel.action(label, on_click, icon=verbs.RESET, inline=inline,
-                        enabled=not playing,
-                        hint=t(all_settings.PLAYING_NOTE) if playing else hint)
+    """The revert icon beside a row, as every other row has it; Reset All is a full line."""
+    shown = t(all_settings.PLAYING_NOTE) if playing else hint
+    if inline:
+        return panel.icon_action(label, on_click, icon=verbs.RESET, hint=shown,
+                                 enabled=not playing)
+    return panel.action(label, on_click, icon=verbs.RESET, inline=False,
+                        enabled=not playing, hint=shown)
 
 
 @on_page
@@ -648,6 +567,25 @@ async def _remove(inner: dict[str, Any], keys: list[str]) -> None:
     await inner["rebuild"]()
 
 
+async def _held_lines(every: dict[str, Any], values: dict[str, Any],
+                      area: str) -> dict[str, list[tuple[Any, Any]]]:
+    """The settings of a table VPinFE draws as a line, not a row, by the heading they sit
+    under in All Settings: the camera with the view modes, and Table Options on every
+    area. Each has its revert icon where the table holds it."""
+    groups = every["config_groups"]
+    going = every.get("clear_note")
+    back = partial(going, every) if going is not None else (lambda keys: "")
+    remove = partial(_remove, every)
+    lines: dict[str, list[tuple[Any, Any]]] = {}
+    view = point_of_view(groups, values, always=True)
+    if view is not None and area in ("", view.key):
+        lines[view.label] = _camera_entries(view, remove, every["playing"], back)
+    options = table_options(groups, values)
+    if options is not None and not area:
+        lines[options[0]] = _option_entries(options, values, remove, every["playing"], back)[1:]
+    return lines
+
+
 async def _every_setting(context: dict[str, Any], table: dict[str, Any],
                          inner: dict[str, Any]) -> None:
     """All Settings, at this table, over the panel. The panel is drawn again on the way
@@ -659,28 +597,111 @@ async def _every_setting(context: dict[str, Any], table: dict[str, Any],
     await _every(context, inner, title)
 
 
+ALL = "all"
+
+
+def _areas(every: dict[str, Any], values: dict[str, Any]) -> list[tuple[str, str]]:
+    """The rail's areas, by key and name: each area the table can hold a setting in, in the
+    launcher's order, then the summarized one."""
+    summarized = next((group.key for group in every["config_groups"] if group.summarized), "")
+    held = [group for group in all_settings._holdable(
+        all_settings._listed_groups(every), values, SCOPE_ENTRY, False) if group.settings]
+    return [*((group.key, str(group.label)) for group in held if group.key != summarized),
+            *((group.key, str(group.label)) for group in held if group.key == summarized)]
+
+
+async def _area_page(every: dict[str, Any], key: str) -> None:
+    """One area as its launcher page draws it at a table, or the summarized one as its rows
+    and its line; or All Settings."""
+    if key == ALL:
+        await all_settings._all_settings(every)
+        return
+    values = await all_settings._config_values(every)
+    group = next(one for one in all_settings._listed_groups(every) if one.key == key)
+    if any(one.summarized and one.key == key for one in every["config_groups"]):
+        entries = await all_settings._setting_entries(
+            every, [(group.label, "", group.settings)], pairs=named_pairs(every["config_groups"]),
+            after=await _held_lines(every, values, key))
+        with ui.column().classes("gap-0 manager-form"):
+            panel.facts(ui, entries)
+        return
+    await all_settings._config_rows(every, group)
+
+
 async def _every(context: dict[str, Any], inner: dict[str, Any], title: str) -> None:
     every: dict[str, Any] = {**inner, "state": {"all_settings": {}}}
     every.pop("config_values", None)
+    every["lines_for"] = partial(_held_lines, every)
+    shown = {"key": ALL}
+    areas: list[tuple[str, str]] = []
 
-    with frame.opened(title, full=True) as dialog:
-        body = ui.column().classes("w-full grow min-h-0 gap-0 overflow-auto")
+    with frame.opened(title, classes="manager-dialog--settings") as dialog:
+        with ui.element("div").classes("w-full grow min-h-0 manager-sections "
+                                       "manager-dialog-sections"):
+            rail = ui.element("div").classes("min-h-0 manager-section-rail")
+            with ui.element("div").classes("min-w-0 manager-section-work"):
+                body = ui.column().classes("w-full min-h-0 gap-0 no-wrap px-3")
+
+        def draw_rail() -> None:
+            rail.clear()
+            with rail:
+                for key, label in [*areas, (ALL, t("manager.workbench.all_settings"))]:
+                    row = ui.row().classes("items-stretch gap-0 no-wrap manager-section-row")
+                    if key == shown["key"]:
+                        row.classes(add="manager-section-on")
+                    with row, ui.row().classes(
+                            "items-center no-wrap grow min-w-0 manager-section-hit"):
+                        ui.label(label).classes("manager-section-name")
+                    row.on("click", lambda key=key: pick(key))
 
         async def redraw() -> None:
             every.pop("config_values", None)
+            every["scrolls"] = shown["key"] == ALL
+            body.classes(replace="w-full min-h-0 gap-0 no-wrap px-3 " + (
+                "overflow-hidden" if every["scrolls"] else "overflow-auto"))
             body.clear()
             with body:
-                await all_settings._all_settings(every)
+                await _area_page(every, shown["key"])
+
+        def pick(key: str) -> None:
+            if key != shown["key"]:
+                shown["key"] = key
+                draw_rail()
+                asyncio.create_task(redraw())
 
         every["rebuild"] = redraw
+        every["show_all"] = lambda: pick(ALL)
         if (more := inner.get("config_more")) is not None:
             every["config_more"] = replace(more, rebuild=redraw)
+        areas.extend(_areas(every, await all_settings._config_values(every)))
+        every.pop("config_values", None)
+        draw_rail()
         await redraw()
         with frame.footer():
             frame.answer(t("word.done"), dialog.close, icon=verbs.DONE)
 
     dialog.on("hide", lambda: context["rebuild"]())
     dialog.open()
+
+
+def _game_note(inner: dict[str, Any], found: dict[str, Any]) -> list[tuple[Any, Any]]:
+    """The line about the game's settings file, if it has anything to say to this table."""
+    if reach := dict(found.get("from_game") or {}):
+        return _from_game_entries(inner, reach)
+    if follows := dict(found.get("follows_game") or {}):
+        return _follows_game_entries(inner, follows)
+    return []
+
+
+async def _game_note_now(inner: dict[str, Any]) -> list[tuple[Any, Any]]:
+    """The same line read afresh, for the dialog, which is drawn again after every write."""
+    try:
+        found = await offload.io(inner["library"].launcher_config,
+                                 inner["launcher"]["launcher_id"], inner["config_table"],
+                                 SCOPE_ENTRY)
+    except Exception:  # noqa: BLE001 - the list below says why when it cannot read
+        return []
+    return _game_note(inner, found)
 
 
 def _from_game_entries(inner: dict[str, Any], reach: dict[str, str]) -> list[tuple[Any, Any]]:

@@ -273,6 +273,16 @@ def value_for(option: dict, raw: Any) -> Any:
     return said
 
 
+def _default_number(option: dict) -> float | None:
+    """The declared default as a number, where there is one: what a box showing it selects."""
+    default = option.get("default")
+    try:
+        number = float(str(default if default is not None else "").strip())
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _fallback_number(option: dict, kind: str) -> Any:
     try:
         number = float(str(option.get("default") or "").strip() or 0)
@@ -406,7 +416,8 @@ def control_for(option: dict, value: Any, save: Callable[[Any], Any], *,
                             shown, lambda e: save(e.value), disabled=off,
                             describes=option.get("describes")
                             or {labels.get(one, one): said for one, said in helped.items()}
-                            or None)
+                            or None,
+                            tags=option.get("tags") or None)
     if kind == "color":
         return panel.swatch(str(value or ""), save, disabled=off)
     blank = str(option.get("blank") or "")
@@ -420,7 +431,7 @@ def control_for(option: dict, value: Any, save: Callable[[Any], Any], *,
             low=option.get("min"), high=option.get("max"), unit=_unit_word(option),
             hint=_range_hint(option),
             placeholder=blank, on_control=refusal.attach if refusal else None,
-            on_leave=refusal is not None)
+            on_leave=refusal is not None, select_at=_default_number(option))
     if kind == "number":
         # Not `int`: a theme declares scale factors and opacities, and a control that
         # formats them as whole numbers shows a value that is not the one stored.
@@ -428,7 +439,8 @@ def control_for(option: dict, value: Any, save: Callable[[Any], Any], *,
             value, lambda e: save(None if e.value is None else float(e.value)),
             disabled=off, whole=False, low=option.get("min"), high=option.get("max"),
             hint=_range_hint(option),
-            step=option.get("step"), placeholder=blank)
+            step=option.get("step"), placeholder=blank,
+            select_at=_default_number(option))
     if kind == "text" and option.get("lines"):
         return panel.field(str(value or ""), lambda text: save(text),
                            lines=int(option["lines"]), disabled=off,

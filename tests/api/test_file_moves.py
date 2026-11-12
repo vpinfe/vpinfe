@@ -101,6 +101,14 @@ class FileMoveRouteTests(TempTree):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_a_table_settings_file_does_not_go_to_the_game(self) -> None:
+        (self.folder / "Cactus B.ini").write_bytes(b"[Player]")
+
+        response = self.client.post(self.url("/to-game", kind="ini"), json={"table": "t2"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse((self.folder / "Cactus.ini").exists())
+
     def test_a_table_playing_blocks_the_move_with_a_conflict(self) -> None:
         self.running = launch_state.LaunchState(launching=True, game_id=GAME_ID)
 

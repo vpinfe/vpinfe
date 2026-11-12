@@ -17,12 +17,14 @@ from collections.abc import (
 )
 from functools import partial
 from itertools import groupby
+from types import SimpleNamespace
 from typing import Any
 
 from nicegui import run, ui
 
 from common import apps
 from common.apps import OWN_FIELDS
+from common.apps.contract import SCOPE_ENTRY
 from common.config import path_state
 from common.failures import why
 from common.i18n import t
@@ -225,12 +227,14 @@ def _marked(parts: Sequence[Part], app_name: str,
 
         def show() -> None:
             changed = [(held, field) for _, held, field in parts if _changed(held, field)]
+            matching = [(held, field) for _, held, field in parts if _matches(held, field)]
             dot.set_visibility(bool(changed))
             off = any(not held.get("in_effect", True) for held, _ in changed)
             dot.classes(add="manager-named-mark--off" if off else None,
                         remove=None if off else "manager-named-mark--off")
-            row.classes(add=None if changed else "manager-field-row--default",
-                        remove="manager-field-row--default" if changed else None)
+            row.classes(add="manager-field-row--held" if changed else "manager-field-row--default",
+                        remove="manager-field-row--default" if changed
+                        else "manager-field-row--held")
             said = _each_said(
                 [(field, _whose_value(held, field, app_name)) for _, held, field in parts],
                 len(parts))
@@ -239,9 +243,9 @@ def _marked(parts: Sequence[Part], app_name: str,
             elif whose is not None:
                 whose.text = said
             end.clear()
-            if clear is not None and changed:
+            if clear is not None and (changed or matching):
                 hint = _each_said([(field, _clear_hint(held, field, app_name))
-                                   for held, field in changed], len(parts))
+                                   for held, field in changed or matching], len(parts))
                 if back is not None and (note := back(
                         [one.key for _, held, one in parts if held.get("set_here")])):
                     hint = "\n".join((hint, note))
@@ -350,6 +354,41 @@ def _follows(held: dict, field: Any, app_name: str) -> tuple[str, str]:
     return _said_value(field, _leaves(held, field)), whose
 
 
+def _scope_word(where: str) -> str:
+    """Whose value a scope falls back to, as a tag: Default where the program picks it."""
+    return {"launcher": t("manager.workbench.launcher"), "folder": t("word.game"),
+            "entry": t("word.table")}.get(where, t("word.default"))
+
+
+def _matches(held: dict, field: Any) -> bool:
+    """This scope names a value, and it is the one it would follow anyway."""
+    return bool(held.get("set_here")) and not held.get("varies") and not _changed(held, field)
+
+
+def _same_mark(held: dict, field: Any, app_name: str) -> Callable[[], None] | None:
+    """The quiet note on a value this scope holds that matches what it would follow, with
+    whose that is on hover: it stays until it is reset."""
+    if not _matches(held, field):
+        return None
+    where = held.get("fallback_scope") or ""
+    word = t({"launcher": "manager.workbench.matches_launcher",
+              "folder": "manager.workbench.matches_game"}.get(
+                  where, "manager.workbench.matches_default"))
+    return panel.state(word, "off", hint=_follows(held, field, app_name)[1])
+
+
+def _default_tag(held: dict, field: Any, option: dict[str, Any]) -> dict[str, str]:
+    """The choice this scope takes when it names none, with whose it is: Default where
+    the program picks it, else the word for the scope that does."""
+    if held.get("varies"):
+        return {}
+    leaves = _leaves(held, field)
+    word = _scope_word(held.get("fallback_scope") or "")
+    found = next((key for key in option.get("choices") or {}
+                  if _same_value(field, key, leaves)), None)
+    return {found: word} if found is not None and (leaves or not found) else {}
+
+
 def _changed(held: dict, field: Any) -> bool:
     """A value this scope sets that is not the one it would follow without it. One that
     something narrower answers over counts: it is the exception most worth seeing."""
@@ -434,7 +473,10 @@ async def _config_rows(context: dict[str, Any], group: Any) -> None:
     if not group.curated:
         await _every_row(context, group)
         return
-    if vpx_input.applies(group):
+    at_table = context.get("config_scope") == SCOPE_ENTRY
+    if at_table:
+        group = _holdable([group], await _config_values(context), SCOPE_ENTRY, False)[0]
+    if vpx_input.applies(group) and not at_table:
         with ui.column().classes("gap-0 manager-form"):
             panel.facts(ui, vpx_input.entries(context, group, await _config_values(context)))
         return
@@ -443,7 +485,7 @@ async def _config_rows(context: dict[str, Any], group: Any) -> None:
     async def draw_rows() -> None:
         values = await _config_values(context)
         shown = curated_blocks(group, values)
-        if vpx_displays.applies(group):
+        if vpx_displays.applies(group) and not at_table:
             entries = await vpx_displays.entries(
                 context, group, shown, values,
                 partial(_setting_entries, context, curated=True,
@@ -580,8 +622,12 @@ def _area_search(context: dict[str, Any], group: Any, values: dict[str, Any]) ->
 
 
 def _open_all_settings(context: dict[str, Any], **wanted: Any) -> None:
-    """All Settings on what was asked for, and nothing an earlier visit narrowed it to."""
+    """All Settings on what was asked for, and nothing an earlier visit narrowed it to. A
+    context that is not a page's own, such as a dialog, says in `show_all` how it shows it."""
     context["state"]["all_settings"] = wanted
+    if (show := context.get("show_all")) is not None:
+        show()
+        return
     _choose(context, "launcher_all")
 
 
@@ -616,17 +662,20 @@ def _mark_for(held: dict, scope: str, field: Any,
 
 async def _setting_entries(context: dict[str, Any],
                            blocks: Sequence[tuple[str, str, Sequence[Any]]], *,
-                           curated: bool = False, sub: bool = False,
+                           curated: bool = False, sub: bool = False, by_panel: bool = False,
                            redraw_on: Collection[str] = (),
                            pairs: Sequence[Any] = (),
                            ahead: Mapping[str, Sequence[tuple[Any, Any]]] | None = None,
+                           after: Mapping[str, Sequence[tuple[Any, Any]]] | None = None,
                            refill: Callable[[], Coroutine[Any, Any, Any]] | None = None,
                            ) -> list[tuple[Any, Any]]:
     """Settings as fact rows, block by block: its heading where it has one - a
     sub-heading with `sub` - the line under that, then its rows. A curated row's line is
     the app's help where it has one; the program's description otherwise. Two rows of a
     block that `pairs` names are one row, under the pair's label and note. `ahead` maps a
-    setting's key to entries drawn above its row.
+    setting's key to entries drawn above its row, and `after` a block's heading to entries
+    drawn under its rows. `by_panel` names every row as a table's panel does, away from an
+    area's page.
 
     A write marks every row again in place, so a control keeps its focus. A named
     setting's row, and a rival switch's Conflict note, are drawn again in place too. The
@@ -647,6 +696,7 @@ async def _setting_entries(context: dict[str, Any],
     if (more := context.get("config_more")) is not None:
         await more.ready(values)
     groups = context.get("config_groups") or []
+    by_view = _row_names(groups, by_panel)
     clashing = conflicts(groups, values)
     rival = rival_switches(groups)
     named = {f.key for _, _, fields in blocks for f in fields if getattr(f, "reported", ())}
@@ -781,6 +831,8 @@ async def _setting_entries(context: dict[str, Any],
     def part(field: Any) -> Part:
         held = rows.setdefault(field.key, dict(values.get(field.key) or {}))
         option = _as_option(field)
+        if tags := _default_tag(held, field, option):
+            option["tags"] = tags
         reported = getattr(field, "reported", ())
         return settings_page.control_for(
             option, settings_page.value_for(option, held.get("value")),
@@ -794,6 +846,7 @@ async def _setting_entries(context: dict[str, Any],
                                 by_value=bool(context.get("by_value"))),
                         *(None if held.get("varies")
                           else _mark_for(held, scope, field, offered(field))
+                          or _same_mark(held, field, app_name)
                           for _, held, field in parts))
 
     entries: list[tuple[Any, Any]] = []
@@ -816,11 +869,18 @@ async def _setting_entries(context: dict[str, Any],
                 continue
             entries.extend((ahead or {}).get(field.key, ()))
             pair, members = paired.get(field.key, (None, [field]))
-            parts = [part(one) for one in members]
+            if (pair is None and table and not offered(field)
+                    and not (values.get(field.key) or {}).get("set_here")):
+                entries.append((by_view.get(field.key, field.label),
+                                _launcher_page_link(launcher["launcher_id"])))
+                if field.description:
+                    entries.append(panel.note(field.description))
+                continue
+            parts =[part(one) for one in members]
             keys = [one.key for one in members]
             row_of.update({key: field.key for key in keys})
             owned = _tables_setting(their_own, keys)
-            entries.append((pair.label if pair else field.label, _marked(
+            entries.append((pair.label if pair else by_view.get(field.key, field.label), _marked(
                 parts, app_name, redraws, joiner=pair.joiner if pair else "",
                 on_leave=settle if any(_as_option(one)["type"] in TYPED for one in members)
                 else None, clear=clear(keys), playing=playing,
@@ -839,7 +899,16 @@ async def _setting_entries(context: dict[str, Any],
                 said = (getattr(field, "help", "") if curated else "") or field.description
             if said:
                 entries.append(panel.note(said))
+        entries.extend((after or {}).get(title, ()))
     return entries
+
+
+def _launcher_page_link(launcher_id: str) -> Callable[[], None]:
+    """Where a setting a table cannot hold is set: the launcher's All Settings."""
+    return panel.link(t("manager.app_settings.launcher_page_link"),
+                      to="/manager?" + deeplink.query({
+                          "view": "launchers", "launcher": launcher_id,
+                          "section": "launcher_all"}))
 
 
 def _again(part: Callable[[Any], Part], members: Sequence[Any]) -> list[Part]:
@@ -994,7 +1063,7 @@ def setting_names(groups: Sequence[Any]) -> dict[str, str]:
         if section.startswith(PLUGIN_SECTION):
             return plugin_row(section, field.label, plugins)
         if window := app_settings._window_of(field.key, group):
-            return t("manager.app_settings.window_row", window=window, label=field.label)
+            return app_settings.window_row(window, field.label)
         if shared[field.label] < 2:
             return field.label
         heading = next((one.label for one in getattr(group, "curated", ())
@@ -1007,6 +1076,19 @@ def setting_names(groups: Sequence[Any]) -> dict[str, str]:
     return {key: t("manager.app_settings.heading_row", heading=pairs[key], label=labels[key])
             if key in pairs and read[name.casefold()] > 1 else name
             for key, name in names.items()}
+
+
+def _row_names(groups: Sequence[Any], by_panel: bool) -> dict[str, str]:
+    """What each row is called, by key, where its heading is not enough to tell it apart:
+    away from its area page every row is named as a table's panel names it; on one only
+    the summarized group's rows are, since its three view modes share one label."""
+    from manager.workbench import app_settings
+
+    if by_panel:
+        return setting_names(groups)
+    return {field.key: str(app_settings._named(field, group, {}).label)
+            for group in groups if getattr(group, "summarized", False)
+            for field in group.settings}
 
 
 def plugin_row(section: str, label: str, plugin_names: dict[str, str]) -> str:
@@ -1026,11 +1108,44 @@ def _all_settings_shown(context: dict[str, Any]) -> bool:
 
 
 def _listed_groups(context: dict[str, Any]) -> list[Any]:
-    """The groups whose settings are rows. A summarized or read-only one is a table's
-    alone."""
-    return [g for g in context.get("config_groups") or []
-            if not getattr(g, "summarized", False) and not getattr(g, "read_only", False)
-            and not vpx_input.applies(g)]
+    """The groups whose settings are rows. At the launcher a summarized or read-only group
+    is a table's alone, and the input is its own page. At a table the input is rows, and a
+    summarized group lists only the rows it draws: the camera and Table Options are lines
+    of their own."""
+    at_table = context.get("config_scope") == SCOPE_ENTRY
+    found = []
+    for group in context.get("config_groups") or []:
+        if getattr(group, "read_only", False):
+            continue
+        if getattr(group, "summarized", False):
+            if not at_table:
+                continue
+            drawn = set(getattr(group, "rows", ()))
+            group = SimpleNamespace(**{
+                **vars(group), "summarized": False,
+                "settings": [f for f in group.settings if f.key in drawn]})
+            if not group.settings:
+                continue
+        elif not at_table and vpx_input.applies(group):
+            continue
+        found.append(group)
+    return found
+
+
+def _holdable(groups: Sequence[Any], values: dict[str, Any], scope: str,
+              searching: bool) -> list[Any]:
+    """At a table, the settings it can hold and those its file does: one it cannot hold
+    is listed only to a search, so it can be pointed to where it is set."""
+    if scope != SCOPE_ENTRY or searching:
+        return list(groups)
+
+    def held_here(field: Any) -> bool:
+        return (scope in (getattr(field, "scopes", ()) or (scope,))
+                or bool((values.get(field.key) or {}).get("set_here")))
+
+    return [SimpleNamespace(**{**vars(group), "settings": [f for f in group.settings
+                                                          if held_here(f)]})
+            for group in groups]
 
 
 async def _all_settings(context: dict[str, Any]) -> None:
@@ -1038,13 +1153,18 @@ async def _all_settings(context: dict[str, Any]) -> None:
     to what differs from its default, or one area."""
     wanted: dict[str, Any] = context["state"].setdefault("all_settings", {})
     groups = _listed_groups(context)
-    names = _plugin_names(groups)
+    scope = str(context.get("config_scope") or "launcher")
     areas = {"": t("manager.workbench.every_area"), **{g.key: g.label for g in groups}}
     if wanted.get("area") not in areas:
         wanted["area"] = ""
 
     app_name = str(context["launcher"].get("app_name") or "")
-    changed = changed_count(groups, await _config_values(context))
+    first = await _config_values(context)
+    changed = changed_count(_holdable(groups, first, scope, False), first)
+    if above_for := context.get("above_for"):
+        if above := await above_for(context):
+            with ui.column().classes("gap-0 manager-form"):
+                panel.facts(ui, above)
     with ui.row().classes("items-center gap-x-4 gap-y-2 manager-section-bar"):
         search = panel.search(t("manager.app_settings.search_settings")) \
             .props("debounce=250")
@@ -1057,23 +1177,36 @@ async def _all_settings(context: dict[str, Any]) -> None:
                               value=bool(wanted.get("differs"))) \
             .props("dense").classes("whitespace-nowrap")
         differs.tooltip(t("manager.workbench.changed_filter.help", app=app_name))
-    results = ui.column().classes("gap-0 w-full")
+    results = ui.column().classes(
+        "gap-0 w-full" + (" grow min-h-0 no-wrap overflow-auto" if context.get("scrolls") else ""))
 
     async def recount() -> None:
         if not differs.is_deleted:
+            values = await _config_values(context)
             differs.set_text(t("manager.workbench.changed_filter_count",
-                               count=changed_count(groups, await _config_values(context))))
+                               count=changed_count(_holdable(groups, values, scope, False),
+                                                   values)))
 
     context["recount_changed"] = recount
 
     async def draw() -> None:
-        found = found_settings(groups, await _config_values(context), wanted)
+        from manager.workbench import app_settings
+
+        values = await _config_values(context)
+        found = found_settings(_holdable(groups, values, scope, bool(wanted.get("query"))),
+                               values, wanted)
+        lines: dict[str, list[tuple[Any, Any]]] = {}
+        if (held := context.get("lines_for")) is not None and not wanted.get("query"):
+            lines = await held(values, wanted.get("area") or "")
         entries = await _setting_entries(
-            context, [(section_title(section, names), "", fields) for section, fields in found],
-            pairs=curated_pairs(groups))
+            context, [(title, "", fields) for title, fields in found],
+            pairs=app_settings.named_pairs(groups), after=lines, by_panel=True)
+        drawn = {title for title, _fields in found}
+        extra = [one for title, said in lines.items() if title not in drawn
+                 for one in ((HEADING, title), *said)]
         results.clear()
         with results, ui.column().classes("gap-0 manager-form"):
-            panel.facts(ui, entries if found else [panel.intro(
+            panel.facts(ui, [*entries, *extra] if found or extra else [panel.intro(
                 t("manager.workbench.settings_empty"))])
 
     async def narrow(key: str, value: Any) -> None:
@@ -1088,25 +1221,27 @@ async def _all_settings(context: dict[str, Any]) -> None:
 
 def found_settings(groups: Sequence[Any], values: dict[str, Any],
                    wanted: dict[str, Any]) -> list[tuple[str, list[Any]]]:
-    """What All Settings lists: each setting under its source section, the sections in
-    the order the areas first reach them."""
+    """What All Settings lists, each setting under its area, the areas in the order they
+    first reach them: the headings and row names of a table's panel, at the launcher
+    and at a table alike."""
     terms = str(wanted.get("query") or "").lower().split()
+    called = setting_names(groups)
 
     def wanted_here(field: Any) -> bool:
         held = values.get(field.key) or {}
         return not ((wanted.get("differs") and not _changed(held, field))
-                    or (terms and not _says_all(field, terms)))
+                    or (terms and not _says_all(field, terms, called)))
 
-    listed = [field for group in groups
+    listed = [(group, field) for group in groups
               if not wanted.get("area") or group.key == wanted["area"]
               for field in group.settings]
-    kept = {field.key for field in listed if wanted_here(field)}
+    kept = {field.key for _group, field in listed if wanted_here(field)}
     kept.update(key for pair in curated_pairs(groups) if not kept.isdisjoint(pair.keys)
                 for key in pair.keys)
     found: dict[str, list[Any]] = {}
-    for field in listed:
+    for group, field in listed:
         if field.key in kept:
-            found.setdefault(_section_of(field.key), []).append(field)
+            found.setdefault(str(group.label), []).append(field)
     return list(found.items())
 
 
@@ -1115,8 +1250,8 @@ def curated_pairs(groups: Sequence[Any]) -> list[Any]:
             for pair in getattr(heading, "pairs", ())]
 
 
-def _says_all(field: Any, terms: Sequence[str]) -> bool:
-    said = " ".join((field.label, field.key, field.description,
+def _says_all(field: Any, terms: Sequence[str], called: Mapping[str, str]) -> bool:
+    said = " ".join((called.get(field.key, ""), field.label, field.key, field.description,
                      getattr(field, "help", ""))).lower()
     return all(term in said for term in terms)
 

@@ -1141,6 +1141,24 @@ body::before {
 .manager-dialog.manager-dialog--pick.q-card {
   height: min(86vh, 780px); display: flex; flex-direction: column;
 }
+/* A program's settings from a table or a selection: the search stays put, the list scrolls,
+   and Done sits at the foot. Wide enough for a label, its control and its help. */
+.manager-dialog.manager-dialog--settings.q-card {
+  width: min(900px, 94vw); height: min(86vh, 900px); display: flex; flex-direction: column;
+}
+/* The areas beside the settings, as a launcher's rail draws them. On a narrow screen they
+   run along the top instead, since a column there leaves the settings no room. */
+.manager-dialog-sections { margin-top: 0; --rail-w: 148px; }
+@media (max-width: 640px) {
+  .manager-dialog-sections {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    background: none;
+  }
+  .manager-dialog-sections .manager-section-rail {
+    grid-row: 1; flex-direction: row; flex-wrap: wrap; overflow: visible;
+  }
+  .manager-dialog-sections .manager-section-work { grid-column: 1; grid-row: 2; }
+}
 .manager-dialog--series .manager-series-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* Choosing tables for a game's file: one height whatever the game's tables, the list scrolls. */
 .manager-dialog.manager-dialog--moves.q-card {
@@ -1186,12 +1204,17 @@ body::before {
 .manager-field-line > .manager-row-action {
   min-width: var(--target-inline); justify-content: center; opacity: 1;
 }
-/* A value at VPX's default reads as background. Colour, not opacity: a dimmed input
-   would fall under the contrast the rest of the page is held to. */
+/* A value at VPX's default reads as background, and one the scope holds reads as the answer.
+   Colour, not opacity: a dimmed input would fall under the contrast the rest of the page is
+   held to, so the held value takes weight as well. */
 .manager-field-row.manager-field-row--default :is(.q-field__native, .q-field__input,
     .q-select__dropdown-icon, .q-toggle__label, .q-slider__text, .q-field__suffix,
     .q-field__prefix) {
-  color: var(--ink-3);
+  color: var(--ink-default);
+}
+.manager-field-row.manager-field-row--held :is(.q-field__native, .q-field__input,
+    .q-toggle__label, .q-slider__text) {
+  font-weight: 600;
 }
 .manager-field-line > .manager-row-action .q-btn {
   width: var(--target-inline); height: var(--target-inline);
@@ -3351,6 +3374,7 @@ input.manager-path-input { padding-right: 0.6ch; }
 /* A number set aside from a dropdown's name: dim, at the end of the row in the open list
    and after the name in the box. */
 .manager-select-count { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.manager-select-tag { color: var(--ink-3); font-size: 0.85em; }
 .q-field__native .manager-select-count { margin-inline-start: 0.5em; }
 /* Beside the number it stands for, a select gives up its floor: the two are one value
    and fit where one does. */
@@ -3931,17 +3955,19 @@ a.manager-tag:hover { background: var(--wash-hover); }
 
 /* A summary fact: the count over what is newest, and the arrow saying it opens more. It
    is drawn as wide as a field in the same column, its text where a field's text starts and
-   its arrow where a field's last icon ends, so the column reads as one. */
+   its arrow where a field's last icon ends, so the column reads as one. It wears a field's
+   edge and ground, since it is a control you act on the same way. */
 .manager-summary {
   display: flex; align-items: center; gap: 8px; min-width: 0; max-width: var(--measure);
-  padding: 6px 14px 6px 9px; margin: -6px 0; border-radius: 6px;
-  transition: background-color 0.12s;
+  padding: 5px 13px 5px 8px; margin: -6px 0; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--wash-lift);
+  transition: border-color 120ms, background 120ms;
 }
 .manager-summary-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.25; }
 .manager-summary-sub { font-size: var(--fs-caption); color: var(--ink-3); }
 .manager-summary-warn { color: var(--tier-table); }
 .manager-summary-go { flex: none; color: var(--ink-2); font-size: var(--icon-mark); }
-.manager-fact-pick:hover .manager-summary { background: var(--surface-hover); }
+.manager-fact-pick:hover .manager-summary { border-color: var(--accent); background: var(--accent-wash); }
 .manager-fact-pick:hover .manager-summary-go,
 .manager-fact-pick:focus-visible .manager-summary-go { color: var(--ink); }
 .manager-fact-pick:focus-visible { outline: none; }

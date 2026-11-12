@@ -964,7 +964,7 @@ class PointOfViewTests(_TableCase):
 
         self.assertEqual(view["rows"], ["TableOverride.ViewCabMode"])
         mode = next(f for f in view["settings"] if f["key"] == "TableOverride.ViewCabMode")
-        self.assertEqual(mode["blank"], "The table's own")
+        self.assertEqual(mode["blank"], "As the author set it")
         self.assertEqual(sorted(mode["choice_help"]), ["0", "1", "2"])
 
     def test_its_table_options_are_listed_as_its_file_holds_them(self) -> None:
@@ -1326,13 +1326,19 @@ class AllTablesOnlyTests(_TableCase):
         self.assertEqual(offered["Player.ShowFPS"]["scopes"], ["launcher"])
         self.assertEqual(offered["Player.FXAA"]["scopes"], ["launcher", "folder", "entry"])
 
-    def test_a_table_and_a_folder_do_not(self) -> None:
-        for scope in ("entry", "folder"):
-            with self.subTest(scope=scope):
-                offered = self._offered(scope)
-                self.assertNotIn("Player.ShowFPS", offered)
-                self.assertNotIn("Input.NudgeSensorCount", offered)
-                self.assertIn("Player.FXAA", offered)
+    def test_a_folder_does_not(self) -> None:
+        offered = self._offered("folder")
+
+        self.assertNotIn("Player.ShowFPS", offered)
+        self.assertNotIn("Input.NudgeSensorCount", offered)
+        self.assertIn("Player.FXAA", offered)
+
+    def test_a_table_lists_them_to_say_they_are_the_launcher_s(self) -> None:
+        offered = self._offered("entry")
+
+        self.assertEqual(offered["Player.ShowFPS"]["scopes"], ["launcher"])
+        self.assertEqual(offered["Input.NudgeSensorCount"]["scopes"], ["launcher"])
+        self.assertIn("Player.FXAA", offered)
 
     def test_one_a_table_s_file_already_holds_is_still_listed(self) -> None:
         pathlib.Path(self.beside).write_text("[Player]\nShowFPS = 1\n", encoding="utf-8")
@@ -1485,11 +1491,12 @@ class CuratedTests(_TableCase):
                          ("Pinball MAME", "Plays ROMs"))
         self.assertEqual(heading["note"], "Runs the original game's ROM")
 
-    def test_a_heading_holds_only_rows_the_scope_offers(self) -> None:
+    def test_a_heading_at_a_table_still_names_the_rows_it_cannot_hold(self) -> None:
         plugins = self._groups("entry")["plugins"]
 
         self.assertEqual(plugins["curated"][0]["keys"],
-                         ["Plugin.PinMAME.Enable", "Plugin.PinMAME.Sound"])
+                         ["Plugin.PinMAME.Enable", "Plugin.PinMAME.Sound",
+                          "Plugin.PinMAME.PinMAMEPath"])
 
     def test_a_setting_carries_a_help_line_and_whether_a_table_sets_it(self) -> None:
         settings = {f["key"]: f for g in self._groups("launcher").values()

@@ -48,6 +48,16 @@ ASSET = "asset"
 # the game, because no table would read it from there.
 TABLE_ONLY = frozenset({"script", "pov"})
 
+# Kinds VPinFE never makes a game's own file of: a table's settings file stays the table's,
+# and the game gets its tables' settings through Set for All Tables. Apart from TABLE_ONLY on
+# purpose: a folder-named .ini is still read by Visual Pinball and still chosen from.
+NEVER_MADE_FOR_GAME = frozenset({"ini"})
+
+
+def goes_to_game(family: str, kind: str) -> bool:
+    """Whether a table's own file of this kind can be made the game's."""
+    return not (family == ASSET and (kind in TABLE_ONLY or kind in NEVER_MADE_FOR_GAME))
+
 _ASSET_KINDS = {kind.key: kind for kind in VPX_ASSET_KINDS}
 _MEDIA_KINDS = {spec.kind for spec in MEDIA_SPECS if spec.token}
 MEDIA_KINDS = tuple(sorted(_MEDIA_KINDS))
@@ -549,7 +559,7 @@ def to_game(game_id: str, family: str, kind: str, table_id: str) -> dict[str, An
     tables without a file of their own read the new one."""
     kind = _slot_kind_or_refuse(family, kind)
     label = label_of(family, kind)
-    if family == ASSET and kind in TABLE_ONLY:
+    if not goes_to_game(family, kind):
         raise service_errors.RefusedError(t("error.file_move.table_only", label=label),
                                           details={"kind": kind})
     game, game_dir = _writable(game_id)
@@ -650,7 +660,7 @@ def state(game_id: str, family: str, kind: str) -> dict[str, Any]:
         "game": _facts(pieces(game_dir, family, kind, folder)),
         "tables": rows,
         "fallback": has_fallback(family, kind),
-        "to_game": not (family == ASSET and kind in TABLE_ONLY),
+        "to_game": goes_to_game(family, kind),
         "playing": playing(game, game_id),
     }
 
@@ -662,5 +672,6 @@ def _listing(game_dir: Path) -> list[os.DirEntry]:
         return []
 
 
-__all__ = ["ASSET", "MEDIA", "TABLE_ONLY", "Moved", "Plan", "label_of", "movable",
-           "plan_to_tables", "state", "to_game", "to_tables", "undo"]
+__all__ = ["ASSET", "MEDIA", "NEVER_MADE_FOR_GAME", "TABLE_ONLY", "Moved", "Plan",
+           "goes_to_game", "label_of", "movable", "plan_to_tables", "state", "to_game",
+           "to_tables", "undo"]

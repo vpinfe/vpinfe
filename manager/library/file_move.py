@@ -55,7 +55,7 @@ def _is_table_file(one: File, family: str) -> bool:
     if not one.present or not one.table or not core.movable(family, one.kind):
         return False
     if family == core.ASSET:
-        return (one.kind not in core.TABLE_ONLY
+        return (core.goes_to_game(family, one.kind)
                 and str(one.row.get("binding") or "") == "table")
     return str(one.row.get("via") or "") == "table"
 

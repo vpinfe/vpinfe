@@ -342,7 +342,8 @@ def app_config(launcher_id: str, table: str = "",
 
     def shown(field: apps.Field) -> bool:
         held = values.get(field.key)
-        return scope in scopes_for(field.key) or (held is not None and held.set_here)
+        return (scope == SCOPE_ENTRY or scope in scopes_for(field.key)
+                or (held is not None and held.set_here))
 
     blank = _blank_words(found.app, config)
     named = _named_values(found.app, config)

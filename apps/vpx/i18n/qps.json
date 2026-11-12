@@ -85,6 +85,7 @@
   "field.Player.AutostartRetry.help": "Ţîɱè ƀèƒöřè Šţàřţ îš þřèššèđ àĝàîñ îƒ ñö ĝàɱè ƀèĝàñ, îñ ĥûñđřèđţĥš öƒ à šèçöñđ",
   "field.Player.AutostartRetry.label": "Àûţöšţàřţ Řèţřý",
   "field.Player.BGSet.help": "Ŵĥîçĥ öƒ ţĥè ţàƀŀè'š çàɱèřà šèţûþš ţö ûšè",
+  "field.Player.BGSet.label": "Đèƒàûŀţ Ṽîèŵ Ḿöđè",
   "field.Player.CabinetAutofitMode.help": "Ŵĥèţĥèř Ṽîšûàŀ Þîñƀàŀŀ ƒîţš ţĥè ţàƀŀè ţö ţĥè šçřèèñ ƒöř ýöû",
   "field.Player.CabinetAutofitPos.help": "Ĥöŵ ĥîĝĥ àûţöƒîţ þûţš ţĥè ŀöŵèř ƒŀîþþèřš - 0% îš ţĥè ƀöţţöɱ öƒ ţĥè šçřèèñ",
   "field.Player.EmissionScale.help": "Đàýŀîĝĥţ ţö ñîĝĥţ ţîɱè, ŵĥîŀè ţĥè ţàƀŀè'š ŀîĝĥţ ŀèṽèŀ îš öṽèřřîđđèñ",
@@ -298,8 +299,12 @@
   "leftover.hide_grill": "Ɓ2Š šĥöŵš ţĥè ĝřîŀŀ àš Ɓ2Š Ŀèĝàçý ŵàš šèţ ţö",
   "leftover.scoreview_enable": "Ñîẋîè šţàýš öƒƒ, àš Šçöřè Ṽîèŵ ŵàš",
   "leftover.scoreview_folder": "Ñîẋîè ûšèš ţĥè ŀàýöûţ ƒöŀđèř Šçöřè Ṽîèŵ ĥàđ",
+  "main_display": "Ḿàîñ đîšþŀàý",
+  "main_display.help": "Öñ ţĥè ɱàîñ đîšþŀàý",
   "match_the_display": "Ḿàţçĥ ţĥè Đîšþŀàý",
   "no_limit": "Ñö Ŀîɱîţ",
   "no_plugins": "Ţĥîš ƀûîŀđ ĥàš ñö þŀûĝîñš ƀèšîđè îţ.",
-  "the_tables_own": "Ţĥè ţàƀŀè'š öŵñ"
+  "system_default": "Šýšţèɱ đèƒàûŀţ",
+  "system_default.help": "Þŀàýš öñ ţĥè šýšţèɱ'š đèƒàûŀţ öûţþûţ",
+  "from_the_table": "Àš ţĥè àûţĥöř šèţ îţ"
 }

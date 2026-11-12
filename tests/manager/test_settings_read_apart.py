@@ -1,7 +1,7 @@
 """No two settings a person can pick read the same.
 
-Two places name every setting: Add a Setting at a table, and the Tables grid's Own
-Settings column, where a setting is picked across every table. Both are composed here
+Two places name every setting: All Settings searched at a table, and the Tables grid's
+Own Settings column, where a setting is picked across every table. Both are composed here
 from the labels VPX writes into its ini: `tests/fixtures/vpx_labels.json` is every
 setting VPX 11bc68f7d declares in `src/core/Settings_properties.inl`, by section, less
 the sections the settings never offer.
@@ -21,7 +21,7 @@ from apps.vpx import ini as vini
 from apps.vpx.setting_types import REGISTERED
 from common.games import launcher_ops, launchers
 from manager.kit import data
-from manager.workbench import all_settings, app_settings
+from manager.workbench import all_settings
 
 LABELS = Path(__file__).resolve().parents[1] / "fixtures" / "vpx_labels.json"
 
@@ -77,12 +77,13 @@ class SettingsReadApartTests(unittest.TestCase):
                 len(same), sum(map(len, same.values())),
                 "\n".join(f"  {name!r}: {keys}" for name, keys in same.items())))
 
-    def test_add_a_setting_at_a_table(self) -> None:
-        offered = {field.key: str(field.label)
-                   for field, _area in app_settings.addable(self.at_a_table, {}, ())}
+    def test_all_settings_searched_at_a_table(self) -> None:
+        listed = all_settings._listed_groups(
+            {"config_groups": self.at_a_table, "config_scope": "entry"})
+        names = all_settings.setting_names(listed)
 
-        self.assertIn("Plugin.B2S.Enable", offered)
-        self._read_apart(offered)
+        self.assertIn("Plugin.B2S.Enable", names)
+        self._read_apart(names)
 
     def test_every_table_s_own_settings(self) -> None:
         names = all_settings.setting_names(self.every)

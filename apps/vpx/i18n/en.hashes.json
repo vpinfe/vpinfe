@@ -85,6 +85,7 @@
   "field.Player.AutostartRetry.help": "7362990856b7",
   "field.Player.AutostartRetry.label": "165c1af6ad87",
   "field.Player.BGSet.help": "584f0e9ce4bc",
+  "field.Player.BGSet.label": "33553d8c51b8",
   "field.Player.CabinetAutofitMode.help": "4578c58583dc",
   "field.Player.CabinetAutofitPos.help": "983b2d854a9d",
   "field.Player.EmissionScale.help": "a8097ae0d21e",
@@ -201,6 +202,7 @@
   "field.log_delete_on_start.label": "1db2f37baf27",
   "from_the_screen": "05b65242d8c4",
   "from_the_screen.help": "f2d300db25b3",
+  "from_the_table": "0dce0a7ef89f",
   "group.displays.heading.backglass.label": "25a5d8a7eb06",
   "group.displays.heading.cabinet.label": "5737c4567e0f",
   "group.displays.heading.playfield.label": "fda1f441972b",
@@ -298,8 +300,11 @@
   "leftover.hide_grill": "9a42c55e014a",
   "leftover.scoreview_enable": "1125c0fb97cd",
   "leftover.scoreview_folder": "fc6fb57536cf",
+  "main_display": "c240423dabc6",
+  "main_display.help": "1f4ff040f7f0",
   "match_the_display": "4dc1422b3290",
   "no_limit": "246fc98366a7",
   "no_plugins": "394a45e52f59",
-  "the_tables_own": "5e49c1729ebb"
+  "system_default": "03d85a5998d1",
+  "system_default.help": "12c45804e450"
 }

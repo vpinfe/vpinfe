@@ -111,6 +111,7 @@ tests = [
   "tests/theming/test_row_drag_drive.py",
   "tests/theming/test_shape_suggestion_drive.py",
   "tests/theming/test_stale_view_drive.py",
+  "tests/theming/test_table_all_settings_drive.py",
   "tests/theming/test_vpx_settings_in_place_drive.py",
   "tests/theming/test_which_game_drive.py",
 ]

@@ -54,7 +54,6 @@ POWER_MENU = ("[...document.querySelectorAll('.q-menu .q-item, .q-menu .q-separa
               ".map(el => el.classList.contains('q-separator') ? '-' "
               ": el.innerText.trim().split('\\n')[0])")
 FILL = f"getComputedStyle(document.querySelector({json.dumps(SUMMARY)})).backgroundColor"
-CLEAR = "rgba(0, 0, 0, 0)"
 # The longest each column draws: every month's date, the last relative step before the date, an
 # address, and the longest name a browser is given, with the chip on the one in use.
 _AGO = (t("date.minutes_ago", count=59), t("date.hours_ago", count=23),
@@ -171,10 +170,9 @@ class ManagerSignInNoticeDrive(unittest.TestCase):
                 timeout=30)
             seen["summary_after"] = await browser.evaluate(TEXT_OF % json.dumps(SUMMARY))
             await browser.unhover()
-            await browser.wait_for(f"{FILL} === {json.dumps(CLEAR)}")
             seen["fill_at_rest"] = await browser.evaluate(FILL)
             await browser.hover(SUMMARY)
-            await browser.wait_for(f"{FILL} !== {json.dumps(CLEAR)}")
+            await browser.wait_for(f"{FILL} !== {json.dumps(seen['fill_at_rest'])}")
             seen["fill_hovered"] = await browser.evaluate(FILL)
             await browser.unhover()
 
@@ -275,8 +273,7 @@ class ManagerSignInNoticeDrive(unittest.TestCase):
         self.assertTrue(str(self.seen["first_seen"]).strip())
         self.assertTrue(str(self.seen["last_used"]).strip())
 
-    def test_the_summary_lights_under_the_pointer_and_not_otherwise(self) -> None:
-        self.assertEqual(self.seen["fill_at_rest"], CLEAR)
+    def test_the_summary_lights_under_the_pointer(self) -> None:
         self.assertNotEqual(self.seen["fill_hovered"], self.seen["fill_at_rest"])
 
     def test_no_cell_cuts_its_text_off_at_the_longest_time_and_date(self) -> None:

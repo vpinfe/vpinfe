@@ -119,26 +119,25 @@ class AllSettingsTests(unittest.TestCase):
         return [(section, [f.key for f in fields]) for section, fields in
                 all_settings.found_settings(self.GROUPS, values or {}, wanted)]
 
-    def test_everything_under_its_section_in_the_order_the_areas_reach_it(self) -> None:
+    def test_everything_under_its_area_in_the_order_the_areas_reach_it(self) -> None:
         self.assertEqual(self._found(), [
-            ("Player", ["Player.PlayfieldFullScreen", "Player.BallTrail"]),
-            ("Backglass", ["Backglass.BackglassOutput"]),
-            ("Plugin.PinMAME", ["Plugin.PinMAME.Enable", "Plugin.PinMAME.PinMAMEPath"]),
-            ("DMD", ["DMD.Profile1Legacy"]),
+            ("Displays", ["Player.PlayfieldFullScreen", "Backglass.BackglassOutput"]),
+            ("Plugins", ["Plugin.PinMAME.Enable", "Plugin.PinMAME.PinMAMEPath"]),
+            ("More", ["Player.BallTrail", "DMD.Profile1Legacy"]),
         ])
 
     def test_the_key_typed_from_the_file_finds_its_row(self) -> None:
         self.assertEqual(self._found(query="fullscreen"),
-                         [("Player", ["Player.PlayfieldFullScreen"])])
+                         [("Displays", ["Player.PlayfieldFullScreen"])])
 
     def test_every_word_has_to_be_somewhere_in_label_key_or_description(self) -> None:
         self.assertEqual(self._found(query="pinmame roms"),
-                         [("Plugin.PinMAME", ["Plugin.PinMAME.PinMAMEPath"])])
+                         [("Plugins", ["Plugin.PinMAME.PinMAMEPath"])])
         self.assertEqual(self._found(query="pinmame trail"), [])
 
     def test_one_area(self) -> None:
         self.assertEqual(self._found(area="more"), [
-            ("Player", ["Player.BallTrail"]), ("DMD", ["DMD.Profile1Legacy"])])
+            ("More", ["Player.BallTrail", "DMD.Profile1Legacy"])])
 
     def test_changed_is_a_value_set_here_that_differs_from_what_it_would_follow(self) -> None:
         values = {"Player.BallTrail": {"value": "1.0", "set_here": True},
@@ -147,7 +146,7 @@ class AllSettingsTests(unittest.TestCase):
                   "DMD.Profile1Legacy": {"value": "2", "set_here": True}}
 
         self.assertEqual(self._found(values, differs=True),
-                         [("DMD", ["DMD.Profile1Legacy"])])
+                         [("More", ["DMD.Profile1Legacy"])])
 
     def test_changed_follows_the_scope_it_is_read_from(self) -> None:
         inherited = {"value": "1", "set_here": True, "in_effect": True,
@@ -159,18 +158,18 @@ class AllSettingsTests(unittest.TestCase):
                   "DMD.Profile1Legacy": {"value": "", "set_here": True, "varies": True}}
 
         self.assertEqual(self._found(values, differs=True), [
-            ("Player", ["Player.PlayfieldFullScreen"]), ("DMD", ["DMD.Profile1Legacy"])])
+            ("Displays", ["Player.PlayfieldFullScreen"]), ("More", ["DMD.Profile1Legacy"])])
 
     def test_a_pair_is_found_whole_where_either_of_its_rows_is(self) -> None:
-        video_mode = SimpleNamespace(key="video_mode", keys=("Topper.TopperFSWidth",
-                                                             "Topper.TopperFSHeight"))
+        video_mode = SimpleNamespace(key="video_mode", label="Video Mode",
+                                     keys=("Topper.TopperFSWidth", "Topper.TopperFSHeight"))
         groups = [_group("displays", _setting("Topper.TopperFullScreen", "Fullscreen"),
                          _setting("Topper.TopperFSWidth", "Width", default="1920"),
                          _setting("Topper.TopperFSHeight", "Height", default="1080"),
                          curated=[_heading("topper", "Topper.TopperFullScreen",
                                            *video_mode.keys, pairs=[video_mode])])]
         values = {"Topper.TopperFSHeight": {"value": "1200", "set_here": True}}
-        pair = [("Topper", ["Topper.TopperFSWidth", "Topper.TopperFSHeight"])]
+        pair = [("Displays", ["Topper.TopperFSWidth", "Topper.TopperFSHeight"])]
 
         for wanted in ({"query": "height"}, {"differs": True}):
             with self.subTest(**wanted):
@@ -179,8 +178,8 @@ class AllSettingsTests(unittest.TestCase):
         self.assertEqual(all_settings.curated_pairs(groups), [video_mode])
 
     def test_changed_counts_a_pair_once_and_only_in_the_area_asked(self) -> None:
-        video_mode = SimpleNamespace(key="video_mode", keys=("Topper.TopperFSWidth",
-                                                             "Topper.TopperFSHeight"))
+        video_mode = SimpleNamespace(key="video_mode", label="Video Mode",
+                                     keys=("Topper.TopperFSWidth", "Topper.TopperFSHeight"))
         groups = [_group("displays", _setting("Topper.TopperFSWidth", "Width", default="1920"),
                          _setting("Topper.TopperFSHeight", "Height", default="1080"),
                          curated=[_heading("topper", *video_mode.keys, pairs=[video_mode])]),
@@ -557,14 +556,14 @@ class BlankValueTests(unittest.TestCase):
 
     def test_a_choice_s_blank_is_an_option_named_by_it(self) -> None:
         field = SimpleNamespace(key="TableOverride.ViewCabMode", type="int",
-                                label="View mode", default="", blank="The table's own",
+                                label="View mode", default="", blank="As the author set it",
                                 choices=(("0", "Legacy"), ("2", "Window")),
                                 choice_help={"2": "The screen as a window"})
 
         option = all_settings._as_option(field)
 
         self.assertEqual(option["choices"],
-                         {"": "The table's own", "0": "Legacy", "2": "Window"})
+                         {"": "As the author set it", "0": "Legacy", "2": "Window"})
         self.assertEqual(option["describes"], {"Window": "The screen as a window"})
 
     def test_a_path_field_keeps_what_it_names_so_the_control_can_browse(self) -> None:
@@ -766,11 +765,12 @@ class ClearTests(unittest.IsolatedAsyncioTestCase):
         icon_action.assert_not_called()
         action.assert_not_called()
 
-    def test_a_value_set_to_what_it_would_be_anyway_has_none(self) -> None:
-        """Nothing was changed, so there is nothing to put back."""
+    def test_a_value_set_to_what_it_would_be_anyway_is_still_reset_to_following(self) -> None:
+        """The value stays held, so Reset is how the scope goes back to following."""
         icon_action, _ = self._drawn({**self.SET, "value": "2"})
 
-        icon_action.assert_not_called()
+        self.assertEqual(icon_action.call_args.args, (t("word.reset"), self.wipe))
+        self.assertEqual(icon_action.call_args.kwargs["hint"], "Back to Floating - The Launcher")
 
     async def test_each_row_s_clear_empties_its_own_key(self) -> None:
         library = Mock()
@@ -997,7 +997,7 @@ class PairTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TableSettingsTitleTests(unittest.TestCase):
-    """Every setting at one table, in the dialog Show Every Setting opens."""
+    """Every setting at one table, in the dialog All Settings opens."""
 
     def test_it_is_titled_for_the_table_not_the_launcher(self) -> None:
         said = app_settings.title_for("Medieval Madness", "VPW 1.2", "Visual Pinball X", 1)
@@ -1290,7 +1290,8 @@ class DifferencesTests(unittest.TestCase):
         found = app_settings.differences([_group("plugins", enable, curated=curated)],
                                          {enable.key: self.SET})
 
-        self.assertEqual(found[0][1][0].label, "B2S Legacy: Enable")
+        self.assertEqual(found[0][0], "Plugins - B2S Legacy")
+        self.assertEqual(found[0][1][0].label, "Enable")
 
     DISPLAYS = _group(
         "displays",
@@ -1314,13 +1315,14 @@ class DifferencesTests(unittest.TestCase):
         found = app_settings.differences([group], dict.fromkeys(keys, self.SET))
         return [field.label for field in found[0][1]]
 
-    def test_a_row_several_windows_share_names_its_window(self) -> None:
-        """Even alone: under Displays, Display Mode on its own says nothing about which
-        window."""
-        self.assertEqual(self._labels("Backglass.BackglassFullScreen"),
-                         ["Backglass Display Mode"])
+    def test_a_row_is_listed_under_its_area_and_heading_as_its_page_names_it(self) -> None:
+        found = app_settings.differences([self.DISPLAYS],
+                                         {"Backglass.BackglassFullScreen": self.SET})
 
-    def test_a_window_s_row_names_its_window_where_no_other_window_shares_it(self) -> None:
+        self.assertEqual([(title, [f.label for f in fields]) for title, fields in found],
+                         [("Displays - Backglass", ["Display Mode"])])
+
+    def test_a_heading_s_rows_are_short_and_the_rest_of_the_area_follows_it(self) -> None:
         preview = _group(
             "more", _field("PlayerVR.PreviewDisplay", "Display"),
             _field("PlayerVR.PreviewWidth", "Width"), _field("Player.Shadows", "Shadows"),
@@ -1328,8 +1330,11 @@ class DifferencesTests(unittest.TestCase):
                                      keys=("PlayerVR.PreviewDisplay",
                                            "PlayerVR.PreviewWidth")),))
 
-        self.assertEqual(self._labels("PlayerVR.PreviewDisplay", "Player.Shadows",
-                                      group=preview), ["VR Preview Display", "Shadows"])
+        found = app_settings.differences(
+            [preview], dict.fromkeys(("PlayerVR.PreviewDisplay", "Player.Shadows"), self.SET))
+
+        self.assertEqual([(title, [f.label for f in fields]) for title, fields in found],
+                         [("More - VR Preview", ["Display"]), ("More", ["Shadows"])])
 
     def test_a_heading_over_several_things_leaves_its_rows_the_program_s(self) -> None:
         self.assertEqual(self._labels("Player.BGSet", "Player.ScreenWidth"),
@@ -1387,7 +1392,7 @@ class PointOfViewTests(unittest.TestCase):
         assert view is not None
 
         self.assertEqual((view.views, view.own, view.reaching), ([], [], False))
-        self.assertEqual(app_settings.camera_said(view), "The table's own")
+        self.assertEqual(app_settings.camera_said(view), "As the author set it")
 
     def test_and_absent_when_nothing_in_it_differs(self) -> None:
         self.assertIsNone(self._view(**{self.CAB.key: DifferencesTests.ALL}))
@@ -1398,7 +1403,7 @@ class PointOfViewTests(unittest.TestCase):
         assert view is not None
         remove = Mock()
 
-        with patch.object(app_settings.panel, "action") as action:
+        with patch.object(app_settings.panel, "icon_action") as action:
             entries = app_settings._camera_entries(view, remove, playing=False)
         action.call_args.args[1]()
 
@@ -1409,7 +1414,7 @@ class PointOfViewTests(unittest.TestCase):
         view = self._view(**{self.DESKTOP.key: DifferencesTests.GAME})
         assert view is not None
 
-        with patch.object(app_settings.panel, "action") as action:
+        with patch.object(app_settings.panel, "icon_action") as action:
             app_settings._camera_entries(view, Mock(), playing=False)
 
         action.assert_not_called()
@@ -1424,9 +1429,10 @@ class TableOptionsTests(unittest.TestCase):
     def _resets(self, values: dict) -> list[str]:
         options = app_settings.table_options([self.GROUP], values)
         assert options is not None
-        with patch.object(app_settings.panel, "action") as action:
+        with patch.object(app_settings.panel, "icon_action") as icon, \
+                patch.object(app_settings.panel, "action") as line:
             app_settings._option_entries(options, values, Mock(), playing=False)
-        return [call.args[0] for call in action.call_args_list]
+        return [call.args[0] for call in (*icon.call_args_list, *line.call_args_list)]
 
     def test_each_one_the_table_holds_has_reset_and_two_have_reset_all(self) -> None:
         values = {self.SPEED.key: DifferencesTests.SET, self.LIGHTS.key: DifferencesTests.SET}
@@ -1443,86 +1449,6 @@ class TableOptionsTests(unittest.TestCase):
 
     def test_and_absent_without_one(self) -> None:
         self.assertIsNone(app_settings.table_options([self.GROUP], {}))
-
-
-class AddASettingTests(unittest.TestCase):
-    SET = DifferencesTests.SET
-    SOUND = _group("sound", _field("Player.A"), _field("Player.B", per_table=True))
-    GRAPHICS = _group("graphics", _field("Player.C", per_table=True), _field("Player.D"))
-
-    def _offered(self, groups, values=None, added=()) -> list[tuple[str, str]]:
-        return [(str(field.label), area)
-                for field, area in app_settings.addable(groups, values or {}, added)]
-
-    def test_those_commonly_set_per_table_come_first_each_with_its_area(self) -> None:
-        self.assertEqual(self._offered([self.SOUND, self.GRAPHICS]),
-                         [("B", "Sound"), ("C", "Graphics"), ("A", "Sound"),
-                          ("D", "Graphics")])
-
-    def test_one_the_table_already_shows_is_not_offered(self) -> None:
-        offered = self._offered([self.SOUND, self.GRAPHICS],
-                                {"Player.A": self.SET, "Player.B": DifferencesTests.GAME},
-                                added=["Player.C"])
-
-        self.assertEqual(offered, [("D", "Graphics")])
-
-    def test_one_kept_for_all_tables_alone_is_not_offered(self) -> None:
-        group = _group("sound", _field("Player.A"),
-                       _field("Player.ShowFPS", scopes=("launcher",)))
-
-        self.assertEqual(self._offered([group]), [("A", "Sound")])
-
-    def test_nor_are_the_table_s_options(self) -> None:
-        self.assertEqual(self._offered([TableOptionsTests.GROUP]), [])
-
-    def test_of_the_point_of_view_only_the_view_modes_it_draws(self) -> None:
-        group = SimpleNamespace(**{**vars(PointOfViewTests.GROUP),
-                                   "rows": (PointOfViewTests.MODE.key,)})
-
-        self.assertEqual(self._offered([group]), [("Cabinet View mode", "Point of View")])
-
-    def test_and_none_of_it_once_its_rows_are_drawn(self) -> None:
-        values = {PointOfViewTests.CAB.key: self.SET}
-
-        self.assertEqual(self._offered([PointOfViewTests.GROUP], values), [])
-
-    def test_an_added_setting_is_listed_among_the_differences(self) -> None:
-        found = app_settings.differences([self.SOUND], {}, added=["Player.B"])
-
-        self.assertEqual([(area, [f.key for f in fields]) for area, fields in found],
-                         [("Sound", ["Player.B"])])
-
-    def test_an_added_view_mode_draws_the_point_of_view(self) -> None:
-        view = app_settings.point_of_view([PointOfViewTests.GROUP], {},
-                                          added=[PointOfViewTests.MODE.key])
-
-        assert view is not None
-        self.assertEqual((len(view.rows), view.views, view.own), (2, [], []))
-
-    def test_what_was_added_is_forgotten_when_another_table_is_open(self) -> None:
-        state: dict[str, Any] = {}
-        app_settings._added(state, "t1")
-        state[app_settings.ADDED]["keys"] = ["Player.A"]
-
-        self.assertEqual(app_settings._added(state, "t1"), ["Player.A"])
-        self.assertEqual(app_settings._added(state, "t2"), [])
-
-    def _headings(self, offered: list) -> list[str]:
-        with patch.object(app_settings.panel, "SettingPicker") as picker, \
-                patch.object(app_settings.ui, "run_javascript"):
-            app_settings._add_picker({"state": {}}, [], offered)
-        return list(picker.call_args.kwargs["headings"].values())
-
-    def test_a_heading_starts_each_run(self) -> None:
-        offered = app_settings.addable([self.SOUND, self.GRAPHICS], {}, ())
-
-        self.assertEqual(self._headings(offered),
-                         ["Commonly Set per Table", "Everything Else"])
-
-    def test_and_none_where_nothing_is_commonly_set_per_table(self) -> None:
-        offered = app_settings.addable([_group("sound", _field("Player.A"))], {}, ())
-
-        self.assertEqual(self._headings(offered), [])
 
 
 def _pair(key: str, label: str, *keys: str) -> SimpleNamespace:
@@ -1563,18 +1489,6 @@ class TablePairTests(unittest.TestCase):
                          ["Backglass Video Mode", "Backglass Size", "Topper Size",
                           t("manager.app_settings.plugin_row", plugin="B2S",
                             label="Backglass DMD Position")])
-
-    def test_add_a_setting_offers_a_pair_once_by_its_name(self) -> None:
-        self.assertEqual([(str(field.label), field.key) for field, _ in
-                          app_settings.addable([self.DISPLAYS], {}, ())],
-                         [("Backglass Video Mode", self.MODE[0]),
-                          ("Backglass Size", self.SIZE[0]), ("Topper Size", self.TOPPER[0])])
-
-    def test_and_not_once_either_of_its_rows_is_drawn(self) -> None:
-        offered = app_settings.addable([self.DISPLAYS], {self.SIZE[1]: self.SET},
-                                       [self.TOPPER[0]])
-
-        self.assertEqual([field.key for field, _ in offered], [self.MODE[0]])
 
 
 def _other(table_id: str, value: str = "1", *, scope: str = "entry",

@@ -737,12 +737,11 @@
     "other": "Řèɱöṽèđ {count:n} ĝàɱèš ƒřöɱ “{name}”"
   },
   "manager.api.api_answered": "Ţĥè ÀÞÎ àñšŵèřèđ {status_code}",
-  "manager.app_settings.add": "Àđđ à Šèţţîñĝ",
   "manager.app_settings.launcher_only": "Ŵöřķš öñŀý ƒöř ţĥè ŀàûñçĥèř",
+  "manager.app_settings.launcher_page_link": "Šèţ öñ ţĥè Ŀàûñçĥèř'š Þàĝè",
   "manager.app_settings.camera": "Çàɱèřà",
   "manager.app_settings.camera.help": "Àđĵûšţ îţ îñ Ṽîšûàŀ Þîñƀàŀŀ ŵĥîŀè ţĥè ţàƀŀè řûñš, ƒřöɱ îţš ɱèñû'š Þöîñţ Öƒ Ṽîèŵ þàĝè",
   "manager.app_settings.camera_reset.help": "Ɓàçķ ţö îţš àûţĥöř'š çàɱèřà",
-  "manager.app_settings.common_heading": "Çöɱɱöñŀý Šèţ þèř Ţàƀŀè",
   "manager.app_settings.copied_from_game": {
     "one": "Çöþîèđ 1 šèţţîñĝ",
     "other": "Çöþîèđ {count:n} šèţţîñĝš"
@@ -752,7 +751,6 @@
   "manager.app_settings.copy_from_game.follows_help": "Ĝîṽèš ţĥîš ţàƀŀè à ƒîŀè öƒ îţš öŵñ ŵîţĥ ţĥè šàɱè ṽàŀûèš",
   "manager.app_settings.back_to_game": "Ţĥèñ îţ ƒöŀŀöŵš ţĥè ĝàɱè'š šèţţîñĝš, ŵĥîçĥ àŀšö çĥàñĝèš:\n{rows}",
   "manager.app_settings.follows_game": "Ñö ƒîŀè öƒ îţš öŵñ, šö îţ ƒöŀŀöŵš îţš ĝàɱè'š šèţţîñĝš",
-  "manager.app_settings.everything_else": "Èṽèřýţĥîñĝ Èŀšè",
   "manager.app_settings.table_title": "{app} ƒöř Ţĥîš Ţàƀŀè",
   "manager.app_settings.from_game": {
     "one": "1 öƒ ţĥîš ĝàɱè'š šèţţîñĝš đöèš ñöţ àþþŀý ţö ţĥîš ţàƀŀè ŵîţĥ îţš öŵñ ƒîŀè",
@@ -821,11 +819,12 @@
     "one": "Çĥàñĝèš ĥèřè àŀšö àþþŀý ţö ţĥè öţĥèř ţàƀŀè, ûñŀèšš îţ ĥàš îţš öŵñ",
     "other": "Çĥàñĝèš ĥèřè àŀšö àþþŀý ţö ţĥè öţĥèř {count:n} ţàƀŀèš, ûñŀèšš ţĥèý ĥàṽè ţĥèîř öŵñ"
   },
-  "manager.app_settings.show_all": "Šĥöŵ Èṽèřý Šèţţîñĝ",
-  "manager.app_settings.show_all.help": "Öþèñš èṽèřý šèţţîñĝ ƒöř ţĥîš ţàƀŀè, ñöţ ĵûšţ ţĥè öñèš šĥöŵñ ĥèřè",
-  "manager.app_settings.the_tables_own": "Ţĥè ţàƀŀè'š öŵñ",
+  "manager.app_settings.all_settings.help": "Öþèñš èṽèřý šèţţîñĝ ƒöř ţĥîš ţàƀŀè, ñöţ ĵûšţ ţĥè öñèš šĥöŵñ ĥèřè",
+  "manager.app_settings.change_button": "Àđđ öř Çĥàñĝè Šèţţîñĝš",
+  "manager.app_settings.from_the_table": "Àš ţĥè àûţĥöř šèţ îţ",
   "manager.app_settings.ignored": "Îĝñöřèđ",
   "manager.app_settings.window_row": "{window} {label}",
+  "manager.app_settings.area_heading": "{area} - {heading}",
   "manager.devices.windows_closed": "Ƒřöñţèñđ çŀöšèđ",
   "manager.devices.windows_closed_many": {
     "one": "Ƒřöñţèñđ çŀöšèđ öñ {count:n} đèṽîçè",
@@ -5082,6 +5081,9 @@
   },
   "manager.workbench.keep_none": "Ķèèþ ñöñè öƒ îţš ĝàɱèš",
   "manager.workbench.the_launcher": "Ţĥè Ŀàûñçĥèř",
+  "manager.workbench.matches_default": "Šàɱè àš đèƒàûŀţ",
+  "manager.workbench.matches_launcher": "Šàɱè àš ŀàûñçĥèř",
+  "manager.workbench.matches_game": "Šàɱè àš ĝàɱè",
   "manager.workbench.cause_both": "Ɓöţĥ ţàƀŀèš",
   "manager.workbench.cause_all": "Àŀŀ {count:n} ţàƀŀèš",
   "manager.workbench.launcher": "Ŀàûñçĥèř",
