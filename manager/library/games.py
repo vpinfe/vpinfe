@@ -45,6 +45,7 @@ from manager.library import (
     drop_target,
     game_acts,
     game_states,
+    library_add,
     mediaview,
     row_drag,
 )
@@ -358,15 +359,16 @@ def grid_presets(kinds: list[str], library: Any) -> dict[str, list[str] | views.
 
 
 def _nothing_yet(words: str, library: Any, state: dict[str, Any],
-                 rescan: Callable[[], Any] | None) -> None:
-    """What a page shows in place of a grid with no rows: where rows come from, and a
-    way to pick up ones that arrived by hand. A link's filter is spent here, not held
-    for the first row that appears."""
+                 rescan: Callable[[], Any] | None, view: str) -> None:
+    """What a page shows in place of a grid with no rows: where rows come from, a way to
+    add some, and a way to pick up ones that arrived by hand. A link's filter is spent
+    here, not held for the first row that appears."""
     for key in ("arriving", "launcher", "sets", "reported", NEW_KEY, UNFILLED_KEY, LACKING_KEY,
                 UPDATES_KEY):
         state.pop(key, None)
     sections.metadata_line(library, state)
     panel.facts(ui, [panel.intro(t(words, page=t("manager.section.library_folders")))])
+    library_add.add_action(library, state, view, empty=True)
     if rescan is not None:
         panel.action(t("manager.games.rescan"), rescan, icon=verbs.REFRESH,
                      hint=t("manager.games.rescan_hint"))()
@@ -389,7 +391,7 @@ def build(rows: list[dict[str, Any]], kinds: list[str], library: Any,
     state["ticked"] = 0
     state["searching"] = False
     if not rows:
-        _nothing_yet("manager.games.empty", library, state, rescan)
+        _nothing_yet("manager.games.empty", library, state, rescan, "games")
         return
     tag_chips.install(library.tag_looks())
     renderers.install_collection_looks(library.smart_collections(), ui.context.client)
@@ -466,6 +468,7 @@ def build(rows: list[dict[str, Any]], kinds: list[str], library: Any,
                 t("manager.games.games_menu"), lambda: grid.selection(table),
                 lambda chosen: game_verbs(chosen, adding["known"]),
                 lambda: table.run_grid_method("deselectAll"), ready=lambda: read_collections())
+            library_add.add_action(library, state, "games", empty=False)
             if rescan is not None:
                 panel.refresh(rescan, t("manager.games.rescan"))
 
@@ -1283,7 +1286,7 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
     state["ticked"] = 0
     state["searching"] = False
     if not rows:
-        _nothing_yet("manager.games.empty_tables", library, state, rescan)
+        _nothing_yet("manager.games.empty_tables", library, state, rescan, "tables")
         return
     tag_chips.install(library.tag_looks())
     renderers.install_setting_names(own_setting_names(library.setting_groups()))
@@ -1364,6 +1367,7 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
                 lambda chosen: table_verbs(chosen, adding["known"]),
                 lambda: table.run_grid_method("deselectAll"),
                 ready=lambda: read_collections())
+            library_add.add_action(library, state, "tables", empty=False)
             if rescan is not None:
                 panel.refresh(rescan, t("manager.games.rescan"))
 

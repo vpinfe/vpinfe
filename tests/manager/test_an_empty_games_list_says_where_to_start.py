@@ -47,8 +47,8 @@ class EmptyListTests(unittest.TestCase):
     def test_a_scan_can_be_asked_for_from_the_empty_page(self) -> None:
         body = self._drawn(self._games, {"view": "games"}, rescan=lambda: None)
 
-        (button,) = [one for one in body.descendants() if isinstance(one, ui.button)]
-        self.assertEqual(t("manager.games.rescan"), button.text)
+        buttons = [one.text for one in body.descendants() if isinstance(one, ui.button)]
+        self.assertEqual([t("manager.add.games"), t("manager.games.rescan")], buttons)
 
     def test_a_filter_a_link_asked_for_is_spent_not_held(self) -> None:
         state: dict[str, Any] = {"view": "games", "arriving": {"x": 1}, "sets": "a"}

@@ -494,13 +494,15 @@ def _not_loaded(loading: ui.element, exc: Exception) -> None:
 # On each route, because the timeout is the page's and these are two pages.
 @on_page
 async def _took_a_drop(
-        library: Library, state: dict, redraw: Callable[[], None], drop: Any) -> None:
+        library: Library, state: dict, redraw: Callable[[], None], drop: Any, *,
+        added: bool = False) -> None:
     """What a drop meant, and the conversation that follows it.
 
     Where somebody let go is the whole of the targeting: `drop_target.resolve` reads the
     row, the cell and any declaration there against the view showing, and a drop that
     lands on nothing names the library, which is what makes it a new game rather than a
-    guess about an existing one.
+    guess about an existing one. `added` is a file brought in by the page's Add, which
+    names the library the same way and is turned away in words about adding, not dropping.
     """
     from manager.library import import_dialog, uploads
 
@@ -540,7 +542,7 @@ async def _took_a_drop(
     # a game that is already there, which only the person who dropped it can say.
     new_game = not game_dir and not media_kind
     if new_game and not analysis.get("has_game"):
-        picked = await _which_game(library, drop, analysis)
+        picked = await _which_game(library, drop, analysis, added=added)
         if picked is None:
             return
         game_id, game_dir, new_game = picked.game, picked.folder, False
@@ -570,15 +572,19 @@ async def _took_a_drop(
 
 
 @on_page
-async def _which_game(library: Library, drop: Any,
-                      analysis: dict[str, Any]) -> drop_target.Target | None:
+async def _which_game(library: Library, drop: Any, analysis: dict[str, Any], *,
+                      added: bool = False) -> drop_target.Target | None:
     """The game a drop with no table is for, as a drop on that game's row would name it.
     None, with the upload let go of, where there is nothing to ask about or the answer was
     to cancel."""
     from manager.library import which_game
 
+    if added and not library.games:
+        await _turned_away(library, drop, t("manager.add.no_games"))
+        return None
     if not library.games or not analysis.get("assets"):
-        await _turned_away(library, drop, t("manager.page.drop_hint"))
+        await _turned_away(library, drop, t(
+            "manager.uploads.nothing_import" if added else "manager.page.drop_hint"))
         return None
     try:
         chosen = await which_game.ask(library, analysis)
@@ -2082,6 +2088,9 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         read_then_render(state, library, content, render, mark_findings, light_nav,
                          refresh_rail)
 
+    state["redraw"] = redraw
+    state["took_a_drop"] = lambda drop: _took_a_drop(library, state, redraw, drop, added=True)
+
     uploads.install()
     row_drag.install()
 
@@ -2143,6 +2152,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         redraw()
         with client:
             deeplink.sync(state, push=True)
+
+    state["go"] = go
 
     @on_page
     async def land_subject() -> None:

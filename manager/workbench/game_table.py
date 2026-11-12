@@ -1379,6 +1379,7 @@ def _tables_block(context: dict[str, Any]) -> None:
             .classes("manager-card-title manager-fact-heading grow")
     if not tables:
         ui.label(t("manager.workbench.no_tables")).classes("manager-help")
+        ui.label(t("manager.workbench.no_tables_drop")).classes("manager-help manager-drop-only")
     if several:
         ui.label(t("manager.workbench.tables_default_help")).classes("manager-help")
         game_default.fell_note(tables)

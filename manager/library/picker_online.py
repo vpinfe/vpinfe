@@ -710,7 +710,7 @@ class Online:
             return
         with self.base, ui.row().classes("w-full items-center gap-3 no-wrap manager-dropbox"):
             ui.label(drop_words(self.host.drop_key, self.pick.label)) \
-                .classes("manager-help grow min-w-0")
+                .classes("manager-help manager-drop-only grow min-w-0")
             self.host.take_button()
 
 

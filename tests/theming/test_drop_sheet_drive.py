@@ -1,7 +1,8 @@
 """The sheet a drop opens: a zip of wheel variants dropped on a wheel cell shows each one with
 its picture and a radio, holds the button until one is picked and imports the picked file,
 and a mixed zip dropped on a game asks where an unnamed picture goes and offers a text file to
-keep in the game folder as it is.
+keep in the game folder as it is. A table chosen from the Add dialog on Games opens the sheet
+for a new game, the one way to make a game from a mobile device.
 
 Slow: boots a real instance and a real browser.
 """
@@ -44,6 +45,8 @@ GO = (f"(() => {{ const b = {BUTTONS}.pop(); return {{text: b.innerText.trim(),"
       " off: b.disabled || b.classList.contains('disabled')}; })()")
 CARD_TEXT = f"document.querySelector('{CARD}').innerText"
 KEPT = t("manager.drop_sheet.other_saved")
+SOURCES = ".manager-sources-card"
+ADDED = "Brand New Table"
 
 
 class DropSheetDrive(unittest.TestCase):
@@ -64,12 +67,14 @@ class DropSheetDrive(unittest.TestCase):
                 archive.writestr("(Wheel) Medieval Madness.png", drops.png_bytes(400, 200))
                 archive.writestr("IMG_0001.png", drops.png_bytes(800, 800))
                 archive.writestr("notes.txt", b"x" * 16)
+            added = Path(tmp) / f"{ADDED}.vpx"
+            added.write_bytes(b"not really a vpx")
             with LiveInstance(library) as instance:
-                cls.seen = asyncio.run(cls._drive(instance, folder, wheels, mixed))
+                cls.seen = asyncio.run(cls._drive(instance, folder, wheels, mixed, added))
 
     @classmethod
     async def _drive(cls, instance: LiveInstance, folder: Path, wheels: Path,
-                     mixed: Path) -> dict:
+                     mixed: Path, added: Path) -> dict:
         seen: dict = {}
         instance.wait_for_api()
         written = folder / "medias" / media_placement.target_name("wheel", GAME, ".png")
@@ -117,6 +122,26 @@ class DropSheetDrive(unittest.TestCase):
             seen["mixed"] = await browser.evaluate(CARD_TEXT)
             seen["mixed_go"] = await browser.evaluate(GO)
 
+            await walk.visit("/manager?view=games")
+            await browser.wait_for(API + ".getDisplayedRowCount() > 0")
+            await browser.evaluate(
+                "(() => { const click = HTMLInputElement.prototype.click;"
+                " HTMLInputElement.prototype.click = function () {"
+                " if (this.type === 'file') { window.__asked = this; return; }"
+                " return click.call(this); }; })()")
+            await browser.evaluate(
+                "[...document.querySelectorAll('.manager-grid-bar .q-btn')]"
+                ".find(b => b.innerText.trim() === 'add').click()")
+            await browser.wait_for(f"!!document.querySelector('{SOURCES} .manager-split .q-btn')")
+            await browser.evaluate(f"document.querySelector('{SOURCES} .manager-split .q-btn')"
+                                   ".click()")
+            await browser.wait_for("!!window.__asked")
+            document = await browser.send("Runtime.evaluate", {"expression": "window.__asked"})
+            await browser.send("DOM.setFileInputFiles", {
+                "objectId": document["result"]["objectId"], "files": [str(added)]})
+            await browser.wait_for(OPEN)
+            seen["added_card"] = await browser.evaluate(CARD_TEXT)
+
         return seen
 
     def test_each_variant_has_a_radio_and_a_picture_with_none_of_these(self) -> None:
@@ -141,6 +166,9 @@ class DropSheetDrive(unittest.TestCase):
         text = self.seen["mixed"]
         self.assertIn(t("manager.drop_sheet.unplaced"), text)
         self.assertIn(KEPT, text)
+
+    def test_the_add_on_games_turns_a_chosen_table_into_a_new_game_sheet(self) -> None:
+        self.assertIn(ADDED, self.seen["added_card"])
 
 
 if __name__ == "__main__":

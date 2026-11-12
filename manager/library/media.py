@@ -22,7 +22,7 @@ from common.i18n import t
 from common.media.media_specs import media_label_map
 from manager.devices import plays_on
 from manager.kit import game_tables, grid, media_ownership, offload, panel, thumbnails, views
-from manager.library import file_acts, file_states
+from manager.library import file_acts, file_states, library_add
 from manager.library.games import view_control
 
 SCOPE = "manager.media.columns"
@@ -286,6 +286,7 @@ def build(found: list[dict[str, Any]], library: Any,
                 t("manager.media.media_menu"), lambda: grid.selection(table),
                 lambda chosen: acts_on(chosen),
                 lambda: table.run_grid_method("deselectAll"))
+            library_add.add_action(library, state, "media", empty=False)
             if rescan is not None:
                 panel.refresh(rescan, t("manager.media.rescan"))
 

@@ -2229,6 +2229,11 @@ class Library:
                     row["in_library"] = True
         return made
 
+    def create_game(self, name: str, location_id: str = "") -> dict:
+        made = self._client.create_game(name, location_id)
+        self._forget_games()
+        return made
+
     def delete_game_folder(self, game_id: str) -> None:
         self._client.delete_game_folder(game_id)
         self._forget_games()

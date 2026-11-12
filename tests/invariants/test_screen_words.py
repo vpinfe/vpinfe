@@ -66,6 +66,7 @@ ASSET = {
     "manager.assets.assets": LOADS,
     "manager.assets.assets_missing": LOADS,
     "manager.assets.search_assets": LOADS,
+    "manager.add.assets": ASSETS_PAGE,
     "manager.backups.kind.asset": "the copy of a file of the Assets page",
     "manager.page.assets": ASSETS_PAGE,
     "manager.section.assets": ASSETS_PAGE,

@@ -24,7 +24,7 @@ from common import icons
 from common.games import asset_lens
 from common.i18n import t
 from manager.kit import game_tables, grid, media_ownership, offload, panel, thumbnails, views
-from manager.library import file_acts, file_states, text_editor
+from manager.library import file_acts, file_states, library_add, text_editor
 from manager.library.games import view_control
 
 logger = logging.getLogger("vpinfe.manager.library.assets")
@@ -210,6 +210,7 @@ def build(found: list[dict[str, Any]], library: Any,
                 t("manager.assets.assets_menu"), lambda: grid.selection(table),
                 lambda chosen: acts_on(chosen),
                 lambda: table.run_grid_method("deselectAll"))
+            library_add.add_action(library, state, "assets", empty=False)
             if rescan is not None:
                 panel.refresh(rescan, t("manager.assets.rescan"))
 

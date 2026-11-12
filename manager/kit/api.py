@@ -1444,6 +1444,10 @@ class ApiClient:
         already there, which the caller reports on that row."""
         return self._post("/games/from_vps", {"vps_id": vps_id, "location": location_id})
 
+    def create_game(self, name: str, location_id: str = "") -> dict:
+        """A folder with a record and no tables, in the place new games go."""
+        return self._post("/games", {"name": name, "location": location_id})
+
     def delete_game_folder(self, game_id: str) -> None:
         """Remove the game's whole folder from the disk. Refused unless this device, or
         an Owner who has confirmed, is asking."""

@@ -49,7 +49,7 @@ AREAS: dict[str, tuple[str, ...]] = {
                 "mediasource", "mediaview", "pictures", "backglass_view", "record",
                 "release_match", "vps_match", "match_group", "vps_records", "picker_online",
                 "picker_memory",
-                "import_dialog", "import_swap",
+                "import_dialog", "import_swap", "library_add",
                 "getting_file", "import_report", "uploads", "drop_target", "drop_sheet",
                 "convert_row", "get_tool", "which_game",
                 "file_acts", "rom_acts", "file_facts", "file_move", "move_picker", "move_plan",

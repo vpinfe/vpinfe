@@ -1372,6 +1372,8 @@ body::before {
    with both reports `fine` and is still being driven with a trackpad. */
 @media (pointer: coarse) {
   :root { --target-inline: var(--target-min); --field-h: var(--target-min); }
+  /* A line that only says where to drop: nothing can be dropped from a finger. */
+  .manager-drop-only { display: none !important; }
 }
 @media (hover: hover) and (pointer: fine) {
   .manager-member-table-caret { opacity: 0; transition: opacity 120ms ease; }
@@ -3112,6 +3114,13 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
 .manager-view-menu { flex: 0 0 auto; }
 .manager-bar-end .q-field { flex: 0 1 16rem; flex-shrink: 6;
                             min-width: 4rem; width: auto; }
+/* Narrow: the second row's description and key wrap instead of running under the count
+   and the buttons, which drop to a line of their own when the text takes the row. */
+@media (max-width: 640px) {
+  .manager-bar-foot { flex-wrap: wrap; row-gap: 2px; }
+  .manager-bar-foot > .manager-view-line { flex-wrap: wrap; row-gap: 2px; }
+  .manager-view-purpose-text { white-space: normal; overflow: visible; }
+}
 
 /* The line and whatever annotates it take the row together; the description alone sizes
    to its text. Growing the description instead puts the free space between it and a key
@@ -4251,8 +4260,10 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 /* One height for every tab. The lists inside take what is left and scroll. */
 .manager-sources-panels { height: min(52vh, 560px); }
-.manager-sources-panels .q-tab-panel { display: flex; flex-direction: column; }
-.manager-source-fill { flex: 1 1 auto; min-height: 0; flex-wrap: nowrap; }
+/* A list never shrinks past a few rows: with the copy-or-keep choice above it, the panel
+   scrolls rather than letting the list run under the drop zone below it. */
+.manager-sources-panels .q-tab-panel { display: flex; flex-direction: column; overflow-y: auto; }
+.manager-source-fill { flex: 1 1 auto; min-height: 14rem; flex-wrap: nowrap; }
 /* Quasar paints its own ground on panels and on the tab bar. Left alone it is a pale
    slab in the middle of a dark dialog. */
 .manager-sources-panels, .manager-sources-panels .q-tab-panel,
@@ -4270,6 +4281,11 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-online-band { flex: 0 0 auto; }
 .manager-online-band .manager-facts { padding: 0; }
 .manager-online-base { flex: 0 0 auto; padding-top: 8px; }
+/* The zone stays in view while the panel scrolls: on a small screen it is the button
+   that does the adding. */
+.manager-sources-panels .q-tab-panel > .manager-online-base {
+  position: sticky; bottom: -12px; z-index: 1; background: var(--surface-1);
+}
 .manager-pick-strip { padding-top: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
 /* A folder is a line, not a picture: it has no thumbnail, so it should not reserve
    the height of one. Nor should a file in a list where nothing has one. */

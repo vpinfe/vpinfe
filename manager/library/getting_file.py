@@ -59,7 +59,8 @@ def open_for(library: Any, *, game_id: str, game_dir: str, table_id: str,
             with ui.column().classes("items-center gap-1 w-full manager-dropbox"):
                 ui.label(t("manager.getting_file.drop_for", version=release.label)
                          if release is not None and release.label
-                         else t("manager.mediasource.drop_file")).classes("manager-help")
+                         else t("manager.mediasource.drop_file")) \
+                    .classes("manager-help manager-drop-only")
                 panel.action(t("manager.mediasource.choose_file"), heard, icon=verbs.FROM_FILE,
                              hint=t("manager.mediasource.choose_file.help"),
                              js="() => window.__managerChoose(false, emit, true)")()
