@@ -21,7 +21,7 @@ RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 # Caps of the old kind: one per control, each a different spelling of the same edge.
 RETIRED = ("--measure", "--row-measure", "--panel-measure", "--facts-label")
 # The Python files that may draw `manager-wide`, with the reason each one spans the pane.
-WIDE = {
+WIDE: dict[str, str] = {
 }
 
 

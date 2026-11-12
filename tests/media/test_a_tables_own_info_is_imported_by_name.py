@@ -50,6 +50,7 @@ class ImportedByName(TestCase):
                     if a.kind == "game_info"}
 
         self.assertEqual({"Cactus.info": False, "Cactus VR.info": True}, kept)
+        assert analysis.bundle_info is not None
         self.assertEqual("abc", analysis.bundle_info["Info"]["VPSId"])
 
     def test_each_file_lands_under_its_own_name(self) -> None:

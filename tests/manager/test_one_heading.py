@@ -16,6 +16,11 @@ HEADINGS = ("manager-card-title", "manager-group", "manager-fact-heading")
 TYPE = ("color", "font-size", "letter-spacing", "text-transform")
 
 
+def _declares(body: str) -> bool:
+    """True when `body` sets one of the type properties itself, not a border's colour."""
+    return any(re.search(rf"(?<![\w-]){p}:", body) for p in TYPE)
+
+
 def _blocks() -> list[tuple[str, str]]:
     text = SHEET.read_text(encoding="utf-8")
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
@@ -25,21 +30,22 @@ def _blocks() -> list[tuple[str, str]]:
 class TestOneHeading(unittest.TestCase):
     def test_the_type_is_declared_once(self) -> None:
         declaring = [sel.strip() for sel, body in _blocks()
-                     if any(f"{p}:" in body for p in TYPE)
+                     if _declares(body)
                      and any(f".{h}" in sel for h in HEADINGS)]
         self.assertEqual(len(declaring), 1,
                          f"a heading's type belongs in one block, found {declaring}")
 
     def test_that_block_covers_all_three(self) -> None:
         block = next(sel for sel, body in _blocks()
-                     if any(f"{p}:" in body for p in TYPE)
+                     if _declares(body)
                      and any(f".{h}" in sel for h in HEADINGS))
         for name in HEADINGS:
             self.assertIn(f".{name}", block, f"{name} is a heading and shares the type")
 
     def test_it_is_the_accent(self) -> None:
         body = next(body for sel, body in _blocks()
-                    if any(f".{h}" in sel for h in HEADINGS) and "color:" in body)
+                    if any(f".{h}" in sel for h in HEADINGS)
+                    and re.search(r"(?<![\w-])color:", body))
         self.assertIn("var(--accent)", body)
 
 

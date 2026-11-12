@@ -6,7 +6,7 @@ from __future__ import annotations
 import contextlib
 import unittest
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 from common.capture import adapters, placing
@@ -164,8 +164,10 @@ class TabTests(unittest.IsolatedAsyncioTestCase):
         await self._record({"state": "recorded", "proposed": [
             {"kind": "playfield_video", "id": "a1"}]}, lens="t1")
 
-        self.assertEqual("take.mp4", self.slot.pending.card.name)
-        self.slot.pane.show.assert_called_once_with(self.slot.pending.card)
+        pending = self.slot.pending
+        assert pending is not None and pending.card is not None
+        self.assertEqual("take.mp4", pending.card.name)
+        cast(Any, self.slot.pane.show).assert_called_once_with(pending.card)
         self.slot.verb.enable.assert_called_once()
 
     async def test_a_kind_that_failed_says_why_without_its_name(self) -> None:

@@ -8,6 +8,7 @@ still takes whole stars.
 import json
 import unittest
 from types import SimpleNamespace
+from typing import Any, cast
 
 from common.games import collection_filters as cf
 from common.games.collection_migration import RATING_HALVES_MIGRATION, ensure_rating_halves
@@ -33,7 +34,7 @@ class RatingHalvesMigrationTests(TempTree):
         store.save()
 
     def _rating(self, name: str) -> object:
-        return self._store().get_filters(name).get("rating")
+        return (self._store().get_filters(name) or {}).get("rating")
 
     def test_a_whole_star_rule_is_doubled(self) -> None:
         self._with_rule("Great", "4", or_higher=True)
@@ -42,7 +43,7 @@ class RatingHalvesMigrationTests(TempTree):
         self.assertEqual(ensure_rating_halves(self._store()), 2)
 
         self.assertEqual((self._rating("Great"), self._rating("Perfect")), ("8", "10"))
-        self.assertIs(self._store().get_filters("Great").get("rating_or_higher"), True)
+        self.assertIs((self._store().get_filters("Great") or {}).get("rating_or_higher"), True)
 
     def test_the_games_it_found_are_the_games_it_still_finds(self) -> None:
         self._with_rule("Great", "4", or_higher=True)
@@ -100,7 +101,7 @@ class ThemeWriterTests(unittest.TestCase):
             save_filter=lambda name, filters, order_by, direction: saved.update(filters)))
 
         game_state.save_current_filter_collection(
-            api, "Mine", "All", "All", "All", "All", "All", "title", rating, "true")
+            cast(Any, api), "Mine", "All", "All", "All", "All", "All", "title", rating, "true")
         return saved
 
     def test_whole_stars_are_stored_as_steps(self) -> None:

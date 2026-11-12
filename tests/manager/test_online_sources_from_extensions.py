@@ -376,7 +376,8 @@ class Taking(_Drawn):
         _click(_row(self.shown, "Wheel A"))
 
         self.library.source_take.assert_not_called()
-        self.assertEqual("Wheel A", self.probe.pending.card.name if self.probe.pending else "")
+        pending = self.probe.pending
+        self.assertEqual("Wheel A", pending.card.name if pending and pending.card else "")
         self.probe.verb.enable.assert_called_once()
 
     async def test_a_double_click_picks_and_takes(self) -> None:

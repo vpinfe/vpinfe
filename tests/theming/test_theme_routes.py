@@ -284,7 +284,7 @@ class SizedMediaTests(unittest.TestCase):
         root = Path(tmp.name)
         self.wheel = root / "wheel.png"
         Image.new("RGB", (600, 600), (200, 40, 40)).save(self.wheel)
-        patches = [
+        patches: list[Any] = [
             mock.patch("common.games.media_lookup.media_path", return_value=self.wheel),
             mock.patch("common.games.game_repository.all_games", return_value=[]),
             mock.patch.object(sized_media, "ROOT", root / "sized"),

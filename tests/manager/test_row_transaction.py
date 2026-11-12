@@ -305,7 +305,8 @@ if __name__ == "__main__":
     unittest.main()
 
     def test_the_panel_is_told_which_games_were_rated(self) -> None:
-        held = [{"id": "g1", "rating": 0}, {"id": "g2", "rating": 0}, {"id": "g3", "rating": 0}]
+        held: list[dict[str, Any]] = [{"id": "g1", "rating": 0}, {"id": "g2", "rating": 0},
+                                      {"id": "g3", "rating": 0}]
         told: list[set[str]] = []
 
         async def then(games: set[str]) -> None:

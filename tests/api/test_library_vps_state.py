@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
@@ -95,7 +96,7 @@ class _Named:
     """A game that names a catalog entry, for the follow-up of one game."""
 
     def __init__(self, vps_id: str = "", tables: int = 1) -> None:
-        self.meta_config = {"Info": {"VPSId": vps_id}, "tables": {
+        self.meta_config: dict[str, Any] = {"Info": {"VPSId": vps_id}, "tables": {
             f"tbl{one:07d}": {"id": f"tbl{one:07d}"} for one in range(tables)}}
 
 
@@ -194,8 +195,8 @@ class FollowTests(unittest.TestCase):
                                           "games": ["g1"]},
                                    "E2": {"tables": 0, "held": [], "bound": [], "games": []}}
 
-        self.assertFalse(rollup.counted_as(_Named("E2"), "g1"))
-        self.assertFalse(rollup.counted_as(_Named(""), "g1"))
+        self.assertFalse(rollup.counted_as(cast(Any, _Named("E2")), "g1"))
+        self.assertFalse(rollup.counted_as(cast(Any, _Named("")), "g1"))
 
     def test_a_game_tied_to_a_release_the_count_lacks_is_not_counted_as_it_stands(self) -> None:
         self.counted["entries"] = {"E1": {"tables": 1, "held": [], "bound": ["v1"],
@@ -203,21 +204,21 @@ class FollowTests(unittest.TestCase):
         game = _Named("E1")
         game.meta_config["tables"]["tbl0000000"]["source"] = {"vps_file_id": "v2"}
 
-        self.assertFalse(rollup.counted_as(game, "g1"))
+        self.assertFalse(rollup.counted_as(cast(Any, game), "g1"))
 
     def test_a_library_never_counted_has_nothing_to_be_out_of_step_with(self) -> None:
         self.counted = {}
 
-        self.assertTrue(rollup.counted_as(_Named("E1"), "g1"))
+        self.assertTrue(rollup.counted_as(cast(Any, _Named("E1")), "g1"))
 
     def test_ties_differ_for_a_match_and_for_a_table_tied_again(self) -> None:
         one = _Named("E1")
-        before = rollup.ties_of(one)
+        before = rollup.ties_of(cast(Any, one))
         one.meta_config["tables"]["tbl0000000"]["source"] = {"vps_file_id": "v2"}
 
-        self.assertNotEqual(before, rollup.ties_of(one))
-        self.assertNotEqual(before, rollup.ties_of(_Named("E2")))
-        self.assertEqual(before, rollup.ties_of(_Named("E1")))
+        self.assertNotEqual(before, rollup.ties_of(cast(Any, one)))
+        self.assertNotEqual(before, rollup.ties_of(cast(Any, _Named("E2"))))
+        self.assertEqual(before, rollup.ties_of(cast(Any, _Named("E1"))))
 
 
 class RollupEntriesTests(unittest.TestCase):

@@ -53,7 +53,9 @@ def _press(row: ui.element) -> None:
     """The click a person makes on `row`."""
     for listener in row._event_listeners.values():
         if listener.type == "click":
-            listener.handler()
+            handler = listener.handler
+            assert handler is not None
+            handler()
 
 
 def _row_named(body: ui.element, text: str) -> ui.element:
@@ -87,8 +89,11 @@ class _Host:
         return True
 
     def entry(self, card: Any, commit: Any, *, discard: Any = None,
-              filename: str = "") -> _Entry:
+              filename: str = "", arrives: bool = False) -> _Entry:
         return _Entry(card, commit)
+
+    def forget_trip(self) -> None:
+        self.trips.clear()
 
     def choose(self, entry: Any) -> None:
         self.took.append(("choose", entry))
