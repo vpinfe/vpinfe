@@ -47,6 +47,9 @@ class Tester:
     Dimmed, with the reason under it, while none could be turned on, and while `event()`
     holds none. `state` is `event_state`'s answer and is kept current as it is pressed.
     `refresh()` draws it again once the field has changed.
+
+    The reason is drawn into `note` when the caller sets one, so it can sit under the whole
+    row with the field's own help rather than squeezing the field beside the button.
     """
 
     def __init__(self, library: Any, state: dict[str, Any],
@@ -56,6 +59,7 @@ class Tester:
         self.event = event
         self.on_dof_page = on_dof_page
         self.column: Any = None
+        self.note: Any = None
 
     def __call__(self) -> None:
         self.column = ui.column().classes("gap-0 min-w-0")
@@ -66,6 +70,9 @@ class Tester:
         if column is None or column.is_deleted:
             return
         column.clear()
+        note = self.note if self.note is not None and not self.note.is_deleted else column
+        if note is not column:
+            note.clear()
         reason = str(self.state.get("blocked") or "")
         token = _token(self.event())
         with column:
@@ -73,12 +80,14 @@ class Tester:
                 panel.action(t("word.stop"), self._stop, icon=verbs.STOP, inline=True,
                              hint=t("manager.dof.stop_hint"))()
                 if self.state.get("no_boards"):
-                    self._no_boards()
+                    with note:
+                        self._no_boards()
                 return
             panel.action(t("manager.dof.test"), self._test, icon=verbs.RUN, inline=True,
                          enabled=not reason and bool(token),
                          hint=reason or panel.NO_HINT)()
-            if reason:
+        if reason:
+            with note:
                 ui.label(reason).classes("manager-help")
 
     def _no_boards(self) -> None:
@@ -143,6 +152,8 @@ def event_row(library: Any, state: dict[str, Any]) -> tuple[Any, Any]:
                 field()
                 test()
             ui.label(t("manager.dof.test_event.help")).classes("manager-help")
+            test.note = ui.column().classes("gap-0 min-w-0")
+            test.refresh()
 
     return (t("manager.dof.test_event"), draw)
 

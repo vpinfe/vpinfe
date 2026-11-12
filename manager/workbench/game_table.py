@@ -21,7 +21,6 @@ from manager.extensions import ext_groups, ext_lists
 from manager.kit import (
     confirm,
     deeplink,
-    dropdown,
     game_tables,
     offload,
     panel,
@@ -421,9 +420,12 @@ def _game_frontend(context: dict[str, Any],
     async def save_dof(value: str) -> bool:
         return await _save_game_overrides(context, {"frontend_dof_event": value})
 
+    drawn: dict[str, Any] = {}
+
     def test(field: ui.input) -> None:
         tester = dof.Tester(context["library"], dof_state or {},
                             lambda: str(field.value or ""))
+        drawn["tester"] = tester
         tester()
         field.on_value_change(tester.refresh)
 
@@ -434,9 +436,12 @@ def _game_frontend(context: dict[str, Any],
                       after=test if dof_state is not None else None)
 
     def draw() -> None:
-        with ui.column().classes("gap-1 min-w-0"):
+        with ui.column().classes("gap-1 min-w-0 w-full"):
             entry()
             ui.label(t("manager.workbench.dof_event_hint")).classes("manager-help")
+            if "tester" in drawn:
+                drawn["tester"].note = ui.column().classes("gap-0 min-w-0")
+                drawn["tester"].refresh()
 
     return [
         (HEADING, game_tables.FRONTEND),
@@ -804,8 +809,7 @@ def _tag_picker(held: list[str], library: Library,
             if derived:
                 _derived_chips(derived, library.tag_looks())
             control = tag_chips.Picker(library.tags(), value=held,
-                                       looks=library.tag_looks(), adds=True,
-                                       look=dropdown.OUTLINED) \
+                                       looks=library.tag_looks(), adds=True) \
                 .props('hide-dropdown-icon popup-content-class="manager-picker-popup"') \
                 .classes("w-full min-w-0")
         control.on_value_change(lambda: on_change(list(control.value or [])))

@@ -872,10 +872,10 @@ body::before {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 8px;
 }
 .manager-binding-send-words { margin: 0; }
-.manager-binding-how { margin-bottom: 12px; max-width: var(--row-measure); }
+.manager-binding-how { margin-bottom: 12px; }
 .manager-binding-steps { margin: 6px 0; padding-left: 20px; list-style: decimal; }
 .manager-binding-where { margin: 0; }
-.manager-binding-relay { max-width: var(--row-measure); margin-bottom: 12px; }
+.manager-binding-relay { margin-bottom: 12px; }
 
 /* A list taller than its pane says so: a fade over the last rows and a way down. Placed
    as the last child of the scrolling element; `hidden` once the end is in view. */
@@ -951,7 +951,8 @@ body::before {
    games, a game's tables. The word is collections' and the classes are shared on
    purpose: the two lists are the same shape and one treatment is the point. */
 .manager-member-row {
-  padding: 5px 10px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
   border-radius: 6px;
   line-height: 1.25;
 }
@@ -1184,22 +1185,21 @@ body::before {
     :not(:has(+ .manager-edit-narrow:not(.hidden)))) {
   min-width: min(var(--select-min), calc(100cqw - var(--target-inline) - 4px));
 }
-/* A path is the long value, so it takes the measure whether it holds a typed path or the
-   default it stands for - a field that is as wide as its text is a different width for
-   every path. The line adds the Reset slot beside the measure, so the field is the
-   width of one with no Reset to draw. */
-.manager-field-line:has(input.manager-path-input),
-.manager-waiting-row:has(.manager-field-line input.manager-path-input) {
-  width: 100%; max-width: calc(var(--measure) + var(--target-inline) + 4px);
+/* A path is the long value, so its field fills the column whether it holds a typed path or
+   the default it stands for - a field as wide as its text is a different width for every
+   path. Reset hangs in the gutter beyond the column's edge, and its slot is kept when empty
+   so the field neither moves nor changes width when Reset appears. A line with no slot has
+   nothing to hang, so it stays inside the column. */
+.manager-field-line:has(input.manager-path-input):has(> .manager-row-action),
+.manager-waiting-row:has(.manager-field-line:has(> .manager-row-action) input.manager-path-input) {
+  width: calc(100% + var(--target-inline) + 4px);
 }
 .manager-field-line > .manager-field-row:has(input.manager-path-input) { flex: 1 1 auto; }
-/* A line with no Reset to show is the measure, as a path with none to draw is. */
-.manager-field-line:not(:has(> .manager-row-action)):has(input.manager-path-input),
-.manager-field-line:has(> .manager-row-action:empty):has(input.manager-path-input) {
-  max-width: var(--measure);
-}
 .manager-field-line > .manager-row-action:empty { display: none; }
-.manager-dialog .manager-field-line { width: 100%; max-width: var(--measure); }
+.manager-field-line:has(input.manager-path-input) > .manager-row-action:empty {
+  display: flex; visibility: hidden;
+}
+.manager-dialog .manager-field-line { width: 100%; }
 .manager-dialog .manager-field-line > .manager-field-row { flex: 1 1 auto; }
 .manager-field-line > .manager-row-action {
   min-width: var(--target-inline); justify-content: center; opacity: 1;
@@ -1694,7 +1694,7 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
    up with the values above and below, and the list stops at the measure those values do. */
 .nicegui-column.manager-theme-kinds {
   display: flex; flex-direction: column; gap: 20px;
-  margin-left: -10px; width: calc(100% + 10px); max-width: calc(var(--measure) + 20px);
+  margin-left: -10px; width: calc(100% + 10px);
 }
 
 /* The row's action appears under the cursor. A column of identical glyphs down a long
@@ -2010,7 +2010,7 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
   display: block;
   /* Or the rule is the width of the word and reads as an underline on it. */
   width: 100%;
-  padding: 0 12px 10px;
+  padding: 0 0 10px 12px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -2041,7 +2041,7 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
 /* The gutter the work region keeps from its own walls. It ran flush before, which was
    invisible while the region was a dark well and obvious the moment it became a lit one:
    a panel touching the wall reads as unfinished rather than as full-width. */
-.manager-workbench-body { padding: 8px var(--panel-gutter); }
+.manager-workbench-body { padding: 8px var(--panel-gutter-end) 8px var(--panel-gutter); }
 /* A section's search and filters. They act on the whole section, so no group heading
    goes over them. */
 .manager-section-bar { width: 100%; padding-bottom: 0.5rem; }
@@ -2580,8 +2580,8 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
   position: sticky; top: -8px; z-index: 1;
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   align-self: stretch; box-sizing: border-box;
-  margin: 0 calc(-1 * var(--panel-gutter)) 8px;
-  padding: 6px calc(2 * var(--panel-gutter));
+  margin: 0 calc(-1 * var(--panel-gutter-end)) 8px calc(-1 * var(--panel-gutter));
+  padding: 6px calc(var(--panel-gutter) + var(--panel-gutter-end)) 6px calc(2 * var(--panel-gutter));
   background: var(--surface-1);
   border-bottom: 1px solid var(--line);
 }
@@ -2836,7 +2836,7 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
    argument for the settings pages, so it gets a class rather than ad-hoc utilities. */
 .manager-help {
   font-size: var(--fs-caption); color: var(--ink-3); line-height: 1.4;
-  max-width: var(--measure); white-space: pre-line;
+  white-space: pre-line;
 }
 /* A line with more to say than it shows ends in a mark, which opens what the line's
    hover shows. The padding is the target, taken back out of the line's height. */
@@ -2988,7 +2988,6 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
   grid-template-columns: max-content 1fr;
   gap: 2px 10px;
   align-items: baseline;
-  max-width: var(--measure);
 }
 .manager-token {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -3153,7 +3152,9 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
   column-gap: 8px;
   row-gap: 8px;
   width: 100%;
-  padding: 0 12px;
+  /* Inset on the left only: the right edge is the content width's, which is where the
+     controls end and where every other section of the panel ends. */
+  padding: 0 0 0 12px;
 }
 /* A value's floor is the label column's ceiling: one that cannot shrink below its own
    width sets the value column's minimum, and the labels get whatever is left. */
@@ -3269,14 +3270,9 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
 /* A choice stacks its options over their sentences, and they read from the column's edge. */
 .manager-fact-edit.nicegui-column { align-items: flex-start; }
 
-/* A control is as wide as the value it holds, capped at the measure - not as wide as
-   the pane, which says nothing about what goes in it. What is naturally short stays
-   short, and the help under it takes the same measure, so the value column reads as one
-   column. */
-.manager-fact-edit { max-width: var(--measure); }
 /* A setting that waits on a restart or a reopen carries its chip beside the control. The
    control keeps the row; a number or a switch is short, so the chip sits against it. */
-.manager-waiting-row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: var(--measure); }
+.manager-waiting-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .manager-waiting-row > .manager-fact-edit { flex: 1 1 auto; }
 .manager-waiting-row > .manager-fact-edit:has(input[type="number"]),
 .manager-waiting-row > .manager-fact-edit:has(.q-toggle) { flex: 0 1 auto; }
@@ -3526,17 +3522,16 @@ input.manager-path-input { padding-right: 0.6ch; }
 .manager-fact-full { grid-column: 1 / -1; padding: 4px 0; min-width: 0; }
 /* A line that is a region holding nothing takes no row, so the gap above it goes too. */
 .manager-fact-full:not(:has(:not(.manager-region))) { display: none; }
-/* A row, or a finding, with its action pinned to the right edge stops where the controls
-   above it end at most: the label column's ceiling, its gap and the measure. Left at the
-   pane's width the action sits a screen away from the name it belongs to. Scoped to the
-   panel because a dialog sets its own width. */
-.manager-section-work .manager-facts :is(.manager-member-row, .manager-source-row),
-.manager-section-work .manager-attention {
-  max-width: var(--row-measure);
+/* The one width limit. What a panel or a page draws, in the facts grid or not, ends at
+   --content-width, so a new control cannot be built outside it by accident. Zero
+   specificity, so any rule of ours can override it for one case. Content that is meant to
+   span the pane (a grid of rows, a two-pane viewer) says so with .manager-wide, and
+   tests/invariants/test_content_width_has_one_owner.py lists who may. Do not put a
+   max-width on a control or a row to hold it to the column: it is already held. */
+:where(.manager-workbench-body > *, .manager-workbench-body .manager-region > *) {
+  max-width: var(--content-width);
 }
-/* Anything holding words that is drawn in the value column and is not a control the
-   column already caps. */
-.manager-measured { max-width: var(--measure); }
+.manager-wide { max-width: none; }
 /* A long list of switches in two columns, filled down the first and on into the second.
    `--kind-rows` is half the list, rounded up, which is what sends the rest across. A cell
    is a label with its switch at the cell's far edge, so the switches line up in a column
@@ -3982,7 +3977,7 @@ a.manager-tag:hover { background: var(--wash-hover); }
    its arrow where a field's last icon ends, so the column reads as one. It wears a field's
    edge and ground, since it is a control you act on the same way. */
 .manager-summary {
-  display: flex; align-items: center; gap: 8px; min-width: 0; max-width: var(--measure);
+  display: flex; align-items: center; gap: 8px; min-width: 0;
   padding: 5px 13px 5px 8px; margin: -6px 0; border-radius: 6px;
   border: 1px solid var(--line); background: var(--wash-lift);
   transition: border-color 120ms, background 120ms;
@@ -3999,7 +3994,7 @@ a.manager-tag:hover { background: var(--wash-hover); }
 
 /* The Settings File choices: a radio each, the control it acts on tucked under its label. A
    choice that is not picked keeps its control drawn but out of reach. */
-.manager-choices .manager-choice-more { margin-left: 28px; max-width: var(--measure); }
+.manager-choices .manager-choice-more { margin-left: 28px; }
 .manager-choices .q-field--disabled .q-btn { pointer-events: none; }
 
 .manager-slot-facts { min-width: 0; }
@@ -4455,7 +4450,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-screens-head > .manager-help { flex: 1; max-width: none; }
 .manager-screens-head-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 .manager-screens { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
-.manager-screens, .manager-screens-head, .manager-screens-differs { max-width: var(--row-measure); }
 /* A panel too narrow for both side by side puts the screens under the picture. The host is
    the container, so the rule holds in a dialog as well as on a settings page. */
 .manager-screens-host { container: manager-screens / inline-size; }
@@ -4628,7 +4622,6 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px; line-height: 1.5;
 }
-.manager-options--field { max-width: var(--measure); }
 .manager-option { overflow-wrap: break-word; min-width: 0; max-width: 100%; }
 .manager-option--window { color: var(--ink-3); }
 .manager-option--yours { color: var(--accent); }

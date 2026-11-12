@@ -770,6 +770,22 @@ for what no one group owns. A line that explains a heading is a lede, whichever 
 drawn as first. A rule that holds for a value over time ("unused for 90 days signs out")
 goes in the lede of the section that owns the value, not in an aside under the control.
 
+### A panel's content ends at one edge
+
+Everything a panel or a settings page draws, in the facts grid or not, ends at
+`--content-width` (`manager/kit/appearance.py`), held by one rule on the children of the
+scroller (`.manager-workbench-body`) and of any region in it. Change the number there and
+every panel and page follows.
+
+**Do not cap a control, a row or a grid.** A `max-width` on a leaf says it for that leaf
+only, and the next section built outside the grid (a card, a notice, a list of rows) has no
+cap and runs long. A side inset belongs on the left only: padding on the right moves the
+section's own edge in from the one the others end at.
+
+**A section that should span the pane says so.** Add `manager-wide` and list the file in
+`tests/invariants/test_content_width_has_one_owner.py` with the reason. A grid of rows and a
+two-pane viewer are the cases; a long form is not.
+
 ### One shape per kind of value
 
 A panel that shows facts uses the same control for the same kind of value, everywhere:

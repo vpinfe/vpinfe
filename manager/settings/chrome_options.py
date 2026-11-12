@@ -160,7 +160,7 @@ class Preview:
 
     def row(self) -> tuple[str, Callable[[], None]]:
         def draw() -> None:
-            self.box = ui.column().classes("gap-1 w-full min-w-0 manager-measured")
+            self.box = ui.column().classes("gap-1 w-full min-w-0")
             with self.box:
                 self.listing = ui.column().classes("manager-options w-full min-w-0 gap-0")
                 with ui.row().classes("items-center gap-2 w-full no-wrap"):

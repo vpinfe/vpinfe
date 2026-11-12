@@ -5,7 +5,7 @@ answers by drawing all of it again. And every section a rail opens is headed: wh
 group in it is headed, the first one is too, and a section with content has a heading.
 Every dropdown on screen is a `manager.kit.dropdown.Select`, and the text in each one
 stands at the middle of its box. No row, card or control in an open section is
-wider than the row measure.
+wider than the content width.
 
 Slow: boots a real instance and a real browser.
 """
@@ -132,7 +132,7 @@ DROPDOWNS = """(() => {
   return {measured, problems};
 })()"""
 
-# Every row, card and control in the open section against the width a row may have. A row
+# Every row, card and control in the open section against the width the content may have. A row
 # is a surface, or a flex line holding an action at its right edge, and a finding is one.
 # Headings, the input bar and grids span the pane by design.
 STRETCHED = """(() => {
@@ -141,7 +141,7 @@ STRETCHED = """(() => {
   const area = [...document.querySelectorAll('.manager-section-work')].find(shown);
   if (!area) return {measured: 0, problems: []};
   const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--row-measure)';
+  probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--content-width)';
   document.body.append(probe);
   const limit = probe.getBoundingClientRect().width + 2;
   probe.remove();
@@ -171,21 +171,16 @@ STRETCHED = """(() => {
 })()"""
 
 
-# A path field in a settings page against the measure a path takes: the same width
-# whether it holds a typed path or the default it stands for.
+# Every path field in a settings page: the same width whether it holds a typed path or the
+# default it stands for.
 PATH_WIDTHS = """(() => {
   const body = document.querySelector('.manager-settings-body');
-  if (!body) return {measure: 0, widths: []};
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--measure)';
-  document.body.append(probe);
-  const measure = Math.round(probe.getBoundingClientRect().width);
-  probe.remove();
+  if (!body) return {widths: []};
   const widths = [...body.querySelectorAll('input.manager-path-input')]
     .filter(input => input.getClientRects().length > 0)
     .map(input => [input.value.slice(-24), Math.round(
       input.closest('.q-field').getBoundingClientRect().width)]);
-  return {measure, widths};
+  return {widths};
 })()"""
 
 
@@ -296,7 +291,7 @@ class ManagerPagesDrive(unittest.TestCase):
         drawn: dict[str, list[str]] = {}
         dropdowns: dict = {"measured": 0, "problems": []}
         stretched: dict = {"measured": 0, "problems": []}
-        paths: dict = {"measure": 0, "widths": []}
+        paths: dict = {"widths": []}
         texts: dict = {"drawn": 0, "problems": [], "loose": []}
         words: dict[tuple[str, str], set[str]] = {}
         device_names = {one["display_name"] or one["address"] for one in json.load(
@@ -311,7 +306,6 @@ class ManagerPagesDrive(unittest.TestCase):
             stretched["measured"] += wide["measured"]
             stretched["problems"] += [[where, one] for one in wide["problems"]]
             said = await browser.evaluate(PATH_WIDTHS)
-            paths["measure"] = said["measure"] or paths["measure"]
             paths["widths"] += [[where, *one] for one in said["widths"]]
             said = await browser.evaluate(PATH_TEXTS)
             texts["drawn"] += said["drawn"]
@@ -400,17 +394,21 @@ class ManagerPagesDrive(unittest.TestCase):
                            "an empty sweep passes and measures nothing")
         self.assertEqual([], self.seen["dropdowns"]["problems"])
 
-    def test_no_row_or_control_stretches_past_the_measure(self) -> None:
+    def test_no_row_or_control_stretches_past_the_content_width(self) -> None:
         self.assertGreater(self.seen["stretched"]["measured"], 50,
                            "an empty sweep passes and measures nothing")
         self.assertTrue(self.seen["stretched"]["finding"],
                         "the empty Folders page was not drawn, so its finding was not measured")
         self.assertEqual([], self.seen["stretched"]["problems"])
 
-    def test_every_path_in_settings_takes_the_measure_default_or_typed(self) -> None:
+    def test_every_path_on_a_settings_page_is_one_width_default_or_typed(self) -> None:
         paths = self.seen["paths"]
         self.assertGreater(len(paths["widths"]), 3, "an empty sweep passes and measures nothing")
-        self.assertEqual([], [one for one in paths["widths"] if one[2] != paths["measure"]])
+        by_page: dict[str, set[int]] = {}
+        for where, _, width in paths["widths"]:
+            by_page.setdefault(where, set()).add(width)
+        self.assertEqual({}, {where: sorted(widths) for where, widths in by_page.items()
+                              if len(widths) > 1})
 
     def test_every_button_and_heading_is_in_title_case(self) -> None:
         words = self.seen["words"]

@@ -15,7 +15,7 @@ from nicegui import run, ui
 from common.failures import why
 from common.i18n import t
 from manager.frontend import launchers
-from manager.kit import dropdown, game_tables, offload, panel, stars, tag_chips, undo
+from manager.kit import game_tables, offload, panel, stars, tag_chips, undo
 from manager.kit.on_page import on_page
 from manager.kit.panel import HEADING
 from manager.workbench.app_settings import JOB_POLL_S
@@ -227,8 +227,7 @@ def _tags(context: dict[str, Any], kind: Kind) -> Callable[[], None]:
         everyone, _ = _carried(context[kind.rows])
         with ui.column().classes("gap-1 w-full min-w-0"):
             control = tag_chips.Picker(library.tags(), value=everyone,
-                                       looks=library.tag_looks(), adds=True,
-                                       look=dropdown.OUTLINED) \
+                                       looks=library.tag_looks(), adds=True) \
                 .props('hide-dropdown-icon popup-content-class="manager-picker-popup"') \
                 .classes("w-full min-w-0")
             context["tag_picker"] = control

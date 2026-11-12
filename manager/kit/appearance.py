@@ -561,16 +561,11 @@ _STRUCTURE = """
      label naming it. The pane's labels sit under this and never wrap. */
   --label-max: 200px;
 
-  /* The measure: how wide anything holding words may get. A control wider than the
-     value it expects invites the wrong answer and costs the eye a journey to find where
-     the value ends, and a line of help past this is hard to read whatever it is about.
-     One number for controls and their help, so the column has a single right edge.
-     In rem, not ch: `ch` is the element's own font size, so the same 62ch is two
-     different widths on a control and on the caption under it. */
-  --measure: 30rem;
-  /* How wide a row may be when it starts under the labels: the label column's ceiling,
-     the column gap and the measure. */
-  --row-measure: calc(var(--label-max) + 8px + var(--measure));
+  /* How wide the content of a panel or a page may be: everything drawn in the scroller,
+     in the facts grid or not, ends here, so a section has one right edge and this is
+     the one place to change it. In rem, not ch: `ch` is the element's own font size, so
+     the same count is two different widths on a control and on the caption under it. */
+  --content-width: 36rem;
   /* The floor under a select, for the caret and the longest option name a set happens
      to hold. Text stretches because what you type has no length; a closed list of named
      things does not. */
@@ -579,6 +574,9 @@ _STRUCTURE = """
   /* The gutter a panel keeps from whatever it sits against. One value, so the browse
      region and the work region do not each pick their own and land 4px apart. */
   --panel-gutter: 16px;
+  /* The right gutter is the room a path field's Reset hangs in, so a narrow panel does not
+     scroll sideways for it. */
+  --panel-gutter-end: max(var(--panel-gutter), calc(var(--target-inline) + 4px));
 
   /* Quiet, not invisible: a scrollbar says a region has more in it, so hiding one
      hides that there is more to see. */
