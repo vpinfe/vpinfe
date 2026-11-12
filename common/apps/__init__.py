@@ -30,14 +30,16 @@ from .contract import (
     Pair,
     Parsed,
     Pause,
+    PlayRecord,
+    Plays,
     Session,
 )
 
 __all__ = [
     "App", "Availability", "Buttons", "Claim", "ConfigGroup", "Entry", "Field", "Heading",
-    "Kinds", "OWN_FIELDS", "Pair", "Parsed", "Pause", "Session", "all_apps", "app_for",
-    "app_name", "default_app", "field_blank", "field_help", "field_words", "get",
-    "group_words", "heading_words", "launcher_fields", "pair_words",
+    "Kinds", "OWN_FIELDS", "Pair", "Parsed", "Pause", "PlayRecord", "Plays", "Session",
+    "all_apps", "app_for", "app_name", "default_app", "field_blank", "field_help",
+    "field_words", "get", "group_words", "heading_words", "launcher_fields", "pair_words",
     "strip_suffix", "table_suffixes", "vps_formats",
 ]
 

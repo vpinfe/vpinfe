@@ -168,6 +168,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `backglass_media_priority` | choice (video, image) | `video` | Backglass Media Priority |
 | `scoreview_media_priority` | choice (video, image) | `video` | Score View Media Priority |
 | `real_dmd_media_priority` | choice (color, standard) | `color` | Real DMD Media Priority |
+| `play_numbers` | choice (game, table, launcher) | `game` | Whose play numbers the wheel, sorting and themes use |
 
 ### `behavior`
 

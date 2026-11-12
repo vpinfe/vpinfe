@@ -23,16 +23,21 @@ from common.games.game_metadata import (
     table_descriptor,
 )
 from common.games.media_lookup import page_counts, resolved_kinds
+from common.games.play_numbers import PlayNumbers
 from common.media.manufacturer_logos import manufacturer_logo_url
 from common.timestamps import epoch_to_iso
 
 
-def entry_resource(entry: Entry, group: str | None = None) -> dict:
+def entry_resource(entry: Entry, group: str | None = None,
+                   plays: PlayNumbers | None = None) -> dict:
     """One entry as REST serves it.
 
     `default` is computed, never read off the entry: it is the game's own choice and
     lives in the vpinfe section, not on the table. visible_entries puts it first.
+
+    A caller building a list passes one `plays` for all of it, so the setting is read once.
     """
+    plays = plays or PlayNumbers()
     game_ident = game_identity.game_id(entry.game)
     offered = visible_entries(entry.game)
     default_id = offered[0].get("id", "") if offered else ""
@@ -54,7 +59,8 @@ def entry_resource(entry: Entry, group: str | None = None) -> dict:
             "manufacturer_logo": manufacturer_logo_url(maker),
             "created_at": epoch_to_iso(getattr(entry.game, "creation_time", None)) or None,
             "rating": game_rating(entry.game),
-            "user": play_record(meta),
+            "user": plays.user(play_record(meta), meta,
+                               str(entry.game.full_path_game or ""), entry.table),
             "derived_tags": derived_tags.game_tags(entry.game),
             "ipdb_id": game_ipdb_id(entry.game),
             "tutorial": contract_1_tutorial(entry.game.meta_config),

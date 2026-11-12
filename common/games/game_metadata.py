@@ -560,10 +560,13 @@ def reset_table_play_record(game: Game, filename: str) -> dict[str, Any]:
 
 def table_play_record(table: dict) -> dict[str, Any]:
     """One table's own play record. Counters only - a rating is entered rather than
-    accumulated, so it sits beside this record and not in it."""
+    accumulated, so it sits beside this record and not in it. The last run is kept as an
+    epoch and shown as the ISO stamp a game's is (`play_record`)."""
+    from common.timestamps import epoch_to_iso
+
     user = table.get("user") or {}
     return {
-        "last_played": user.get("last_run") or None,
+        "last_played": epoch_to_iso(user.get("last_run")) or None,
         "play_count": int(user.get("start_count", 0) or 0),
         "play_time_seconds": int(user.get("run_time_seconds", 0) or 0),
     }

@@ -817,6 +817,13 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
             choices=("color", "standard"),
             legacy=(("media", "realdmdmediapriority"),),
         ),
+        ConfigOption(
+            "play_numbers",
+            applies=APPLIES_WINDOWS,
+            type="choice",
+            default="game",
+            choices=("game", "table", "launcher"),
+        ),
     ),
     # How the frontend behaves, as against `themes`, which is what is installed. Both of
     # these were in `general` beside genuinely global settings.

@@ -44,6 +44,7 @@ from common.games.game_metadata import (
     retag_library,
     table_tags,
 )
+from common.games.play_numbers import PlayNumbers
 from common.games.tables import table_entries
 from common.i18n import t
 from common.online import vps_home, vps_marks, vps_updates
@@ -165,8 +166,9 @@ def entries() -> dict[str, Any]:
     it answers without putting a row in anyone's file.
     """
     resolved = resolve(BUILTIN_ALL, get_collections_manager(), game_repository.all_games())
+    plays = PlayNumbers()
     return {"collection": "", "count": len(resolved),
-            "entries": [entry_lens.entry_resource(entry) for entry in resolved]}
+            "entries": [entry_lens.entry_resource(entry, plays=plays) for entry in resolved]}
 
 
 def preview(criteria: dict, limit: int = 0) -> dict[str, Any]:
@@ -185,8 +187,9 @@ def preview(criteria: dict, limit: int = 0) -> dict[str, Any]:
         manager.set_view_filters(None)
     if limit and limit > 0:
         resolved = resolved[:limit]
+    plays = PlayNumbers()
     return {"collection": "", "count": len(resolved),
-            "entries": [entry_lens.entry_resource(entry) for entry in resolved]}
+            "entries": [entry_lens.entry_resource(entry, plays=plays) for entry in resolved]}
 
 
 def scan(options: dict[str, Any]) -> job_registry.Job:

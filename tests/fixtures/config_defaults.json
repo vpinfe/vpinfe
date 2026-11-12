@@ -120,6 +120,7 @@
   "presentation": {
     "backglass_media_priority": "video",
     "cab_mode": "false",
+    "play_numbers": "game",
     "playfield_media_priority": "video",
     "playfield_media_rotation": "auto",
     "real_dmd_media_priority": "color",

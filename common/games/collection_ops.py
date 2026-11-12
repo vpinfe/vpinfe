@@ -68,6 +68,7 @@ from common.games.collections_service import (
 )
 from common.games.game_repository import collections_by_game_id, game_to_row
 from common.games.media_lookup import resolved_kinds
+from common.games.play_numbers import PlayNumbers
 from common.i18n import t
 from common.media import sized_media
 from common.values import is_truthy
@@ -526,9 +527,11 @@ def entries_of(name: str) -> dict:
     # lenses would come to disagree.
     order_by = get_collections_manager().get_order(name)["by"]
     key = group_key(order_by)
+    plays = PlayNumbers()
     return {"collection": name, "count": len(entries),
             "group_by": group_kind(order_by) if key is not None else "",
-            "entries": [entry_lens.entry_resource(one, key(one.game) if key else None)
+            "entries": [entry_lens.entry_resource(one, key(one.game) if key else None,
+                                                  plays)
                         for one in entries]}
 
 

@@ -44,6 +44,7 @@ from common.games.game_metadata import (
     vpinfe_section,
 )
 from common.games.media_lookup import page_counts, resolved_kinds
+from common.games.play_numbers import PlayNumbers
 from common.games.tables import entry_file
 from common.i18n import t
 from common.media.manufacturer_logos import manufacturer_logo_url
@@ -138,8 +139,10 @@ def _default_id(game: ScannedGame) -> str:
 
 
 def _entry_row(entry: Entry, logo_cache: dict[str, str | None],
-               group: Callable[[GameRecord], Any] | None = None) -> dict:
+               group: Callable[[GameRecord], Any] | None = None,
+               plays: PlayNumbers | None = None) -> dict:
     """One entry in contract 2: the game, the table it is, and what resolved for it."""
+    plays = plays or PlayNumbers()
     game = entry.game
     meta = normalize_meta(game.meta_config)
     info = section(meta, "Info")
@@ -160,7 +163,8 @@ def _entry_row(entry: Entry, logo_cache: dict[str, str | None],
             "path": game.full_path_game,
             "manufacturer_logo": logo_cache[maker],
             "created_at": epoch_to_iso(getattr(game, "creation_time", None)) or None,
-            "user": play_record(meta),
+            "user": plays.user(play_record(meta), meta,
+                               str(game.full_path_game or ""), entry.table),
             "derived_tags": derived_tags.game_tags(game),
             # Everything the record declares about the machine. These were absent for
             # no reason anybody chose - a projection listed some fields and stopped -
@@ -213,13 +217,14 @@ def games_json(entries: Sequence[Entry], contract: int = CURRENT_CONTRACT, *,
     # The group comes from the order the list is built with, so it is correct for as long
     # as the list is and a wheel step costs no round trip to know where it sits.
     key = group_key(order_by)
+    plays = PlayNumbers()
     return json.dumps({
         "collection": collection,
         "count": len(entries),
         # Empty when the order has no groups, so a theme can tell "no grouping here"
         # from "the group happens to be empty".
         "group_by": group_kind(order_by) if key is not None else "",
-        "entries": [_entry_row(e, logo_cache, key(e.game) if key else None)
+        "entries": [_entry_row(e, logo_cache, key(e.game) if key else None, plays)
                     for e in entries],
     })
 

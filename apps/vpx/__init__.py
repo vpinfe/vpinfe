@@ -15,6 +15,7 @@ from .config import VPXConfig
 from .controls import VPXControls
 from .launch import VPXLaunch
 from .pause import VPXPause
+from .plays import VPXPlays
 
 # What sits beside a table and belongs to it: its settings, a script, its
 # backglass, a point of view, a saved camera. Here rather than in a generic module
@@ -50,4 +51,5 @@ VPX = App(
     pause=VPXPause(),
     buttons=VPXButtons(),
     controls=VPXControls(),
+    plays=VPXPlays(),
 )

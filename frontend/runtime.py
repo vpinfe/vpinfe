@@ -374,7 +374,7 @@ def reopen_windows(iniconfig: ConfigStore, frontend_browser: ChromiumManager,
     again, and a library resolved under another set or variant is read once more.
     """
     from common.config.paths import get_ini_config
-    from common.games import game_repository
+    from common.games import game_repository, play_numbers
 
     with _reopening:
         if shutdown_event.is_set() or shutdown.requested():
@@ -385,7 +385,7 @@ def reopen_windows(iniconfig: ConfigStore, frontend_browser: ChromiumManager,
         frontend_browser.close_windows()
         iniconfig.reread()
         _apply_theme_media_sets(iniconfig, logger)
-        if game_repository.reread_media_settings():
+        if game_repository.reread_media_settings() | play_numbers.changed_since_built():
             # The shared view still holds the games it resolved before. The first window
             # to ask rebuilds it, as it does after any change to the library.
             for api in ws_bridge.apis():

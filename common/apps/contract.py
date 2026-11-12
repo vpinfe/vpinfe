@@ -4,9 +4,9 @@ An app is the program that plays something; a launcher is a configured wrapper a
 one and holds the values for the fields the app declares. This module is the whole of
 the boundary: an implementation under `apps/` imports it and nothing else of ours.
 
-Seven capability groups. `claim` and `kinds` are declarations every app makes; `format`,
-`launch`, `config`, `capability` and `capture` are behavior, and None is a real answer for
-each. Consumers ask before they call.
+Capability groups. `claim` and `kinds` are declarations every app makes; `format`,
+`launch`, `config`, `capability`, `capture`, `pause`, `buttons`, `controls` and `plays` are
+behavior, and None is a real answer for each. Consumers ask before they call.
 
 Nothing here takes or returns a VPinFE object, and nothing holds a word. An app's words
 are in `i18n/<language>.json` beside it, found by what the app declares: `name`,
@@ -537,6 +537,33 @@ class Controls(Protocol):
     def why_not(self, control_id: str, settings: Mapping[str, Any]) -> str: ...
 
 
+# --- play record --------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PlayRecord:
+    """What the program itself counted for one entry. `last` is an ISO 8601 time with its
+    zone, or "" where the program has none."""
+
+    count: int = 0
+    seconds: int = 0
+    last: str = ""
+
+
+@runtime_checkable
+class Plays(Protocol):
+    """The program's own count of how often it ran an entry, for a frontend that shows
+    that count in place of its own.
+
+    `record` answers None where the program keeps none for this entry: it never ran it,
+    it keeps one count for several entries, or it keeps none at all. A caller then shows
+    its own number, never a blend of the two. Nothing here writes: the program's count is
+    the program's.
+    """
+
+    def record(self, entry: Entry, settings: Mapping[str, Any]) -> PlayRecord | None: ...
+
+
 # --- the app ----------------------------------------------------------------------
 
 
@@ -563,3 +590,4 @@ class App:
     pause: Pause | None = None
     buttons: Buttons | None = None
     controls: Controls | None = None
+    plays: Plays | None = None

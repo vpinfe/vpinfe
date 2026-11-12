@@ -37,6 +37,7 @@ from common.games.game_metadata import (
     section,
     vpinfe_section,
 )
+from common.games.play_numbers import PlayNumbers
 from common.games.tables import (
     TABLE_FILENAME_KEY,
     TABLE_ID_KEY,
@@ -46,6 +47,7 @@ from common.games.tables import (
     recorded_default,
     table_entries,
 )
+from common.timestamps import iso_to_epoch
 
 MEMBER_GAME_KEY = "game"
 MEMBER_TABLE_KEY = "table"
@@ -170,14 +172,40 @@ def _primary_key(order_by: str) -> Callable[[GameRecord], Any]:
         return lambda game: game_rating(game)
     if order_by == "added":
         return lambda game: getattr(game, "creation_time", 0) or 0
-    if order_by == "play_time_seconds":
-        # The seconds, not User.RunTime: ordering on the minutes ties every game with
-        # under a minute on it at zero, which is most of a library that gets browsed.
-        return lambda game: run_time_seconds(getattr(game, "meta_config", {}) or {})
-    if order_by in ("last_played", "play_count"):
+    if order_by in PLAY_ORDERS:
+        return _play_key(order_by)
+    return lambda game: collation.sort_key(game_title(game))
+
+
+PLAY_ORDERS = ("play_time_seconds", "last_played", "play_count")
+
+
+def _play_key(order_by: str) -> Callable[[Any], Any]:
+    """The key for an order on play numbers, whose they are being the setting's answer.
+
+    The whole game's read the game, as they always did. The others read the table of
+    the entry handed over, or the game's default where it is handed a game, so a game
+    offering two tables can sit in two places in a list of tables.
+    """
+    plays = PlayNumbers()
+    if plays.whole_game:
+        if order_by == "play_time_seconds":
+            # The seconds, not User.RunTime: ordering on the minutes ties every game with
+            # under a minute on it at zero, which is most of a library that gets browsed.
+            return lambda game: run_time_seconds(getattr(game, "meta_config", {}) or {})
         stored = {"last_played": "LastRun", "play_count": "StartCount"}[order_by]
         return lambda game: _user_value(game, stored)
-    return lambda game: collation.sort_key(game_title(game))
+
+    def shown(item: Any) -> Any:
+        game = getattr(item, "game", item)
+        numbers = plays.counters(getattr(item, "meta_config", {}) or {},
+                                 str(getattr(game, "full_path_game", "") or ""),
+                                 getattr(item, "table", None)) or {}
+        if order_by == "last_played":
+            return iso_to_epoch(numbers.get("last_played")) or 0
+        return int(numbers.get(order_by, 0) or 0)
+
+    return shown
 
 
 def _tiebreak(entry: Entry) -> tuple:
@@ -199,7 +227,10 @@ def _ordered(entries: list, order_by: str, descending: bool = False) -> list:
         entries.sort(key=rankings.rank_key(order_by))
         return entries
     key = _primary_key(order_by)
-    entries.sort(key=lambda entry: key(entry.game), reverse=descending)
+    if order_by in PLAY_ORDERS and not PlayNumbers().whole_game:
+        entries.sort(key=key, reverse=descending)
+    else:
+        entries.sort(key=lambda entry: key(entry.game), reverse=descending)
     return entries
 
 
