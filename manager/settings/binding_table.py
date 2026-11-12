@@ -612,16 +612,26 @@ class Table:
 
     def _draw_send(self) -> None:
         """The switch that sends the cabinet's buttons here, or what stands in its place:
-        the offer to open the frontend windows, or that they are opening."""
+        the offer to open the frontend windows, or that they are opening. A page on the
+        device that serves it hears that device's own buttons and has no switch, only the
+        line on how to stop listening."""
         if self.send.is_deleted:
             return
         self.send.clear()
+        if not self.elsewhere:
+            if self.listening:
+                with self.send:
+                    ui.label(t("manager.binding_table.click_away")) \
+                        .classes("manager-help manager-binding-send-words")
+            self.send.set_visibility(bool(self.listening))
+            self._say_where()
+            return
         words = ""
         with self.send:
             if self.opening:
                 ui.spinner(size="16px").classes("shrink-0")
                 words = t("manager.binding_table.opening", device=self._cab)
-            elif self.elsewhere and not self._frontend_up:
+            elif not self._frontend_up:
                 panel.action(t("action.frontend.start"), self._open_windows, icon=verbs.OPEN_WINDOW,
                              hint=t("action.frontend.start.help"))()
                 words = t("manager.binding_table.frontend_closed", device=self._cab)
@@ -710,6 +720,10 @@ class Table:
         name = str(event.args or "")
         self.listening = name if name in self.by_name else ""
         self._active_at = time.monotonic()
+        if self.listening and not self.elsewhere and not self.sending:
+            self.sending = True
+            self.off_reason = ""
+            self._sync_lease(resume=True)
         if self.listening:
             self.lit = ""
             self._light()
@@ -790,7 +804,7 @@ class Table:
             self.opening = False
             ui.notify(t("manager.binding_table.open_failed", device=self._cab), type="warning")
             changed = True
-        if self.sending and now - self._active_at >= IDLE_S:
+        if self.elsewhere and self.sending and now - self._active_at >= IDLE_S:
             self._turn_off("idle")
             return
         self._sync_lease()

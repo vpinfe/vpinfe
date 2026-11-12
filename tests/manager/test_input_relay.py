@@ -758,11 +758,15 @@ class ATableOnTheServingDevice(_TableCase):
 
         self.assertIsNone(control._relay)
 
-    async def test_it_draws_the_switch_and_no_offer_when_the_frontend_is_closed(self) -> None:
-        control = self.drawn()
+    async def test_it_draws_no_switch_or_offer_with_the_frontend_up_or_closed(self) -> None:
+        for up in (False, True):
+            with self.subTest(frontend_up=up):
+                self.up = up
+                control = self.drawn()
 
-        self.assertIsNotNone(self._switch(control))
-        self.assertEqual(self._words(control), [self._switch_label(control)])
+                self.assertIsNone(self._switch(control))
+                self.assertEqual(self._words(control), [])
+                self.assertFalse(control.send.visible)
 
     async def test_it_asks_for_the_buttons_too_and_names_no_device(self) -> None:
         with patch.object(table, "holder_of", return_value=("Chrome on Linux", "")):
@@ -771,3 +775,32 @@ class ATableOnTheServingDevice(_TableCase):
 
         self.assertEqual(self.asked.armed, [True])
         self.assertEqual(self.asked.seen[0]["device"], "")
+
+    async def test_two_minutes_with_nothing_pressed_does_not_let_them_go(self) -> None:
+        control = self.drawn()
+        await control._begin()
+        control._active_at = time.monotonic() - table.IDLE_S - 1
+
+        await control._keep()
+
+        self.assertTrue(control.sending)
+        self.assertNotIn(False, self.asked.armed)
+
+    async def test_listening_says_how_to_stop_where_the_switch_would_be(self) -> None:
+        control = self.drawn()
+
+        said(control.line, "listen", "back")
+
+        self.assertEqual(self._words(control), [t("manager.binding_table.click_away")])
+        self.assertTrue(control.send.visible)
+
+    async def test_the_cabinet_taking_them_is_undone_by_listening_for_a_row_again(self) -> None:
+        control = self.drawn()
+        await control._begin()
+        said(control.line, "taken")
+        self.assertFalse(control.sending)
+
+        said(control.line, "listen", "back")
+
+        self.assertTrue(control.sending)
+        self.assertEqual(self.asked.armed, [True, False, True])
