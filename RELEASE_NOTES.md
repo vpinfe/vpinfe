@@ -1,5 +1,66 @@
 ## VPinFE Release Notes
 
+### New in beta.3
+
+#### New
+- **Frontend** - Full builds now play H.264 video and AAC audio, so more of your media plays without converting it.
+- **Core** - Each game's `.info` now follows the latest Visual Pinball's FileLayout.md, changed once on first start.
+- **Manager** - Rate tables in half stars: click the last lit star again to flip between half and whole. Collection rules take half stars too.
+- **Manager** - A game with several tables can keep each table's own details, rating, tags and plays.
+- **Manager** - Choose whose play counts the wheel and sorting use: the game's, the table's or Visual Pinball's own.
+- **Manager** - Presets set up your screens for Cabinet or Desktop in one step, with Undo.
+- **Manager** - Displays shows your screens laid out as they sit on your desk, and you can drag each part onto the screen you want.
+- **Manager** - A table's settings open in a card with Visual Pinball's own areas down the side, and show which values are defaults.
+- **Manager** - Choose a Visual Pinball launcher's settings file when you add or copy it. A launcher copied to another device takes its file along.
+- **Manager** - Setup has Visual Pinball write its own settings file, so every setting has its label and choices.
+- **Manager** - Visual Pinball launchers take Arguments, and show the command that starts a table.
+- **Manager** - Add on Games, Tables, Media and Assets, from this device or the VPinFE device.
+- **Manager** - Match to VPS… walks through several tables or files at once, and a ROM zip named exactly as its VPS ROM matches on its own.
+- **Manager** - Discovery shows when a game you have has an update, and lets you skip it or ignore updates for a table.
+- **Manager** - Read a game's rule sheet or readme in its card, and edit a text one in place.
+- **Manager** - A `.B2SPro` backglass counts as a backglass, travels with its table and shows in Assets.
+- **Manager** - Full DMD pictures and videos are kept and listed, and come in with the PinballX and Popper imports.
+- **Manager** - Choose Visual Pinball's names for new flyers and instruction cards in Settings > Library > Media.
+- **Manager** - Dropping a `.info` on a game asks how to merge it, and keeps a backup.
+- **Frontend** - Holding the wheel is smoother: the other screens catch up when you let go.
+
+#### Improved
+- **Manager** - Menus group their actions, with Delete from Disk last in red.
+- **Manager** - The Collections menu on Games and Tables puts a check beside each collection that holds your selection. Press a check to take it out again, with Undo.
+- **Manager** - A file's Source is a row in its Details on Assets and Media, so you can see whether you added it or it came from somewhere else.
+- **Manager** - Themes and extensions are Trusted instead of Accepted, and Trust All covers several themes at once.
+- **Manager** - Assets and Media keep their place when you pick a file.
+- **Manager** - File dialogs open on the game's own folder.
+- **Manager** - A device that is asleep or closed shows grey, not red.
+- **Manager** - Setup isn't finished is an amber notice on every page.
+- **Manager** - The System badge counts a problem once.
+- **Manager** - Importing works beside your library, and an import with no room is refused before it starts.
+- **Manager** - Hash and Checksum values have a Copy button.
+- **Manager** - A rating given in the grid shows at once in the open panel, and Rate games has an Apply button.
+- **Manager** - Dialogs line up: one margin, a rule under the title and above the buttons, and the same sizes everywhere. Match to VPS… shows what the game is matched to above the search.
+- **Manager** - Smaller touches: Show Updates replaces Show Update Count, help text is shorter, panels share one content width, and the Visual Pinball Input page says keys only.
+
+#### Fixed
+- **Frontend** - Rapid wheel taps no longer leave the cards waiting on pictures.
+- **Frontend** - A held page button repeats at a pace you can read.
+- **Frontend** - On a Mac, starting the frontend no longer stops on a keychain dialog.
+- **Manager** - A web page in a game's folder can no longer run as the Manager.
+- **Manager** - Upgrading replaces the retired VPinFE Theme List address.
+- **Manager** - A rule sheet that is a picture is shown, not linked.
+- **Manager** - Files named Full DMD no longer land in the DMD slot.
+
+#### Removed
+- **Manager** - Move to Game for a Table INI.
+- **Manager** - Add a Setting and Commonly Set per Table. All Settings holds every setting the table can have.
+
+#### For theme and API authors
+- **Core** - Ratings are 0 to 10 in Contract 2 and the HTTP API. Contract 1 stays on whole stars, 0 to 5.
+- **Core** - A game's `.info` is schema 3, and a table can have its own. The API's `user` fields follow the Plays setting.
+- **Core** - Extensions gain `table.picture_taken` and `input.action`, which needs the See Actions permission.
+- **Core** - Themes gain `fullDMDImagePath` and `fullDMDVideoPath`.
+- **Core** - Themes can set `vpin.mediaSettleMs` and `vpin.pageRepeatMs`, and a long hold ends with one `TableIndexUpdate` with reason `settle`.
+- **Core** - New: `POST /api/v1/launchers/{id}/settings-file/received`, `PUT /uploads/{id}/file`, and `set_aside` on `GET /discovery/updates`.
+
 ### New in beta.2
 
 #### New
