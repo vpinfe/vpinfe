@@ -1444,8 +1444,8 @@ One WebSocket method, `report_browser`, carries what the controller window found
 probed its own browser: `canPlayType` for each format VPinFE media can hold, and a real
 decode of two small clips in `frontend/static/probe/`. Refused to themes, like
 `get_paging_state`: its caller is core's own page. Nothing a theme reads changes.
-*Why:* only the browser knows what it plays, and the bundled Chromium plays no H.264 while
-most shared videos are H.264. Covered by `tests/host/test_frontend_browser.py`,
+*Why:* only the browser knows what it plays, and a browser a device brings itself may play
+no H.264 while most shared videos are H.264. Covered by `tests/host/test_frontend_browser.py`,
 `tests/js/internal-methods.test.js` and `tests/invariants/test_theme_api_surface.py`.
 
 **PAR-98 - High scores are kept per ROM, and read off the table that was played.**

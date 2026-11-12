@@ -127,42 +127,45 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path chromium\linux,chromium\windows,chromium\mac
 
-      # All four downloads below are Chromium 152.0.7977.x. The snapshot buckets do not
-      # build at the same positions - Windows is the nearest below the other two - so the
-      # numbers differ while the browser does not. Keep them on one version when bumping:
-      # a theme is written against what the bundled browser supports, and a capability
-      # that exists on one platform and not another is invisible to whoever wrote it.
+      # All four downloads below are ungoogled-chromium 152.0.7977.82. Its builds carry the
+      # proprietary codecs, so H.264 and AAC video plays in the bundled browser. Keep the four
+      # on one version when bumping: a theme is written against what the bundled browser
+      # supports, and a capability that exists on one platform and not another is invisible
+      # to whoever wrote it. The release tags differ by platform (the Linux builds end -1, the
+      # Windows and macOS builds -1.1) but the browser inside is the same.
       - name: Download Linux Chromium
         if: runner.os == 'Linux' && runner.arch == 'X64'
         run: |
-          wget -O chromium/linux/chrome.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F1669021%2Fchrome-linux.zip?generation=1785190995992284&alt=media"
-          unzip -q chromium/linux/chrome.zip -d chromium/linux
-          mv chromium/linux/chrome-linux chromium/linux/chrome
+          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/152.0.7977.82-1/ungoogled-chromium-152.0.7977.82-1-x86_64_linux.tar.xz"
+          tar xvf chromium/linux/chrome.tar.xz -C chromium/linux/
+          mv chromium/linux/ungoogled-chromium-152.0.7977.82-1-x86_64_linux chromium/linux/chrome
           chmod +x chromium/linux/chrome/chrome
 
       - name: Download ARM Linux Chromium
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: |
-          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/152.0.7977.64-1/ungoogled-chromium-152.0.7977.64-1-arm64_linux.tar.xz"
+          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/152.0.7977.82-1/ungoogled-chromium-152.0.7977.82-1-arm64_linux.tar.xz"
           tar xvf chromium/linux/chrome.tar.xz -C chromium/linux/
-          mv chromium/linux/ungoogled-chromium-152.0.7977.64-1-arm64_linux chromium/linux/chrome
+          mv chromium/linux/ungoogled-chromium-152.0.7977.82-1-arm64_linux chromium/linux/chrome
           chmod +x chromium/linux/chrome/chrome
 
       - name: Download Windows Chromium
         if: runner.os == 'Windows'
         run: |
-          pwsh -Command "Invoke-WebRequest -Uri 'https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Win_x64%2F1668971%2Fchrome-win.zip?generation=1785191094860934&alt=media' -OutFile 'chromium/windows/chrome.zip' -UseBasicParsing"
+          pwsh -Command "Invoke-WebRequest -Uri 'https://github.com/ungoogled-software/ungoogled-chromium-windows/releases/download/152.0.7977.82-1.1/ungoogled-chromium_152.0.7977.82-1.1_windows_x64.zip' -OutFile 'chromium/windows/chrome.zip' -UseBasicParsing"
           pwsh -Command "Expand-Archive -Path 'chromium/windows/chrome.zip' -DestinationPath 'chromium/windows'"
+          pwsh -Command "Rename-Item -Path 'chromium/windows/ungoogled-chromium_152.0.7977.82-1.1_windows_x64' -NewName 'chrome-win'"
           pwsh -Command "Remove-Item 'chromium/windows/chrome.zip'"
 
       - name: Download Mac Chromium
         if: runner.os == 'macOS'
         run: |
           mkdir -p chromium
-          curl -L -o chrome-mac.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Mac_Arm%2F1669021%2Fchrome-mac.zip?generation=1785190481571679&alt=media"
-          unzip -q chrome-mac.zip
-          mv chrome-mac/Chromium.app chromium/Chromium.app
-          rm -rf chrome-mac chrome-mac.zip
+          curl -L -o chrome-mac.dmg "https://github.com/ungoogled-software/ungoogled-chromium-macos/releases/download/152.0.7977.82-1.1/ungoogled-chromium_152.0.7977.82-1.1_arm64-macos.dmg"
+          hdiutil attach chrome-mac.dmg -mountpoint chrome-mac-volume -nobrowse -quiet
+          cp -R chrome-mac-volume/Chromium.app chromium/Chromium.app
+          hdiutil detach chrome-mac-volume -quiet
+          rm -f chrome-mac.dmg
 
       # What ships is packaging/vpinfe.spec, not flags here. See its docstring.
       - name: Build app with PyInstaller
