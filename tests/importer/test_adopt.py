@@ -689,7 +689,7 @@ class ImportTests(AdoptCase):
             counted = adopt._add_missing(self._ctx, game_id, adds, plan.Held(), refused)
 
         user = self.client.get(f"/games/{game_id}").json()["user"]
-        self.assertEqual((1, 7, 3), (counted, user["play_count"], user["rating"]))
+        self.assertEqual((1, 7, 6), (counted, user["play_count"], user["rating"]))
         self.assertEqual(refused, [self._ctx.t("refused.history")])
 
     def test_two_refused_history_writes_are_each_logged_and_named_once(self) -> None:

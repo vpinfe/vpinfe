@@ -226,13 +226,14 @@ class GameIdTests(TempTree):
             "Info": {"VPSId": "vps-1", "Title": "Example"},
             "User": {"Rating": 4},
             "vpinfe": {"alt_title": "My Example"},
+            "VPXFile": {},
         })
 
         game_identity.ensure_id(game)
         info = Path(game.full_path_game) / "Example.info"
         on_disk = saved_record(info)
 
-        self.assertEqual(on_disk["User"]["Rating"], 4)
+        self.assertEqual(on_disk["User"]["Rating"], 8)
         self.assertEqual(on_disk["vpinfe"]["alt_title"], "My Example")
         self.assertEqual(on_disk["Info"]["Title"], "Example")
 

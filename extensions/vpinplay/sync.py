@@ -24,7 +24,9 @@ t = words("vpinplay")
 
 GAME_TIMEOUT = 30
 
-# Their bound, and one game outside it fails the whole request rather than that game.
+# Their bound, in whole stars, and one game outside it fails the whole request rather than
+# that game. A game's own rating is in half stars, 0-10, and goes as whole stars, a half
+# star rounding down, except a lone half star, which goes as one: 0 would clear the rating.
 RATING_MIN, RATING_MAX = 0, 5
 
 # What the service calls each thing a script was seen to use. Ours are in `features`
@@ -104,7 +106,8 @@ def payload_for_player(game: dict, table: dict | None, mine: dict, held: dict,
     return payload_for({
         **game,
         "user": {"rating": (mine.get("rating") if rated
-                            else mine.get("rating") or held.get("rating")),
+                            else _rating(mine.get("rating")) * 2
+                            or _halves(held.get("rating"))),
                  "last_played": mine.get("last_played"),
                  "play_count": mine.get("play_count"),
                  "play_time_seconds": mine.get("play_time_seconds"),
@@ -130,7 +133,8 @@ def payload_for_owner(game: dict, table: dict | None, held: dict, reading: Any,
         **game,
         "user": {**user,
                  "rating": (user.get("rating") if rated
-                            else user.get("rating") or held.get("rating")),
+                            else _rating(user.get("rating")) * 2
+                            or _halves(held.get("rating"))),
                  "score": theirs_of(reading, initials, credited) or held.get("score")},
     }, table)
 
@@ -273,9 +277,16 @@ def _number(value: Any) -> int:
 
 
 def _rating(value: Any) -> int:
-    """Clamped rather than sent as it came: one game outside their bound fails the
-    whole request, so a rating nobody meant is not worth losing a sync over."""
-    return max(RATING_MIN, min(RATING_MAX, _number(value)))
+    """A rating in half stars as the whole stars the service takes. Clamped rather than
+    sent as it came: one game outside their bound fails the whole request, so a rating
+    nobody meant is not worth losing a sync over."""
+    halves = _number(value)
+    return max(RATING_MIN, min(RATING_MAX, max(1, halves // 2) if halves > 0 else 0))
+
+
+def _halves(stars: Any) -> int:
+    """What the service holds, whole stars, in the half stars a game's rating is in."""
+    return max(RATING_MIN, min(RATING_MAX, _number(stars))) * 2
 
 
 def send(endpoint: str, payload: dict, timeout_seconds: int) -> dict:

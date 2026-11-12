@@ -33,7 +33,13 @@ from common.games.collection_store import (
     normalize_direction,
     public_name,
 )
-from common.games.game_metadata import game_rating, normalize_meta, set_game_rating
+from common.games.game_metadata import (
+    game_rating,
+    normalize_meta,
+    normalize_rating,
+    set_game_rating,
+    whole_stars,
+)
 from common.games.game_repository import all_games
 from common.games.player_records import get_records
 from common.host import frontend_browser, frontend_state, frontend_windows, launch, launch_state
@@ -197,6 +203,10 @@ API_INTERNAL_METHODS = {
     'set_player_up',
     'set_player_rating',
     'get_player_rating',
+    # The owner's rating of the game, in half stars whatever theme is showing. A theme's
+    # get_game_rating and set_game_rating answer in the scale its contract has.
+    'get_rating_halves',
+    'set_rating_halves',
     # What the person set for attract mode, asked by core when it starts its timers.
     # A theme reads its own `attract` block from its config.json instead.
     'get_attract_config',
@@ -964,16 +974,33 @@ class API:
         return config_api.get_vpinplay_endpoint(self._ini_config.config)
 
     def get_game_rating(self, index: Any) -> int:
-        """Get User.Rating for a game index in the current filtered list."""
-        entry = self.entry_at(index)
-        return game_rating(entry.game) if entry is not None else 0
+        """User.Rating for a game index in the current filtered list, on the scale the
+        active theme's contract has: whole stars, 0-5, at contract 1 and half stars, 0-10,
+        at contract 2."""
+        rating = self.get_rating_halves(index)
+        return whole_stars(rating) if self._theme_contract() < 2 else rating
 
     def set_game_rating(self, index: Any, rating: Any) -> dict[str, Any]:
-        """Set User.Rating (0-5) for a game index in the current filtered list.
+        """Set User.Rating for a game index in the current filtered list, on the scale of
+        `get_game_rating`.
 
         The index is converted here; the write itself is the one in common/, so a
         rating set from a theme and one set over HTTP are the same operation.
         """
+        contract_one = self._theme_contract() < 2
+        halves = min(5, normalize_rating(rating)) * 2 if contract_one else rating
+        done = self.set_rating_halves(index, halves)
+        if done.get("success") and contract_one:
+            return {**done, "rating": whole_stars(done["rating"])}
+        return done
+
+    def get_rating_halves(self, index: Any) -> int:
+        """The owner's rating for a game index, 0-10: a half star a step."""
+        entry = self.entry_at(index)
+        return game_rating(entry.game) if entry is not None else 0
+
+    def set_rating_halves(self, index: Any, rating: Any) -> dict[str, Any]:
+        """Set User.Rating, 0-10, for a game index in the current filtered list."""
         entry = self.entry_at(index)
         if entry is None:
             logger.warning("Ignoring rating for invalid index: %s", index)
@@ -998,8 +1025,8 @@ class API:
         return players_for_themes(get_roster().state())
 
     def get_player_rating(self, player_id: Any, index: Any) -> int:
-        """A player's own rating (0-5) for a game index, for the main menu's Rating
-        dialog to preview. The owner's is get_game_rating's, read the same way."""
+        """A player's own rating (0-10, half stars) for a game index, for the main menu's
+        Rating dialog to preview. The owner's is get_rating_halves's, read the same way."""
         entry = self.entry_at(index)
         if entry is None:
             return 0
@@ -1011,8 +1038,8 @@ class API:
         return get_records().game(player, game_identity.game_id(entry.game)).get("rating", 0)
 
     def set_player_rating(self, player_id: Any, index: Any, rating: Any) -> dict[str, Any]:
-        """A non-owner player's own rating (0-5) for a game index - their own record,
-        never the library's. The owner writes through set_game_rating instead."""
+        """A non-owner player's own rating (0-10, half stars) for a game index - their own
+        record, never the library's. The owner writes through set_rating_halves instead."""
         entry = self.entry_at(index)
         if entry is None:
             logger.warning("Ignoring rating for invalid index: %s", index)

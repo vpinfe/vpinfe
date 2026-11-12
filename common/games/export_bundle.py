@@ -20,6 +20,7 @@ from common.games.asset_registry import (
 from common.games.asset_resolver import resolve_for_table
 from common.games.game_metadata import VPINFE_SECTION, vpinfe_section
 from common.games.info_file import ASSETS_KEY
+from common.games.info_migration import migrate, needs_migration
 from common.games.tables import (
     DEFAULT_TABLE_KEY,
     TABLES_KEY,
@@ -81,15 +82,18 @@ def prune_info(info_text: str, bundled_arcnames: set[str]) -> str:
     section = data.get("vpinfe") if isinstance(data, dict) else None
     if isinstance(section, dict) and table_files.TABLE_SECTION in section:
         return info_text
-    record = info_codec.decode(data)
+    schema_3 = info_codec.is_schema_3(data)
+    if schema_3:
+        record = migrate(data) if needs_migration(data) else info_codec.decode(data)
+    else:
+        record = data
     assets = record.get(ASSETS_KEY)
     if isinstance(assets, dict):
         record[ASSETS_KEY] = {
             path: entry for path, entry in assets.items() if path in bundled_arcnames
         }
     _keep_shipped_tables(record, bundled_arcnames)
-    return json.dumps(info_codec.encode(record) if info_codec.is_schema_3(data) else record,
-                      indent=2)
+    return json.dumps(info_codec.encode(record) if schema_3 else record, indent=2)
 
 
 def _keep_shipped_tables(record: dict, bundled_arcnames: set[str]) -> None:

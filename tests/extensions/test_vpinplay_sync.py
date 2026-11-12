@@ -230,7 +230,7 @@ class PlayerPayloadTests(unittest.TestCase):
         self.assertEqual(found["vpinfe"], {"alttitle": "Theirs", "altvpsid": "theirs-id"})
 
     def test_a_rating_they_gave_here_is_theirs(self) -> None:
-        found = sync.payload_for_player(GAME, TABLE, {**MINE, "rating": 2}, {"rating": 4},
+        found = sync.payload_for_player(GAME, TABLE, {**MINE, "rating": 4}, {"rating": 4},
                                         READING, "ABC")
 
         self.assertEqual(found["user"]["rating"], 2)

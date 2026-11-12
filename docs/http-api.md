@@ -261,7 +261,7 @@ the documented entry point is a plain 200. Both spellings work.
 | DELETE | `/api/v1/games/{id}/folders?path=&resolve=` | Remove a folder. An empty one goes at once. One with files asks first (`holds`): `keep` moves the files up into the folder it was in, and a name clash there is `409` with nothing moved (a file that would become a table or the game's record there is `400`, and at the top of the game's folder `keep` is checked for `companion` effects as a move there is); `break` removes the folder and what is in it, with no copy in Backups. `games:write`, and `protected:write` to list `break` in `resolve` |
 | GET | `/api/v1/games/{id}/archive` | Download a game as `.vpxz` — one table by default; `?file=` picks which table. `?full=true` (whole folder) carries its own scope, `games:export_full` |
 | POST | `/api/v1/games/{id}/launch` | Launch a game here. Optional `{"file": "..."}` picks which table |
-| PUT | `/api/v1/games/{id}/rating` | Rate a game, `{"rating": 0-5}`. `0` is unrated |
+| PUT | `/api/v1/games/{id}/rating` | Rate a game, `{"rating": 0-10}`, a half star a step. `0` is unrated |
 | PUT | `/api/v1/games/{id}/tables/{table_id}/rating` | Rate one table, same body. Refines the game's rather than replacing it; returns the table |
 | PUT | `/api/v1/games/{id}/favorite` | Mark a game a favorite, or not, `{"favorite": bool}` |
 | PUT | `/api/v1/games/{id}/private` | Mark a game Private, or not, `{"private": bool}`. A Private game is never sent to a community service, whoever plays it - see `docs/extensions/reference/offers.md` |
@@ -337,7 +337,7 @@ the documented entry point is a plain 200. Both spellings work.
 | PUT | `/api/v1/players/{id}/up` | Put one player up beside whoever is, `{"up": true}`, or take them down. Answers with the whole list |
 | PUT | `/api/v1/players/up` | Say exactly who is up, `{"ids": [...]}`. An id nobody has is a `404` and changes nothing. Answers with the whole list |
 | GET | `/api/v1/players/{id}/record` | What a player other than the owner has done with each game - see [Records](#records) |
-| PUT | `/api/v1/players/{id}/ratings/{game_id}` | A player's rating of a game, `{"rating": 3}`, 0-5 as `PUT /games/{id}/rating` takes it. Answers `{"rating"}`. Not the owner's, which is the library's |
+| PUT | `/api/v1/players/{id}/ratings/{game_id}` | A player's rating of a game, `{"rating": 6}`, 0-10 as `PUT /games/{id}/rating` takes it. Answers `{"rating"}`. Not the owner's, which is the library's |
 | POST | `/api/v1/players/guests/card` | Add a guest from their card, `{"card": "..."}`: the card file's contents, or the card's text on its own. `201`, up alone. The same card again puts that guest up rather than adding another - see [Accounts and cards](#accounts-and-cards) |
 | GET | `/api/v1/players/{id}/accounts` | Every account this player can hold here, one per running extension that offers one |
 | GET | `/api/v1/players/{id}/accounts/{extension}` | One of them |
@@ -1590,10 +1590,10 @@ to offer. `tags_none_of` is table-scoped like `tags`: a game where neither it no
 tables carries one matches its default table, and otherwise each table where neither it
 nor its game carries one matches on its own.
 
-The `rating` axis carries its scale, `["1", "2", "3", "4", "5"]`, on every install rather
+The `rating` axis carries its scale, half-star steps `["1", ... "10"]`, on every install rather
 than the ratings a library happens to hold: enumerating the ratings in use would offer a
 different scale to two libraries, and a shrinking one as ratings change. A rule asks for
-one exactly, or with `rating_or_higher: true` for that many stars or more.
+one step exactly, or with `rating_or_higher: true` for that step or more.
 `rating_or_higher` carries no values of its own.
 
 ## Devices
@@ -1735,7 +1735,7 @@ player removes their record.
 ```json
 {"player": "Hc4Rt8Wv1N", "games": [
   {"game_id": "Tq3Nx8Kd2P", "play_count": 2, "play_time_seconds": 1520,
-   "last_played": "2026-09-28T20:14:02Z", "rating": 4,
+   "last_played": "2026-09-28T20:14:02Z", "rating": 8,
    "best_score": {"rom": "example", "section": "HIGH SCORES",
                   "scored_at": "2026-09-28T20:39:11Z", "rank": 2, "initials": "ABC",
                   "score": 12500000, "prefix": "", "suffix": "", "text": "12,500,000"}}

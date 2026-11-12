@@ -27,7 +27,8 @@ from common.players.players import Player, get_roster
 logger = logging.getLogger("vpinfe.common.games.player_records")
 
 RECORDS_DIR = CONFIG_DIR / "player_records"
-SCHEMA = 1
+SCHEMA = 2
+WHOLE_STAR_SCHEMA = 1
 SCHEMA_KEY = "schema"
 PLAYER_KEY = "player"
 GAMES_KEY = "games"
@@ -131,7 +132,8 @@ class PlayerRecords:
         self._change(player, game_id, scored)
 
     def set_rating(self, player: Player, game_id: str, rating: Any) -> int:
-        """Their rating of a game, 0-5, 0 meaning unrated. Returns what was stored."""
+        """Their rating of a game, 0-10 in half stars, 0 meaning unrated. Returns what was
+        stored."""
         stored = normalize_rating(rating)
 
         def rated(entry: dict[str, Any]) -> None:
@@ -181,8 +183,10 @@ class PlayerRecords:
         except Exception:
             logger.warning("The record at %s is unreadable; treating it as empty", path)
             return {}
-        if not isinstance(payload, dict) or _schema_of(payload) < SCHEMA:
+        if not isinstance(payload, dict) or _schema_of(payload) < WHOLE_STAR_SCHEMA:
             return {}
+        if _schema_of(payload) == WHOLE_STAR_SCHEMA:
+            return _in_half_stars(payload)
         return payload
 
     def _save(self, player: Player, record: dict[str, Any]) -> None:
@@ -204,6 +208,16 @@ class PlayerRecords:
         """None for an id that is not a file name."""
         wanted = str(player_id or "").strip()
         return self.root / f"{wanted}.json" if _SAFE_ID.fullmatch(wanted) else None
+
+
+def _in_half_stars(payload: dict[str, Any]) -> dict[str, Any]:
+    """A schema 1 record rated in whole stars, 0-5; the same record in half stars, 0-10,
+    stamped so a later read does not double it again."""
+    games = payload.get(GAMES_KEY)
+    doubled = {game_id: {**entry, RATING: min(10, _whole(entry.get(RATING)) * 2)}
+               if isinstance(entry, dict) and RATING in entry else entry
+               for game_id, entry in (games.items() if isinstance(games, dict) else ())}
+    return {**payload, SCHEMA_KEY: SCHEMA, GAMES_KEY: doubled}
 
 
 def _theirs(player: Player) -> Player:

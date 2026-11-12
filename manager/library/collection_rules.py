@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from common.games.collection_filters import UNCONSTRAINED
+from common.games.game_metadata import star_words
 from common.i18n import t
 
 # How a row asks of its field. Held in the draft only; the wire never sees these.
@@ -123,7 +124,7 @@ TEMPLATES = (
     Template("manager.collection_rules.never_played",
              ({"field": "played", "op": NO, "value": None},)),
     Template("manager.collection_rules.top_rated",
-             ({"field": "rating", "op": AT_LEAST, "value": "4"},),
+             ({"field": "rating", "op": AT_LEAST, "value": "8"},),
              {"order_by": "rating", "direction": "desc"}),
     Template("manager.collection_rules.a_manufacturer",
              ({"field": "manufacturer", "op": ANY_OF, "value": None},)),
@@ -313,7 +314,7 @@ def _clause(row: dict[str, Any], named: dict[str, Field]) -> str:
         return t("manager.collection_rules.axis_not", axis=one.label,
                  values=_either(_chosen(value)))
     if op in (AT_LEAST, EXACTLY):
-        stars = t("manager.stars.5", n=_chosen(value)[0])
+        stars = t("manager.stars.5", n=star_words(_chosen(value)[0]))
         if op == AT_LEAST:
             return t("manager.collection_rules.axis_min", axis=one.label, value=stars)
         return t("manager.collection_rules.axis_is", axis=one.label, values=stars)

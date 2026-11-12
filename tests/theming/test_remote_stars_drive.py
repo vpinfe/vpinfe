@@ -32,6 +32,10 @@ LIT_NOW = (f"[...document.querySelectorAll({json.dumps(STARS)})]"
            ".map(el => el.classList.contains('manager-star--on'))")
 OPACITY_NOW = (f"[...document.querySelectorAll({json.dumps(STARS)})]"
                ".map(el => getComputedStyle(el).opacity)")
+STATE_NOW = (f"[...document.querySelectorAll({json.dumps(STARS)})]"
+             ".map(el => el.classList.contains('manager-star--on') ? 'on'"
+             " : el.classList.contains('manager-star--half') ? 'half' : 'off')")
+NUMBER_NOW = "document.querySelector('.manager-stars-number')?.innerText"
 SAID_NOW = "[...document.querySelectorAll('.q-notification')].map(n => n.innerText).join(' | ')"
 SAVED_SHOWN = ("[...document.querySelectorAll('.manager-stars-saved')]"
                ".some(el => el.offsetParent !== null)")
@@ -47,9 +51,15 @@ def _call(instance: LiveInstance, method: str, path: str, body: dict | None = No
     return json.loads(raw) if raw else None
 
 
-def _rating(root: Path) -> int:
+def _halves(root: Path) -> int:
+    """The saved rating in half stars, as the file holds it: 0-10."""
     info = saved_record(root / "Solo" / "Solo.info")
     return int((info.get("User") or {}).get("Rating") or 0)
+
+
+def _rating(root: Path) -> int:
+    """The saved rating in whole stars."""
+    return _halves(root) // 2
 
 
 class RemoteStarsDrive(unittest.TestCase):
@@ -135,6 +145,31 @@ class RemoteStarsDrive(unittest.TestCase):
             await browser.wait_for(f"document.querySelectorAll({json.dumps(STARS)}).length === 5")
             seen["lit after redraw"] = await browser.evaluate(LIT_NOW)
 
+            # The star that is already the last lit one flips to a half star and back, and
+            # the arrow keys step a half star. The saved rating is read from the file.
+            await browser.tap(STARS, nth=2)
+            await browser.wait_for(f"{STATE_NOW}[2] === 'half'")
+            await browser.wait_for(SAVED_SHOWN)
+            seen["half state"] = await browser.evaluate(STATE_NOW)
+            seen["half number"] = await browser.evaluate(NUMBER_NOW)
+            seen["half saved"] = _halves(b_root)
+            await browser.tap(STARS, nth=2)
+            await browser.wait_for(f"{STATE_NOW}[2] === 'on'")
+            await browser.wait_for(SAVED_SHOWN)
+            seen["whole again saved"] = _halves(b_root)
+            await browser.evaluate("document.querySelector('.manager-stars').focus()")
+            await browser.press("ArrowRight", "ArrowRight", 39)
+            await browser.wait_for(f"{STATE_NOW}[3] === 'half'")
+            await browser.wait_for(f"{NUMBER_NOW} === '3\\u00bd'")
+            await browser.wait_for(SAVED_SHOWN)
+            seen["key state"] = await browser.evaluate(STATE_NOW)
+            seen["key saved"] = _halves(b_root)
+            await browser.press("ArrowLeft", "ArrowLeft", 37)
+            await browser.press("ArrowLeft", "ArrowLeft", 37)
+            await browser.wait_for(f"{NUMBER_NOW} === '2\\u00bd'")
+            await browser.wait_for(SAVED_SHOWN)
+            seen["steps down"] = await browser.evaluate(NUMBER_NOW)
+
             # Refused: B is gone, so the write fails.
             b.proc.kill()
             b.proc.wait(timeout=30)
@@ -170,9 +205,20 @@ class RemoteStarsDrive(unittest.TestCase):
     def test_stars_drawn_again_hold_the_saved_rating(self) -> None:
         self.assertEqual(self.seen["lit after redraw"], [True, True, True, False, False])
 
+    def test_the_last_lit_star_flips_between_whole_and_half(self) -> None:
+        self.assertEqual(self.seen["half state"], ["on", "on", "half", "off", "off"])
+        self.assertEqual(self.seen["half number"], "2\u00bd")
+        self.assertEqual(self.seen["half saved"], 5)
+        self.assertEqual(self.seen["whole again saved"], 6)
+
+    def test_the_arrow_keys_step_half_a_star(self) -> None:
+        self.assertEqual(self.seen["key state"], ["on", "on", "on", "half", "off"])
+        self.assertEqual(self.seen["key saved"], 7)
+        self.assertEqual(self.seen["steps down"], "2\u00bd")
+
     def test_a_refused_write_puts_the_stars_back_and_says_so(self) -> None:
         self.assertTrue(self.seen["notified"])
-        self.assertEqual(self.seen["lit after refusal"], [True, True, True, False, False])
+        self.assertEqual(self.seen["lit after refusal"], [True, True, False, False, False])
         self.assertFalse(self.seen["saved after refusal"])
 
 

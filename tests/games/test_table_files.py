@@ -24,7 +24,7 @@ def _record() -> dict:
               "LastRun": 1700000000, "RunTime": 30},
         tables={"a": {"id": "a", "filename": SHARED, "user": {"start_count": 5}},
                 "b": {"id": "b", "filename": VR,
-                      "user": {"rating": 2, "tags": ["VR"], "start_count": 2,
+                      "user": {"rating": 6, "tags": ["VR"], "start_count": 2,
                                "last_run": LAST, "run_time_seconds": 190}}})
 
 
@@ -66,10 +66,10 @@ class Split(SplitCase):
         own = _json(self.folder / VR_INFO)
 
         self.assertEqual("Cactus", own["Info"]["Title"])
-        self.assertEqual({"Rating": 4, "Favorite": 1, "Tags": ["Wide", "VR"],
+        self.assertEqual({"Rating": 6, "Favorite": 1, "Tags": ["Wide", "VR"],
                           "LastRun": "2023-11-14T22:15:00Z", "StartCount": 2, "RunTime": 190},
                          own["User"])
-        self.assertEqual({"rating": 4, "tags": ["VR"]}, own["vpinfe"]["table"]["own"])
+        self.assertEqual({"rating": 6, "tags": ["VR"]}, own["vpinfe"]["table"]["own"])
 
     def test_the_game_file_keeps_only_who_the_table_is(self) -> None:
         self._write()
@@ -93,7 +93,7 @@ class Split(SplitCase):
 
         self.assertEqual(written, json.loads(json.dumps(self._meta().data)))
         entry = self._meta().data["tables"]["b"]
-        self.assertEqual({"rating": 2, "tags": ["VR"], "start_count": 2, "last_run": LAST,
+        self.assertEqual({"rating": 6, "tags": ["VR"], "start_count": 2, "last_run": LAST,
                           "run_time_seconds": 190}, entry["user"])
 
     def test_writing_again_changes_nothing(self) -> None:
@@ -135,7 +135,7 @@ class Adopt(SplitCase):
                          (own["User"]["StartCount"], own["User"]["RunTime"],
                           own["User"]["LastRun"]))
         self.assertEqual({"Runs": 3}, own["VPX"])
-        self.assertEqual(5, self._meta().data["tables"]["b"]["user"]["rating"])
+        self.assertEqual(10, self._meta().data["tables"]["b"]["user"]["rating"])
 
     def test_adopting_twice_backs_up_once(self) -> None:
         (self.folder / VR_INFO).write_text(json.dumps({"User": {"StartCount": 1}}),
@@ -186,7 +186,7 @@ class Seed(TempTree):
         self.assertEqual({"One.vpx", "Two.vpx"},
                          {row["filename"] for row in data["tables"].values()})
         self.assertEqual("Cactus", data["Info"]["Title"])
-        self.assertEqual((3, ["T"]), (data["User"]["Rating"], data["User"]["Tags"]))
+        self.assertEqual((6, ["T"]), (data["User"]["Rating"], data["User"]["Tags"]))
 
 
 

@@ -272,7 +272,7 @@ class RecordTests(_PlayersCase):
     def test_the_rating_takes_the_library_route_s_scale(self) -> None:
         kept = self._add("Jordan", "ABC")
 
-        for rating in (6, -1, "great"):
+        for rating in (11, -1, "great"):
             with self.subTest(rating=rating):
                 self.assertEqual(self._rate(kept, rating).status_code, 422)
         self.assertEqual(self._record(kept)["games"], [])

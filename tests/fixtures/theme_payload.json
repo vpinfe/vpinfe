@@ -312,7 +312,7 @@
             "last_played": null,
             "play_count": 0,
             "play_time_seconds": 0,
-            "rating": 4,
+            "rating": 8,
             "tags": []
           },
           "vps_id": "vps-afm",
@@ -563,7 +563,7 @@
             "last_played": null,
             "play_count": 0,
             "play_time_seconds": 0,
-            "rating": 5,
+            "rating": 10,
             "tags": []
           },
           "vps_id": "vps-mm",

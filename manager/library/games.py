@@ -99,7 +99,8 @@ def _asset_label(key: str) -> str:
 #
 # Clicking the star a rating already stands on clears it. That is how every star widget
 # behaves, and the alternative is a sixth control on a column this narrow.
-_RATING_CHOICES = ([{"value": 0, "label": t("manager.games.unrated")}]
+_RATING_CHOICES = ([{"value": 0, "label": t("manager.games.unrated")},
+                    {"value": 0.5, "label": "", "mark": f"{stars.STAR} {stars.HALF}"}]
                    + [{"value": n, "label": "", "mark": f"{stars.STAR} {stars.LIT}",
                        "repeat": n} for n in range(1, 6)])
 
@@ -130,7 +131,7 @@ COLUMNS = [
     grid.column("rating", t("manager.games.game_rating"), group=t(_GAME),
                 help=t("manager.games.game_rating.help"),
                 cellClass="manager-stars-cell",
-                **{**grid.choice_filter(_RATING_CHOICES),
+                **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("game")}),
     grid.list_column("tags", t("manager.workbench.tags"), 200, group=t(_GAME),
                      help=t("manager.games.tags.help"), looks=renderers.TAG_LOOKS),
@@ -572,8 +573,21 @@ def build(rows: list[dict[str, Any]], kinds: list[str], library: Any,
             mediaview.open_viewer(art.media(game_id, kind, version=version), kind,
                                   media_label_map().get(kind, kind))
 
-    rate_games = stars.game_rater(rows, by_id, lambda: table, library)
-    rate_row = stars.rating_handler(rows, by_id, lambda: table, library)
+    async def panel_follows(rated: set[str]) -> None:
+        """A rating given in the grid shows in the panel beside it. The panel reads the
+        library when it is drawn, so drawing it again is all it takes."""
+        if table.is_deleted:
+            return
+        if viewing["on"] and on_selection is not None and viewing["ids"] & rated:
+            await on_selection(sorted(viewing["ids"]))
+        elif str(state.get("game") or "") in rated:
+            answer = on_select(by_id.get(str(state["game"])))
+            if inspect.isawaitable(answer):
+                await answer
+
+    rate_games = stars.game_rater(rows, by_id, lambda: table, library, then=panel_follows)
+    rate_row = stars.rating_handler(rows, by_id, lambda: table, library,
+                                    then=panel_follows)
 
     grid.on_row_focus(SCOPE, focused)
     state["media_zoom"] = zoom_media
@@ -898,12 +912,12 @@ TABLE_COLUMNS = [
     grid.column(GAME_RATING, t("manager.games.game_rating"), group=t(_GAME),
                 help=t("manager.games.game_rating.help"),
                 cellClass="manager-stars-cell",
-                **{**grid.choice_filter(_RATING_CHOICES),
+                **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("game", on_table=True)}),
     grid.column("rating", t("manager.games.table_rating"), group=t(_TABLE),
                 help=t("manager.games.table_rating.help"),
                 cellClass="manager-stars-cell",
-                **{**grid.choice_filter(_RATING_CHOICES),
+                **{**grid.choice_filter(_RATING_CHOICES, stars=True),
                    ":cellRenderer": stars.renderer("table")}),
     grid.list_column("tags", t("manager.workbench.tags"), 200, group=t(_TABLE),
                      help=t("manager.games.table_tags.help"), looks=renderers.TAG_LOOKS),
@@ -1087,6 +1101,8 @@ def table_rows(rows: list[dict[str, Any]], art: bool = False) -> list[dict[str, 
     held = Counter(str(row.get("game_id") or "") for row in rows)
     bases = ties.patch_bases(rows)
     return [{**row,
+             # A table's own rating is offered only where its game has a choice of tables.
+             "own_marks": held[str(row.get("game_id") or "")] > 1,
              "hidden": game_states.HIDDEN if row.get("hidden") else "",
              "missing": game_states.MISSING if not row.get("available", True) else "",
              # The file where there is one, and the name its program knows it by where
@@ -1375,7 +1391,22 @@ def build_tables(rows: list[dict[str, Any]], library: Any,
     # rather than selection, so arrowing down the list is a sweep and the checkboxes
     # stay whatever a bulk action left them.
     by_id = {row["id"]: row for row in built}
-    rate_row = stars.rating_handler(built, by_id, lambda: table, library, GAME_RATING)
+
+    async def panel_follows(rated: set[str]) -> None:
+        """A rating given in the grid shows in the panel beside it, whichever of the
+        game's own or one of its tables' ratings it was. Drawing the panel again is all
+        it takes: it reads the library when it is drawn."""
+        if table.is_deleted:
+            return
+        if viewing["on"] and on_selection is not None:
+            await on_selection(sorted(viewing["ids"]))
+        elif str(state.get("game") or "") in rated:
+            answer = on_select(by_id.get(str(state.get("table") or "")))
+            if inspect.isawaitable(answer):
+                await answer
+
+    rate_row = stars.rating_handler(built, by_id, lambda: table, library, GAME_RATING,
+                                    then=panel_follows)
 
     def focused(event: Any) -> Any:
         if viewing["on"] and grid.ticked(event):

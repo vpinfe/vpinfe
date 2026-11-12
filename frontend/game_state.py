@@ -36,12 +36,12 @@ from common.games.game_metadata import (
     game_year,
     guides_on_wire,
     normalize_meta,
-    normalize_rating,
     play_record,
     reorder_leading_article,
     section,
     table_descriptor,
     vpinfe_section,
+    whole_stars,
 )
 from common.games.media_lookup import page_counts, resolved_kinds
 from common.games.play_numbers import PlayNumbers
@@ -93,8 +93,8 @@ def _legacy_row(game: Game, logo_cache: dict[str, str | None]) -> dict:
     meta = dict(normalize_meta(game.meta_config))
     info = section(meta, "Info")
     held_user = meta.get("User")
-    if isinstance(held_user, dict) and isinstance(held_user.get("Rating"), float):
-        meta["User"] = {**held_user, "Rating": normalize_rating(held_user["Rating"])}
+    if isinstance(held_user, dict) and "Rating" in held_user:
+        meta["User"] = {**held_user, "Rating": whole_stars(held_user["Rating"])}
 
     # This shape has one slot per field, so a user's answer is resolved into it here.
     # A theme on this contract would otherwise read the catalog's value while every
@@ -333,9 +333,14 @@ def save_current_filter_collection(api: API, name: str, letter: str, theme: str,
                                    order_by: str, rating: str,
                                    rating_or_higher: object,
                                    direction: str = DEFAULT_DIRECTION) -> dict[str, Any]:
+    """A theme names whole stars, 1 to 5, as it always has; a rule keeps half-star steps, so
+    it is doubled here. The collection menu's own `keep_filter_collection` already speaks
+    in steps."""
+    stars = str(rating or "").strip()
     api.library.save_filter(
         name, {"letter": letter, "theme": theme, "game_type": game_type,
-               "manufacturer": manufacturer, "year": year, "rating": rating,
+               "manufacturer": manufacturer, "year": year,
+               "rating": str(min(5, int(stars)) * 2) if stars.isdigit() else rating,
                "rating_or_higher": is_truthy(rating_or_higher)},
         order_by, direction)
     return {"success": True, "message": t("frontend.collection.saved", name=name)}

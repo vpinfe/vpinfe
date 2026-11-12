@@ -137,7 +137,8 @@ def _stars(context: dict[str, Any], kind: Kind) -> Callable[[], None]:
         with ui.row().classes("items-center gap-2 no-wrap"):
             stars.draw(next(iter(counts)) if len(counts) == 1 else 0, rate)()
             if len(counts) > 1:
-                varies_chip(kind, counts, lambda value: t("manager.stars.5", n=value))()
+                varies_chip(kind, counts,
+                            lambda value: t("manager.stars.5", n=stars.shown(value)))()
 
     return draw
 

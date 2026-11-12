@@ -220,7 +220,7 @@ At `contract: 2` the payload is an object, and the list you iterate is `entries`
         "manufacturer_logo": "/manufacturers/bally/logo",
         "created_at": "2026-08-01T09:30:00Z",
         "path": "/games/Attack from Mars (Bally 1995)",
-        "user": { "rating": 4, "favorite": false, "tags": [],
+        "user": { "rating": 8, "favorite": false, "tags": [],
                   "last_played": "2026-08-01T20:14:00Z",
                   "play_count": 12, "play_time_seconds": 5400 }
       },
@@ -248,7 +248,7 @@ the game it belongs to attached.
 | `expanded` | `false` means one entry per game — its default table. `true` means one entry per table, so a game with three tables contributes three. The user sets this; your theme does not have to do anything differently either way. |
 | `count` | How many entries. The same as `entries.length`. |
 | `entries[].game` | Identity and metadata for the machine. The same names `/api/v1/games` uses. |
-| `entries[].game.user` | What this user did with the game: `rating`, `favorite`, `tags`, `last_played`, `play_count`, `play_time_seconds`, `high_scores`. Timestamps are ISO 8601 UTC and durations name their unit, whatever the `.info` stores. |
+| `entries[].game.user` | What this user did with the game: `rating` (0 to 10, a half star a step, so a theme draws `rating / 2` stars), `favorite`, `tags`, `last_played`, `play_count`, `play_time_seconds`, `high_scores`. Timestamps are ISO 8601 UTC and durations name their unit, whatever the `.info` stores. |
 | `entries[].game.user.high_scores` | The machine's high score table as last read, for the default table's ROM, or `null` until one has been read. `sections` hold the machine's own groups (`name`, `entries`); each entry has `rank`, `initials` as the machine wrote them, `score`, `text` (the value as the machine shows it, ready to draw) and `new` (not on the table before the last game). The whole shape is in `docs/http-api.md`, "High scores". A theme may show it; nothing requires it. |
 | `entries[].game.derived_tags` | Tags an extension's Community list puts on the game, kept apart from the user's own in `user.tags`. Read-only. |
 | `entries[].table` | The `.vpx` this entry is. `id` is stable across renames; `filename` is not. |
@@ -1442,7 +1442,7 @@ window is told through the `lifecycle.acting` event and cannot block it.
 | `get_collections_metadata` | — | `array` | Returns the collections the frontend offers, in the order they are arranged, each with `name`, `type`, `is_filter`, `image`, `image_url`, `in_frontend`, `table_count` and `game_wheel_urls`. `image_url` is a theme-server URL such as `/collection_icons/favorites.png`, or an empty string when no image is set. `table_count` is how many entries the collection shows, rules and limit included. `game_wheel_urls` is up to four wheel URLs of the games it holds, the same shape as `image_url`, for drawing a collection with no image of its own. A collection kept out of the frontend is left out unless it is the one showing, which comes with `in_frontend` false. On a device that reads its library from another (`network.library_url`), these are that device's collections, counted there, and both URLs are paths on this device's own `/library`, which fetches the picture from that library. |
 | `get_collection_image_url` | `collection` | `string` | Returns the image URL for one collection, or an empty string when no image is set. |
 | `set_tables_by_collection` | `collection` | — | Shows the named collection: what it holds, in the order it stores. Works for a hand-picked collection and a filter-based one alike. |
-| `save_filter_collection` | `name`, `letter`, `theme`, `game_type`, `manufacturer`, `year`, `order_by`, `rating`, `rating_or_higher`, `direction` | `object` | Saves the current filter settings as a named collection. Every filter defaults to `"All"`. `order_by` is the sort (default `"title"`) and `direction` is `"asc"` or `"desc"` (default `"asc"`); `"Ascending"` and `"Descending"` are read the same way. Returns `{success, message}`, where `message` is in the player's language. |
+| `save_filter_collection` | `name`, `letter`, `theme`, `game_type`, `manufacturer`, `year`, `order_by`, `rating`, `rating_or_higher`, `direction` | `object` | Saves the current filter settings as a named collection. Every filter defaults to `"All"`. `rating` is whole stars, `"1"` to `"5"`. `order_by` is the sort (default `"title"`) and `direction` is `"asc"` or `"desc"` (default `"asc"`); `"Ascending"` and `"Descending"` are read the same way. Returns `{success, message}`, where `message` is in the player's language. |
 | `get_current_collection` | — | `string` | Returns the name of the currently active collection, or `"None"`. |
 
 ##### Filters & Sorting

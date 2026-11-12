@@ -386,10 +386,10 @@ class TableRatingTests(_Lens):
         self.assertEqual({(row["game_rating"], row["rating"]) for row in rows}, {(3, 0)})
 
     def test_a_rating_outside_the_scale_is_refused(self) -> None:
-        """Refused rather than clamped, the same as a game's - storing 5 for a caller
-        that sent 9 hides its bug."""
+        """Refused rather than clamped, the same as a game's - storing 10 for a caller
+        that sent 14 hides its bug."""
         response = self.client.put(f"/games/{GAME_ID}/tables/tbl0000002/rating",
-                                   json={"rating": 9})
+                                   json={"rating": 14})
 
         self.assertEqual(response.status_code, 422)
 

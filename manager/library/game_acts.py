@@ -206,13 +206,28 @@ async def _rate(games: list[dict[str, Any]], rate: Rate) -> None:
             for prior, ids in was.items():
                 await rate(ids, prior)
 
-        undo.offer(t("manager.games.rated_game_s", count=len(games), value=value), put_back)
+        undo.offer(t("manager.games.rated_game_s", count=len(games), value=stars.shown(value)),
+                   put_back)
+
+    chosen: dict[str, int | None] = {"value": None}
+
+    def choose(value: int) -> None:
+        chosen["value"] = value
+        draw.refresh()
+        go.enable()
+
+    @ui.refreshable
+    def draw() -> None:
+        stars.draw(chosen["value"] or 0, choose)()
 
     with frame.opened(t("manager.games.rate_game_s", count=len(games))) as box:
         with ui.row().classes("px-3"):
-            stars.draw(0, lambda n: asyncio.create_task(apply(n)))()
+            draw()
         with frame.footer():
             frame.cancel(box.close)
+            go = frame.answer(t("word.apply"), lambda: asyncio.create_task(
+                apply(int(chosen["value"] or 0))), icon=verbs.DONE)
+            go.disable()
     box.open()
 
 

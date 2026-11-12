@@ -143,11 +143,15 @@ class NoneOf(unittest.TestCase):
 class RatingInTheSentence(unittest.TestCase):
     def test_at_least(self) -> None:
         self.assertEqual("Every game where Rating is at least 4 of 5",
-                         _said({"rating": "4", "rating_or_higher": True}))
+                         _said({"rating": "8", "rating_or_higher": True}))
+
+    def test_a_half_star_is_said_as_one(self) -> None:
+        self.assertEqual("Every game where Rating is at least 3\u00bd of 5",
+                         _said({"rating": "7", "rating_or_higher": True}))
 
     def test_exactly(self) -> None:
         self.assertEqual("Every game where Rating is 4 of 5",
-                         _said({"rating": "4", "rating_or_higher": False}))
+                         _said({"rating": "8", "rating_or_higher": False}))
 
     def test_a_floor_with_no_rating_says_nothing_about_rating(self) -> None:
         self.assertNotIn("Rating", _said({"rating": "All", "rating_or_higher": True}))
@@ -262,7 +266,7 @@ class Templates(unittest.TestCase):
         self.assertEqual({"recently_played": {"played": True},
                           "favorites": {"favorite": True},
                           "never_played": {"played": False},
-                          "top_rated": {"rating": "4", "rating_or_higher": True},
+                          "top_rated": {"rating": "8", "rating_or_higher": True},
                           "a_manufacturer": {}}, asked)
 
     def test_its_order_is_one_the_collection_can_be_given(self) -> None:

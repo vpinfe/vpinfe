@@ -119,10 +119,13 @@ class WhatSurvivesTests(unittest.TestCase):
         self.after = migrate(LEGACY)
 
     def test_play_history_is_untouched(self):
-        """Ratings, counts and tags are the user's, and no part of this reshapes them."""
+        """Ratings, counts and tags are the user's, and no part of this reshapes them.
+        A 2.x rating is whole stars and comes through as the same stars in halves, held
+        to five stars: the file's 7 is out of range."""
         user = self.after["User"]
-        for key in ("Rating", "Favorite", "LastRun", "StartCount", "RunTime", "Tags"):
+        for key in ("Favorite", "LastRun", "StartCount", "RunTime", "Tags"):
             self.assertEqual(user[key], LEGACY["User"][key], key)
+        self.assertEqual(user["Rating"], 10)
 
     def test_a_key_outside_the_spec_survives(self):
         self.assertEqual(self.after["User"]["Seen"], {"by": "another tool"})
@@ -259,7 +262,7 @@ class WhatSurvivesTests(unittest.TestCase):
         after = migrate({"Info": {"Title": "x"}, "User": {"Rating": 2},
                          "Medias": {}, "VPinFE": {"altlauncher": "/opt/vpx"}})
         self.assertEqual(after["tables"], {})
-        self.assertEqual(after["User"]["Rating"], 2)
+        self.assertEqual(after["User"]["Rating"], 4)
         self.assertTrue(is_versioned(after))
 
 

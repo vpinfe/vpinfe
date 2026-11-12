@@ -391,6 +391,7 @@ try:
     from common.games.collection_migration import (
         ensure_last_played,
         ensure_order_direction,
+        ensure_rating_halves,
     )
     from common.games.collection_store import CollectionStore
     _collections = CollectionStore(str(COLLECTIONS_PATH))
@@ -400,6 +401,8 @@ try:
         migration_ledger.record("last_played", get_version())
     if moved := ensure_order_direction(_collections):
         migration_ledger.record("collection_order", get_version(), moved)
+    if moved := ensure_rating_halves(_collections):
+        migration_ledger.record("collection_rating", get_version(), moved)
 except Exception:
     logger.exception("Collection membership migration failed; memberships left as they were")
 

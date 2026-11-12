@@ -178,7 +178,7 @@ def match_game(game_id: str, vps_id: str, guess: bool = False) -> dict:
 
 
 def set_rating(game_id: str, rating: Any) -> dict:
-    """Set `User.Rating` on a game, 0-5."""
+    """Set `User.Rating` on a game, 0-10."""
     game = game_lens.game_for_writing(game_id)
     stored = set_game_rating(game, rating)
     reread_game(game)

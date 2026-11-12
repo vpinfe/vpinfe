@@ -24,7 +24,7 @@ class Followed(TempTree):
             "Cactus", game_id="Follow0001", User={"Rating": 4},
             tables={"a": {"id": "a", "filename": SHARED},
                     "b": {"id": "b", "filename": VR,
-                          "user": {"rating": 2, "tags": ["VR"], "start_count": 2,
+                          "user": {"rating": 6, "tags": ["VR"], "start_count": 2,
                                    "last_run": LAST}}})
         self.folder = write_game(self.root, FOLDER, info=record, files={VR: b"vr"})
         MetaConfig(str(self.folder / f"{FOLDER}.info")).write_config()
@@ -48,7 +48,7 @@ class Rename(Followed):
         self.assertEqual(set(), {VR_INFO} & self._names())
         own = json.loads((self.folder / "Cactus Night.info").read_text(encoding="utf-8"))
         self.assertEqual("b", own["vpinfe"]["table"]["id"])
-        self.assertEqual({"rating": 4, "tags": ["VR"]}, own["vpinfe"]["table"]["own"])
+        self.assertEqual({"rating": 6, "tags": ["VR"]}, own["vpinfe"]["table"]["own"])
         self.assertEqual(2, self._meta().data["tables"]["b"]["user"]["start_count"])
 
     def test_a_rename_leaves_no_copy_of_the_old_file_behind(self) -> None:

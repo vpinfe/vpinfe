@@ -1054,14 +1054,32 @@ body::before {
   transition: opacity 90ms ease-out, background 90ms ease-out;
 }
 .manager-star--on { background: var(--accent); opacity: 1; }
+/* A half star: the left half lit, in the same shape, so a rating of 4\00bd reads between
+   4 and 5. The unlit half is the unrated star's own colour at its own strength, drawn into
+   the gradient because the star's opacity is 1 here and the lit half cannot be dimmed. */
+.manager-star--half {
+  background: linear-gradient(90deg, var(--accent) 50%,
+                              color-mix(in srgb, var(--ink-3) 35%, transparent) 50%);
+  opacity: 1;
+}
 /* Gated on the input, never on the surface (`docs/conventions.md`): a touch screen has no
    hover to leave, so the star last touched would otherwise stay lit on its own while the
    ones before it read as unrated. */
 @media (hover: hover) and (pointer: fine) {
   .ag-row:hover .manager-star { opacity: 0.6; }
-  .ag-row:hover .manager-star--on { opacity: 1; }
-  .manager-star:hover { opacity: 1; background: var(--accent); }
+  .ag-row:hover .manager-star--on, .ag-row:hover .manager-star--half { opacity: 1; }
+  .manager-star:hover:not(.manager-star--half) { opacity: 1; background: var(--accent); }
 }
+/* The rating as a person says it, beside the stars: 3\00bd. */
+.manager-stars-number {
+  align-self: center;
+  margin-left: 8px;
+  min-width: 2ch;
+  font-size: var(--fs-caption);
+  line-height: 1.2;
+  color: var(--ink-2);
+}
+.manager-stars:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
 /* Beside the stars on a panel row: what the write did, said where the eye already is. */
 .manager-stars-saved {
   align-self: center;

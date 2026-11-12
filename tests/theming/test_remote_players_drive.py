@@ -447,7 +447,7 @@ class RemotePlayersDrive(unittest.TestCase):
 
     def test_a_kept_players_rating_goes_to_their_record_not_the_library(self) -> None:
         record = {row["game_id"]: row for row in self.seen["kid_record"]["games"]}
-        self.assertEqual(record["alpha"]["rating"], 3)
+        self.assertEqual(record["alpha"]["rating"], 3 * 2)  # three stars, held as half stars
         self.assertFalse(self.seen["owner_game_after_kid_rated"].get("user", {}).get("rating"))
 
     def test_not_me_clears_the_header_and_favorite_returns(self) -> None:

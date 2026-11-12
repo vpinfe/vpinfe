@@ -71,7 +71,7 @@ class KeptPlayerTests(_RecordsCase):
         self.records.set_rating(self.kept, "g1", 4)
 
         on_disk = self._file(self.kept)
-        self.assertEqual((on_disk["schema"], on_disk["player"]), (1, self.kept.player_id))
+        self.assertEqual((on_disk["schema"], on_disk["player"]), (2, self.kept.player_id))
         self.assertEqual(self._restart().game(self.kept, "g1")["rating"], 4)
         self.assertEqual(self.records.game(self.kept, "g1")["play_count"], 1)
 
@@ -228,10 +228,10 @@ class RatingTests(_RecordsCase):
         hear = events.subscribe(events.GAME_RATED, lambda **payload: heard.append(payload))
         self.addCleanup(events.unsubscribe, events.GAME_RATED, hear)
 
-        self.records.set_rating(self.kept, "g1", 9)
+        self.records.set_rating(self.kept, "g1", 11)
 
         self.assertEqual(heard, [{"game_id": "g1", "player": self.kept.as_payload(),
-                                  "rating": 5}])
+                                  "rating": 10}])
 
     def test_one_game_reads_as_their_record_lists_it(self) -> None:
         self.records.offer_scores(self.kept, "g1", "rom1", [_entry("ABC", 1234)], AT)
@@ -242,7 +242,8 @@ class RatingTests(_RecordsCase):
         self.assertEqual(self.records.shown(self.kept, "never")["play_count"], 0)
 
     def test_a_rating_is_held_to_the_library_s_scale(self) -> None:
-        self.assertEqual(self.records.set_rating(self.kept, "g1", 9), 5)
+        self.assertEqual(self.records.set_rating(self.kept, "g1", 11), 10)
+        self.assertEqual(self.records.set_rating(self.kept, "g1", 7), 7)
         self.assertEqual(self.records.set_rating(self.kept, "g1", "x"), 0)
 
     def test_taking_back_the_only_thing_said_about_a_game_leaves_nothing(self) -> None:

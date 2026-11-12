@@ -268,7 +268,7 @@ def _remember(ctx: Any, game_id: str, played: Any, held: Held | None = None,
         if played.tags:
             ctx.games.set_tags(game_id, list(played.tags))
         if played.rating:
-            ctx.games.rate_game(game_id, played.rating)
+            ctx.games.rate_game(game_id, played.rating * 2)
         if played.favorite:
             ctx.games.set_favorite(game_id, True)
     except Exception as exc:
@@ -287,7 +287,7 @@ def _add_missing(ctx: Any, game_id: str, adds: Missing, held: Held,
          lambda: ctx.games.set_play_record(game_id, **adds.counters)),
         (True, adds.tags,
          lambda: ctx.games.set_tags(game_id, [*(held.user.get("tags") or []), *adds.tags])),
-        (False, adds.rating, lambda: ctx.games.rate_game(game_id, adds.rating)),
+        (False, adds.rating, lambda: ctx.games.rate_game(game_id, adds.rating * 2)),
         (False, adds.favorite, lambda: ctx.games.set_favorite(game_id, True)),
     )
     counted = 0

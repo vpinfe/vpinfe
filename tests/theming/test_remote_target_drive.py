@@ -56,6 +56,11 @@ def _user(root: Path, name: str) -> dict:
     return info.get("User") or {}
 
 
+def _stars(root: Path, name: str) -> int:
+    """The saved rating in whole stars; the file holds half stars, 0-10."""
+    return int(_user(root, name).get("Rating") or 0) // 2
+
+
 class RemoteWritesToItsTargetDrive(unittest.TestCase):
     seen: dict = {}
 
@@ -111,7 +116,7 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
             async def rated(root: Path, name: str, want: int) -> None:
                 """The write has landed, and the sheet it was made on is still open."""
                 for _attempt in range(100):
-                    if _user(root, name).get("Rating") == want:
+                    if _stars(root, name) == want:
                         break
                     await asyncio.sleep(0.1)
                 else:
@@ -140,7 +145,7 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
             await open_sheet("Solo")
             await browser.click(".remote-sheet .manager-star", nth=3)
             await rated(b_root, "Solo", 4)
-            seen["solo rated"] = _user(b_root, "Solo").get("Rating")
+            seen["solo rated"] = _stars(b_root, "Solo")
 
             # A rating leaves the sheet where it is.
             await click_text(".remote-sheet button", t("word.favorite"))
@@ -160,8 +165,8 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
             await rated(b_root, "Shared", 2)
             await browser.escape()
             await sheet_closed()
-            seen["shared on b"] = _user(b_root, "Shared").get("Rating")
-            seen["shared on a"] = _user(a_root, "Shared").get("Rating")
+            seen["shared on b"] = _stars(b_root, "Shared")
+            seen["shared on a"] = _stars(a_root, "Shared")
 
             # The tab, not a reload: a fresh page is aimed at the install serving it again.
             await click_text(".remote-tab", t("word.now"))
@@ -169,7 +174,7 @@ class RemoteWritesToItsTargetDrive(unittest.TestCase):
             await walk.drawn()
             await browser.click(".manager-stars .manager-star", nth=4)
             await walk.drawn()
-            seen["solo from now"] = _user(b_root, "Solo").get("Rating")
+            seen["solo from now"] = _stars(b_root, "Solo")
         seen["hand a"] = _call(a, "GET", "/api/v1/collections/Hand%20A/games").get("games")
         return seen
 

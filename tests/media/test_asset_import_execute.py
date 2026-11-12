@@ -138,7 +138,8 @@ class GameInfoImportTests(unittest.TestCase):
         from tempfile import TemporaryDirectory
         with mock.patch.object(asset_import_service, "refresh_game"):
             with TemporaryDirectory() as tmp:
-                zip_path = self._bundle(tmp, {"Info": {"VPSId": "abc"}, "User": {"Rating": 5}})
+                zip_path = self._bundle(
+                    tmp, {"Info": {"VPSId": "abc"}, "User": {"Rating": 5}, "VPXFile": {}})
                 analysis = analyze_path(zip_path)
                 plan = build_import_plan(analysis, allow_new_game=True, games_path=tmp)
                 plan = select_plan_items(plan, None, "New Name (Mfg 2000)")
@@ -146,7 +147,7 @@ class GameInfoImportTests(unittest.TestCase):
                 dest = Path(tmp) / "New Name (Mfg 2000)" / "New Name (Mfg 2000).info"
                 self.assertTrue(dest.exists())
                 data = saved_record(dest)
-                self.assertEqual(data["User"]["Rating"], 5)
+                self.assertEqual(data["User"]["Rating"], 10)
 
     def test_a_renamed_plan_names_the_files_the_import_writes(self):
         import zipfile
@@ -183,7 +184,8 @@ class GameInfoImportTests(unittest.TestCase):
                 game_dir.mkdir()
                 (game_dir / "Foo.vpx").write_bytes(b"x")
                 library_of(self)
-                local = {"Info": {"VPSId": "local-id"}, "User": {"Rating": 3, "StartCount": 12}}
+                local = {"Info": {"VPSId": "local-id"}, "User": {"Rating": 3, "StartCount": 12},
+                         "VPXFile": {}}
                 info_path = game_dir / "Foo (Bar 1999).info"
                 info_path.write_text(json.dumps(local))
                 zip_path = self._bundle(
@@ -194,13 +196,14 @@ class GameInfoImportTests(unittest.TestCase):
 
                 data = saved_record(info_path)
                 self.assertEqual(data["Info"]["VPSId"], "local-id")     # association kept
-                self.assertEqual(data["User"]["Rating"], 3)             # history kept
+                self.assertEqual(data["User"]["Rating"], 6)             # history kept
                 self.assertEqual(data["User"]["StartCount"], 12)
                 copies = sorted(game_dir.glob("Foo (Bar 1999).info.vpinfe-*-import"))
                 self.assertEqual(len(copies), 1)
                 kept = saved_record(copies[0])
                 self.assertEqual(kept["Info"], local["Info"])
-                self.assertEqual({key: kept["User"][key] for key in local["User"]}, local["User"])
+                self.assertEqual({key: kept["User"][key] for key in local["User"]},
+                                 {"Rating": 6, "StartCount": 12})
                 self.assertFalse((game_dir / "Foo (Bar 1999).info.bak").exists())
 
     def _import_into_existing(self, tmp, mode, incoming):
@@ -305,7 +308,7 @@ class GameInfoImportTests(unittest.TestCase):
                 kept = sorted(game_dir.glob("Foo (Bar 1999).info.vpinfe-????????T??????Z"))
                 self.assertEqual(len(kept), 1)
                 self.assertEqual(json.loads(kept[0].read_text()), local)
-                self.assertEqual(saved_record(info_path)["User"]["Rating"], 3)
+                self.assertEqual(saved_record(info_path)["User"]["Rating"], 6)
 
 
 class ImportExecuteTests(unittest.TestCase):

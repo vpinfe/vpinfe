@@ -177,17 +177,17 @@ def migrate(data: dict) -> dict:
     returns a new one.
 
     The in-memory record is what `info_codec.decode` gives and what schema 2 already is,
-    so the step from 2 to 3 changes nothing but the stamp; the new shape and units are
-    written by `info_codec.encode`. Its output is the in-memory shape, so it is only ever
-    run on a file as read from disk: a stamped record with a top-level `tables` reads as a
-    beta's.
+    so the step from 2 to 3 changes the stamp and doubles the ratings, whole stars to 0 to 10;
+    the new shape and the other units are written by `info_codec.encode`. Its output is the
+    in-memory shape, so it is only ever run on a file as read from disk: a stamped record with
+    a top-level `tables` reads as a beta's.
     """
     from common.games import info_codec
 
     beta_lists: dict[str, Any] = {}
     if info_codec.is_schema_3(data):
         beta_lists = {name: data[name] for name in BETA_LISTS if name in data}
-        data = info_codec.decode(data)
+    data = info_codec.decode(data)
     from_beta = bool(beta_lists)
     upgrading = (schema_of(data) or 0) < INFO_SCHEMA and not from_beta
     if _written_by_2x(data):

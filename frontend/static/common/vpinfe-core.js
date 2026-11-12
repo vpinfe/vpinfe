@@ -505,6 +505,8 @@ const INTERNAL_METHODS = new Set([
   "set_player_up",
   "set_player_rating",
   "get_player_rating",
+  "get_rating_halves",
+  "set_rating_halves",
   "get_attract_config",
   "input_capture",
   "input_capture_release",

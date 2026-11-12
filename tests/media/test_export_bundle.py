@@ -156,6 +156,14 @@ class PrunedInfoTests(unittest.TestCase):
 
         self.assertEqual(list(pruned["assets"]), ["wheel.png"])
 
+    def test_an_older_file_ships_with_its_whole_stars_for_the_receiver_to_double(self) -> None:
+        info = json.dumps({"User": {"Rating": 4}, "assets": {}})
+
+        pruned = json.loads(prune_info(info, set()))
+
+        self.assertEqual(pruned["User"]["Rating"], 4)
+        self.assertNotIn("schema", pruned.get("vpinfe", {}))
+
     def test_a_broken_info_passes_through_rather_than_vanishing(self) -> None:
         self.assertEqual(prune_info("not json", set()), "not json")
 

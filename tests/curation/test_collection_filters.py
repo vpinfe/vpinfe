@@ -1,4 +1,6 @@
-"""The filter registry, and the rule that keeps adding an axis free.
+"""Protects: (a) a saved collection rule keeps selecting the games it always did.
+
+The filter registry, and the rule that keeps adding an axis free.
 
 An axis is append-only and its meaning never changes. That is not a convention anyone
 can hold in their head across releases, so the snapshot below fails if an existing
@@ -10,6 +12,7 @@ import unittest
 from types import SimpleNamespace
 
 from common.games import collection_filters as cf
+from common.games import info_codec
 from common.games.collection_filters import GameListFilters
 
 
@@ -98,10 +101,38 @@ class UnknownAxisTests(unittest.TestCase):
         self.assertEqual(cf.unknown_axes({"table_type": "SS"}), ["table_type"])
 
 
+class ASavedRuleAfterTheUpgradeTests(unittest.TestCase):
+    """Protects: (a) a library rated in whole stars is read back doubled, and a saved rule
+    is doubled with it once at startup, so "4 or higher" finds the games it found before."""
+
+    STARS = {"Three": 3, "Four": 4, "Five": 5, "Unrated": 0}
+
+    def _library(self, ratings: dict[str, int]) -> dict[str, SimpleNamespace]:
+        return {name: make_game(name=name, rating=rating) for name, rating in ratings.items()}
+
+    def _selected(self, rule: dict, library: dict) -> set[str]:
+        return {name for name, game in library.items() if cf.matches(rule, game)}
+
+    def test_four_or_higher_selects_the_same_games(self) -> None:
+        rule = {"rating": "8", "rating_or_higher": "true"}
+        before = {name: {"User": {"Rating": stars}, "VPXFile": {}}
+                  for name, stars in self.STARS.items()}
+        after = {name: info_codec.decode(file)["User"]["Rating"] for name, file in before.items()}
+
+        self.assertEqual(self._selected(rule, self._library(after)), {"Four", "Five"})
+        self.assertEqual(after, {name: stars * 2 for name, stars in self.STARS.items()})
+
+    def test_a_rule_can_name_a_half_star(self) -> None:
+        rule = {"rating": "7", "rating_or_higher": "true"}
+        library = self._library({"Three": 6, "ThreeAndAHalf": 7, "Four": 8})
+
+        self.assertEqual(self._selected(rule, library), {"ThreeAndAHalf", "Four"})
+
+
 class MatchingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.afm = make_game(name="Attack from Mars", manufacturer="Bally",
-                             year="1995", game_type="SS", themes=["Aliens"], rating=4)
+                             year="1995", game_type="SS", themes=["Aliens"], rating=8)
 
     def test_a_digit_title_filters_under_the_hash_group(self) -> None:
         """Paging always bucketed `300` under `#`. The filter compared the first
@@ -132,6 +163,20 @@ class MatchingTests(unittest.TestCase):
     def test_rating_is_a_set_unless_or_higher_is_set(self) -> None:
         self.assertFalse(cf.matches({"rating": "3"}, self.afm))
         self.assertTrue(cf.matches({"rating": "3", "rating_or_higher": "true"}, self.afm))
+
+    def test_exactly_is_the_one_step_the_rule_names(self) -> None:
+        for halves, wanted in ((7, False), (8, True), (9, False), (10, False)):
+            with self.subTest(halves=halves):
+                game = make_game(rating=halves)
+
+                self.assertIs(cf.matches({"rating": "8"}, game), wanted)
+
+    def test_a_half_star_is_a_step_a_rule_can_name(self) -> None:
+        game = make_game(rating=1)
+
+        self.assertTrue(cf.matches({"rating": "1"}, game))
+        self.assertTrue(cf.matches({"rating": "1", "rating_or_higher": "true"}, game))
+        self.assertFalse(cf.matches({"rating": "2", "rating_or_higher": "true"}, game))
 
     def test_or_higher_without_a_rating_constrains_nothing(self) -> None:
         self.assertTrue(cf.matches({"rating_or_higher": "true"}, self.afm))

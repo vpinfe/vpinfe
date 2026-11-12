@@ -71,6 +71,7 @@ COLLECTION_IMAGE_KEY = "image"
 # whichever conversion stamped that first would tell the others they had already run.
 MIGRATIONS_KEY = "migrations"
 ORDER_DIRECTION_MIGRATION = "direction_applies_to_every_sort"
+RATING_HALVES_MIGRATION = "rating_rule_is_in_half_stars"
 
 # A member names a game, and optionally one of its tables:
 #

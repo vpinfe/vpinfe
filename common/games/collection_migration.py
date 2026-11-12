@@ -11,6 +11,7 @@ from common.games.collection_store import (
     COLLECTIONS_SCHEMA,
     MANUAL_ORDER,
     ORDER_DIRECTION_MIGRATION,
+    RATING_HALVES_MIGRATION,
     CollectionStore,
 )
 
@@ -57,6 +58,33 @@ def ensure_order_direction(collections: CollectionStore) -> int:
 
     if moved:
         logger.info("Recorded the descending order %s already had on screen",
+                    ", ".join(repr(name) for name in moved))
+    return len(moved)
+
+
+def ensure_rating_halves(collections: CollectionStore) -> int:
+    """Say a saved rating rule in half stars, the way a rating is kept. A rule used to name
+    whole stars, 1 to 5, and now names a step of a half star, 1 to 10, so each one is doubled
+    once and finds the games it always did. Returns how many collections moved."""
+    if collections.has_migrated(RATING_HALVES_MIGRATION):
+        return 0
+    if collections.schema_version() > COLLECTIONS_SCHEMA:
+        logger.warning("Collections file is schema %s, newer than this build's %s; "
+                       "leaving saved rating rules alone",
+                       collections.schema_version(), COLLECTIONS_SCHEMA)
+        return 0
+
+    moved = []
+    with collections.mutate() as store:
+        for name in store.get_collections_name():
+            stars = str((store.get_filters(name) or {}).get("rating") or "").strip()
+            if stars.isdigit() and 0 < int(stars):
+                store.set_filter(name, "rating", str(min(5, int(stars)) * 2))
+                moved.append(name)
+        store.record_migration(RATING_HALVES_MIGRATION)
+
+    if moved:
+        logger.info("Rating rules now name half stars: %s",
                     ", ".join(repr(name) for name in moved))
     return len(moved)
 

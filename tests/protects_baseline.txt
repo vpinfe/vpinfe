@@ -195,7 +195,6 @@ tests/config/test_upgrade_needs.py
 tests/config/test_whats_new.py
 tests/config/test_when_a_setting_takes_effect.py
 tests/curation/test_collation.py
-tests/curation/test_collection_filters.py
 tests/curation/test_collection_limit.py
 tests/curation/test_collection_resolver.py
 tests/curation/test_collection_sorting.py

@@ -148,6 +148,9 @@ _FILTER_THIS_LIST = t("manager.grid.filter_hint")
 
 _CHOICE_FILTER_JS = """
 if (!window.HubChoiceFilter) {
+  // A rating is held in half stars and filtered by the star it is in: 9 is under 4, a
+  // single half star is its own choice rather than the unrated one.
+  const stars = (halves) => (halves === 1 ? 0.5 : Math.floor(halves / 2));
   window.HubChoiceFilter = class {
     init(params) {
       this.params = params;
@@ -229,6 +232,7 @@ if (!window.HubChoiceFilter) {
     // "missing" choice, whose value is "".
     buckets(node) {
       const held = this.params.getValue(node);
+      if (this.params.stars && typeof held === 'number') return [stars(held)];
       return [held === null || held === undefined ? '' : held];
     }
     // How big the bucket is, over the whole library rather than over what the other
@@ -393,7 +397,7 @@ def install_filters() -> None:
 
 
 def choice_filter(choices: list[dict[str, Any]], *,
-                  formatted: bool = False) -> dict[str, Any]:
+                  formatted: bool = False, stars: bool = False) -> dict[str, Any]:
     """Column options that filter by picking a state rather than by typing one.
 
     The cell holds the value, not the label - a filter matches on what the row says and
@@ -402,6 +406,8 @@ def choice_filter(choices: list[dict[str, Any]], *,
 
     `formatted=True` where the column writes its own: a tick column formats a boolean
     and would collide with one written here.
+
+    `stars=True` for a rating in half stars: a row is matched on the whole star it is in.
     """
     # Only a string value is a token with a word for it. A boolean or a number is the
     # cell's own content and the column formats it - keying this on `str(True)` built a
@@ -414,7 +420,8 @@ def choice_filter(choices: list[dict[str, Any]], *,
         and str(one.get("label") or "") != one["value"]}
     out: dict[str, Any] = {":filter": CHOICE_FILTER,
                            "filterParams": {"choices": choices,
-                                            "words": {"search": _FILTER_THIS_LIST}}}
+                                            "words": {"search": _FILTER_THIS_LIST},
+                                            **({"stars": True} if stars else {})}}
     if shown:
         out[":valueFormatter"] = (
             f"params => ({json.dumps(shown)})[params.value] ?? params.value")

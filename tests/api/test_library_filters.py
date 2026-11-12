@@ -88,11 +88,11 @@ class LibraryFilterTests(TempTree):
                          ["Adventure", "Fantasy", "Medieval", "Space"])
 
     def test_a_rating_axis_carries_its_scale(self) -> None:
-        """It is 0-5 on every install. Enumerating the ratings in use would offer a
+        """It is half-star steps 1-10 on every install. Enumerating the ratings in use would offer a
         different scale to two libraries and a shrinking one as ratings change."""
         axes = self._axes()
 
-        self.assertEqual(["1", "2", "3", "4", "5"], axes["rating"]["values"])
+        self.assertEqual([str(step) for step in range(1, 11)], axes["rating"]["values"])
         self.assertIsNone(axes["rating_or_higher"]["values"])
 
     def test_an_axis_read_under_another_field_says_which(self) -> None:
@@ -119,7 +119,7 @@ class LibraryFilterTests(TempTree):
 
         self.assertEqual(sorted(axes), sorted(axis.name for axis in AXES))
         self.assertEqual(axes["manufacturer"]["values"], [])
-        self.assertEqual(["1", "2", "3", "4", "5"], axes["rating"]["values"])
+        self.assertEqual([str(step) for step in range(1, 11)], axes["rating"]["values"])
 
 
 class FilterOptionParityTests(TempTree):

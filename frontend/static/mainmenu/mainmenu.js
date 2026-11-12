@@ -321,15 +321,45 @@ function resolveCurrentGameIndex() {
   return currentGameIndex;
 }
 
+// A rating is 0 to 10, a half star a step, drawn as five stars.
+const RATING_HALVES = 10;
+const STAR_LIT = '#ffd84d';
+const STAR_OFF = '#666';
+const STAR_POINTS = '12,1.5 15.1,8.6 22.8,9.3 17,14.4 18.8,22 12,18 5.2,22 7,14.4 1.2,9.3 8.9,8.6';
+
 function normalizeRating(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(5, Math.floor(numeric)));
+  return Math.max(0, Math.min(RATING_HALVES, Math.floor(numeric)));
 }
 
-function ratingStarsText(rating) {
-  const normalized = normalizeRating(rating);
-  return `${'★'.repeat(normalized)}${'☆'.repeat(5 - normalized)}`;
+function starSvg(color, filled, from, width) {
+  return `<svg viewBox="${from} 0 12 24" width="${width}em" height="1em" ` +
+    `style="display:block;" aria-hidden="true"><polygon points="${STAR_POINTS}" ` +
+    `fill="${filled ? color : 'none'}" stroke="${color}" stroke-width="1.6" ` +
+    `stroke-linejoin="round"/></svg>`;
+}
+
+// One half of a star, the left or the right, lit or not.
+function starHalfSvg(lit, right) {
+  return starSvg(lit ? STAR_LIT : STAR_OFF, lit, right ? 12 : 0, 0.5);
+}
+
+// Five stars as markup, a half star showing as half lit.
+function ratingStarsHtml(rating) {
+  const held = normalizeRating(rating);
+  let out = '';
+  for (let star = 0; star < 5; star++) {
+    out += '<span style="display:inline-flex;margin-right:0.1em;">' +
+      starHalfSvg(held >= star * 2 + 1, false) + starHalfSvg(held >= star * 2 + 2, true) +
+      '</span>';
+  }
+  return `<span style="display:inline-flex;vertical-align:-0.12em;">${out}</span>`;
+}
+
+function ratingText(rating) {
+  const stars = normalizeRating(rating) / 2;
+  return String(stars);
 }
 
 function syncMenuWidthFromLongestLabel() {
@@ -426,7 +456,7 @@ function ratingLabelTarget() {
 async function readRating(target, idx) {
   return target
     ? window.parent.vpin.callInternal('get_player_rating', target.id, idx)
-    : window.parent.vpin.call('get_game_rating', idx);
+    : window.parent.vpin.callInternal('get_rating_halves', idx);
 }
 
 async function refreshRatingMenuLabel(indexHint = null) {
@@ -445,7 +475,7 @@ async function refreshRatingMenuLabel(indexHint = null) {
 
     const savedRating = await readRating(ratingLabelTarget(), idx);
     if (requestSeq !== ratingLabelRequestSeq) return;
-    ratingItem.innerHTML = `${t('word.rating', 'Rating')} (<span style="color:#ffd84d;">${ratingStarsText(savedRating)}</span>)`;
+    ratingItem.innerHTML = `${t('word.rating', 'Rating')} (${ratingStarsHtml(savedRating)})`;
     syncMenuWidthFromLongestLabel();
   } catch (_e) {
     if (requestSeq !== ratingLabelRequestSeq) return;
@@ -798,26 +828,31 @@ function hideBuildMetaDialog() {
 }
 
 function renderRatingStars() {
-  const stars = Array.from(document.querySelectorAll('.rating-star'));
-  stars.forEach((btn) => {
-    const starValue = Number(btn.dataset.rating || '0');
-    if (starValue <= ratingDraft) {
-      btn.textContent = '★';
-      btn.style.color = '#ffd84d';
-      btn.style.textShadow = '0 0 1.2vh rgba(255,216,77,0.55)';
-    } else {
-      btn.textContent = '☆';
-      btn.style.color = '#666';
-      btn.style.textShadow = 'none';
+  const row = document.getElementById('rating-stars-row');
+  if (!row.children.length) {
+    row.style.fontSize = '5vh';
+    for (let half = 1; half <= RATING_HALVES; half++) {
+      const btn = document.createElement('button');
+      btn.className = 'rating-star';
+      btn.dataset.rating = String(half);
+      btn.style.cssText = 'background: transparent; border: none; padding: 0; line-height: 0; cursor: pointer;' +
+        (half % 2 === 0 && half < RATING_HALVES ? ' margin-right: 1vh;' : '');
+      btn.addEventListener('click', () => {
+        ratingDraft = half;
+        renderRatingStars();
+      });
+      row.appendChild(btn);
     }
+  }
+  Array.from(row.children).forEach((btn) => {
+    const half = Number(btn.dataset.rating);
+    btn.innerHTML = starHalfSvg(half <= ratingDraft, half % 2 === 0);
   });
 
-  const filled = '★'.repeat(ratingDraft);
-  const empty = '☆'.repeat(5 - ratingDraft);
   document.getElementById('rating-current-text').innerHTML =
     t('frontend.mainmenu.current_rating', 'Current: {stars} ({rating}/5)', {
-      stars: `<span style="color:#ffd84d;">${filled}</span><span style="color:#777;">${empty}</span>`,
-      rating: ratingDraft,
+      stars: ratingStarsHtml(ratingDraft),
+      rating: ratingText(ratingDraft),
     });
 }
 
@@ -860,7 +895,7 @@ async function showRatingDialog(forPlayer) {
     document.getElementById('rating-clear'),
     document.getElementById('rating-cancel'),
     document.getElementById('rating-save'),
-  ]);
+  ], Math.max(0, ratingDraft - 1));
   updateDialogSelection();
 }
 
@@ -877,7 +912,7 @@ async function saveRatingDialog() {
       await window.parent.vpin.callInternal(
         'set_player_rating', ratingForPlayer.id, ratingGameIndex, ratingDraft);
     } else {
-      await window.parent.vpin.call('set_game_rating', ratingGameIndex, ratingDraft);
+      await window.parent.vpin.callInternal('set_rating_halves', ratingGameIndex, ratingDraft);
     }
     window.parent.vpin.sendMessageToAllWindowsIncSelf({
       type: 'TableDataChange',
@@ -1000,13 +1035,6 @@ window.onload = async () => {
   document.getElementById('buildmeta-start').addEventListener('click', startBuildMeta);
   document.getElementById('buildmeta-close').addEventListener('click', hideBuildMetaDialog);
 
-  const ratingStars = Array.from(document.querySelectorAll('.rating-star'));
-  ratingStars.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      ratingDraft = Math.max(1, Math.min(5, Number(btn.dataset.rating || '1')));
-      renderRatingStars();
-    });
-  });
   document.getElementById('rating-clear').addEventListener('click', () => {
     ratingDraft = 0;
     renderRatingStars();

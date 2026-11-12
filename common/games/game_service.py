@@ -83,7 +83,7 @@ def normalize_game_rating(value: Any) -> int:
         normalized = int(float(value))
     except (TypeError, ValueError):
         normalized = 0
-    return max(0, min(5, normalized))
+    return max(0, min(10, normalized))
 
 
 def ensure_vpsdb_downloaded() -> bool:

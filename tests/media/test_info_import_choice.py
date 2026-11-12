@@ -116,7 +116,7 @@ class AFirstImportTakesWhatTheSenderSaid(_Drop):
     SENT = {"Info": {"VPSId": "sent-id", "Title": "Foo"},
             "User": {"Rating": 5, "Favorite": 1, "Tags": ["flippers"], "StartCount": 99,
                      "RunTime": 600, "LastRun": "2026-01-02T03:04:05Z"},
-            "VPX": {"RunCount": 12},
+            "VPX": {"RunCount": 12}, "VPXFile": {},
             "vpinfe": {"alt_launcher": "/nonexistent/launcher", "alt_title": "Foo Mod"}}
 
     def _first(self) -> dict:

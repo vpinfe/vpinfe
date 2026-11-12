@@ -303,3 +303,27 @@ class RatingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_the_panel_is_told_which_games_were_rated(self) -> None:
+        held = [{"id": "g1", "rating": 0}, {"id": "g2", "rating": 0}, {"id": "g3", "rating": 0}]
+        told: list[set[str]] = []
+
+        async def then(games: set[str]) -> None:
+            told.append(games)
+
+        rater = stars.game_rater(held, {row["id"]: row for row in held}, lambda: _Grid(),
+                                 _Library(refuses="g2"), then=then)
+        with mock.patch.object(stars.ui, "notify"):
+            asyncio.run(rater(["g1", "g2", "g3"], 4))
+
+        self.assertEqual(told, [{"g1"}])
+
+    def test_a_table_rated_in_the_grid_tells_the_panel_its_game(self) -> None:
+        held = [{"id": "t1", "game_id": "g1", "rating": 0, "game_rating": 0}]
+        told: list[set[str]] = []
+        rate = stars.rating_handler(held, {"t1": held[0]}, lambda: _Grid(), _Library(),
+                                    "game_rating", then=told.append)
+
+        asyncio.run(rate(SimpleNamespace(args={"game": "g1", "table": "t1", "value": 3})))
+
+        self.assertEqual(told, [{"g1"}])

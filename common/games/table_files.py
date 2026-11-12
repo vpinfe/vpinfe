@@ -212,9 +212,9 @@ def _fold_one(data: dict[str, Any], entry: dict[str, Any], own: OwnFile,
                                            plays["run_time_seconds"] or 0)
             held["last_run"] = _later(held.get("last_run"), plays["last_run"])
         file_user = _dict(stored.get("User"))
-        file_stars = info_codec.stars_in(file_user.get("Rating"))
-        if file_stars and file_stars != (held.get("rating") or _game_user(data).get("Rating")):
-            held["rating"] = file_stars
+        file_rating = info_codec.half_stars(file_user.get("Rating"))
+        if file_rating and file_rating != (held.get("rating") or _game_user(data).get("Rating")):
+            held["rating"] = file_rating
         if not held:
             entry.pop("user", None)
         return
@@ -225,7 +225,7 @@ def _fold_one(data: dict[str, Any], entry: dict[str, Any], own: OwnFile,
             entry[key] = copy.deepcopy(value)
     held.update(plays)
     chosen = _dict(record.get(OWN_KEY))
-    own_stars = info_codec.stars_in(chosen.get("rating"))
+    own_rating = info_codec.half_stars(chosen.get("rating"))
     own_tags = _tags(chosen.get("tags"))
 
     # What another program changed in the file is taken in: a rating that is not what we
@@ -233,9 +233,9 @@ def _fold_one(data: dict[str, Any], entry: dict[str, Any], own: OwnFile,
     # the file has that the game and the table do not is the table's.
     game = _game_user(data)
     file_user = _dict(stored.get("User"))
-    file_stars = info_codec.stars_in(file_user.get("Rating"))
-    if file_stars and file_stars != (own_stars or game.get("Rating") or 0):
-        own_stars = file_stars
+    file_rating = info_codec.half_stars(file_user.get("Rating"))
+    if file_rating and file_rating != (own_rating or game.get("Rating") or 0):
+        own_rating = file_rating
     if "Favorite" in file_user:
         wanted = str(file_user["Favorite"]).strip().lower() in ("1", "true")
         if wanted != (bool(game.get("Favorite")) if favorite_was is None else favorite_was):
@@ -243,8 +243,8 @@ def _fold_one(data: dict[str, Any], entry: dict[str, Any], own: OwnFile,
     for tag in _tags(file_user.get("Tags")):
         if tag not in _tags(game.get("Tags")) and tag not in own_tags:
             own_tags.append(tag)
-    if own_stars:
-        held["rating"] = own_stars
+    if own_rating:
+        held["rating"] = own_rating
     else:
         held.pop("rating", None)
     held["tags"] = own_tags
@@ -298,7 +298,7 @@ def seed(info_path: str) -> dict[str, Any]:
             data["Info"] = {k: v for k, v in info.items() if k != "Authors"}
         user = stored.get("User")
         if isinstance(user, dict) and "User" not in data:
-            data["User"] = {"Rating": info_codec.stars_in(user.get("Rating")),
+            data["User"] = {"Rating": info_codec.half_stars(user.get("Rating")),
                             "Favorite": str(user.get("Favorite", "")).strip().lower()
                             in ("1", "true"),
                             "Tags": _tags(user.get("Tags"))}
@@ -464,11 +464,11 @@ def _build(entry: dict[str, Any], data: dict[str, Any], existing: OwnFile | None
 
     game = _dict(data.get("User"))
     held = _dict(entry.get("user"))
-    own_stars = held.get("rating") or 0
+    own_rating = held.get("rating") or 0
     tags = _joined(_tags(game.get("Tags")), _tags(held.get("tags")))
     user = dict(_dict(stored.get("User")))
     user.update({
-        "Rating": info_codec.stars_out(own_stars or game.get("Rating")),
+        "Rating": info_codec.half_stars(own_rating or game.get("Rating")),
         "Favorite": 1 if game.get("Favorite") in (True, 1, "1", "true", "True") else 0,
         "Tags": tags,
         "LastRun": (epoch_to_iso(held["last_run"]) or None) if held.get("last_run") else None,
@@ -485,8 +485,8 @@ def _build(entry: dict[str, Any], data: dict[str, Any], existing: OwnFile | None
     record = {key: copy.deepcopy(value) for key, value in entry.items()
               if key not in _NOT_IN_FILE}
     chosen: dict[str, Any] = {}
-    if own_stars:
-        chosen["rating"] = info_codec.stars_out(own_stars)
+    if own_rating:
+        chosen["rating"] = info_codec.half_stars(own_rating)
     if _tags(held.get("tags")):
         chosen["tags"] = _tags(held["tags"])
     if chosen:

@@ -20,6 +20,7 @@ from common.games.collection_store import (
     NATURAL_DIRECTION,
     SORT_LABELS,
 )
+from common.games.game_metadata import star_words
 from common.i18n import t
 from manager.extensions import ext_lists
 from manager.kit import arrange as arranging
@@ -654,8 +655,9 @@ def _condition_value(context: dict[str, Any], field: collection_rules.Field,
         _many_values(context, field, value, put)
         return
     if op in (collection_rules.AT_LEAST, collection_rules.EXACTLY):
-        stars = dropdown.Select({one: t("manager.stars.5", n=one) for one in field.values},
-                                value=(value if value in field.values else None))
+        stars = dropdown.Select(
+            {one: t("manager.stars.5", n=star_words(one)) for one in field.values},
+            value=(value if value in field.values else None))
         stars.on_value_change(lambda: _edit_rules(context, put(value=stars.value)))
         return
     if op == collection_rules.BETWEEN:

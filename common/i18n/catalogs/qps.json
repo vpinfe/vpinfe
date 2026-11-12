@@ -2402,8 +2402,8 @@
     "one": "{count:n} ĝàɱè řàţèđ {value} öƒ 5",
     "other": "{count:n} ĝàɱèš řàţèđ {value} öƒ 5"
   },
-  "manager.games.game_rating.help": "Ýöûř řàţîñĝ ƒöř ţĥè ĝàɱè, 0 ţö 5",
-  "manager.games.table_rating.help": "Ýöûř řàţîñĝ ƒöř ţĥîš ţàƀŀè, 0 ţö 5",
+  "manager.games.game_rating.help": "Ýöûř řàţîñĝ ƒöř ţĥè ĝàɱè, ûþ ţö 5 šţàřš, ĥàŀṽèš îñçŀûđèđ",
+  "manager.games.table_rating.help": "Ýöûř řàţîñĝ ƒöř ţĥîš ţàƀŀè, ûþ ţö 5 šţàřš, ĥàŀṽèš îñçŀûđèđ",
   "manager.games.rescan": "Řèŀöàđ ƒřöɱ Đîšķ",
   "manager.games.rescan_hint": "Řèàđ ţĥè ŀîƀřàřý ƒöŀđèřš àĝàîñ",
   "manager.games.rename_view": "Ñàɱè àñđ Đèšçřîþţîöñ…",
@@ -6127,6 +6127,8 @@
   "frontend.collectionmenu.manufacturer": "Ḿàñûƒàçţûřèř:",
   "frontend.collectionmenu.name_collection": "Ñàɱè ţĥè çöŀŀèçţîöñ",
   "frontend.collectionmenu.named_by_sort": "Ɓý {sort}",
+  "frontend.collectionmenu.named_halves": "{count} Šţàřš",
+  "frontend.collectionmenu.named_halves_plus": "{count}+ Šţàřš",
   "frontend.collectionmenu.named_stars": {
     "one": "{count:n} Šţàř",
     "other": "{count:n} Šţàřš"
@@ -6779,6 +6781,7 @@
   "word.add": "Àđđ",
   "word.all": "Àŀŀ",
   "word.any": "Àñý",
+  "word.apply": "Àþþŀý",
   "word.author": "Àûţĥöř",
   "word.back": "Ɓàçķ",
   "word.cancel": "Çàñçèŀ",

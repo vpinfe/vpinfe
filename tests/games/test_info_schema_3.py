@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from common.games import file_listing, info_codec
+from common.games.export_bundle import prune_info
 from common.games.info_file import MetaConfig, migration_backup_reason, record_of
 from common.games.info_migration import migrate, needs_migration
 from common.kept_copies import AGAIN, BETA, REASON_2X, RESTORE, backup_path, keep_newest
@@ -24,7 +25,7 @@ from tests.support.saved import saved_record
 
 RICH: dict[str, Any] = {
     "Info": {"Title": "Dr. Dude", "VPSId": "vps-1", "Rom": "dd_l2"},
-    "User": {"Rating": 3.5, "Favorite": True, "LastRun": 1671033801, "StartCount": 12,
+    "User": {"Rating": 7, "Favorite": True, "LastRun": 1671033801, "StartCount": 12,
              "RunTime": 340, "Tags": ["fast"], "Seen": {"by": "another tool"}},
     "vpinfe": {"schema": 3, "game_id": "g1", "run_time_seconds": 20400, "unrelated": "kept"},
     "tables": {
@@ -116,11 +117,14 @@ class WhatIsWrittenReadsBackTests(unittest.TestCase):
 
                 self.assertNotIn("run_time_seconds", record["vpinfe"])
 
-    def test_a_schema_2_file_reads_as_it_is(self) -> None:
+    def test_a_schema_2_file_reads_as_it_is_with_its_stars_doubled(self) -> None:
         schema_2 = copy.deepcopy(RICH)
         schema_2["vpinfe"]["schema"] = 2
+        schema_2["User"]["Rating"] = 4
+        expected = copy.deepcopy(schema_2)
+        expected["User"]["Rating"] = 8
 
-        self.assertIs(info_codec.decode(schema_2), schema_2)
+        self.assertEqual(info_codec.decode(schema_2), expected)
 
 
 class WhatThemesAndTheApiReadTests(unittest.TestCase):
@@ -151,12 +155,12 @@ class WhatThemesAndTheApiReadTests(unittest.TestCase):
         self.assertEqual(read_back["User"]["RunTime"], held["User"]["RunTime"])
         self.assertEqual(read_back["User"]["LastRun"], held["User"]["LastRun"])
 
-    def test_a_rating_in_stars_keeps_its_stars(self) -> None:
-        for stars in (0, 1, 2.5, 3, 4.5, 5):
-            with self.subTest(stars=stars):
-                stored = info_codec.encode({"User": {"Rating": stars}})
+    def test_a_rating_keeps_its_half_stars(self) -> None:
+        for halves in (0, 1, 5, 6, 9, 10):
+            with self.subTest(halves=halves):
+                stored = info_codec.encode({"User": {"Rating": halves}})
 
-                self.assertEqual(info_codec.decode(stored)["User"]["Rating"], stars)
+                self.assertEqual(info_codec.decode(stored)["User"]["Rating"], halves)
 
     def test_the_run_time_in_minutes_keeps_its_seconds(self) -> None:
         stored = info_codec.encode({"User": {"RunTime": 3}, "vpinfe": {"run_time_seconds": 200}})
@@ -195,7 +199,7 @@ class AFileConvertsOnceTests(unittest.TestCase):
 
         record = migrate(beta)
 
-        self.assertEqual(record["User"]["Rating"], 4)
+        self.assertEqual(record["User"]["Rating"], 8)
         self.assertEqual(record["User"]["Tags"], ["a", "b"])
         self.assertNotIn("user", record["tables"]["t1"])
 
@@ -204,7 +208,7 @@ class AFileConvertsOnceTests(unittest.TestCase):
                 "vpinfe": {"schema": 2, "game_id": "g"},
                 "tables": {"t1": {"id": "t1", "filename": "T.vpx", "user": {"rating": 1}}}}
 
-        self.assertEqual(migrate(beta)["User"]["Rating"], 5)
+        self.assertEqual(migrate(beta)["User"]["Rating"], 10)
 
     def test_two_tables_keep_a_rating_each(self) -> None:
         beta = {"Info": {}, "User": {},
@@ -214,8 +218,8 @@ class AFileConvertsOnceTests(unittest.TestCase):
 
         record = migrate(beta)
 
-        self.assertEqual(record["tables"]["t1"]["user"]["rating"], 4)
-        self.assertEqual(record["tables"]["t2"]["user"]["rating"], 2)
+        self.assertEqual(record["tables"]["t1"]["user"]["rating"], 8)
+        self.assertEqual(record["tables"]["t2"]["user"]["rating"], 4)
         self.assertFalse(record["User"].get("Rating"))
 
 
@@ -281,6 +285,60 @@ class ABetaBackInAFileTests(unittest.TestCase):
         written = info_codec.encode(migrate(stored))
 
         self.assertNotIn("tables", written)
+
+
+class AFileAnOlderBuildWroteAgainTests(unittest.TestCase):
+    """A 2.x or beta build leaves the stamp alone and writes `User` in its own units."""
+
+    def _stamped_with(self, user: dict, **more: Any) -> dict:
+        stored = info_codec.encode({"Info": {}, "User": {}, "vpinfe": {"game_id": "g"}})
+        return {**stored, "User": user, **more}
+
+    def test_a_2x_file_with_the_stamp_kept_is_read_in_stars_and_minutes(self) -> None:
+        stored = self._stamped_with({"Rating": 4, "RunTime": 90}, VPXFile={})
+
+        for record in (migrate(stored), info_codec.decode(stored)):
+            self.assertEqual(record["User"]["Rating"], 8)
+            self.assertEqual(record["User"]["RunTime"], 90)
+        self.assertEqual(info_codec.encode(migrate(stored))["User"]["RunTime"], 5400)
+
+    def test_a_beta_file_with_the_stamp_kept_is_read_in_stars_and_minutes(self) -> None:
+        stored = self._stamped_with({"Rating": 4, "RunTime": 90},
+                                    tables={"t1": {"id": "t1", "filename": "T.vpx"}})
+        stored["vpinfe"]["run_time_seconds"] = 5430
+
+        record = migrate(stored)
+
+        self.assertEqual(record["User"]["Rating"], 8)
+        self.assertEqual(info_codec.encode(record)["User"]["RunTime"], 5430)
+
+    def test_a_file_converted_from_an_older_build_is_not_converted_again(self) -> None:
+        stored = self._stamped_with({"Rating": 4, "RunTime": 90}, VPXFile={})
+
+        once = info_codec.encode(migrate(stored))
+
+        self.assertEqual(info_codec.encode(record_of(once)), once)
+        self.assertEqual(once["User"]["Rating"], 8)
+
+    def test_a_bundle_ships_a_returning_file_converted_once_for_the_receiver(self) -> None:
+        beta = self._stamped_with({"Rating": 4, "RunTime": 90},
+                                  tables={"t1": {"id": "t1", "filename": "T.vpx"}})
+        beta["vpinfe"]["run_time_seconds"] = 5430
+        for stored, seconds in ((self._stamped_with({"Rating": 4, "RunTime": 90}, VPXFile={}),
+                                 5400), (beta, 5430)):
+            with self.subTest(older="VPXFile" in stored):
+                shipped = json.loads(prune_info(json.dumps(stored), set()))
+
+                self.assertFalse(needs_migration(shipped))
+                self.assertEqual(shipped["User"]["Rating"], 8)
+                self.assertEqual(shipped["User"]["RunTime"], seconds)
+                self.assertEqual(record_of(shipped)["User"]["Rating"], 8)
+
+    def test_a_file_with_no_stamp_and_nothing_2x_wrote_is_read_as_it_is(self) -> None:
+        for rating in (3, 7, 10):
+            with self.subTest(rating=rating):
+                self.assertEqual(info_codec.decode({"User": {"Rating": rating}})["User"]["Rating"],
+                                 rating)
 
 
 class TheCapOnKeptCopiesTests(TempTree):

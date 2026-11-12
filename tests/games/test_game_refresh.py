@@ -45,7 +45,7 @@ class SingleGameRefreshTests(TempTree):
 
         self.parser.reload_game(str(self.root / "Bravo"))
 
-        self.assertEqual(self._rating(self._by_name("Bravo")), 5)
+        self.assertEqual(self._rating(self._by_name("Bravo")), 10)
 
     def test_the_rest_of_the_library_is_not_re_read(self):
         """The point of the change. Charlie is edited on disk and must stay stale,

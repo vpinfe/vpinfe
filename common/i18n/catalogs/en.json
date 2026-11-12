@@ -2402,8 +2402,8 @@
     "one": "{count:n} game rated {value} of 5",
     "other": "{count:n} games rated {value} of 5"
   },
-  "manager.games.game_rating.help": "Your rating for the game, 0 to 5",
-  "manager.games.table_rating.help": "Your rating for this table, 0 to 5",
+  "manager.games.game_rating.help": "Your rating for the game, up to 5 stars, halves included",
+  "manager.games.table_rating.help": "Your rating for this table, up to 5 stars, halves included",
   "manager.games.rescan": "Reload from Disk",
   "manager.games.rescan_hint": "Read the library folders again",
   "manager.games.rename_view": "Name and Description…",
@@ -6127,6 +6127,8 @@
   "frontend.collectionmenu.manufacturer": "Manufacturer:",
   "frontend.collectionmenu.name_collection": "Name the collection",
   "frontend.collectionmenu.named_by_sort": "By {sort}",
+  "frontend.collectionmenu.named_halves": "{count} Stars",
+  "frontend.collectionmenu.named_halves_plus": "{count}+ Stars",
   "frontend.collectionmenu.named_stars": {
     "one": "{count:n} Star",
     "other": "{count:n} Stars"
@@ -6779,6 +6781,7 @@
   "word.add": "Add",
   "word.all": "All",
   "word.any": "Any",
+  "word.apply": "Apply",
   "word.author": "Author",
   "word.back": "Back",
   "word.cancel": "Cancel",

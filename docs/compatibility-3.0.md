@@ -197,7 +197,7 @@ on read, keeping the original alongside it as `<Game>.info.vpinfe-<timestamp>`.
 Schema 3 then puts `tables`, `assets` and `guides` under `vpinfe.manifest` as lists, with
 `media` split out of `assets`, and stores `User` in the units Visual Pinball's `FileLayout.md`
 names: `Rating` 0 to 10, `LastRun` as an ISO date, `RunTime` in seconds. Every payload a
-theme, the API or VPinPlay receives is served as before, so none of it changes.
+theme, the API or VPinPlay receives is served as before, so none of it changes, except the rating (PAR-112).
 A game with two or more tables also gets a `<table>.info` beside each table that is not
 named like the folder, which Visual Pinball reads first. A theme, the API or VPinPlay still
 reads the game's record, which folds those files in, so none of them sees the files.
@@ -778,24 +778,24 @@ collection could filter by. The axes are projected from the same registry the re
 matches on rather than listed again, so a client cannot be offered an axis nothing would
 resolve, and an axis added there needs no second edit here. The values are the ones the
 library actually holds, because a choice that matches nothing is not a choice. A `rating`
-axis carries `null` instead of a list: it is 0-5 on every install, and enumerating the
-ratings in use would offer a different scale to two libraries and a shrinking one as
-ratings change. `filter_options` in `frontend/game_state.py` was a second copy of this
+axis carries `null` instead of a list: it is whole stars, 1-5, on every install, and
+enumerating the ratings in use would offer a different scale to two libraries and a
+shrinking one as ratings change. `filter_options` in `frontend/game_state.py` was a second copy of this
 computation and now delegates to `GameListFilters.available_options()`, so the frontend
 and the API answer from one implementation - a parity test asserts they agree. Covered by
 `tests/api/test_library_filters.py`.
 
 **PAR-57 — A game can be rated over the API.** New: `PUT /api/v1/games/{id}/rating`,
-taking `{"rating": 0-5}` and carrying the `games:write` scope. `GET /games/{id}` reported
+taking `{"rating": 0-10}` and carrying the `games:write` scope. `GET /games/{id}` reported
 a rating already, so this is the write half of a field that was read-only; a rating set
 from the frontend and one set here land in the same `User.Rating`, and nothing about the
 frontend's own path changes.
 *Why:* the only way to rate a game was the window channel, which addresses games by their
 position in one window's filtered list - so no other caller could reach it, and the
 asymmetry was the last real gap between the channel's management half and the HTTP API. A rating
-outside 0-5 is refused with a 422 rather than clamped, which is a deliberate difference
+outside 0-10 is refused with a 422 rather than clamped, which is a deliberate difference
 from `normalize_rating`: clamping is right when reading whatever a hand-edited `.info`
-holds, and wrong for a caller that just sent 9, because storing 5 hides its bug. A whole
+holds, and wrong for a caller that just sent 11, because storing 10 hides its bug. A whole
 value PUT rather than a PATCH - the rating is the resource, so sending it twice says the
 same thing rather than incrementing. The write itself moved to
 `common/games/game_metadata.py` beside `game_rating`, and re-reads the `.info` first so a
@@ -1596,6 +1596,24 @@ which reaches `/api/v1` as `features` on the browser report.
 moved is not where its setting says; only the window knows. Covered by
 `tests/host/test_frontend_windows.py`, `tests/js/internal-methods.test.js` and
 `tests/invariants/test_parity.py`.
+
+**PAR-112 - A rating is 0 to 10, a half star a step.** The Console and the main menu's Rating
+dialog draw five stars and set half stars. Contract 2 (`entries[].game.user.rating`,
+`entries[].table.user.rating`) and the API (`GET`/`PUT /games/{id}/rating`, a table's rating,
+a player's rating, `game.rated` on the extension channel) carry 0 to 10, and so does a saved
+Rating rule and the rating filter's `rating` axis, 1 to 10: At least 7 finds 3½ and up, and
+Exactly 8 finds 4 and nothing else. A rule saved when it took whole stars is doubled once at
+startup, so "4 or higher" picks the same games before and after. Contract 1 keeps `meta.User.Rating` and
+`get_game_rating`/`set_game_rating` on 0 to 5, a half star rounding down but never to none (a
+lone half star reads as 1), and VPinPlay is sent whole stars the same way. The one filter
+writer a theme can call, `save_filter_collection`, still takes whole stars and doubles them. A 2.x or schema 2 `.info`, and a player's record from a beta, hold
+whole stars and are doubled the first time they are read, so a saved "4 or higher" rule picks
+the same games before and after. The main menu reads and writes half stars through the core-only
+`get_rating_halves` and `set_rating_halves`, which are refused to themes.
+*Why:* Visual Pinball's own file layout rates 0 to 10, and a rating in whole stars could not
+say a half. Contract 1 themes read 0 to 5 and are not asked to change; a contract 2 theme draws
+`rating / 2` stars. Covered by `tests/api/test_game_rating.py`,
+`tests/games/test_info_schema_3.py` and `tests/curation/test_collection_filters.py`.
 
 ## Explicitly *not* exceptions
 

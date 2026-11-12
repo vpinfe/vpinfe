@@ -353,7 +353,7 @@ class FrontendServiceTests(unittest.TestCase):
             game_play_service.increment_start_count(game)
 
             saved = saved_record(info_path)
-            self.assertEqual(saved["User"]["Rating"], 4)
+            self.assertEqual(saved["User"]["Rating"], 8)
             self.assertEqual(saved["User"]["StartCount"], 1)
 
     def test_parse_score_from_nvram_reads_the_rom_it_is_given(self) -> None:
@@ -394,7 +394,7 @@ class FrontendServiceTests(unittest.TestCase):
                 game, "vpx_rom", reading, None, "/nv")  # type: ignore[arg-type]
 
             saved = saved_record(info_path)["User"]
-            self.assertEqual((saved["Rating"], saved["StartCount"]), (4, 2))
+            self.assertEqual((saved["Rating"], saved["StartCount"]), (8, 2))
             self.assertEqual(saved["HighScores"]["vpx_rom"]["entries"], reading["entries"])
             self.assertNotIn("Score", saved)
 

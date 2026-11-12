@@ -159,7 +159,8 @@ def _number(value: Any) -> int | None:
 
 
 def stars(value: Any) -> int | None:
-    """A rating in whole stars, 0-5, which is the scale a game is rated on here.
+    """A rating in whole stars, 0-5, the scale the sources use. A game is rated in half
+    stars, so a caller doubles it.
 
     A half star is rounded up rather than dropped, so 3.5 arrives as 4. Python's own
     round() goes to the even neighbour, which would send 2.5 to 2 and 3.5 to 4.

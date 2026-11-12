@@ -254,7 +254,8 @@ function t(key, english, params) {
     let types = ['All'];
     let manufacturers = ['All'];
     let years = ['All'];
-    let ratings = ['All', '1', '2', '3', '4', '5'];
+    // A rule names a step of half a star, 1 to 10, the scale a game is rated on.
+    let ratings = ['All', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
     let ratingModes = ['Exact', 'Or Higher'];
     // The orders a collection can carry, in the same order and with the same labels the
     // Manager offers. This used to be the five 2.x sort names, which could not express
@@ -297,8 +298,17 @@ function t(key, english, params) {
     // Which dropdowns show something other than their stored value. The popup renders
     // the raw option, so without this the sort list reads `play_time_seconds`.
     const OPTION_LABELS = { sortby: SORT_LABELS, orderby: DIRECTION_LABELS };
+    // The stars a step reads as: 1 is a half star, 7 is three and a half.
+    const starLabel = (step) => {
+      const halves = Number(step);
+      if (!halves) return step;
+      return (halves >> 1 || '') + (halves % 2 ? '\u00bd' : '');
+    };
+    const ratingLabel = (token) => (token === 'All' ? word(token) : starLabel(token));
     const optionLabel = (type, value) => type === 'collection'
-      ? collectionLabel(value) : word((OPTION_LABELS[type] || {})[value] || value);
+      ? collectionLabel(value)
+      : type === 'rating' ? ratingLabel(value)
+      : word((OPTION_LABELS[type] || {})[value] || value);
     const directionLabel = (token) => word(DIRECTION_LABELS[token] || token);
     // `None` is the token the menu sends for the whole library. Every other entry is a
     // collection's own name, which no catalog translates.
@@ -529,11 +539,20 @@ function t(key, english, params) {
         if (index > 0) parts.push(word(values[index]));
       }
       if (ratingIndex > 0) {
-        const count = Number(ratings[ratingIndex]);
-        parts.push(ratingModes[ratingModeIndex] === 'Or Higher'
-          ? t('frontend.collectionmenu.named_stars_plus', '{count}+ Stars', { count })
-          : t('frontend.collectionmenu.named_stars',
-              { one: '{count} Star', other: '{count} Stars' }, { count }));
+        const halves = Number(ratings[ratingIndex]);
+        const floor = ratingModes[ratingModeIndex] === 'Or Higher';
+        if (halves % 2) {
+          const count = starLabel(halves);
+          parts.push(floor
+            ? t('frontend.collectionmenu.named_halves_plus', '{count}+ Stars', { count })
+            : t('frontend.collectionmenu.named_halves', '{count} Stars', { count }));
+        } else {
+          const count = halves / 2;
+          parts.push(floor
+            ? t('frontend.collectionmenu.named_stars_plus', '{count}+ Stars', { count })
+            : t('frontend.collectionmenu.named_stars',
+                { one: '{count} Star', other: '{count} Stars' }, { count }));
+        }
       }
       if (!parts.length) {
         parts.push(t('frontend.collectionmenu.named_by_sort', 'By {sort}',
@@ -592,7 +611,7 @@ function t(key, english, params) {
       document.getElementById('type-value').textContent = word(filterDisplayOverrides.type || types[typeIndex]);
       document.getElementById('manufacturer-value').textContent = word(filterDisplayOverrides.manufacturer || manufacturers[manufacturerIndex]);
       document.getElementById('year-value').textContent = word(filterDisplayOverrides.year || years[yearIndex]);
-      document.getElementById('rating-value').textContent = word(filterDisplayOverrides.rating || ratings[ratingIndex]);
+      document.getElementById('rating-value').textContent = ratingLabel(filterDisplayOverrides.rating || ratings[ratingIndex]);
       document.getElementById('ratingmode-value').textContent = word(filterDisplayOverrides.ratingmode || ratingModes[ratingModeIndex]);
       document.getElementById('sortby-value').textContent =
         sortLabel(filterDisplayOverrides.sortby || sortOptions[sortByIndex]);

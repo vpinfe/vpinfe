@@ -61,6 +61,38 @@ class ContractOneTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
 
 
+class TheRatingScaleTests(unittest.TestCase):
+    """Protects: (b) a theme reads a rating on the scale its contract was written for."""
+
+    def _rated(self, halves: int):
+        game = _game()
+        game.meta_config["User"] = {"Rating": halves}
+        return game
+
+    def test_contract_1_gives_whole_stars_a_half_rounds_down_but_never_to_none(self) -> None:
+        for halves, stars in ((0, 0), (1, 1), (2, 1), (3, 1), (7, 3), (8, 4), (10, 5)):
+            with self.subTest(halves=halves):
+                (row,) = json.loads(games_json(entries_for([self._rated(halves)]),
+                                               contract=1))
+
+                self.assertEqual(row["meta"]["User"]["Rating"], stars)
+
+    def test_contract_2_gives_half_stars(self) -> None:
+        for halves in (0, 1, 7, 8, 10):
+            with self.subTest(halves=halves):
+                body = json.loads(games_json(entries_for([self._rated(halves)]),
+                                             contract=2, collection="C"))
+
+                self.assertEqual(body["entries"][0]["game"]["user"]["rating"], halves)
+
+    def test_what_a_theme_reads_does_not_change_what_is_held(self) -> None:
+        game = self._rated(7)
+
+        games_json(entries_for([game]), contract=1)
+
+        self.assertEqual(game.meta_config["User"]["Rating"], 7)
+
+
 class ContractTwoTests(unittest.TestCase):
     def _payload(self, games, **kwargs):
         return json.loads(games_json(entries_for(games, **kwargs), contract=2,
@@ -102,7 +134,7 @@ class ContractTwoTests(unittest.TestCase):
         """Texal-Flyer reads meta.User.StartCount and RunTime at contract 1. Contract 2
         served only the rating, so a theme showing play stats could not be ported."""
         game = _game(tables=TWO_TABLES)
-        game.meta_config["User"] = {"Rating": 4, "Favorite": 1, "Tags": ["night"],
+        game.meta_config["User"] = {"Rating": 7, "Favorite": 1, "Tags": ["night"],
                                    "LastRun": 1754000000, "StartCount": 12, "RunTime": 90}
         game.meta_config["tables"]["t1"]["user"] = {
             "last_run": "2026-08-01T20:14:00Z", "start_count": 5, "run_time_seconds": 3600}
@@ -114,7 +146,7 @@ class ContractTwoTests(unittest.TestCase):
                          "User.RunTime is minutes; the payload names its unit")
         self.assertTrue(entry["game"]["user"]["last_played"].startswith("20"),
                         "User.LastRun is an epoch int; the payload serves ISO")
-        self.assertEqual(entry["game"]["user"]["rating"], 4)
+        self.assertEqual(entry["game"]["user"]["rating"], 7)
         self.assertTrue(entry["game"]["user"]["favorite"])
         self.assertEqual(entry["game"]["user"]["tags"], ["night"])
 

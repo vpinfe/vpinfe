@@ -49,6 +49,11 @@ class GameRatingTests(TempTree):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"rating": 4})
 
+    def test_a_half_star_is_a_rating(self) -> None:
+        """Ratings run 0 to 10, a half star a step: 7 is three and a half stars."""
+        self.assertEqual(self._put(7).json(), {"rating": 7})
+        self.assertEqual(self._on_disk(), 7)
+
     def _on_disk(self) -> int:
         """The rating as the `.info` holds it.
 
@@ -78,8 +83,8 @@ class GameRatingTests(TempTree):
         self.assertEqual(self._put(3).json(), {"rating": 3})
 
     def test_a_rating_outside_the_range_is_refused_rather_than_clamped(self) -> None:
-        """Storing 5 for a caller that sent 9 would hide the caller's bug."""
-        for rating in (6, 9, -1):
+        """Storing 10 for a caller that sent 14 would hide the caller's bug."""
+        for rating in (11, 14, -1):
             with self.subTest(rating=rating):
                 self.assertEqual(self._put(rating).status_code, 422)
 

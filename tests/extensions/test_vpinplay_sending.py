@@ -40,7 +40,7 @@ def _only(entry: dict) -> dict:
 def _game(game_id: str, **changes: object) -> dict:
     return {"id": game_id, "name": f"Game {game_id}", "vps_id": f"vps-{game_id}",
             "rom": "ex", "private": False,
-            "user": {"rating": 4, "last_played": AT, "play_count": 7,
+            "user": {"rating": 8, "last_played": AT, "play_count": 7,
                      "play_time_seconds": 600, "high_scores": None},
             "overrides": {"alt_title": "Mine", "alt_vps_id": ""}, **changes}
 
@@ -179,6 +179,23 @@ class WhatAPlaySends(SendingCase):
 
         self.assertEqual(self.only_table()["user"]["rating"], 4)
 
+    def test_a_half_star_goes_as_the_whole_star_below_it(self) -> None:
+        self.sharing(self.owner, "owner-id")
+        self.games[GAME] = _game(GAME, user={**_game(GAME)["user"], "rating": 7})
+
+        self.play(self.owner)
+
+        self.assertEqual(self.only_table()["user"]["rating"], 3)
+
+    def test_a_lone_half_star_goes_as_one_star_and_does_not_clear_what_vpinplay_holds(self) -> None:
+        self.sharing(self.owner, "owner-id")
+        self.games[GAME] = _game(GAME, user={**_game(GAME)["user"], "rating": 1})
+        self.their_record.return_value = {"rating": 3}
+
+        self.play(self.owner)
+
+        self.assertEqual(self.only_table()["user"]["rating"], 1)
+
     def test_an_owner_with_nothing_held_and_nothing_to_send_sends_none(self) -> None:
         self.sharing(self.owner, "owner-id")
         self.games[GAME]["user"]["rating"] = 0
@@ -190,7 +207,7 @@ class WhatAPlaySends(SendingCase):
 
     def test_a_kept_player_s_game_goes_with_their_own_numbers(self) -> None:
         kept = self.sharing(self.kept().player_id, "jordan")
-        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 2)
+        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 4)
         self.their_record.return_value = {"rating": 5, "alttitle": "Theirs", "altvpsid": "t"}
 
         self.play(kept)
@@ -310,7 +327,7 @@ class WhatIsNeverSent(SendingCase):
     def test_a_rating_on_a_game_never_sent_waits_for_its_next_play(self) -> None:
         kept = self.sharing(self.kept().player_id, "jordan")
 
-        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 3)
+        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 6)
         self.run_later()
 
         self.send.assert_not_called()
@@ -444,9 +461,9 @@ class WhatARatingSends(SendingCase):
     def test_the_owner_s_rating_on_a_game_already_sent_goes_at_once(self) -> None:
         self.sharing(self.owner, "owner-id")
         self.play(self.owner)
-        self.games[GAME] = _game(GAME, user={**_game(GAME)["user"], "rating": 1})
+        self.games[GAME] = _game(GAME, user={**_game(GAME)["user"], "rating": 2})
 
-        events.emit(events.GAME_RATED, game_id=GAME, rating=1,
+        events.emit(events.GAME_RATED, game_id=GAME, rating=2,
                     player=players.get_roster().player(self.owner).as_payload())
         self.run_later()
 
@@ -457,7 +474,7 @@ class WhatARatingSends(SendingCase):
         kept = self.sharing(self.kept().player_id, "jordan")
         self.play(kept)
 
-        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 3)
+        player_records.get_records().set_rating(players.get_roster().player(kept), GAME, 6)
         self.run_later()
 
         self.assertEqual(self.requests_sent()[-1]["tables"][0]["user"]["rating"], 3)
@@ -492,7 +509,7 @@ class WhatClearingARatingSends(SendingCase):
     def test_a_kept_player_clearing_their_rating_sends_the_clear_not_the_one_held(self) -> None:
         kept = self.sharing(self.kept().player_id, "jordan")
         player = players.get_roster().player(kept)
-        player_records.get_records().set_rating(player, GAME, 2)
+        player_records.get_records().set_rating(player, GAME, 4)
         self.play(kept)
         self.send.reset_mock()
         self.their_record.return_value = {"rating": 5}

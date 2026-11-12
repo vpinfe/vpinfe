@@ -3,12 +3,13 @@
 On disk the game's files, media, assets and guides are four lists under `vpinfe.manifest`
 and `User` is in the units FileLayout.md names. In memory the record keeps the shape and
 units every reader was written against: `tables` and `assets` are maps, `guides` a list
-with its origin, `Rating` runs 0 to 5, `LastRun` is an epoch and `RunTime` is minutes with
-the exact seconds in `vpinfe.run_time_seconds`. Everything above storage - themes, the API,
-VPinPlay, the manager - reads the in-memory form and so does not change with the schema.
+with its origin, `Rating` runs 0 to 10 as the file has it, `LastRun` is an epoch and
+`RunTime` is minutes with the exact seconds in `vpinfe.run_time_seconds`. Everything above
+storage - themes, the API, VPinPlay, the manager - reads the in-memory form and so does not
+change with the schema.
 
-`decode` leaves a file that is not schema 3 as it found it: schema 2 is the in-memory shape.
-`encode` always writes schema 3.
+`decode` leaves a file that is not schema 3 in the shape it found it: schema 2 is the in-memory
+shape. `encode` always writes schema 3.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from math import isfinite
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from common.games.info_migration import needs_migration
 from common.games.tables import (
     ABSENT_SINCE_KEY,
     TABLE_APP_KEY,
@@ -30,6 +32,9 @@ from common.games.tables import (
     rekey_by_id,
 )
 from common.timestamps import epoch_to_iso
+
+# FileLayout.md's `Rating`: 0 is unrated, and VPinFE draws it as five stars, half a star a step.
+RATING_MAX = 10
 
 SCHEMA = 3
 MANIFEST_KEY = "manifest"
@@ -69,9 +74,16 @@ def is_schema_3(data: object) -> bool:
 
 
 def decode(data: dict[str, Any]) -> dict[str, Any]:
-    """The in-memory record for what is on disk; `data` itself when it is not schema 3."""
+    """The in-memory record for what is on disk.
+
+    A file a 2.x or beta build wrote is already in the in-memory shape, but its ratings are
+    whole stars, 0 to 5, and come back doubled. A file with no stamp and nothing a 2.x build
+    wrote is read as it is. A schema 3 file that a 2.x or beta build has written to again
+    carries that build's units in `User`, and is converted as that build's file.
+    """
     if not is_schema_3(data):
-        return data
+        return _ratings_doubled(data) if needs_migration(data) else dict(data)
+    returning = needs_migration(data)
     record = {k: v for k, v in data.items() if k not in TOP_LEVEL_LISTS}
     vpinfe = dict(record.get("vpinfe") or {})
     manifest = vpinfe.pop(MANIFEST_KEY, None)
@@ -88,7 +100,7 @@ def decode(data: dict[str, Any]) -> dict[str, Any]:
 
     user = record.get("User")
     if isinstance(user, dict):
-        record["User"] = _user_in(user, vpinfe)
+        record["User"] = _user_in(user, vpinfe, older=returning)
     for entry in record[TABLES_KEY].values():
         _table_user_in(entry)
     return record
@@ -121,6 +133,30 @@ def encode(record: dict[str, Any], slim: Iterable[str] = ()) -> dict[str, Any]:
     }
     out["vpinfe"] = vpinfe
     return out
+
+
+def _ratings_doubled(data: dict[str, Any]) -> dict[str, Any]:
+    """A copy of an older file with its ratings on today's scale, a table's own included."""
+    out = dict(data)
+    user = out.get("User")
+    if isinstance(user, dict) and "Rating" in user:
+        out["User"] = {**user, "Rating": half_stars(_stars(user["Rating"]) * 2)}
+    tables = out.get(TABLES_KEY)
+    if isinstance(tables, dict):
+        out[TABLES_KEY] = {key: _table_stars_doubled(entry) for key, entry in tables.items()}
+    return out
+
+
+def _table_stars_doubled(entry: Any) -> Any:
+    user = entry.get("user") if isinstance(entry, dict) else None
+    if isinstance(user, dict) and "rating" in user:
+        return {**entry, "user": {**user, "rating": half_stars(_stars(user["rating"]) * 2)}}
+    return entry
+
+
+def _stars(value: object) -> float:
+    amount = number(value)
+    return 0 if amount is None or amount <= 0 else min(amount, RATING_MAX // 2)
 
 
 def _listed(value: object) -> list[dict[str, Any]]:
@@ -233,18 +269,10 @@ def number(value: object) -> float | None:
     return found if isfinite(found) else None
 
 
-def stars_in(value: object) -> int | float:
-    """A 0 to 10 rating as stars; a half star stays a half."""
+def half_stars(value: object) -> int:
+    """A 0 to 10 rating, a half star a step; anything else a person's edit left is unrated."""
     amount = number(value)
-    if amount is None or amount <= 0:
-        return 0
-    stars = min(amount, 10) / 2
-    return int(stars) if stars == int(stars) else stars
-
-
-def stars_out(value: object) -> int:
-    amount = number(value)
-    return 0 if amount is None or amount <= 0 else int(round(min(amount, 5) * 2))
+    return 0 if amount is None or amount <= 0 else int(min(amount, RATING_MAX))
 
 
 def epoch_of(stamp: str) -> int | None:
@@ -256,16 +284,20 @@ def epoch_of(stamp: str) -> int | None:
     return int((parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).timestamp())
 
 
-def _user_in(user: dict[str, Any], vpinfe: dict[str, Any]) -> dict[str, Any]:
+def _user_in(user: dict[str, Any], vpinfe: dict[str, Any], older: bool = False) -> dict[str, Any]:
+    """`User` in memory. `older` is a file a 2.x or beta build last wrote: whole stars and
+    minutes, with any `vpinfe.run_time_seconds` the beta kept left as found."""
     out = dict(user)
-    out["Rating"] = stars_in(user.get("Rating"))
+    out["Rating"] = half_stars(_stars(user.get("Rating")) * 2 if older else user.get("Rating"))
     if "Favorite" in user:
         out["Favorite"] = str(user["Favorite"]).strip().lower() in ("1", "true")
     if isinstance(user.get("LastRun"), str):
         out["LastRun"] = epoch_of(user["LastRun"])
-    seconds = number(user.get("RunTime"))
-    if seconds is not None:
-        total = max(0, int(seconds))
+    amount = number(user.get("RunTime"))
+    if amount is not None and older:
+        out["RunTime"] = max(0, int(amount))
+    elif amount is not None:
+        total = max(0, int(amount))
         out["RunTime"] = total // 60
         if total:
             vpinfe["run_time_seconds"] = total
@@ -274,7 +306,7 @@ def _user_in(user: dict[str, Any], vpinfe: dict[str, Any]) -> dict[str, Any]:
 
 def _user_out(user: dict[str, Any], vpinfe: dict[str, Any]) -> dict[str, Any]:
     out = dict(user)
-    out["Rating"] = stars_out(user.get("Rating"))
+    out["Rating"] = half_stars(user.get("Rating"))
     if "Favorite" in user:
         out["Favorite"] = 1 if user["Favorite"] in (True, 1, "1", "true", "True") else 0
     if "LastRun" in user:
@@ -289,11 +321,11 @@ def _user_out(user: dict[str, Any], vpinfe: dict[str, Any]) -> dict[str, Any]:
 def _table_user_in(entry: dict[str, Any]) -> None:
     user = entry.get("user")
     if isinstance(user, dict) and "rating" in user:
-        entry["user"] = {**user, "rating": stars_in(user["rating"])}
+        entry["user"] = {**user, "rating": half_stars(user["rating"])}
 
 
 def _table_user_out(entry: dict[str, Any]) -> dict[str, Any]:
     user = entry.get("user")
     if isinstance(user, dict) and "rating" in user:
-        return {**entry, "user": {**user, "rating": stars_out(user["rating"])}}
+        return {**entry, "user": {**user, "rating": half_stars(user["rating"])}}
     return entry

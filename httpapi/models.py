@@ -768,7 +768,7 @@ class PlayerGameRecord(ApiModel):
     play_time_seconds: int = 0
     last_played: str | None = None
     best_score: PlayerBestScore | None = None
-    # 0-5, 0 unrated.
+    # 0-10, a half star a step, 0 unrated.
     rating: int = 0
 
 
@@ -3857,10 +3857,10 @@ class ManufacturerList(ApiModel):
 # --- Launch ----------------------------------------------------------------
 
 class RatingRequest(ApiModel):
-    """0-5, where 0 means unrated. A value outside that is refused rather than
-    clamped: silently storing 5 for a caller that sent 9 hides its bug."""
+    """0-10, where 0 means unrated and each step is half a star. A value outside that is
+    refused rather than clamped: silently storing 10 for a caller that sent 12 hides its bug."""
 
-    rating: int = Field(ge=0, le=5)
+    rating: int = Field(ge=0, le=10)
 
 
 class Rating(ApiModel):
@@ -4009,7 +4009,7 @@ class MarkEdit(ApiModel):
 
     game_id: str
     table_id: str | None = None
-    rating: int | None = Field(default=None, ge=0, le=5)
+    rating: int | None = Field(default=None, ge=0, le=10)
     tags: list[str] | None = None
     hidden: bool | None = None
     delete_nvram_on_close: bool | None = None

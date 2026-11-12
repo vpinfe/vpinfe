@@ -36,6 +36,7 @@ from common.games.game_metadata import (
     normalize_rating,
     play_record,
     table_tags,
+    whole_stars,
 )
 from common.games.tables import table_entries
 from common.i18n import t
@@ -130,9 +131,15 @@ def _match_year_range(criterion: object, game: GameRecord, table: dict) -> bool:
     return (start is None or year >= start) and (end is None or year <= end)
 
 
+def _steps_wanted(criterion: object) -> set[int]:
+    """The half-star steps a criterion names, 1 to 10, the scale a game is rated on. A rule
+    saved when a rule took whole stars is doubled once at startup, so it finds what it did."""
+    return {normalize_rating(v) for v in _values(criterion)}
+
+
 def _match_rating(criterion: object, game: GameRecord, table: dict) -> bool:
-    wanted = {normalize_rating(v) for v in _values(criterion)}
-    return game_rating(game) in wanted
+    """Exactly the one step the rule names: 4 finds 2 stars, 9 finds 4 and a half."""
+    return game_rating(game) in _steps_wanted(criterion)
 
 
 def _match_played(criterion: object, game: GameRecord, table: dict) -> bool:
@@ -163,7 +170,7 @@ def _match_no_tag(criterion: object, game: GameRecord, table: dict) -> bool:
 def _match_rating_or_higher(criterion: object, game: GameRecord, table: dict) -> bool:
     """Reads `rating` as a floor rather than a set. Declared as its own axis because
     that is how it is stored and how the UI presents it - a checkbox beside rating."""
-    wanted = {normalize_rating(v) for v in _values(criterion)}
+    wanted = _steps_wanted(criterion)
     return bool(wanted) and game_rating(game) >= min(wanted)
 
 
@@ -244,8 +251,8 @@ AXES: tuple[FilterAxis, ...] = (
                values_of=lambda game: [str(game_year(game) or "")],
                values_key="years"),
     FilterAxis("rating", GAME_SCOPE, "rating",
-               _match_rating, groups=lambda game: str(game_rating(game)),
-               choices=("1", "2", "3", "4", "5")),
+               _match_rating, groups=lambda game: str(whole_stars(game_rating(game))),
+               choices=tuple(str(step) for step in range(1, 11))),
     FilterAxis("rating_or_higher", GAME_SCOPE, "rating",
                _match_rating_or_higher, field="rating"),
     FilterAxis("played", GAME_SCOPE, "flag",
@@ -449,7 +456,7 @@ class GameListFilters:
 
     @staticmethod
     def _normalize_rating(value: Any) -> int:
-        """Normalize rating values to an integer in the range 0..5."""
+        """Normalize rating values to an integer in the range 0..10."""
         return normalize_rating(value)
 
     def _get_game_rating(self, game: GameRecord) -> int:

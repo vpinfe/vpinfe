@@ -13,6 +13,7 @@ from typing import Any
 from common import events
 from common.games import high_scores, info_files, ties, unwritten
 from common.games.game import Game, GameRecord
+from common.games.info_codec import RATING_MAX
 from common.games.info_file import GAME_ID_KEY, VPINFE_SECTION, MetaConfig
 from common.games.info_migration import MATCHED_BY_USER, MATCHED_ON_IMPORT, VPS_MATCHED_BY_KEY
 from common.games.tables import (
@@ -100,11 +101,27 @@ def default_table_entry(meta: Any, names: Any = None) -> dict[str, Any]:
 
 
 def normalize_rating(value: Any) -> int:
+    """A rating on the scale a game is rated on: 0 (unrated) to 10, a half star a step."""
     try:
         normalized = int(float(value))
     except (TypeError, ValueError):
         normalized = 0
-    return max(0, min(5, normalized))
+    return max(0, min(RATING_MAX, normalized))
+
+
+def star_words(halves: Any) -> str:
+    """A rating as the number of stars a person reads: `3`, `3½`, `½`. The count a rule or
+    a menu names, so it is never the stored 0 to 10."""
+    steps = normalize_rating(halves)
+    whole = f"{steps // 2}" if steps // 2 else ""
+    return whole + ("½" if steps % 2 else "") or "0"
+
+
+def whole_stars(rating: Any) -> int:
+    """A rating as whole stars, for a reader that draws no half star. The half rounds down,
+    except the lowest: a half star is a rating, so it reads as one star and never as none."""
+    halves = normalize_rating(rating)
+    return max(1, halves // 2) if halves else 0
 
 
 def as_string_list(value: Any) -> list[str]:

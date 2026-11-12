@@ -274,7 +274,7 @@ Core events say who played and who rated what, as plain lists and dicts. `game` 
 | `table.launched` | `game_id`, `table_id`, `source`; `up`, who the game counts for, taken once as it starts, each `{id, name, initials, owner, guest}`; and `private`, whether the game is Private |
 | `table.exited` | `table_id`, `source`. Announced on every path out |
 | `table.play_recorded` | the same as `table.launched`, once the game has ended and its play is written, with `private` read again then; `seconds` played; `reading`, the machine's high score table as read after the game, or None; `new_entries`, `[{player, entries}]` for each player with an entry new this game |
-| `game.rated` | `game_id`; `player`, whose rating it is, `{id, name, initials, owner, guest}`, or None on an install with no owner yet; and `rating`, 0 to 5, 0 meaning unrated. The owner's rating is the library's, anyone else's is in their own record |
+| `game.rated` | `game_id`; `player`, whose rating it is, `{id, name, initials, owner, guest}`, or None on an install with no owner yet; and `rating`, 0 to 10 in half stars, 0 meaning unrated. The owner's rating is the library's, anyone else's is in their own record |
 | `account.share_changed` | `player`, `{id, name, initials, owner, guest}`; `extension`, whose account it is; and `share`, what it is now. It carries every extension's, so one reads only its own |
 | `players.changed` | `state`, the whole roster: `{"players": [...]}`, each row as `ctx.players.roster()` gives it |
 | `game.selected` | The wheel stopped on a game. It carries core objects (`game`, `neighbors`) that are not part of this contract; subscribe to know that it happened |

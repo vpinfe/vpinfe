@@ -701,7 +701,8 @@ def _table_entries(table: dict[str, Any],
         # labelled for its own group is the File/Filename collision again.
         entries += [(HEADING, game_tables.FEATURES),
                     (FULL, lambda: _feature_chips(features))]
-    if context is not None:
+    # A table's own rating and tags are for telling one table of a game from another.
+    if context is not None and len(context.get("tables") or []) > 1:
         entries += _table_marks(context, table)
 
     # Can it run, and how. The dependencies are shown as evidence, never managed
