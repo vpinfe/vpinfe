@@ -603,6 +603,7 @@ Table Folder Name (Manufacturer Year)/
     ├── flyer.png
     ├── realdmd.png
     ├── realdmd-color.png
+    ├── fulldmd.png
     └── audio.mp3
 ```
 
@@ -618,6 +619,8 @@ Table Folder Name (Manufacturer Year)/
 | flyer.png         | Promotional flyer image                 |
 | realdmd.png       | Real DMD for use with ZeDMD            |
 | realdmd-color.png | Real DMD (Colorized) for use with ZeDMD |
+| fulldmd.png       | Full DMD (16:9) image                   |
+| fulldmd.mp4       | Full DMD (16:9) video                   |
 | audio.mp3         | Table audio track for frontend playback  |
 
 ## Using Your Own Media (User Media)

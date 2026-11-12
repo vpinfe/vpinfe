@@ -26,8 +26,8 @@ High-level flow:
 
 Standard filenames include:
 
-- Images: `table.png`, `fss.png`, `bg.png`, `dmd.png`, `wheel.png`, `logo.png`, `cab.png`, `realdmd.png`, `realdmd-color.png`, `flyer.png`, `instructioncard.png`, `topper.png`
-- Videos: `table.mp4`, `fss.mp4`, `bg.mp4`, `dmd.mp4`, `realdmd.mp4`, `realdmd-color.mp4`, `topper.mp4`, `loading.mp4`
+- Images: `table.png`, `fss.png`, `bg.png`, `dmd.png`, `wheel.png`, `logo.png`, `cab.png`, `realdmd.png`, `realdmd-color.png`, `fulldmd.png`, `flyer.png`, `instructioncard.png`, `topper.png`
+- Videos: `table.mp4`, `fss.mp4`, `bg.mp4`, `dmd.mp4`, `realdmd.mp4`, `realdmd-color.mp4`, `fulldmd.mp4`, `topper.mp4`, `loading.mp4`
 - Audio: `audio.mp3`, `audiolaunch.mp3`
 - Documents: `rulesheet.pdf` (also `.md`, `.txt`, `.html`, or a picture of the sheet such as `rulesheet.png`)
 
@@ -51,11 +51,14 @@ The token in brackets names the kind. Visual Pinball publishes these in its own 
 | DMD | `(DMD)` | Instruction card | `(InstructionCard)` |
 | Real DMD | `(RealDMD)` | Game flyer | `(Flyer)` |
 | Real color DMD | `(RealColorDMD)` | Rulesheet | `(RuleSheet)` |
+| Full DMD | `(FullDMD)` | | |
 | Topper | `(Topper)` | Loading video | `(Loading)` |
 | Cabinet | `(Cabinet)` | Audio | `(Audio)` |
 | FSS | `(FSS)` | Launch audio | `(AudioLaunch)` |
 
 A video uses its image counterpart's token and is told apart by extension, so `(Topper) Name.png` and `(Topper) Name.mp4` are different kinds.
+
+Full DMD is carried and listed only; nothing plays it. The library importer fills it from PinballX's `FullDMD Videos` folder and Popper's `Menu` folder, a picture or a video by extension. Popper calls the screen that `Menu` feeds Apron / FullDMD, so the importer assumes the folder holds Full DMD media; an Apron strip kept there arrives as a Full DMD file and is the person's to delete.
 
 Two of these differ from the published names. Visual Pinball calls the instruction card `(GameHelp)` and the game flyer `(GameInfo)`; VPinFE's own words for them are `(InstructionCard)` and `(Flyer)`, which say what the file is. VPinFE reads all four, and `(RuleCard)`, which it recommended earlier in 3.0 development, is read too. If several are present the preferred name wins, but a table-specific file always beats a folder-level one whichever token it uses. `(Cabinet)`, `(FSS)`, `(Logo)` and `(RuleSheet)` have no published equivalent and are VPinFE's own.
 

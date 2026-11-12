@@ -306,6 +306,8 @@
   "media.kind.real_dmd_color": "Color DMD",
   "media.kind.real_dmd_video": "Real DMD video",
   "media.kind.real_dmd_color_video": "Color DMD video",
+  "media.kind.full_dmd": "Full DMD",
+  "media.kind.full_dmd_video": "Full DMD video",
   "media.kind.instruction_card": "Instruction card",
   "media.kind.flyer": "Flyer",
   "media.kind.wheel": "Wheel",

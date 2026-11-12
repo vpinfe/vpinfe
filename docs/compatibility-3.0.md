@@ -1615,6 +1615,20 @@ say a half. Contract 1 themes read 0 to 5 and are not asked to change; a contrac
 `rating / 2` stars. Covered by `tests/api/test_game_rating.py`,
 `tests/games/test_info_schema_3.py` and `tests/curation/test_collection_filters.py`.
 
+**PAR-113 - Two Full DMD kinds: full_dmd and full_dmd_video.**
+*(machine-checked)* Themes gain two payload fields, `fullDMDImagePath` (`fulldmd.png`) and
+`fullDMDVideoPath` (`fulldmd.mp4`), both with the token `(FullDMD)`; every existing field is
+unchanged. The picture and the video share the token and the extension family tells them
+apart, the way `bg` and `dmd` do. A file named with `fulldmd`, `full dmd`, `full-dmd` or
+`full_dmd` in its name now classifies as Full DMD, where a name such as `Full DMD.png` used
+to land in the DMD slot. `getMedia(index, "full_dmd")` answers with a picture; a theme that
+wants the video asks for `"full_dmd_video"`.
+*Why:* a Full DMD is a 16:9 screen of its own, not the slim DMD strip, and Visual Pinball's
+file layout names it `(FullDMD)`. PinballX's FullDMD Videos folder and Popper's Menu folder,
+which Popper uses for that screen, import into these kinds.
+Covered by `tests/media/test_media_resolution.py`, `tests/media/test_asset_registry.py` and
+`tests/importer/test_mapping.py`.
+
 ## Explicitly *not* exceptions
 
 The theme-facing payload (`tables_json` keys, media path fields, stable values) and

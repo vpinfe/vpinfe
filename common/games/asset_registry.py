@@ -213,8 +213,8 @@ def _token_kinds(token: str) -> dict[str, str] | None:
 
 
 # Keyword-in-stem fallbacks when a media file is not named canonically.
-# Ordered; realdmd is handled ahead of this table so the scoreview keyword never claims a
-# realdmd file. The keyword people actually type stays as it is - it is what they name
+# Ordered; realdmd and fulldmd are handled ahead of this table so the scoreview keyword
+# never claims either. The keyword people actually type stays as it is - it is what they name
 # files - while the slot it fills is scoreview.
 _MEDIA_KEYWORDS: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
     (("wheel",), "wheel", None),
@@ -286,6 +286,13 @@ def match_media_kind(filename: str) -> str | None:
             return "real_dmd_color" if color else "real_dmd"
         if ext in VIDEO_EXTENSIONS:
             return "real_dmd_color_video" if color else "real_dmd_video"
+        return None
+
+    if "fulldmd" in stem or "full dmd" in stem or "full-dmd" in stem or "full_dmd" in stem:
+        if ext in IMAGE_EXTENSIONS:
+            return "full_dmd"
+        if ext in VIDEO_EXTENSIONS:
+            return "full_dmd_video"
         return None
 
     words = set(re.split(r"[^a-z0-9]+", stem))

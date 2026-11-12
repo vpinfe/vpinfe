@@ -129,6 +129,25 @@ class MediaTests(unittest.TestCase):
                          ["flyer", "flyer", "real_dmd_color_video", "real_dmd_video"])
         self.assertEqual(mapping.unmapped_kinds("pinballx", game, known), [])
 
+    def test_the_pinballx_fulldmd_folder_is_the_full_dmd_video(self) -> None:
+        known = (*KINDS, "full_dmd_video")
+
+        found = mapping.media_for("pinballx", self._with("FullDMD Videos"), known)
+
+        self.assertEqual(found, [("full_dmd_video", "/s/FullDMD Videos.png")])
+        self.assertEqual(mapping.unmapped_kinds("pinballx", self._with("FullDMD Videos"),
+                                                known), [])
+
+    def test_a_popper_menu_folder_is_full_dmd_and_the_extension_picks_picture_or_video(
+            self) -> None:
+        known = (*KINDS, "full_dmd", "full_dmd_video")
+        game = _game(media=(SourceMedia(source_kind="Menu", path="/m/Taxi.png"),
+                            SourceMedia(source_kind="Menu", path="/m/Taxi.mp4")))
+
+        found = mapping.media_for("popper", game, known)
+
+        self.assertEqual(sorted(kind for kind, _p in found), ["full_dmd", "full_dmd_video"])
+
     def test_a_flyer_with_front_inside2_and_back_is_pages_one_to_three_in_that_order(
             self) -> None:
         game = self._with("Flyer Images/Back", "Flyer Images/Inside2", "Flyer Images/Front")

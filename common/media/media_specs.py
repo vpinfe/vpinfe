@@ -190,6 +190,21 @@ MEDIA_SPECS = (
         family=VIDEO_FAMILY,
     ),
     MediaSpec(
+        "full_dmd",
+        attr="full_dmd_image_path",
+        payload_key="fullDMDImagePath",
+        filename_template="fulldmd.png",
+        token="(FullDMD)",
+    ),
+    MediaSpec(
+        "full_dmd_video",
+        attr="full_dmd_video_path",
+        payload_key="fullDMDVideoPath",
+        filename_template="fulldmd.mp4",
+        token="(FullDMD)",
+        family=VIDEO_FAMILY,
+    ),
+    MediaSpec(
         "flyer",
         attr="flyer_image_path",
         payload_key="FlyerImagePath",

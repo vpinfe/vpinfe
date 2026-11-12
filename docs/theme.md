@@ -1751,7 +1751,7 @@ and the root is the fallback, at every tier below.
 
 ### The kinds
 
-Twenty-two. `entry.media` lists the ones a game has a file for, using exactly these names, and
+Twenty-four. `entry.media` lists the ones a game has a file for, using exactly these names, and
 `/media/<table id>/<kind>` serves one.
 
 | Kind | Default filename | Spec token | Also accepted |
@@ -1770,6 +1770,8 @@ Twenty-two. `entry.media` lists the ones a game has a file for, using exactly th
 | `real_dmd_color` | `realdmd-color.png` | `(RealColorDMD)` | |
 | `real_dmd_video` | `realdmd.mp4` | `(RealDMD)` | |
 | `real_dmd_color_video` | `realdmd-color.mp4` | `(RealColorDMD)` | |
+| `full_dmd` | `fulldmd.png` | `(FullDMD)` | |
+| `full_dmd_video` | `fulldmd.mp4` | `(FullDMD)` | |
 | `playfield_video` | `table.mp4` | `(Playfield)` | |
 | `backglass_video` | `bg.mp4` | `(Backglass)` | |
 | `scoreview_video` | `dmd.mp4` | `(DMD)` | |

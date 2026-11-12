@@ -22,6 +22,8 @@
       "WheelImagePath": "/library/Attack from Mars (Bally 1995)/medias/wheel.png",
       "altColorExists": false,
       "altSoundExists": false,
+      "fullDMDImagePath": null,
+      "fullDMDVideoPath": null,
       "fullPathTable": "/library/Attack from Mars (Bally 1995)",
       "fullPathVPXfile": "/library/Attack from Mars (Bally 1995)/Attack from Mars (Bally 1995).vpx",
       "meta": {
@@ -92,6 +94,8 @@
       "WheelImagePath": null,
       "altColorExists": false,
       "altSoundExists": false,
+      "fullDMDImagePath": null,
+      "fullDMDVideoPath": null,
       "fullPathTable": "/library/Bare Table (Gottlieb 1980)",
       "fullPathVPXfile": "/library/Bare Table (Gottlieb 1980)/Bare Table (Gottlieb 1980).vpx",
       "meta": {
@@ -159,6 +163,8 @@
       "WheelImagePath": "/library/Congo (Williams 1995)/wheel.png",
       "altColorExists": false,
       "altSoundExists": false,
+      "fullDMDImagePath": null,
+      "fullDMDVideoPath": null,
       "fullPathTable": "/library/Congo (Williams 1995)",
       "fullPathVPXfile": "/library/Congo (Williams 1995)/Congo (Williams 1995).vpx",
       "meta": {
@@ -228,6 +234,8 @@
       "WheelImagePath": "/library/Medieval Madness (Williams 1997)/medias/wheels/monochrome/wheel.png",
       "altColorExists": false,
       "altSoundExists": false,
+      "fullDMDImagePath": null,
+      "fullDMDVideoPath": null,
       "fullPathTable": "/library/Medieval Madness (Williams 1997)",
       "fullPathVPXfile": "/library/Medieval Madness (Williams 1997)/Medieval Madness (Williams 1997).vpx",
       "meta": {

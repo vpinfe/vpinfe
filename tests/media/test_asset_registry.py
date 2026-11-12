@@ -102,6 +102,20 @@ class AssetRegistryTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 self.assertEqual(match_media_kind(filename), expected)
 
+    def test_a_full_dmd_file_uploads_to_its_own_kind_and_not_the_dmd_slot(self):
+        cases = [
+            ("fulldmd.png", "full_dmd"),
+            ("fulldmd.mp4", "full_dmd_video"),
+            ("(FullDMD) Attack from Mars.png", "full_dmd"),
+            ("(FullDMD) Attack from Mars.mp4", "full_dmd_video"),
+            ("Full DMD Attack from Mars.mp4", "full_dmd_video"),
+            ("Attack from Mars full-dmd.png", "full_dmd"),
+            ("dmd.mp4", "scoreview_video"),
+        ]
+        for filename, expected in cases:
+            with self.subTest(filename=filename):
+                self.assertEqual(match_media_kind(filename), expected)
+
     def test_spec_for_flags(self):
         self.assertFalse(spec_for("table").requires_game)
         self.assertTrue(spec_for("backglass").requires_game)

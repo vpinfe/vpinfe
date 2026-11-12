@@ -205,6 +205,34 @@ class RealDmdVideoTests(unittest.TestCase):
         self.assertEqual(spec_named(f"(RealDMD) {FOLDER}.png"), ("real_dmd", FOLDER, 1))
 
 
+class FullDmdTests(unittest.TestCase):
+    """The 16:9 screen, a picture and a video that share the one (FullDMD) token."""
+
+    def test_each_kind_resolves_at_every_tier(self) -> None:
+        for kind, ext in (("full_dmd", "png"), ("full_dmd_video", "mp4")):
+            fixed = f"fulldmd.{ext}"
+            for label, names, wanted in (
+                    ("table", [f"(FullDMD) {TABLE}.{ext}", f"(FullDMD) {FOLDER}.{ext}", fixed],
+                     f"(FullDMD) {TABLE}.{ext}"),
+                    ("game", [f"(FullDMD) {FOLDER}.{ext}", fixed],
+                     f"(FullDMD) {FOLDER}.{ext}"),
+                    ("fixed", [fixed], fixed)):
+                with self.subTest(kind=kind, tier=label):
+                    self.assertEqual(_resolve(names)[kind].name, wanted)
+
+    def test_a_picture_and_its_video_at_one_tier_both_resolve(self) -> None:
+        resolved = _resolve([f"(FullDMD) {FOLDER}.png", f"(FullDMD) {FOLDER}.mp4"])
+
+        self.assertEqual(resolved["full_dmd"].name, f"(FullDMD) {FOLDER}.png")
+        self.assertEqual(resolved["full_dmd_video"].name, f"(FullDMD) {FOLDER}.mp4")
+
+    def test_a_full_dmd_file_is_not_the_dmd(self) -> None:
+        resolved = _resolve(["fulldmd.png", "fulldmd.mp4"])
+
+        self.assertIsNone(resolved["scoreview"])
+        self.assertIsNone(resolved["scoreview_video"])
+
+
 class TokenAliasTests(unittest.TestCase):
     """VPX publishes (GameHelp) and (GameInfo); we lead with the plain-English name.
 

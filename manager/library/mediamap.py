@@ -24,8 +24,8 @@ from manager.library import mediapages, mediaview, uploads
 # Screens first, then everything else, with a rule between.
 SCREENS = ("topper", "topper_video", "backglass", "backglass_video",
            "scoreview", "scoreview_video", "real_dmd", "real_dmd_video",
-           "real_dmd_color", "real_dmd_color_video", "playfield", "playfield_video",
-           "playfield_fss")
+           "real_dmd_color", "real_dmd_color_video", "full_dmd", "full_dmd_video",
+           "playfield", "playfield_video", "playfield_fss")
 EXTRAS = ("wheel", "logo", "flyer", "cab", "instruction_card", "rule_sheet",
           "loading", "audio", "audio_launch")
 
@@ -48,6 +48,7 @@ TILE_AR = {
     "scoreview": 3.0, "scoreview_video": 3.0,
     "real_dmd": 4.0, "real_dmd_color": 4.0,
     "real_dmd_video": 4.0, "real_dmd_color_video": 4.0,
+    "full_dmd": 1.78, "full_dmd_video": 1.78,
     # docs/media-flow.md: an fss.png is "the same subject as a table.png photographed
     # differently", so it takes the playfield's shape rather than one of its own.
     "playfield": 1.78, "playfield_video": 1.78,

@@ -107,7 +107,8 @@ class WhatEachKindOffers(unittest.TestCase):
         "real_dmd": ("", "real_dmd"), "playfield_video": ("", "playfield_video"),
     }
     NOTHING_ONLINE = ("logo", "instruction_card", "loading", "audio_launch",
-                      "backglass_video", "real_dmd_video", "real_dmd_color_video")
+                      "backglass_video", "real_dmd_video", "real_dmd_color_video",
+                      "full_dmd", "full_dmd_video")
 
     def test_each_file_kind_is_listed_where_the_catalogs_list_it(self) -> None:
         for kind, (listed, manifest) in self.FILES.items():

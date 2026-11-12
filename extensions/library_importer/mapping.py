@@ -37,6 +37,7 @@ PINBALLX_KINDS = {
     "Real DMD Color Images": "real_dmd_color",
     "Real DMD Videos": "real_dmd_video",
     "Real DMD Color Videos": "real_dmd_color_video",
+    "FullDMD Videos": "full_dmd_video",
     "Instruction Cards": "instruction_card",
     **{f"Flyer Images/{page}": "flyer" for page in FLYER_PAGES},
     "Wheel Images": "wheel",
@@ -65,6 +66,7 @@ POPPER_KINDS = {
     "Wheel": "wheel",
     "Topper": "topper",
     "Loading": "loading",
+    "Menu": "full_dmd",
     "GameInfo": "flyer",
     "GameHelp": "instruction_card",
     "Audio": "audio",
@@ -78,6 +80,7 @@ MOVING = {
     "backglass": "backglass_video",
     "scoreview": "scoreview_video",
     "topper": "topper_video",
+    "full_dmd": "full_dmd_video",
 }
 VIDEO_SUFFIXES = frozenset({".mp4", ".m4v", ".mkv", ".avi", ".mov", ".webm", ".f4v"})
 # These two kinds take pictures only, and a source's folder for them can hold a clip or a

@@ -19,6 +19,7 @@ const MEDIA_PATH_FIELDS = {
   cab: "CabImagePath",
   real_dmd: "realDMDImagePath",
   real_dmd_color: "realDMDColorImagePath",
+  full_dmd: "fullDMDImagePath",
   flyer: "FlyerImagePath",
   instruction_card: "InstructionCardImagePath",
   topper: "TopperPath",
@@ -268,7 +269,7 @@ const VIDEO_KIND = { playfield: "playfield_video", backglass: "backglass_video",
                      loading: "loading" };
 // A video is asked for by name: a kind that is an image (`wheel`) has no video to answer with.
 const VIDEO_KINDS = new Set([...Object.values(VIDEO_KIND),
-                             "real_dmd_video", "real_dmd_color_video"]);
+                             "real_dmd_video", "real_dmd_color_video", "full_dmd_video"]);
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +317,8 @@ const VPINFE_RENAMED_MEMBERS = {
 // a lookup for a kind nobody serves returns nothing rather than complaining.
 const MEDIA_KINDS = [
   "backglass", "scoreview", "playfield", "playfield_fss", "wheel", "cab",
-  "real_dmd", "real_dmd_color", "real_dmd_video", "real_dmd_color_video", "flyer",
+  "real_dmd", "real_dmd_color", "real_dmd_video", "real_dmd_color_video",
+  "full_dmd", "full_dmd_video", "flyer",
   "playfield_video", "backglass_video", "scoreview_video", "audio", "instruction_card",
   "topper", "topper_video", "loading", "audio_launch", "rule_sheet", "logo",
 ];

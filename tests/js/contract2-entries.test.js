@@ -152,7 +152,7 @@ describe("media is named, and the URL follows from the name", () => {
 
   test("every video kind the media spec names is answered when the entry has it", async () => {
     const kinds = ["playfield_video", "backglass_video", "scoreview_video", "topper_video",
-                   "loading", "real_dmd_video", "real_dmd_color_video"];
+                   "loading", "real_dmd_video", "real_dmd_color_video", "full_dmd_video"];
     const everything = {
       ...PAYLOAD,
       entries: PAYLOAD.entries.map((entry, n) => (n === 0
