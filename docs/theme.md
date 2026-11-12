@@ -622,6 +622,11 @@ one for an element, say so on it:
 falls back to the other when the game has only one. The same element keeps its picture while
 the selection stays on one game, so a playing video is not restarted.
 
+Core draws on the first press of a run and again when the run pauses. A press that follows
+another within `vpin.mediaSettleMs` (150 ms) leaves the pictures as they were, so a player
+tapping through the wheel does not have full-size art fetched for every table passed. Set
+`vpin.mediaSettleMs = 0` to draw on every press.
+
 With `layout.enabled`, playfield art drawn this way is marked `vpinfe-playfield-media` and
 turned to fit the surface, as in [Letting core do it](#letting-core-do-it).
 

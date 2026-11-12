@@ -929,6 +929,12 @@ class VPinFECore {
     this.scrubAfterMs = 1000;
     this.scrubSettleMs = 200;
     this._scrub = null;
+    // A press that follows another within this long is part of a run, and the media drawn
+    // in this window waits for the run to pause. 0 draws on every press.
+    this.mediaSettleMs = 150;
+    this._mediaAt = null;
+    this._mediaMovedAt = 0;
+    this._mediaTimer = null;
     // A theme that draws the wheel while it scrubs says so (`vpin.scrubAware = true`) and
     // is sent a `TableIndexUpdate` with `scrubbing: true` for every step. One that does
     // not is sent nothing until the scrub ends.
@@ -2382,6 +2388,7 @@ class VPinFECore {
   #renderWindowMedia() {
     this.#showHeld();
     if (!this.enabled("core_media_window")) return;
+    if (this.#mediaWaits()) return;
     const held = this.#selectionHeld();
     for (const target of document.querySelectorAll("[data-vpin-media]")) {
       if (held) {
@@ -2393,6 +2400,24 @@ class VPinFECore {
       const kind = named ? this.#canonicalKind(named) : this.windowMediaKind;
       if (kind && MEDIA_KINDS.includes(kind)) this.#renderMediaInto(target, kind);
     }
+  }
+
+  // The first press of a run draws at once; the presses after it draw once, when it pauses.
+  #mediaWaits() {
+    const at = this._currentTableIndex;
+    const now = Date.now();
+    if (at === this._mediaAt) return this._mediaTimer !== null;
+    const inRun = now - this._mediaMovedAt < this.mediaSettleMs;
+    this._mediaAt = at;
+    this._mediaMovedAt = now;
+    clearTimeout(this._mediaTimer);
+    this._mediaTimer = null;
+    if (!inRun) return false;
+    this._mediaTimer = setTimeout(() => {
+      this._mediaTimer = null;
+      this.#renderWindowMedia();
+    }, this.mediaSettleMs);
+    return true;
   }
 
   #renderMediaInto(target, kind) {
@@ -3404,6 +3429,8 @@ class VPinFECore {
 
   #beginScrub(held) {
     if (!this.enabled("core_scrub") || !this.isController() || !this.atRoot) return;
+    clearTimeout(this._mediaTimer);
+    this._mediaTimer = null;
     this._scrub = { released: false, timer: null, from: this._currentTableIndex,
                     source: "user", held,
                     direction: held.action.endsWith("previous") ? "previous" : "next" };

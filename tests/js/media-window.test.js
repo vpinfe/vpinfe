@@ -31,6 +31,7 @@ const BRIDGE_DEFAULTS = {
 /** A core on a named window, with a page that may or may not offer a render target. */
 async function coreOn(windowName, { target = true, themeConfig = {} } = {}) {
   const { vpin, browser } = newCore({ windowName });
+  vpin.mediaSettleMs = 0;
   vpin.call = (method) => Promise.resolve(
     method === "get_theme_config" ? themeConfig : BRIDGE_DEFAULTS[method]);
   vpin.init();
@@ -52,6 +53,7 @@ async function coreOn(windowName, { target = true, themeConfig = {} } = {}) {
 async function started(windowName, { target = true, index = 0, quick, ask, slow,
                                      controllerAsked = null } = {}) {
   const { vpin, browser } = newCore({ windowName });
+  vpin.mediaSettleMs = 0;
   const sent = [];
   // The list this window is given, which a test can change before the next reload.
   const list = { rows: ROWS };
@@ -311,6 +313,7 @@ describe("core rendering the window's media", () => {
 
   test("an answer that beats the game list still draws once the list is here", async () => {
     const { vpin, browser } = newCore({ windowName: "backglass" });
+    vpin.mediaSettleMs = 0;
     let releaseTables;
     const tablesGate = new Promise((resolve) => { releaseTables = resolve; });
     vpin.call = (method) => Promise.resolve(
