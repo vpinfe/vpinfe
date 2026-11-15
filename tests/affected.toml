@@ -39,6 +39,11 @@ tests = [
   "tests/supportpackage/test_display_section.py",
 ]
 
+# The Mac signing request, which the invariants load by path rather than import.
+[[area]]
+paths = ["scripts/mac_signing.py"]
+tests = ["tests/invariants/test_mac_signing_outcomes.py"]
+
 # The list of test modules that predate the rule that a module says what it protects.
 [[area]]
 paths = ["tests/protects_baseline.txt"]

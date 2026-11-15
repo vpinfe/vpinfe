@@ -25,6 +25,9 @@
 # The parity gate's committed master snapshot - see docs/compatibility-3.0.md
 !tests/fixtures/parity_baseline_master.json
 
+# The DMG window the Mac signing layer hands over with the .app.
+!packaging/dmg-layout.json
+
 # The theme payload the JavaScript tests read. Committed on purpose: it is the only
 # thing tying tests/js/ to what Python actually builds.
 !tests/fixtures/theme_payload.json
