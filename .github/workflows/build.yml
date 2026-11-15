@@ -12,9 +12,15 @@ on:
   # artifacts on all three runners without pushing a tag is how that gets checked.
   # The release jobs refuse to run this way; see their conditions.
   workflow_dispatch:
+    inputs:
+      sign_mac:
+        description: Have the Mac builds signed and notarized (the result stays a run artifact, never a release)
+        type: boolean
+        default: false
 
+# Each job asks for what it needs; the publishing job is the only one that writes.
 permissions:
-  contents: write
+  contents: read
 
 # One run per branch. A second push supersedes the first rather than queueing behind
 # it - a tag run is exempt, because cancelling one halfway leaves a partial release.
@@ -28,7 +34,16 @@ env:
 jobs:
   build:
     timeout-minutes: 30
+    # id-token and attestations are for the Mac signing layer: the signing repository trusts
+    # a build only if it can prove it came from this workflow. See request-mac-signing.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
+      # The same test as request-mac-signing's `if`. True only when that job will run, so a
+      # branch push or a pull request uploads and attests nothing.
+      MAC_SIGN_REQUESTED: ${{ (vars.MAC_SIGNING || '1') != '0' && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.sign_mac)) }}
       DOF_VERSION: latest
       DOF_REPO: vpinfe/libdof-python
       DMDUTIL_VERSION: latest
@@ -194,10 +209,36 @@ jobs:
       # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
       # copied out of its DMG carries Finder info, which codesign refuses to sign over.
       # Identical for the full and slim builds, so it is written once and run twice.
-      - name: Package the .app as a signed DMG (macOS)
+      - name: Strip Finder attributes (macOS)
+        if: runner.os == 'macOS'
+        run: sudo xattr -rc dist
+        shell: bash
+
+      # The signing layer takes the .app as it is here, before the ad-hoc signature below.
+      # The DMG window comes from packaging/dmg-layout.json; the flags in the two create-dmg
+      # steps below spell out the same values, so change them together.
+      - name: Hand the full build to Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        run: python scripts/mac_signing.py prepare-input --app dist/VPinFE.app --out mac-sign-input/full
+        shell: bash
+
+      - name: Upload the full build for Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: mac-sign-input-full
+          path: mac-sign-input/full
+          retention-days: 7
+
+      - name: Attest the full build (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true' && github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: mac-sign-input/full/VPinFE.app.zip
+
+      - name: Package the .app as an ad-hoc signed DMG (macOS)
         if: runner.os == 'macOS'
         run: |
-          sudo xattr -rc dist
           codesign --force --deep --sign - dist/VPinFE.app
           codesign --verify --verbose dist/VPinFE.app
           create-dmg \
@@ -283,10 +324,33 @@ jobs:
       # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
       # copied out of its DMG carries Finder info, which codesign refuses to sign over.
       # Identical for the full and slim builds, so it is written once and run twice.
-      - name: Package the .app as a signed DMG (macOS Slim)
+      - name: Strip Finder attributes (macOS Slim)
+        if: runner.os == 'macOS'
+        run: sudo xattr -rc dist
+        shell: bash
+
+      - name: Hand the slim build to Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        run: python scripts/mac_signing.py prepare-input --app dist/VPinFE.app --out mac-sign-input/slim
+        shell: bash
+
+      - name: Upload the slim build for Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: mac-sign-input-slim
+          path: mac-sign-input/slim
+          retention-days: 7
+
+      - name: Attest the slim build (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true' && github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: mac-sign-input/slim/VPinFE.app.zip
+
+      - name: Package the .app as an ad-hoc signed DMG (macOS Slim)
         if: runner.os == 'macOS'
         run: |
-          sudo xattr -rc dist
           codesign --force --deep --sign - dist/VPinFE.app
           codesign --verify --verbose dist/VPinFE.app
           create-dmg \
@@ -311,13 +375,42 @@ jobs:
           path: dist/VPinFE.dmg
           retention-days: 30
 
+  # Mac signing is an optional layer: a separate signing repository signs and notarizes the two
+  # Mac builds and this workflow checks what comes back (see mac-signing.yml). It runs for a
+  # pushed tag, or a hand-started run that ticks sign_mac, and never for a pull request.
+  #
+  # A rejection fails this job, so release_bundle and publish_release do not run and nothing
+  # is published. If signing is withdrawn the job succeeds and the release goes out with the
+  # ad-hoc signed Mac builds, loudly marked unsigned.
+  #
+  # Safe to remove: delete this job, mac-signing.yml, the secrets MAC_SIGNING_TOKEN and
+  # MAC_SIGNING_REPO and the variable MAC_SIGNING, and undo the Mac signing
+  # parts of release_bundle and publish_release described in docs/mac-signing.md.
+  # To skip signing without removing anything, set the repository variable MAC_SIGNING to 0.
+  # Set the repository secret MAC_SIGNING_REPO to the signing repository (owner/name).
+  request-mac-signing:
+    needs: build
+    if: (vars.MAC_SIGNING || '1') != '0' && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.sign_mac))
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/mac-signing.yml
+    with:
+      mode: ${{ github.event_name == 'push' && 'release' || 'dev' }}
+      tag: ${{ github.event_name == 'push' && github.ref_name || '-' }}
+    secrets:
+      MAC_SIGNING_TOKEN: ${{ secrets.MAC_SIGNING_TOKEN }}
+      MAC_SIGNING_REPO: ${{ secrets.MAC_SIGNING_REPO }}
+
   release_bundle:
     timeout-minutes: 15
     # A hand-started run never releases, whatever it was started against - a tag can be
     # dispatched as readily as a branch, and "it only publishes on a tag push" should be
-    # true by construction rather than by reading the ref.
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch'
-    needs: build
+    # true by construction rather than by reading the ref. It also needs the build, and
+    # either a signing request that did not fail or none at all: a rejected request must
+    # stop the release, a skipped one (signing off) must not.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch' && needs.build.result == 'success' && (needs.request-mac-signing.result == 'success' || needs.request-mac-signing.result == 'skipped') }}
+    needs: [build, request-mac-signing]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -340,6 +433,9 @@ jobs:
             triplet: macos-arm64-slim
 
     steps:
+      # When signing succeeded the signing workflow has already replaced the Mac artifacts with
+      # the signed builds, so the same names are read either way. Both hold a VPinFE.dmg, so
+      # the zip below is made the same way and keeps its name.
       - name: Download build artifact
         uses: actions/download-artifact@v8
         with:
@@ -372,9 +468,16 @@ jobs:
 
   publish_release:
     timeout-minutes: 15
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch'
-    needs: release_bundle
+    # release_bundle only runs when nothing was rejected, so its success is the gate.
+    # request-mac-signing is listed to read its result; it may have been skipped.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch' && needs.release_bundle.result == 'success' }}
+    needs: [release_bundle, request-mac-signing]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
+    env:
+      MAC_SIGNED: ${{ needs.request-mac-signing.outputs.signed == 'true' }}
+      DISABLE_MSG: 'Set the repository variable MAC_SIGNING to 0 to skip signing, or follow "Remove Mac signing" to remove it permanently.'
 
     steps:
       - name: Checkout repository
@@ -397,9 +500,11 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           tag = "${{ github.ref_name }}"
+          mac_signed = os.environ["MAC_SIGNED"] == "true"
           release_dir = Path("release")
           assets = {}
 
@@ -412,6 +517,8 @@ jobs:
                   "file": name,
                   "sha256": sha,
               }
+              if triplet.startswith("macos-"):
+                  assets[triplet]["mac_signed"] = mac_signed
 
           manifest = {
               "version": tag,
@@ -423,6 +530,32 @@ jobs:
               encoding="utf-8",
           )
           PY
+
+      # The notes are published from a copy so an unsigned release can say so without
+      # touching RELEASE_NOTES.md in the tree.
+      - name: Prepare the release notes
+        env:
+          SIGN_RESULT: ${{ needs.request-mac-signing.result }}
+          SIGN_REASON: ${{ needs.request-mac-signing.outputs.reason }}
+        run: |
+          cp RELEASE_NOTES.md release-notes.txt
+          if [[ "$MAC_SIGNED" != "true" ]]; then
+            if [[ "$SIGN_RESULT" == "skipped" ]]; then
+              reason="Mac signing is switched off by the repository variable MAC_SIGNING"
+            else
+              reason="${SIGN_REASON:-signing did not return a signed build}"
+            fi
+            echo "::warning title=Mac builds in this release are unsigned::${reason}. ${DISABLE_MSG}"
+            {
+              echo "### Mac builds in this release are unsigned"
+              echo
+              echo "${reason}."
+              echo
+              echo "${DISABLE_MSG}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '\n%s\n' "Mac builds in this release are unsigned" >> release-notes.txt
+          fi
+        shell: bash
 
       - name: Publish GitHub release assets
         env:
@@ -444,10 +577,10 @@ jobs:
           fi
 
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md "${flags[@]}"
+            gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.txt "${flags[@]}"
             gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
           else
             gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
-              --notes-file RELEASE_NOTES.md \
+              --notes-file release-notes.txt \
               --verify-tag "${flags[@]}"
           fi

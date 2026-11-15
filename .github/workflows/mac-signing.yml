@@ -1,0 +1,225 @@
+# Mac signing - an optional layer, called by the request-mac-signing job in build.yml.
+#
+# It asks a separate signing repository to sign and notarize the two Mac builds, waits for the
+# answer, checks what came back and puts the signed builds in place of the ad-hoc ones, under the
+# same artifact names (build-macos-arm64, build-macos-arm64-slim). The certificate and the notarization key never exist in this repository.
+#
+# Everything here is safe to remove: deleting this file, the request-mac-signing job in build.yml,
+# the secrets MAC_SIGNING_TOKEN and MAC_SIGNING_REPO and the variable MAC_SIGNING leaves the
+# ad-hoc signed Mac builds the workflow made before.
+# To skip signing without removing anything, set the repository variable MAC_SIGNING to 0.
+# The steps are in docs/mac-signing.md under "Remove Mac signing".
+name: Mac signing
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: release (a pushed tag) or dev (a run started by hand)
+        type: string
+        required: true
+      tag:
+        description: The release tag, or - for a run started by hand
+        type: string
+        required: true
+    secrets:
+      MAC_SIGNING_TOKEN:
+        description: Lets this workflow start a run in the signing repository
+        required: false
+      MAC_SIGNING_REPO:
+        description: The signing repository, as owner/name. A secret so every log masks it. Empty counts as withdrawn.
+        required: false
+    outputs:
+      signed:
+        description: "true when the Mac builds were signed, false when they were not"
+        value: ${{ jobs.finish.outputs.signed }}
+      reason:
+        description: Why they were not, or what was done
+        value: ${{ jobs.finish.outputs.reason }}
+
+permissions:
+  contents: read
+
+env:
+  DISABLE_MSG: 'Set the repository variable MAC_SIGNING to 0 to skip signing, or follow "Remove Mac signing" to remove it permanently.'
+
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    # Ten minutes to find the signing run and an hour for it to finish.
+    timeout-minutes: 80
+    # Write access, because GitHub lists a draft release only to a token that can push.
+    permissions:
+      contents: write
+    outputs:
+      outcome: ${{ steps.request.outputs.outcome }}
+      reason: ${{ steps.request.outputs.reason }}
+      draft_id: ${{ steps.request.outputs.draft_id }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/mac_signing.py
+          persist-credentials: false
+
+      - name: Request signing
+        id: request
+        env:
+          MAC_SIGNING_REPO: ${{ secrets.MAC_SIGNING_REPO }}
+          MAC_SIGNING_TOKEN: ${{ secrets.MAC_SIGNING_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MAC_SIGN_MODE: ${{ inputs.mode }}
+          MAC_SIGN_TAG: ${{ inputs.tag }}
+        run: python3 scripts/mac_signing.py request
+        shell: bash
+
+      - name: Delete a draft the signing left behind
+        if: always() && steps.request.outputs.outcome == 'rejected'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_NAME: mac-signing-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.draft and (.name == \"${DRAFT_NAME}\" or .tag_name == \"${DRAFT_NAME}\")) | .id" |
+            while read -r id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${id}"
+            done
+        shell: bash
+
+  collect:
+    needs: request
+    if: needs.request.outputs.outcome == 'signed'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRAFT_ID: ${{ needs.request.outputs.draft_id }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/mac_signing.py
+          persist-credentials: false
+
+      - name: Download the signed builds
+        run: |
+          mkdir signed
+          for name in VPinFE-full.dmg VPinFE-slim.dmg result.json; do
+            asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_ID}" \
+              --jq ".assets[] | select(.name == \"${name}\") | .id")
+            if [[ -z "$asset" ]]; then
+              echo "::error title=The signed build is incomplete::${name} is not in the draft. ${DISABLE_MSG}"
+              exit 1
+            fi
+            gh api -H "Accept: application/octet-stream" \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/${asset}" > "signed/${name}"
+          done
+          ls -l signed
+        shell: bash
+
+      # Checked again here because this repository does not take the signing repository's word
+      # for it: what is accepted is what macOS itself accepts, signed by the team the result names.
+      - name: Check what came back
+        env:
+          EXPECT_REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECT_SHA: ${{ github.sha }}
+        run: |
+          fail() {
+            echo "::error title=The signed build does not check out::$1. ${DISABLE_MSG}"
+            exit 1
+          }
+          python3 scripts/mac_signing.py check-result --dir signed
+          result_team=$(jq -r '.team_id' signed/result.json)
+          team_of() {
+            codesign -dv --verbose=4 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p'
+          }
+          for build in full slim; do
+            dmg="signed/VPinFE-${build}.dmg"
+            mount="${RUNNER_TEMP}/signed-${build}"
+            codesign --verify --strict --verbose=2 "$dmg" || fail "the ${build} disk image's signature is not valid"
+            [[ "$(team_of "$dmg")" == "$result_team" ]] || fail "the ${build} disk image is not signed by team ${result_team}"
+            spctl -a -vv --type open --context context:primary-signature "$dmg" || fail "macOS does not accept the ${build} disk image"
+            xcrun stapler validate "$dmg" || fail "the ${build} disk image has no notarization ticket"
+            mkdir -p "$mount"
+            hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" -quiet
+            app="${mount}/VPinFE.app"
+            ok=true
+            codesign --verify --strict --deep --verbose=2 "$app" || ok=false
+            [[ "$(team_of "$app")" == "$result_team" ]] || ok=false
+            spctl -a -vv --type exec "$app" || ok=false
+            xcrun stapler validate "$app" || ok=false
+            hdiutil detach "$mount" -quiet
+            [[ "$ok" == true ]] || fail "the app inside the ${build} disk image is not signed and notarized by team ${result_team}"
+          done
+        shell: bash
+
+      - name: Stage the signed builds
+        run: |
+          mkdir -p upload/full upload/slim
+          cp signed/VPinFE-full.dmg upload/full/VPinFE.dmg
+          cp signed/VPinFE-slim.dmg upload/slim/VPinFE.dmg
+        shell: bash
+
+      # The signed disk image takes the place of the ad-hoc one, so a run lists one Mac
+      # download per variant, named like the Linux and Windows ones.
+      - name: Replace the ad-hoc full build with the signed one
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-macos-arm64
+          path: upload/full/VPinFE.dmg
+          retention-days: 30
+          overwrite: true
+
+      - name: Replace the ad-hoc slim build with the signed one
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-macos-arm64-slim
+          path: upload/slim/VPinFE.dmg
+          retention-days: 30
+          overwrite: true
+
+      - name: Delete the draft release
+        if: always()
+        run: gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_ID}"
+        shell: bash
+
+  finish:
+    needs: [request, collect]
+    if: always()
+    runs-on: ubuntu-latest
+    # Deleting the hand-over copies needs write access to this run's artifacts.
+    permissions:
+      actions: write
+    outputs:
+      signed: ${{ steps.result.outputs.signed }}
+      reason: ${{ steps.result.outputs.reason }}
+    steps:
+      - name: Say whether the Mac builds are signed
+        id: result
+        env:
+          OUTCOME: ${{ needs.request.outputs.outcome }}
+          REASON: ${{ needs.request.outputs.reason }}
+          COLLECT: ${{ needs.collect.result }}
+        run: |
+          signed=false
+          if [[ "$OUTCOME" == "signed" && "$COLLECT" == "success" ]]; then
+            signed=true
+          fi
+          echo "signed=${signed}" >> "$GITHUB_OUTPUT"
+          echo "reason=${REASON}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      # The copies handed over for signing are no use to anyone once it is finished. They go
+      # unless signing was rejected or the check here failed, because "Re-run failed jobs"
+      # needs them.
+      - name: Delete the copies handed over for signing
+        if: always() && (needs.collect.result == 'success' || needs.request.outputs.outcome == 'withdrawn')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+            --jq '.artifacts[] | select(.name | startswith("mac-sign-input-")) | .id' |
+            while read -r id; do
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}"
+            done
+        shell: bash

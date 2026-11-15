@@ -1,0 +1,10 @@
+{
+  "volname": "VPinFE",
+  "app_name": "VPinFE.app",
+  "hide_extension": true,
+  "window_pos": [200, 120],
+  "window_size": [610, 475],
+  "icon_size": 100,
+  "app_icon_pos": [175, 190],
+  "app_drop_link_pos": [425, 190]
+}
