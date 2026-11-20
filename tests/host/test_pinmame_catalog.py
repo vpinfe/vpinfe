@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import struct
 import subprocess
 import sys
 import unittest
@@ -19,7 +20,7 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from common.games.asset_resolver import apply_audit, resolve_rom_chain
-from common.host import pinmame_catalog, pinmame_worker
+from common.host import pinmame_catalog, pinmame_worker, tools
 
 
 class LocatorTests(unittest.TestCase):
@@ -106,6 +107,129 @@ class LocatorTests(unittest.TestCase):
         self.assertFalse(available)
         assert reason is not None
         self.assertIn("libpinmame", reason)
+
+
+def _pe(bits: int) -> bytes:
+    """The start of a Windows library, enough for its header to name a machine."""
+    machine = {32: 0x14C, 64: 0x8664}[bits]
+    head = bytearray(64)
+    head[:2] = b"MZ"
+    head[0x3C:0x40] = (64).to_bytes(4, "little")
+    return bytes(head) + b"PE\0\0" + machine.to_bytes(2, "little") + bytes(32)
+
+
+APP_BITS = struct.calcsize("P") * 8
+OTHER_BITS = 32 if APP_BITS == 64 else 64
+
+
+class LibraryChoiceTests(unittest.TestCase):
+    """Protects: (d) a Windows install holding both a 32-bit and a 64-bit PinMAME gave
+    every table's audit the one that cannot load."""
+
+    def setUp(self) -> None:
+        os.environ.pop(pinmame_catalog.ENV_OVERRIDE, None)
+        pinmame_catalog.clear_cache()
+        self.addCleanup(pinmame_catalog.clear_cache)
+
+    def _install(self, tmp: str, **libraries: bytes) -> str:
+        binary = Path(tmp) / "VPinballX_BGFX.exe"
+        binary.write_bytes(b"MZ")
+        for name, content in libraries.items():
+            (Path(tmp) / f"{name}.dll").write_bytes(content)
+        return str(binary)
+
+    def test_the_library_for_this_bitness_wins_whatever_its_name_sorts_as(self) -> None:
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame32=_pe(OTHER_BITS), libpinmame64=_pe(APP_BITS))
+
+            found = pinmame_catalog.find_library(binary)
+
+        assert found is not None
+        self.assertEqual(found.name, "libpinmame64.dll")
+
+    def test_a_library_only_for_the_other_bitness_is_none_and_is_named(self) -> None:
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame32=_pe(OTHER_BITS))
+
+            found = pinmame_catalog.find_library(binary)
+            set_aside = pinmame_catalog.unusable(binary)
+            available, reason = pinmame_catalog.availability(binary)
+
+        self.assertIsNone(found)
+        self.assertEqual(set_aside, [f"libpinmame32.dll ({OTHER_BITS}-bit)"])
+        self.assertFalse(available)
+        assert reason is not None
+        self.assertIn("will not load", reason)
+
+    def test_a_library_whose_header_cannot_be_read_is_still_offered(self) -> None:
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame=b"not a header")
+
+            found = pinmame_catalog.find_library(binary)
+
+        assert found is not None
+        self.assertEqual(found.name, "libpinmame.dll")
+
+    def test_a_library_that_will_not_load_hands_over_to_the_next(self) -> None:
+        asked: list[str] = []
+
+        def ask(library: str, roms_dir: str, set_name: str) -> dict:
+            asked.append(Path(library).name)
+            if library.endswith("libpinmame1.dll"):
+                return {"error": "OSError: not a valid Win32 application", "load_failed": True}
+            return {set_name: {"catalog": True, "found": True}}
+
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame1=b"x", libpinmame2=b"x")
+            with mock.patch.object(pinmame_catalog, "_ask", side_effect=ask):
+                with self.assertLogs("vpinfe.common.host.pinmame_catalog", level="WARNING"):
+                    first = pinmame_catalog.lookup(binary, tmp, "afm_113b")
+                second = pinmame_catalog.lookup(binary, tmp, "mm_109c")
+
+        assert first is not None and second is not None
+        self.assertEqual(asked, ["libpinmame1.dll", "libpinmame2.dll", "libpinmame2.dll"])
+
+    def test_a_library_that_will_not_load_is_not_tried_again_for_the_next_table(self) -> None:
+        fake = mock.Mock(return_value={"error": "OSError: no", "load_failed": True})
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame=b"x")
+            with mock.patch.object(pinmame_catalog, "_ask", fake):
+                with self.assertLogs("vpinfe.common.host.pinmame_catalog", level="WARNING"):
+                    results = [pinmame_catalog.lookup(binary, tmp, name)
+                               for name in ("afm_113b", "mm_109c", "tz_92")]
+            available, reason = pinmame_catalog.availability(binary)
+
+        self.assertEqual(results, [None, None, None])
+        self.assertEqual(fake.call_count, 1)
+        self.assertFalse(available)
+        assert reason is not None
+        self.assertIn("will not load", reason)
+
+    def test_a_helper_that_keeps_failing_is_given_up_on_after_a_few_goes(self) -> None:
+        fake = mock.Mock(side_effect=BrokenPipeError)
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame=b"x")
+            with mock.patch.object(pinmame_catalog, "_ask", fake):
+                with self.assertLogs("vpinfe.common.host.pinmame_catalog", level="WARNING"):
+                    for index in range(pinmame_catalog.FAILURES_BEFORE_SKIP + 2):
+                        pinmame_catalog.lookup(binary, tmp, f"set{index}")
+
+        self.assertEqual(fake.call_count, pinmame_catalog.FAILURES_BEFORE_SKIP)
+
+    def test_a_library_that_has_answered_is_not_given_up_on_for_failures_after(self) -> None:
+        answer = {"afm_113b": {"catalog": True, "found": True}}
+        outcomes = [answer] + [BrokenPipeError] * (pinmame_catalog.FAILURES_BEFORE_SKIP + 1)
+        fake = mock.Mock(side_effect=outcomes)
+        with TemporaryDirectory() as tmp:
+            binary = self._install(tmp, libpinmame=b"x")
+            with mock.patch.object(pinmame_catalog, "_ask", fake):
+                with self.assertLogs("vpinfe.common.host.pinmame_catalog", level="WARNING"):
+                    for index in range(len(outcomes)):
+                        pinmame_catalog.lookup(binary, tmp, f"set{index}")
+            found = pinmame_catalog.find_library(binary)
+
+        self.assertEqual(fake.call_count, len(outcomes))
+        self.assertIsNotNone(found, "one table that crashes the helper must not end the audit")
 
 
 class HelperCommandTests(unittest.TestCase):
@@ -220,6 +344,24 @@ class WorkerContractTests(unittest.TestCase):
         self.assertTrue(all(entry is not None and entry["found"] for entry in found))
         self.assertEqual(popen.call_count, 1)
 
+    def test_the_helper_starts_without_a_window_of_its_own(self) -> None:
+        process = mock.Mock()
+        process.poll.return_value = None
+        process.stdout.readline.return_value = json.dumps(
+            {"afm_113b": {"catalog": True, "found": True}}) + "\n"
+        with TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "VPinballX_BGFX"
+            binary.write_bytes(b"elf")
+            (Path(tmp) / "libpinmame.so").write_bytes(b"so")
+
+            pinmame_catalog.clear_cache()
+            self.addCleanup(pinmame_catalog.clear_cache)
+            with mock.patch.object(pinmame_catalog.subprocess, "Popen",
+                                   return_value=process) as popen:
+                pinmame_catalog.lookup(str(binary), tmp, "afm_113b")
+
+        self.assertEqual(popen.call_args.kwargs["creationflags"], tools.NO_WINDOW)
+
     def test_a_helper_that_stops_answering_is_replaced_for_the_next_lookup(self) -> None:
         dead = mock.Mock()
         dead.poll.return_value = None
@@ -298,11 +440,27 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(answers[1], {"afm_113b": {"catalog": False}})
 
     def test_a_library_that_will_not_open_is_one_error_line(self) -> None:
-        answers = self._serve([json.dumps({"roms_dir": "/a", "names": ["x"]})],
-                              OSError("no such library"))
+        error = OSError("no such library")
+        error.library_load = True  # type: ignore[attr-defined]
+        answers = self._serve([json.dumps({"roms_dir": "/a", "names": ["x"]})], error)
 
         self.assertEqual(len(answers), 1)
         self.assertIn("no such library", answers[0]["error"])
+        self.assertTrue(answers[0]["load_failed"], "the app skips a library that says this")
+
+    def test_a_setup_failure_after_the_library_opened_does_not_blame_the_library(self) -> None:
+        answers = self._serve([json.dumps({"roms_dir": "/a", "names": ["x"]})],
+                              OSError("temp folder is read-only"))
+
+        self.assertFalse(answers[0]["load_failed"])
+
+    def test_a_failed_request_does_not_say_the_library_would_not_load(self) -> None:
+        audit = mock.Mock()
+        audit.lookup.side_effect = RuntimeError("bad set")
+
+        answers = self._serve([json.dumps({"roms_dir": "/a", "names": ["x"]})], audit)
+
+        self.assertNotIn("load_failed", answers[0])
 
 
 def _shipped_library() -> str | None:

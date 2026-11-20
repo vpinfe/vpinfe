@@ -51,7 +51,11 @@ class Audit:
     """The library, opened once; each lookup points it at a roms folder and asks."""
 
     def __init__(self, lib_path: str) -> None:
-        self._lib = ctypes.CDLL(lib_path)
+        try:
+            self._lib = ctypes.CDLL(lib_path)
+        except OSError as exc:
+            exc.library_load = True  # type: ignore[attr-defined]
+            raise
         config = PinmameConfig()
         ctypes.memset(ctypes.byref(config), 0, ctypes.sizeof(config))
         # The library insists on a writable vpm home even for catalog reads.
@@ -110,7 +114,9 @@ def serve(lib_path: str, requests: Iterable[str], answers: TextIO) -> int:
     try:
         audit = Audit(lib_path)
     except Exception as exc:
-        print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}), file=answers, flush=True)
+        print(json.dumps({"error": f"{type(exc).__name__}: {exc}",
+                          "load_failed": getattr(exc, "library_load", False)}),
+              file=answers, flush=True)
         return 1
     try:
         for line in requests:

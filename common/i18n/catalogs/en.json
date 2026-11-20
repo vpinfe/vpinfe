@@ -6253,6 +6253,7 @@
   "error.path.not_set": "{name} has no path set",
   "error.path.not_reachable": "{name} is not reachable: {reason}",
   "error.pinmame.library_not_found": "libpinmame is not in VPX's folder",
+  "error.pinmame.library_unusable": "The libpinmame in VPX's folder will not load here",
   "error.pinmame.no_launcher": "This device has no launcher, so there is no VPX to borrow libpinmame from",
   "error.players.card_initials": "A card's initials are one to three characters",
   "error.players.card_not_for": "{extension} does not read this kind of card",

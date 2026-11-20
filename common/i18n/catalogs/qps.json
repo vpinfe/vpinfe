@@ -6253,6 +6253,7 @@
   "error.path.not_set": "{name} ĥàš ñö þàţĥ šèţ",
   "error.path.not_reachable": "{name} îš ñöţ řèàçĥàƀŀè: {reason}",
   "error.pinmame.library_not_found": "ŀîƀþîñɱàɱè îš ñöţ îñ ṼÞẊ'š ƒöŀđèř",
+  "error.pinmame.library_unusable": "Ţĥè ŀîƀþîñɱàɱè îñ ṼÞẊ'š ƒöŀđèř ŵîŀŀ ñöţ ŀöàđ ĥèřè",
   "error.pinmame.no_launcher": "Ţĥîš đèṽîçè ĥàš ñö ŀàûñçĥèř, šö ţĥèřè îš ñö ṼÞẊ ţö ƀöřřöŵ ŀîƀþîñɱàɱè ƒřöɱ",
   "error.players.card_initials": "À çàřđ'š îñîţîàŀš àřè öñè ţö ţĥřèè çĥàřàçţèřš",
   "error.players.card_not_for": "{extension} đöèš ñöţ řèàđ ţĥîš ķîñđ öƒ çàřđ",

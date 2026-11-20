@@ -1251,6 +1251,7 @@
   "error.path.unwritable": "ede44c1358c0",
   "error.path.wrong_suffix": "879972d0d1e7",
   "error.pinmame.library_not_found": "bcdc6e80ed9d",
+  "error.pinmame.library_unusable": "c16c1bfbc276",
   "error.pinmame.no_launcher": "e1fde4013c5e",
   "error.players.card_initials": "d4e9d2fb3f85",
   "error.players.card_not_for": "78ea1f9a5782",

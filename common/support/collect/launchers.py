@@ -175,17 +175,18 @@ def _libraries(default: launchers.Launcher | None) -> list[str]:
             f"- **DOF:** {_library(dof_service.find_dof_file(*dof_service._RUNNER_NAMES))}",
             "- **libdmdutil:** " + _library(libdmdutil_service.find_libdmdutil_file(
                 *libdmdutil_service._WRAPPER_NAMES)),
-            f"- **PinMAME:** {_library(pinmame_catalog.find_library(program))}"]
+            f"- **PinMAME:** {_library(*pinmame_catalog.inventory(program))}"]
 
 
-def _library(path: Path | None) -> str:
+def _library(path: Path | None, set_aside: tuple[str, ...] | list[str] = ()) -> str:
+    note = f"; not usable: {', '.join(set_aside)}" if set_aside else ""
     if path is None:
-        return "Not present"
+        return "Not present" + note
     try:
         when = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%d")
     except OSError:
-        return "Present"
-    return f"Present, modified {when}"
+        return "Present" + note
+    return f"Present, modified {when}{note}"
 
 
 def _last_launch() -> list[str]:
