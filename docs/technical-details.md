@@ -190,6 +190,14 @@ Runtime state written by VPinFE, not shown as a setting.
 | `attract_order` | choice (random, in_order) | `random` | Random shows every game once before any repeats |
 | `attract_on_return` | choice (restore, stay) | `restore` | When a Button Is Pressed |
 | `attract_audio` | bool | `false` | Play Game Sound |
+| `loading_screen` | choice (table_video, table_image, table_playfield, theme_video, theme_image, my_video, my_image, spinner, off) | `table_video` | Loading Screen |
+| `loading_screen_fallback` | choice (table_video, table_image, table_playfield, theme_video, theme_image, my_video, my_image, spinner) | `table_image` | Loading Screen |
+| `loading_video_file` | string |  | Loading Video You Choose |
+| `loading_image_file` | string |  | Loading Image You Choose |
+| `loading_screen_ends` | choice (stop, repeat) | `stop` | When the Loading Video Ends |
+| `launch_audio` | choice (table, theme, mine, off) | `table` | Launch Audio |
+| `launch_audio_fallback` | choice (table, theme, mine, silence) | `silence` | Launch Audio |
+| `launch_audio_file` | string |  | Launch Audio You Choose |
 | `experimental_table_focus` | bool | `false` | Experimental Table Focus |
 
 ### `themes`

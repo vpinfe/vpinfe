@@ -14,6 +14,7 @@ from common.config.config_access import cfg_get
 from common.config.config_store import ConfigStore
 from common.config.paths import THEMES_DIR, VPINFE_INI_PATH
 from common.i18n import t
+from common.media import theme_loading
 from common.online.theme_level import OLDEST_CONTRACT, declared_contract
 from common.online.themes import ThemeRegistry
 from common.settings import config_service, theme_options
@@ -158,6 +159,40 @@ def attract_left_to_the_theme(theme_key: str, registry: ThemeRegistry | None = N
     if declared_contract(theme_dir) <= OLDEST_CONTRACT:
         return ATTRACT_TWO_X
     return ""
+
+
+NO_LOADING: dict[str, Any] = {"video": "", "image": "", "audio": "", "own": False}
+
+
+def _with_option_values(config: dict[str, Any] | None, values: dict[str, Any]) -> dict[str, Any]:
+    """The theme's config.json with its option values laid over it, the way the launch reads
+    it. An option's key is a dotted path into the config."""
+    merged: dict[str, Any] = json.loads(json.dumps(config or {}))
+    for dotted, value in values.items():
+        node = merged
+        *parents, leaf = str(dotted).split(".")
+        for part in parents:
+            child = node.get(part)
+            if not isinstance(child, dict):
+                child = node[part] = {}
+            node = child
+        node[leaf] = value
+    return merged
+
+
+def loading_of_the_theme(theme_key: str, registry: ThemeRegistry | None = None,
+                         ) -> dict[str, Any]:
+    """What the theme says about the loading screen: the video, image and sound it names
+    (paths inside its folder, "" for none) and whether it draws its own screen, as the launch
+    reads it: a theme that does not say takes it from its contract."""
+    theme_dir = get_installed_theme_dir(theme_key, registry)
+    if theme_dir is None:
+        return dict(NO_LOADING)
+    config = _with_option_values(_read_json_object(theme_dir / "config.json"),
+                                 get_theme_option_values(theme_key, registry))
+    on_by_default = declared_contract(theme_dir) > OLDEST_CONTRACT
+    return {**theme_loading.files(theme_dir, config),
+            "own": theme_loading.draws_its_own(config, on_by_default)}
 
 
 def load_theme_option_schema(

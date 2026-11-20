@@ -283,6 +283,13 @@ MEDIA_SPECS = (
         family=VIDEO_FAMILY,
     ),
     MediaSpec(
+        "loading_image",
+        attr="loading_image_path",
+        payload_key="LoadingImagePath",
+        filename_template="loading.png",
+        token="(Loading)",
+    ),
+    MediaSpec(
         "audio_launch",
         attr="audio_launch_path",
         payload_key="AudioLaunchPath",

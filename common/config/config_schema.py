@@ -18,7 +18,7 @@ from typing import Any
 
 from common import i18n
 from common.apps.contract import Field
-from common.config import input_registry, setting_groups
+from common.config import input_registry, loading_choices, setting_groups
 from common.config.labels import humanize
 from common.i18n import t
 from common.ids import new_id
@@ -971,6 +971,69 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
             group=setting_groups.ATTRACT,
             type="bool",
             default="false",
+        ),
+        # Core reads these at each launch (`get_loading_screen_config`). The fallback is
+        # what a launch shows when the choice has nothing for that table; the Manager draws
+        # both, and the files named below, as one set of rows.
+        ConfigOption(
+            "loading_screen",
+            group=setting_groups.LAUNCH,
+            type="choice",
+            default=loading_choices.DEFAULT_SCREEN,
+            choices=loading_choices.SCREEN_CHOICES,
+        ),
+        ConfigOption(
+            "loading_screen_fallback",
+            group=setting_groups.LAUNCH,
+            label_key="config.behavior.loading_screen",
+            type="choice",
+            default=loading_choices.DEFAULT_FALLBACK,
+            choices=tuple(one for one in loading_choices.SCREEN_CHOICES
+                          if one != loading_choices.OFF),
+        ),
+        ConfigOption(
+            "loading_video_file",
+            group=setting_groups.LAUNCH,
+            home="vpinfe.launch_media",
+            type="string",
+            default="",
+        ),
+        ConfigOption(
+            "loading_image_file",
+            group=setting_groups.LAUNCH,
+            home="vpinfe.launch_media",
+            type="string",
+            default="",
+        ),
+        ConfigOption(
+            "loading_screen_ends",
+            group=setting_groups.LAUNCH,
+            as_buttons=True,
+            type="choice",
+            default="stop",
+            choices=("stop", "repeat"),
+        ),
+        ConfigOption(
+            "launch_audio",
+            group=setting_groups.LAUNCH,
+            type="choice",
+            default=loading_choices.DEFAULT_SOUND,
+            choices=loading_choices.SOUND_CHOICES,
+        ),
+        ConfigOption(
+            "launch_audio_fallback",
+            group=setting_groups.LAUNCH,
+            label_key="config.behavior.launch_audio",
+            type="choice",
+            default=loading_choices.DEFAULT_SOUND_FALLBACK,
+            choices=loading_choices.SOUND_FALLBACKS,
+        ),
+        ConfigOption(
+            "launch_audio_file",
+            group=setting_groups.LAUNCH,
+            home="vpinfe.launch_media",
+            type="string",
+            default="",
         ),
         # Read at each launch by `common/host/front.py` and `frontend/play_events.py`.
         ConfigOption(

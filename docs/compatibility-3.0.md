@@ -1639,6 +1639,13 @@ an extension about it unless the page says. Covered by `tests/js/input.test.js`,
 `tests/js/take-picture.test.js`, `tests/api/test_input_actions.py` and
 `tests/invariants/test_parity.py`.
 
+**PAR-115 - A loading image kind: loading_image.** Themes gain one payload field,
+`LoadingImagePath`, for `loading.png` or `(Loading) <folder>.png`. It sits beside the loading video
+under the same token, and the file type tells the two apart, as for `topper` and `topper_video`.
+Every existing field is unchanged.
+*Why:* a table with no loading video can still show a picture while it starts. Covered by
+`tests/media/test_media_resolution.py` and `tests/invariants/test_parity.py`.
+
 ## Explicitly *not* exceptions
 
 The theme-facing payload (`tables_json` keys, media path fields, stable values) and

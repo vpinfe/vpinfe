@@ -24,6 +24,7 @@ const MEDIA_PATH_FIELDS = {
   instruction_card: "InstructionCardImagePath",
   topper: "TopperPath",
   logo: "LogoImagePath",
+  loading_image: "LoadingImagePath",
 };
 
 const MEDIA_VIDEO_PATH_FIELDS = {
@@ -152,6 +153,17 @@ const CAPABILITIES = {
     config: ["launch_indicator.enabled"],
     describe: "Core draws a spinner in each window from the moment a game starts "
             + "launching until it is running.",
+  },
+  core_loading_screen: {
+    // On from contract 2, for the reason core_launch_indicator is: a contract 1 theme
+    // draws its own overlay on TableLaunching and a second one would sit on top of it.
+    // The person's choice (`behavior.loading_screen`) rides on the message and this
+    // switch is the theme's: off, and the dim and the spinner stay as they were.
+    default: false,
+    defaultFromContract: 2,
+    config: ["loading_screen.enabled"],
+    describe: "Core shows the person's chosen loading video or picture in the controller "
+            + "window while a game launches, and plays the launch audio they chose.",
   },
   core_attract: {
     // On from contract 2. A contract 1 theme may run its own idle timer, which core cannot
@@ -328,7 +340,7 @@ const MEDIA_KINDS = [
   "real_dmd", "real_dmd_color", "real_dmd_video", "real_dmd_color_video",
   "full_dmd", "full_dmd_video", "flyer",
   "playfield_video", "backglass_video", "scoreview_video", "audio", "instruction_card",
-  "topper", "topper_video", "loading", "audio_launch", "rule_sheet", "logo",
+  "topper", "topper_video", "loading", "loading_image", "audio_launch", "rule_sheet", "logo",
 ];
 
 // Kind names earlier builds accepted, against the canonical snake_case set.
@@ -1451,6 +1463,7 @@ class VPinFECore {
   setAudioMuted(muted = true) {
     this._audioMuted = !!muted;
     if (this._audio) this._audio.muted = this._audioMuted;
+    if (this._launchAudio) this._launchAudio.muted = this._audioMuted;
     if (this._audioMuted) {
       this.stopTableAudio({ immediate: true });
       return;
@@ -1951,6 +1964,7 @@ class VPinFECore {
     // and everything that follows the selection wait for the settle.
     if (message.scrubbing) return this.#runEventHandlers(message);
     this.#syncSelectionFromMessage(message);
+    this.#applyLoadingScreen(message);
     this.#applyLaunchDim(message.type);
     this.#applyLaunchIndicator(message.type);
     this.#applyLaunchQuiet(message.type);
@@ -2366,11 +2380,172 @@ class VPinFECore {
    */
   #applyLaunchDim(type) {
     if (!this.enabled("core_launch_dim")) return;
+    if (type === "TableLaunching" && this.#loadingScreenLeavesArt()) return;
     const root = document.documentElement;
     if (!root) return;
     // dataset, like every other data-vpinfe-* this file sets.
     if (type === "TableLaunching") root.dataset.vpinfeLaunching = "true";
     else if (type === "TableLaunchComplete") delete root.dataset.vpinfeLaunching;
+  }
+
+  /**
+   * The loading screen for this launch over the controller window, and its launch audio:
+   * the first of the things the message lists that has something for this game.
+   *
+   * The choice arrives on TableLaunching so it is the one in force for this launch. A
+   * message without it leaves the dim and the spinner exactly as they were. Windows other
+   * than the controller keep their own art while a video or picture shows.
+   */
+  #applyLoadingScreen(message) {
+    const type = message.type;
+    if (type === "TableRunning" || type === "TableLaunchComplete") {
+      this.#endLoadingScreen();
+      return;
+    }
+    if (type !== "TableLaunching") return;
+    this.#endLoadingScreen();
+    const settings = message.loading_screen;
+    if (!this.enabled("core_loading_screen") || !settings || typeof settings !== "object") return;
+    const mode = ["video", "image", "spinner", "off"].includes(settings.mode)
+      ? settings.mode : "spinner";
+    this._loadingScreen = { mode, shown: null };
+    document.documentElement.dataset.vpinfeLoadingScreen = mode;
+    if (!this.isController()) return;
+
+    const index = this.#indexOfTable(message.table_id);
+    if (index < 0) return;
+    this.#showLoadingRung(this.#loadingRungs(settings.rungs, index), !!settings.repeat);
+    if (!this._audioMuted) this.#startLaunchAudio(this.#launchSounds(settings.audio, index));
+  }
+
+  // The things to try in order, as urls: a table's own media that this table lacks drops
+  // out, and a file named by the theme or the person is the same for every table.
+  #loadingRungs(list, index) {
+    const present = (url) => url && url !== MISSING_MEDIA_URL;
+    const rungs = [];
+    for (const one of Array.isArray(list) ? list : []) {
+      if (!one || typeof one !== "object" || !["video", "image"].includes(one.kind)) continue;
+      let url = one.url;
+      if (one.from === "table") {
+        url = one.kind === "video" ? this.getVideoURL(index, one.media)
+                                   : this.getImageURL(index, one.media);
+      }
+      if (present(url)) rungs.push({ kind: one.kind, url, turn: !!one.turn });
+    }
+    return rungs;
+  }
+
+  #launchSounds(list, index) {
+    const item = this.tableData[index];
+    const urls = [];
+    for (const one of Array.isArray(list) ? list : []) {
+      const url = one && one.from === "table"
+        ? (item ? this._reader.url?.(item, one.media) : null)
+        : one?.url;
+      if (url) urls.push(url);
+    }
+    return urls;
+  }
+
+  // The first picture or video that loads; one that cannot be read or decoded gives way to
+  // the next, and the last gives way to the spinner, so the screen never stays black.
+  #showLoadingRung(rungs, repeat) {
+    const state = this._loadingScreen;
+    if (!state) return;
+    state.element?.remove();
+    state.element = null;
+    state.shown = null;
+    const { kind, url, turn } = rungs[0] || {};
+    if (!kind) {
+      this.#applyLaunchIndicator("TableLaunching");
+      return;
+    }
+    const screen = document.createElement("div");
+    screen.className = "vpinfe-loading-screen";
+    screen.setAttribute("aria-hidden", "true");
+    const node = document.createElement(kind === "video" ? "video" : "img");
+    if (kind === "video") {
+      Object.assign(node, { src: url, muted: true, autoplay: true, loop: repeat,
+                            playsInline: true });
+    } else {
+      node.src = url;
+    }
+    if (turn) this.#turnForCabinet(node);
+    node.addEventListener("error", () => {
+      if (this._loadingScreen === state && state.element === screen) {
+        this.#showLoadingRung(rungs.slice(1), repeat);
+      }
+    });
+    screen.appendChild(node);
+    // On <html>, like the spinner: the dim fades the body to nothing.
+    document.documentElement.appendChild(screen);
+    state.element = screen;
+    state.shown = kind;
+    if (kind === "video") {
+      const started = node.play?.();
+      if (started && typeof started.catch === "function") started.catch(() => {});
+    }
+  }
+
+  #endLoadingScreen() {
+    this._loadingScreen?.element?.remove();
+    this._loadingScreen = null;
+    delete document.documentElement.dataset.vpinfeLoadingScreen;
+    if (this._launchAudio) {
+      this._launchAudio.pause();
+      this._launchAudio = null;
+    }
+  }
+
+  // A file a theme's own screen shows is drawn for a landscape screen, so on a cabinet it
+  // turns the way the rest of core's overlays do. A table's own art is turned by its kind.
+  #turnForCabinet(node) {
+    const degrees = this.layout?.uprightRotation || 0;
+    if (!this.layout?.cabinet || !degrees) return;
+    node.style.transform = `rotate(${degrees}deg)`;
+    if (degrees === 90 || degrees === 270) {
+      node.style.width = "100vh";
+      node.style.height = "100vw";
+    }
+  }
+
+  // The first sound that can be played; one that cannot be read gives way to the next.
+  #startLaunchAudio(urls) {
+    if (!urls.length) return;
+    const sound = new Audio(urls[0]);
+    sound.muted = this._audioMuted;
+    this._launchAudio = sound;
+    sound.addEventListener("error", () => {
+      if (this._launchAudio === sound) {
+        this._launchAudio = null;
+        this.#startLaunchAudio(urls.slice(1));
+      }
+    });
+    const started = sound.play();
+    if (started && typeof started.catch === "function") started.catch(() => {});
+  }
+
+  #indexOfTable(id) {
+    if (!id || !Array.isArray(this.tableData)) return -1;
+    return this.tableData.findIndex(item =>
+      item && typeof item === "object" && this._reader.identity(item) === id);
+  }
+
+  // Under Video and Image a window that is not the controller keeps its own art, so it
+  // is not dimmed.
+  #loadingScreenLeavesArt() {
+    const mode = this._loadingScreen?.mode;
+    return (mode === "video" || mode === "image") && !this.isController();
+  }
+
+  // The spinner is for Spinner, and for a game with neither a video nor a picture; a
+  // screen that shows one, or Off, turns nothing.
+  #loadingScreenHasNoSpinner() {
+    const screen = this._loadingScreen;
+    if (!screen) return false;
+    if (screen.mode === "off") return true;
+    if (screen.mode === "spinner") return false;
+    return !this.isController() || !!screen.shown;
   }
 
   // The spinner stays up until the table says it is running, which is later than the dim
@@ -2380,7 +2555,7 @@ class VPinFECore {
   #applyLaunchIndicator(type) {
     if (type === "TableLaunching") {
       if (!this.enabled("core_launch_indicator")) return;
-      if (this._launchIndicator) return;
+      if (this._launchIndicator || this.#loadingScreenHasNoSpinner()) return;
       const indicator = document.createElement("div");
       indicator.className = "vpinfe-launch-indicator";
       indicator.setAttribute("role", "status");
@@ -2399,6 +2574,10 @@ class VPinFECore {
     }
   }
 
+  #isLoadingScreenMedia(media) {
+    return !!media.closest?.(".vpinfe-loading-screen");
+  }
+
   /**
    * Stop what is playing in this window while a game runs, whoever started it.
    *
@@ -2413,7 +2592,8 @@ class VPinFECore {
       const held = { media: new Set(), animations: new Set() };
       this._quiet = held;
       const hold = (media) => {
-        if (media === this._audio || media.paused || media.ended) return;
+        if (media === this._audio || media === this._launchAudio
+            || this.#isLoadingScreenMedia(media) || media.paused || media.ended) return;
         media.pause();
         held.media.add(media);
       };
@@ -2422,7 +2602,9 @@ class VPinFECore {
       // held the moment it is playing. `playing`, not `play`: pausing inside `play`
       // rejects the promise the theme is awaiting from its own play() call.
       this._quietOnPlay = (event) => {
-        if (event.target && event.target !== this._audio) {
+        if (event.target && event.target !== this._audio
+            && event.target !== this._launchAudio
+            && !this.#isLoadingScreenMedia(event.target)) {
           event.target.pause();
           held.media.add(event.target);
         }
@@ -2434,6 +2616,7 @@ class VPinFECore {
         if (animation.playState !== "running") continue;
         if (typeof CSSTransition !== "undefined" && animation instanceof CSSTransition) continue;
         if (animation.effect?.target?.closest?.(".vpinfe-launch-indicator")) continue;
+        if (animation.effect?.target?.closest?.(".vpinfe-loading-screen")) continue;
         animation.pause();
         held.animations.add(animation);
       }

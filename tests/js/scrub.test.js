@@ -17,7 +17,7 @@ afterEach(() => {
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The repeat curve and the scrub compressed, so a hold costs a fifth of a second. The
+// The repeat curve and the scrub compressed, so a hold costs about half a second. The
 // shape is under test - a delay, a long hold, a settle - not the numbers.
 async function started({ scrubAware = false } = {}) {
   const { VPinFECore, browser } = loadCore({ windowName: "table" });
@@ -39,8 +39,8 @@ async function started({ scrubAware = false } = {}) {
   vpin.isController = () => true;
   vpin.frontendInputEnabled = true;
   vpin.tableData = Array.from({ length: 400 }, () => ({}));
-  Object.assign(vpin, { repeatDelayMs: 5, repeatStartMs: 5, repeatFloorMs: 5,
-                        scrubAfterMs: 40, scrubSettleMs: 15, scrubAware });
+  Object.assign(vpin, { repeatDelayMs: 15, repeatStartMs: 15, repeatFloorMs: 15,
+                        scrubAfterMs: 120, scrubSettleMs: 45, scrubAware });
   const selections = [];
   vpin.onSelection((index) => selections.push(index));
   const fire = (type, key, repeat = false) => {
@@ -60,13 +60,13 @@ describe("a long hold", () => {
     const { vpin, everyone, selections, down, up } = await started();
 
     await down();
-    await pause(30);
+    await pause(90);
     const before = everyone.length;
-    await pause(120);
+    await pause(360);
     const during = everyone.length;
     const heard = selections.length;
     await up();
-    await pause(60);
+    await pause(180);
 
     assert.ok(before >= 2, "the first steps of a hold are announced as usual");
     assert.equal(during, everyone.length - 1, "nothing is announced while the scrub runs");
@@ -82,11 +82,11 @@ describe("a long hold", () => {
     const { vpin, everyone, down, up } = await started();
 
     await down();
-    await pause(120);
+    await pause(360);
     await up();
     const stopped = vpin.getCurrentTableIndex();
     vpin.moveTo(stopped + 1, { direction: "next" });
-    await pause(60);
+    await pause(180);
 
     const settles = everyone.filter((message) => message.reason === "settle");
     assert.equal(settles.length, 1);
@@ -99,7 +99,7 @@ describe("a long hold", () => {
     const { vpin, everyone, down, up } = await started();
 
     await down();
-    await pause(120);
+    await pause(360);
     await up();
     vpin.launchTable(vpin.getCurrentTableIndex());
 
@@ -133,9 +133,9 @@ describe("a long hold", () => {
     const { everyone, down, up } = await started();
 
     await down();
-    await pause(20);
-    await up();
     await pause(60);
+    await up();
+    await pause(180);
 
     assert.ok(everyone.length > 0);
     assert.ok(everyone.every((message) => message.reason !== "settle"));
@@ -145,10 +145,10 @@ describe("a long hold", () => {
     const { vpin, everyone, toSelf, down, up } = await started({ scrubAware: true });
 
     await down();
-    await pause(150);
+    await pause(450);
     const announced = everyone.length;
     await up();
-    await pause(60);
+    await pause(180);
 
     const steps = toSelf.filter((message) => message.scrubbing);
     assert.ok(steps.length >= 3, "a step reaches the wheel while the scrub runs");
@@ -161,9 +161,9 @@ describe("a long hold", () => {
     const { toSelf, down, up } = await started();
 
     await down();
-    await pause(150);
+    await pause(450);
     await up();
-    await pause(60);
+    await pause(180);
 
     assert.equal(toSelf.filter((message) => message.scrubbing).length, 0);
   });
@@ -173,10 +173,10 @@ describe("a long hold", () => {
     vpin._capabilities.core_scrub = false;
 
     await down();
-    await pause(150);
+    await pause(450);
     const during = everyone.length;
     await up();
-    await pause(60);
+    await pause(180);
 
     assert.ok(during > 6, "every step reaches every window");
     assert.ok(everyone.every((message) => message.reason !== "settle"));

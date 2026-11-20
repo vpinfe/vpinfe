@@ -26,7 +26,7 @@ High-level flow:
 
 Standard filenames include:
 
-- Images: `table.png`, `fss.png`, `bg.png`, `dmd.png`, `wheel.png`, `logo.png`, `cab.png`, `realdmd.png`, `realdmd-color.png`, `fulldmd.png`, `flyer.png`, `instructioncard.png`, `topper.png`
+- Images: `table.png`, `fss.png`, `bg.png`, `dmd.png`, `wheel.png`, `logo.png`, `cab.png`, `realdmd.png`, `realdmd-color.png`, `fulldmd.png`, `flyer.png`, `instructioncard.png`, `topper.png`, `loading.png`
 - Videos: `table.mp4`, `fss.mp4`, `bg.mp4`, `dmd.mp4`, `realdmd.mp4`, `realdmd-color.mp4`, `fulldmd.mp4`, `topper.mp4`, `loading.mp4`
 - Audio: `audio.mp3`, `audiolaunch.mp3`
 - Documents: `rulesheet.pdf` (also `.md`, `.txt`, `.html`, or a picture of the sheet such as `rulesheet.png`)
@@ -52,7 +52,7 @@ The token in brackets names the kind. Visual Pinball publishes these in its own 
 | Real DMD | `(RealDMD)` | Game flyer | `(Flyer)` |
 | Real color DMD | `(RealColorDMD)` | Rulesheet | `(RuleSheet)` |
 | Full DMD | `(FullDMD)` | | |
-| Topper | `(Topper)` | Loading video | `(Loading)` |
+| Topper | `(Topper)` | Loading video or image | `(Loading)` |
 | Cabinet | `(Cabinet)` | Audio | `(Audio)` |
 | FSS | `(FSS)` | Launch audio | `(AudioLaunch)` |
 

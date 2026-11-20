@@ -27,7 +27,7 @@ SCREENS = ("topper", "topper_video", "backglass", "backglass_video",
            "real_dmd_color", "real_dmd_color_video", "full_dmd", "full_dmd_video",
            "playfield", "playfield_video", "playfield_fss")
 EXTRAS = ("wheel", "logo", "flyer", "cab", "instruction_card", "rule_sheet",
-          "loading", "audio", "audio_launch")
+          "loading", "loading_image", "audio", "audio_launch")
 
 # A tile fits in this box, in its own shape: a strip stops at the width and a portrait tile
 # at the height, so no kind outweighs the others on a line. Keep the width in step with the
@@ -57,7 +57,7 @@ TILE_AR = {
     "wheel": 1.0, "logo": 1.0,
     "flyer": 0.75,
     "instruction_card": 1.4, "rule_sheet": 1.4,
-    "loading": 1.78,
+    "loading": 1.78, "loading_image": 1.78,
     # No picture to take a shape from, so audio fills the whole box like the screens beside it.
     "audio": 2.0, "audio_launch": 2.0,
 }
@@ -130,7 +130,8 @@ def _state(entry: dict[str, Any]) -> str:
 def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
           on_pick: Callable[[str], None] | None, selected: str | None,
           differing: int = 0, offered: int = 0, wont_play: Sequence[str] = (),
-          marks: dict[str, ui.label] | None = None, drafted: bool = False) -> None:
+          marks: dict[str, ui.label] | None = None, drafted: bool = False,
+          launch: str = "") -> None:
     state = _state(entry)
     version = entry.get("version")
     src = art.media(game_id, kind, table_id, version=version, size=art.PANEL)
@@ -204,15 +205,19 @@ def _tile(game_id: str, table_id: str, kind: str, entry: dict[str, Any],
                     .on("click.stop", lambda: enlarge()) \
                     .tooltip(t("word.enlarge"))
         ui.label(media_label_map().get(kind, kind)).classes("manager-mediatile-cap")
-    tile.tooltip(_tooltip(kind, entry, wont_play))
+    tile.tooltip(_tooltip(kind, entry, wont_play, launch))
 
 
-def _tooltip(kind: str, entry: dict[str, Any], wont_play: Sequence[str] = ()) -> str:
-    """The file, who uses it, and where it won't play."""
+def _tooltip(kind: str, entry: dict[str, Any], wont_play: Sequence[str] = (),
+             launch: str = "") -> str:
+    """The file, who uses it, and where it won't play. `launch` is what Loading Screen or
+    Launch Audio makes of this tile: what an empty one gets instead, or why a file is not used."""
     if not entry.get("present"):
-        return t("manager.mediamap.no_kind", kind=media_label_map().get(kind, kind))
+        label = media_label_map().get(kind, kind)
+        return (t("manager.mediamap.tooltip_launch", kind=label, launch=launch) if launch
+                else t("manager.mediamap.no_kind", kind=label))
     parts = [str(entry.get("file") or ""), t(media_ownership.phrase(entry.get("via"))),
-             *wont_play]
+             *wont_play, launch]
     return "  ·  ".join(part for part in parts if part)
 
 
@@ -228,7 +233,8 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
           offered: dict[str, int] | None = None,
           kept: set[str] | None = None,
           wont_play: dict[str, list[str]] | None = None,
-          drafted: set[str] | None = None) -> Callable[[set[str]], None]:
+          drafted: set[str] | None = None,
+          launch: dict[str, str] | None = None) -> Callable[[set[str]], None]:
     """Draw the map into the current container.
 
     `table_id` is the lens: empty for the game's shared media, or one table's. The map
@@ -246,6 +252,8 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
 
     `drafted` is the kinds whose file has changes typed and not saved. Returns the function
     that sets that set again, which marks and unmarks the tiles in place.
+
+    `launch` is, by kind, the line Loading Screen or Launch Audio says about that tile.
     """
     marks: dict[str, ui.label] = {}
     if kept is not None:
@@ -259,7 +267,7 @@ def build(entries: dict[str, dict[str, Any]], game_id: str, table_id: str = "",
                         _tile(game_id, table_id, kind, entries[kind], on_pick, selected,
                               len((overrides or {}).get(kind) or []),
                               (offered or {}).get(kind, 0), (wont_play or {}).get(kind, ()),
-                              marks, kind in (drafted or ()))
+                              marks, kind in (drafted or ()), (launch or {}).get(kind, ""))
 
     # Roughly the width browse gets once work takes its half. The rows inside are two
     # tile columns wide and centered, so a wider pane leaves the surplus either side.

@@ -39,7 +39,7 @@ KINDS: frozenset[str] = frozenset({
     "real_dmd", "real_dmd_color", "real_dmd_video", "real_dmd_color_video",
     "full_dmd", "full_dmd_video", "flyer",
     "playfield_video", "backglass_video", "scoreview_video", "audio", "instruction_card",
-    "topper", "topper_video", "loading", "audio_launch", "rule_sheet", "logo",
+    "topper", "topper_video", "loading", "loading_image", "audio_launch", "rule_sheet", "logo",
 })
 
 FIELDS: tuple[Field, ...] = (

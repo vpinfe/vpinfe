@@ -129,6 +129,10 @@ body {
   transition: opacity 300ms ease;
 }
 
+html[data-vpinfe-launching][data-vpinfe-loading-screen] {
+  background: #000;
+}
+
 html[data-vpinfe-launching] body {
   opacity: 0;
 }
@@ -494,6 +498,30 @@ html[data-vpinfe-waiting]::after {
 
 @keyframes vpinfe-launch-spin {
   to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   The loading screen (core_loading_screen): the game's Loading Video or its Playfield
+   picture over the controller window while a game starts. Above the page, below the
+   spinner. A theme restyles .vpinfe-loading-screen or turns it off with
+   loading_screen.enabled.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-loading-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  pointer-events: none;
+  z-index: 2147483643;
+}
+
+.vpinfe-loading-screen > video,
+.vpinfe-loading-screen > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* ---------------------------------------------------------------------------

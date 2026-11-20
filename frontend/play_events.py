@@ -22,6 +22,7 @@ from common.config.config_store import ConfigStore
 from common.games.game import GameRecord
 from common.host import front, launch_state
 from common.players import player_pictures
+from frontend import config_api
 from frontend.last_game import save_last_launched
 
 if TYPE_CHECKING:
@@ -86,7 +87,10 @@ def on_launching(*, game: GameRecord | None = None, table_id: str = "",
     if (game is not None and _ini_config is not None
             and source != launch_state.SOURCE_CAPTURE):
         save_last_launched(_ini_config, game, table_id)
-    _broadcast({"type": "TableLaunching"})
+    launching: dict[str, Any] = {"type": "TableLaunching", "table_id": table_id}
+    if _ini_config is not None:
+        launching["loading_screen"] = config_api.get_loading_screen_config(_ini_config)
+    _broadcast(launching)
     if (sys.platform == "win32" and _browser is not None
             and not front.enabled(_ini_config)):
         # VPX pauses whenever its player window loses focus, and Windows will not let a

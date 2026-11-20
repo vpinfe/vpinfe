@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -15,6 +16,7 @@ from common.failures import why
 from common.games import file_move as moved_files
 from common.games import file_ops
 from common.i18n import t
+from common.media import launch_lines
 from common.media.media_specs import (
     PAGED_KINDS,
     held_family,
@@ -113,13 +115,14 @@ async def _media_block(context: dict[str, Any]) -> None:
         kept = _kept_kinds(context, "media")
         context["devices"] = await offload.io(library.known_devices)
         wont_play = await _wont_play(context)
+        context["launch"] = await _launch_lines(context, entries)
         holder.clear()
         with holder:
             mark = mediamap.build(entries, game_id, table_id or "",
                                   on_pick=lambda kind: _pick_slot(context, kind, draw),
                                   selected=context["slot"]["kind"],
                                   overrides=overrides, offered=offered, kept=kept,
-                                  wont_play=wont_play,
+                                  wont_play=wont_play, launch=context["launch"],
                                   drafted=_drafted_kinds(entries, game_id,
                                                          set(text_editor.drafts_of(
                                                              context["state"]))))
@@ -250,6 +253,22 @@ async def _wont_play(context: dict[str, Any]) -> dict[str, list[str]]:
     found = {kind: [one.label for one in plays_on.refusals(codec, devices, local)]
              for kind, codec in codecs.items()}
     return {kind: labels for kind, labels in found.items() if labels}
+
+
+async def _launch_lines(context: dict[str, Any],
+                        entries: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """What Loading Screen and Launch Audio say about this game's launch tiles, by kind."""
+    library = context["library"]
+    try:
+        values = await offload.io(library.config_values)
+        listing = await offload.io(library.themes)
+    except Exception:  # noqa: BLE001 - a line not read is no line
+        logger.debug("No launch lines for %s", context["game_id"], exc_info=True)
+        return {}
+    present = {kind: bool((entries.get(kind) or {}).get("present"))
+               for kind in launch_lines.READ}
+    return launch_lines.lines((values or {}).get("behavior") or {},
+                              launch_lines.theme_in_use(listing or {}), present, sys.platform)
 
 
 def _kept_kinds(context: dict[str, Any], family: str) -> set[str] | None:
@@ -515,6 +534,10 @@ def _slot(context: dict[str, Any], kind: str, entry: dict[str, Any],
                      if table_id
                      else t("manager.workbench.missing_game", kind=label)) \
                 .classes("manager-help")
+
+        said = (context.get("launch") or {}).get(kind, "")
+        if said:
+            ui.label(said).classes("manager-help")
 
         others = [item for item in also_here if not item.get("wins")]
         if others:

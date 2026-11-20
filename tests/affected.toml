@@ -278,6 +278,7 @@ tests = [
   "tests/theming/test_core_topper_drive.py",
   "tests/theming/test_frontend_reports_drive.py",
   "tests/theming/test_late_window_drive.py",
+  "tests/theming/test_loading_screen_drive.py",
   "tests/theming/test_picker_index_drive.py",
   "tests/theming/test_render_smoke.py",
   "tests/theming/test_theme_locales_drive.py",

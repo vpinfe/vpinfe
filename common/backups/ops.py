@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from common import atomic_write, service_errors
-from common.config import path_state
+from common.config import path_state, paths
 from common.failures import why
 from common.games import (
     asset_ops,
@@ -140,6 +140,8 @@ def _restore_file(one: Copy, place: str, path: Path) -> Restored:
     held = media_files.where(path)
     if held is None:
         raise service_errors.NotFoundError(t("error.backups.gone"))
+    if held.game_id == media_files.LAUNCH_ID:
+        return _restore_launch_file(one, place, path, held)
     game = game_lens.game_for_writing(held.game_id)
     if place == PLACE_TABLE and launch_state.running(held.game_id, game.game_dir_name):
         raise service_errors.BlockedError(t("error.games.table_running"))
@@ -158,6 +160,20 @@ def _restore_file(one: Copy, place: str, path: Path) -> Restored:
         MetaConfig(str(info_files.info_path_of(game))).restore_table(record)
     media_ops.reread(game_dir)
     asset_ops.refresh_if_backglass(held.game_id, target)
+    return Restored(one, _kept(_kept_copy(str(replaced) if replaced else None, place)))
+
+
+def _restore_launch_file(one: Copy, place: str, path: Path, held: media_files.Where) -> Restored:
+    """Put a file back into the launch media folder."""
+    target = paths.LAUNCH_MEDIA_DIR / held.relative
+    try:
+        replaced = (media_files.keep_launch(target, REASON_RESTORE) if target.is_file()
+                    else None)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with atomic_write.staged_for(target) as staged:
+            shutil.copy2(path, staged)
+    except OSError as exc:
+        raise service_errors.RefusedError(why(exc)) from exc
     return Restored(one, _kept(_kept_copy(str(replaced) if replaced else None, place)))
 
 

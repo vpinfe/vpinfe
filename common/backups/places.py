@@ -381,12 +381,15 @@ def _file_copy(path: Path, names: dict[str, str], area: str) -> Copy | None:
     if area == media_files.TABLES and table_entry.is_entry(held.relative):
         return None
     kind, place = _AREA_COPIES[area]
+    launch = held.game_id == media_files.LAUNCH_ID
     return Copy(
-        id=make_id(place, path), subject_kind=SUBJECT_GAME, subject_id=held.game_id,
-        subject_name=names.get(held.game_id, held.game_id), kind=kind, file=held.relative,
+        id=make_id(place, path), subject_kind=SUBJECT_VPINFE if launch else SUBJECT_GAME,
+        subject_id="" if launch else held.game_id,
+        subject_name=VPINFE_NAME if launch else names.get(held.game_id, held.game_id),
+        kind=kind, file=held.relative,
         path=str(path), taken=iso_from_stamp(backup_stamp(path)), written_by="",
         reason=_reason_of_name(path.name), note="", size=_size(path),
-        gone=held.game_id not in names,
+        gone=not launch and held.game_id not in names,
         label=table_entry.label_beside(path) if area == media_files.TABLES else "")
 
 

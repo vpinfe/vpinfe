@@ -62,6 +62,7 @@ should normally call.
 | `DMDVideoPath` | `dmd.mp4` | DMD video. |
 | `TopperVideoPath` | `topper.mp4` | Topper video. |
 | `LoadingVideoPath` | `loading.mp4` | Loading-screen video. |
+| `LoadingImagePath` | `loading.png` | Loading-screen picture. |
 | `AudioPath` | `audio.mp3` | Per-game audio. |
 | `AudioLaunchPath` | `audiolaunch.mp3` | Audio played on launch. |
 | `RuleSheetPath` | `rulesheet.pdf` | Rule sheet document. |

@@ -109,12 +109,13 @@ LEDGER_ALLOWS: dict[str, Any] = {
     "PAR-15": {"ManufacturerLogoPath"},
     "PAR-105": {"realDMDVideoPath", "realDMDColorVideoPath"},
     "PAR-113": {"fullDMDImagePath", "fullDMDVideoPath"},
+    "PAR-115": {"LoadingImagePath"},
 }
 
 # Every theme-payload key the ledger permits adding, across entries.
 ALLOWED_NEW_PAYLOAD_KEYS = (LEDGER_ALLOWS["PAR-11"] | LEDGER_ALLOWS["PAR-12"]
                             | LEDGER_ALLOWS["PAR-15"] | LEDGER_ALLOWS["PAR-105"]
-                            | LEDGER_ALLOWS["PAR-113"])
+                            | LEDGER_ALLOWS["PAR-113"] | LEDGER_ALLOWS["PAR-115"])
 
 
 def _capture_current() -> dict:

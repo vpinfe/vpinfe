@@ -27,11 +27,13 @@ from typing import Any
 from nicegui import background_tasks, run, ui
 
 from common import apps, i18n, icons
+from common.backups import media as backup_media
 from common.capture.run import FILL
 from common.capture.session import RECORDABLE
 from common.failures import why
 from common.games.asset_registry import ARCHIVE_EXTENSIONS, ASSET_SPECS, spec_for, specs_named
 from common.i18n import t
+from common.media import launch_media
 from common.media.media_specs import (
     DOC_FAMILY,
     IMAGE_FAMILY,
@@ -46,6 +48,7 @@ from manager.kit import (
     art,
     busy,
     candidates,
+    confirm,
     deeplink,
     folder_picker,
     kind_words,
@@ -211,6 +214,8 @@ class _Sources:
     keyed = False
     records = False
     backglass = False
+    # Whether a first tab lists files the person added before, drawn by `yours_tab`.
+    yours = False
     # The tab the dialog opens on, where it is not the first.
     first = ""
     # Where this dialog is in a walk over several files ("2 of 5"), which turns Cancel into
@@ -338,6 +343,12 @@ class _Sources:
     async def backglass_tab(self, body: ui.column) -> None:
         return None
 
+    def yours_label(self) -> str:
+        return ""
+
+    async def yours_tab(self, body: ui.column) -> None:
+        return None
+
     def picked(self, tab: str) -> None:
         """`tab` was opened."""
 
@@ -429,6 +440,8 @@ class _Sources:
             host = _host_name(self.library)
             merged = self.merged = acting.browser_is_here()
             with frame.tabs().props("inline-label") as tabs:
+                if self.yours:
+                    ui.tab("yours", label=self.yours_label(), icon=verbs.FROM_YOURS)
                 if self.backglass:
                     ui.tab("backglass", label=t("manager.mediasource.backglass_file"),
                            icon=verbs.FROM_BACKGLASS_FILE)
@@ -456,9 +469,13 @@ class _Sources:
             keyed_body: ui.column | None = None
             record_body: ui.column | None = None
             backglass_body: ui.column | None = None
+            yours_body: ui.column | None = None
             first = self.first or "host"
             with frame.body(split=True):
                 with ui.tab_panels(tabs, value=first).classes("manager-sources-panels"):
+                    if self.yours:
+                        with ui.tab_panel("yours"):
+                            yours_body = ui.column().classes("w-full gap-2 manager-source-fill")
                     if self.backglass:
                         with ui.tab_panel("backglass"):
                             backglass_body = ui.column() \
@@ -516,7 +533,8 @@ class _Sources:
                      "games": (games_body, self.games_tab),
                      "keyed": (keyed_body, self.keyed_tab),
                      "record": (record_body, self.record_tab),
-                     "backglass": (backglass_body, self.backglass_tab)}
+                     "backglass": (backglass_body, self.backglass_tab),
+                     "yours": (yours_body, self.yours_tab)}
             body, read = reads.get(event.value, (None, None))
             if body is None or read is None:
                 return
@@ -528,6 +546,11 @@ class _Sources:
             loaded.add("host")
             with box:
                 busy.fill(host_body, lambda: self.host_tab(host_body))
+        if first == "yours" and yours_body is not None:
+            loaded.add("yours")
+            self.picked("yours")
+            with box:
+                busy.fill(yours_body, lambda: self.yours_tab(yours_body))
         if first == "backglass" and backglass_body is not None:
             loaded.add("backglass")
             self.picked("backglass")
@@ -1885,6 +1908,151 @@ class _PlayerPicture(_Image):
             return
         self.dialog.close()
         await redraw()
+
+
+_LAUNCH_FAMILY = {"video": "video", "image": "image", "audio": "audio"}
+_LAUNCH_KIND = {"video": "loading", "image": "loading_image", "audio": "audio_launch"}
+
+
+class _LaunchMedia(_OneFile):
+    """A loading video, loading picture or launch sound: one the person added before, kept in
+    VPinFE's settings folder, or one from a device, which is copied there first. `done(name)`
+    hears the name the file has in that folder."""
+
+    yours = True
+    first = "yours"
+
+    def __init__(self, library: Any, kind: str, done: Callable, now: str = "") -> None:
+        super().__init__(library, media_label_map()[_LAUNCH_KIND[kind]], done,
+                         tuple(launch_media.EXTENSIONS[kind]))
+        self.kind = kind
+        self.family = _LAUNCH_FAMILY[kind]
+        # The name in the folder of the file in use, or "".
+        self.now = now
+        self.listing: Any = None
+
+    def memory_kind(self) -> str:
+        return f"launch_{self.kind}"
+
+    def kinds_word(self) -> str:
+        return t(f"media.kind.{_LAUNCH_KIND[self.kind]}.plural")
+
+    def title(self) -> str:
+        return t(f"manager.launchmedia.choose.{self.kind}")
+
+    def verb_label(self) -> str:
+        return t(f"manager.launchmedia.use.{self.kind}")
+
+    def yours_label(self) -> str:
+        return t(f"manager.launchmedia.tab.{self.kind}")
+
+    def now_card(self) -> pick_pane.Card | None:
+        path = launch_media.path_of(self.now)
+        return (pick_pane.card_for(self.family, self.preview(str(path)), self.now)
+                if path else None)
+
+    @on_page
+    async def use_file(self, path: str) -> None:
+        try:
+            data = await self.contents(path)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(t("manager.launchmedia.failed"), caption=why(exc),
+                      type="negative")
+            return
+        self.remember(path)
+        await self.took(_file_name(path), data)
+
+    @on_page
+    async def took(self, name: str, data: bytes) -> None:
+        try:
+            stored = await offload.io(launch_media.add_bytes, name, data)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(t("manager.launchmedia.failed"), caption=why(exc), type="negative")
+            return
+        self.dialog.close()
+        await self.done(stored)
+
+    def file_row(self, item: dict[str, Any]) -> None:
+        path, name = item["path"], item["name"]
+        src = self.preview(path)
+        taken = self.entry(pick_pane.card_for(self.family, src, name),
+                           partial(self.use_file, path), filename=name)
+        taken.bind(candidates.row(src, name, "", "", taken.pick, family=self.family,
+                                  use=taken.use))
+
+    async def yours_tab(self, body: ui.column) -> None:
+        self.listing = body
+        body.clear()
+        names = await offload.io(launch_media.names, self.kind)
+        where = str(launch_media.folder())
+        with body:
+            with ui.row().classes("items-center gap-1 no-wrap w-full"):
+                panel.line(t(f"manager.launchmedia.line.{self.kind}"), hint=where)
+                panel.copy_text(where).classes("shrink-0")
+            if not names:
+                ui.label(t("manager.launchmedia.nothing")).classes("manager-help")
+                panel.action(self._find_words(), lambda: self.tabs.set_value("host"),
+                             icon=verbs.FROM_HOST, hint=panel.NO_HINT)()
+                return
+            with ui.column().classes("w-full gap-1 manager-source-list"):
+                for name in names:
+                    self._your_row(name)
+
+    def _find_words(self) -> str:
+        return (t("manager.launchmedia.find_here") if self.merged
+                else t("manager.launchmedia.find_on", device=_host_name(self.library)))
+
+    def _your_row(self, name: str) -> None:
+        path = launch_media.path_of(name)
+        if path is None:
+            return
+        src = self.preview(str(path))
+        user = launch_media.in_use(name)
+        taken = self.entry(pick_pane.card_for(self.family, src, name),
+                           partial(self._use_yours, name), filename=name)
+
+        def trailing() -> None:
+            hint = (t(f"manager.launchmedia.in_use_by.{user}") if user
+                    else t("word.remove"))
+            with ui.element("span").classes("shrink-0") \
+                    .on("click.stop", js_handler="() => {}") as holder:
+                panel.icon_action(t("word.remove"), partial(self._remove, name),
+                                  icon=verbs.REMOVE, enabled=not user)()
+                holder.tooltip(hint)
+
+        taken.bind(candidates.choice(
+            src, name, "", taken.pick, family=self.family, slot=True, use=taken.use,
+            trailing=trailing, tag=t("manager.launchmedia.in_use") if user else "",
+            tag_here=bool(user)))
+
+    @on_page
+    async def _use_yours(self, name: str) -> None:
+        self.dialog.close()
+        await self.done(name)
+
+    @on_page
+    async def _remove(self, name: str) -> None:
+        if not await confirm.ask(t("manager.workbench.remove_asset", name=name),
+                                 detail=t("manager.launchmedia.remove_detail"),
+                                 confirm=t("word.remove"), icon=verbs.REMOVE):
+            return
+        try:
+            await offload.io(backup_media.remove_launch, name)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(t("said.remove_failed"), caption=why(exc), type="negative")
+        else:
+            ui.notify(t("manager.launchmedia.removed", name=name), type="positive")
+        if self.pending is not None and self.pending.filename == name:
+            self.choose_trip(None, None)
+        if self.shown() and self.listing is not None:
+            await self.yours_tab(self.listing)
+
+
+def open_launch_media_sources(library: Any, kind: str, done: Callable, now: str = "") -> None:
+    """Choose the file Loading Screen or Launch Audio plays on every table. `kind` is
+    `video`, `image` or `audio`, `now` the name in `launch_media` of the one in use, and
+    `done(name)` hears the name of the one chosen."""
+    _LaunchMedia(library, kind, done, now).open()
 
 
 def _attention(said: str) -> None:

@@ -44,6 +44,7 @@ from common.host import (
     tools,
 )
 from common.i18n import t
+from common.media import launch_lines
 from common.media.media_specs import MEDIA_SPECS, NAMED_TOKENS, VIDEO_FAMILY, media_label_map
 from common.online import theme_source_checks as online_checks
 from common.settings import feature_checks
@@ -77,6 +78,7 @@ from manager.settings import (
     dof,
     folders,
     input_page,
+    loading_screen,
     placement_panel,
     presets,
     recording,
@@ -85,6 +87,7 @@ from manager.settings import (
     vpx_displays,
 )
 from manager.settings import commands as commands_help
+from manager.settings.linked import Linked
 from manager.setup import setup as setup_page
 
 logger = logging.getLogger("vpinfe.manager.settings.settings")
@@ -1933,7 +1936,7 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
                  from_elsewhere: bool = False,
                  previewed: chrome_options.Preview | None = None,
                  stands_in: dict[str, list[tuple[Any, Any]]] | None = None,
-                 linked: attract.Attract | None = None,
+                 linked: Sequence[Linked] = (),
                  under: dict[str, list[tuple[Any, Any]]] | None = None,
                  saved: Callable[[], Awaitable[None]] | None = None,
                  after: dict[str, Callable[[], Awaitable[None]]] | None = None,
@@ -1947,7 +1950,7 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
 
     `stands_in` draws other rows where a setting would be, named `section.key`, for a
     setting whose value is better handled one entry at a time than as one field. `linked`
-    is the Attract Mode group's own behavior, for the page that has one. `after` maps a
+    is the behavior of the groups whose rows depend on one another. `after` maps a
     setting's key to what is awaited once its write has gone through.
     """
     current = dict(values.get(section) or {})
@@ -1969,8 +1972,8 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
             group = t("manager.settings.group_other")
         if group and group != heading:
             entries.append((panel.HEADING, group))
-            if linked is not None:
-                entries += linked.under_heading(str(option.get("group") or ""))
+            for one in linked:
+                entries += one.under_heading(str(option.get("group") or ""))
         heading = group
         if (replaced := (stands_in or {}).get(f"{section}.{option['key']}")) is not None:
             entries += replaced
@@ -1979,8 +1982,8 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
         refusal = Refusal() if option.get("unit") == config_schema.UNIT_PORT else None
         save, note = _noted(option, value, saver(source, section, option["key"], refusal),
                             (resolved or {}).get(option["key"], ""))
-        if linked is not None:
-            save = linked.saves(option["key"], save)
+        for one in linked:
+            save = one.saves(option["key"], save)
         if option.get("cuts_off_manager") and from_elsewhere:
             save = _asked_first(option, save, refill)
         if option.get("moves_with") == config_schema.MOVES_BACKUPS and isinstance(
@@ -2010,16 +2013,16 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
                 check=(checks or {}).get((section, option["key"])),
                 suggestions=suggestions,
                 section_values=effective, browse=browse, refusal=refusal, saved=saved)
-        if linked is not None:
-            control = linked.draws(option["key"], control)
+        for one in linked:
+            control = one.draws(option["key"], control)
         entries.append((option.get("label") or humanize(option["key"]),
                         chipped.beside(control, option) if chipped is not None
                         else control))
         if note is not None:
             entries.append(note)
         entries += (under or {}).get(option["key"], [])
-        if linked is not None:
-            entries += linked.under(option["key"])
+        for one in linked:
+            entries += one.under(option["key"])
         if previewed is not None and option["key"] == chrome_options.ADD:
             entries.append(previewed.warning_row())
         if section == "dof" and option["key"] == "config_tool_api_key":
@@ -2047,7 +2050,7 @@ async def build_device_page(source: Any, context: dict[str, Any], schema: list[d
                             drawn_elsewhere: bool = False,
                             waiting: Waiting | None = None,
                             stands_in: dict[str, list[tuple[Any, Any]]] | None = None,
-                                       linked: attract.Attract | None = None,
+                            linked: Sequence[Linked] = (),
                             below: dict[str, dict[str, list[tuple[Any, Any]]]] | None = None,
                             ) -> None:
     """One page of a device's settings, drawn exactly as this install's are.
@@ -2125,7 +2128,7 @@ async def build_device_page(source: Any, context: dict[str, Any], schema: list[d
                             browse=browse, waiting=waiting,
                             from_elsewhere=from_elsewhere, previewed=preview,
                             stands_in=stands_in,
-                            linked=linked if name == attract.SECTION else None,
+                            linked=linked if name == attract.SECTION else (),
                             saved=saved)
         # A section that opens with a heading keeps its head under it: nothing sits
         # above the first heading.
@@ -2383,14 +2386,21 @@ async def _draw_schema_page(library: Library, key: str, sections: tuple[str, ...
                                   values, schema, write, refill)]))
     stands_in = await _theme_sources(library, state if state is not None else {}, refill) \
         if theme_sources.SECTION in sections else None
-    linked = None
+    linked: list[Linked] = []
     if attract.SECTION in sections:
-        theme, left = attract.left_to_theme(await _themes_listing(library))
-        linked = attract.Attract(lambda changes: _write_many(library, changes), values,
-                                 _options_of(schema, attract.SECTION),
-                                 writable=_writable(schema, attract.SECTION),
-                                 theme=theme, left_to_theme=left)
-        stands_in = {**(stands_in or {}), **linked.stands_in()}
+        listing = await _themes_listing(library)
+        theme, left = attract.left_to_theme(listing)
+        attracting = attract.Attract(lambda changes: _write_many(library, changes), values,
+                                     _options_of(schema, attract.SECTION),
+                                     writable=_writable(schema, attract.SECTION),
+                                     theme=theme, left_to_theme=left)
+        loading = loading_screen.LoadingScreen(
+            lambda changes: _write_many(library, changes), library, values,
+            _options_of(schema, loading_screen.SECTION),
+            writable=_writable(schema, loading_screen.SECTION),
+            theme=launch_lines.theme_in_use(listing))
+        stands_in = {**(stands_in or {}), **attracting.stands_in(), **loading.stands_in()}
+        linked = [attracting, loading]
     page_head(key, findings)
     await build_device_page(library, {"library": library, "refill": refill, "saved": saved},
                             schema, values, sections, checks=marks,

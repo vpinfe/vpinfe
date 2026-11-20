@@ -84,6 +84,13 @@ def register(app: FastAPI, mount_points: dict[str, str]) -> None:
         return _file(request, path) if path else PlainTextResponse("No such logo",
                                                                   status_code=404)
 
+    @app.get("/launch_media/{name}", include_in_schema=False)
+    def launch_media_file(request: Request, name: str) -> Response:
+        from common.media import launch_media
+        path = launch_media.path_of(name)
+        return _file(request, path) if path else PlainTextResponse("No such file",
+                                                                  status_code=404)
+
     @app.get("/tables/{folder}/{rest:path}", include_in_schema=False)
     def game_file(request: Request, folder: str, rest: str) -> Response:
         return _game_file(request, folder, rest)

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
+from common.config import loading_choices
 from common.config.config_access import (
     ConfigSource,
     DisplayConfig,
@@ -17,9 +20,11 @@ from common.config.config_access import (
 )
 from common.devices import serving
 from common.extensions.store import get_extension_store
-from common.host import addresses
+from common.host import addresses, front
+from common.media import launch_media, theme_loading
 from common.security import access_keys
 from common.values import is_truthy
+from frontend import theme_api
 
 if TYPE_CHECKING:
     from frontend.api import API
@@ -51,6 +56,78 @@ def get_attract_config(iniconfig: ConfigSource) -> dict[str, Any]:
                                         "restore").strip().lower() == "stay" else "restore"),
         "audio": cfg_bool(iniconfig, "behavior", "attract_audio", False),
     }
+
+
+def _theme_loading(config: ConfigSource) -> tuple[str, dict[str, str]]:
+    """The running theme's name and the loading files it names, by kind."""
+    theme_dir = theme_api.resolve_theme_dir(theme_api.get_theme_name(config))
+    if theme_dir is None:
+        return "", dict.fromkeys(theme_loading.KINDS, "")
+    return theme_dir.name, theme_loading.files(theme_dir, theme_api.get_theme_config(config))
+
+
+def _theme_url(name: str, relative: str) -> str:
+    parts = "/".join(quote(part, safe="") for part in relative.split("/"))
+    return f"/themes/{quote(name, safe='')}/{parts}"
+
+
+def _screen_rungs(config: ConfigSource) -> tuple[str, list[dict[str, Any]]]:
+    """What the loading screen is: Off, the spinner, or the first of these rungs that has
+    something for the table being launched."""
+    main = loading_choices.screen_or_default(
+        cfg_get(config, "behavior", loading_choices.SCREEN_KEY))
+    if main == loading_choices.OFF:
+        return "off", []
+    fallback = loading_choices.fallback_or_default(
+        cfg_get(config, "behavior", loading_choices.FALLBACK_KEY), main)
+    theme, theirs = _theme_loading(config)
+    rungs: list[dict[str, Any]] = []
+    for one in loading_choices.ladder(main, fallback):
+        choice = loading_choices.BY_ID[one]
+        if choice.kind:
+            rungs.append({"from": "table", "media": choice.kind, "kind": choice.family})
+        elif choice.theme and theirs[choice.family]:
+            rungs.append({"url": _theme_url(theme, theirs[choice.family]),
+                          "kind": choice.family, "turn": True})
+        elif choice.mine and (name := launch_media.chosen(choice.family, config)):
+            rungs.append({"url": f"/launch_media/{quote(name, safe='')}",
+                          "kind": choice.family})
+    return (rungs[0]["kind"] if rungs else "spinner"), rungs
+
+
+def _sound_rungs(config: ConfigSource) -> list[dict[str, Any]]:
+    main = loading_choices.sound_or_default(
+        cfg_get(config, "behavior", loading_choices.SOUND_KEY))
+    fallback = loading_choices.sound_fallback_or_default(
+        cfg_get(config, "behavior", loading_choices.SOUND_FALLBACK_KEY), main)
+    theme, theirs = _theme_loading(config)
+    rungs: list[dict[str, Any]] = []
+    for one in loading_choices.sound_ladder(main, fallback):
+        if one == loading_choices.TABLE_SOUND:
+            rungs.append({"from": "table", "media": "audio_launch"})
+        elif one == loading_choices.THEME_SOUND and theirs[loading_choices.AUDIO]:
+            rungs.append({"url": _theme_url(theme, theirs[loading_choices.AUDIO])})
+        elif one == loading_choices.MY_SOUND and (
+                name := launch_media.chosen(loading_choices.AUDIO, config)):
+            rungs.append({"url": f"/launch_media/{quote(name, safe='')}"})
+    return rungs
+
+
+def get_loading_screen_config(config: ConfigSource) -> dict[str, Any]:
+    """What the person set for the loading screen and the launch audio, as core reads it at
+    each launch: the order of things to try, the first that has something being used.
+
+    On Windows without Experimental Table Focus the windows are minimized for the launch,
+    so nothing of the screen can be seen there: it is the spinner and the launch audio is
+    off, which is what core did before the screen existed.
+    """
+    if sys.platform == "win32" and not front.enabled(config):
+        mode, rungs, audio = "spinner", [], []
+    else:
+        mode, rungs = _screen_rungs(config)
+        audio = _sound_rungs(config)
+    ends = cfg_get(config, "behavior", loading_choices.ENDS_KEY, "stop").strip().lower()
+    return {"mode": mode, "repeat": ends == "repeat", "rungs": rungs, "audio": audio}
 
 
 def _remote_urls(config: ConfigSource) -> list[str]:

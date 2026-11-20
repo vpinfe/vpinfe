@@ -98,7 +98,7 @@ def _settings_words():
     stems, choices = {config_schema.window_screen("any").keys}, {}
     for option in config_schema.options():
         stems.add(option.keys)
-        choices[option.keys] = {str(value) for value in option.choices}
+        choices.setdefault(option.keys, set()).update(str(value) for value in option.choices)
     groups = {option.group for option in config_schema.options() if option.group}
     return stems, groups, {spec.key for spec in config_schema.lists()}, choices
 

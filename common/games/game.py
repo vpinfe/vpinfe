@@ -84,6 +84,7 @@ class Game:
     instruction_card_image_path: str | None = None
     topper_path: str | None = None
     loading_video_path: str | None = None
+    loading_image_path: str | None = None
     audio_launch_path: str | None = None
     rule_sheet_path: str | None = None
     logo_image_path: str | None = None

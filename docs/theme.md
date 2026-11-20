@@ -171,6 +171,7 @@ it itself.
 | `core_layout` | `layout.enabled` | off | on | Turns the UI and the playfield art to suit the device. | You read `vpin.layout` and lay yourself out. |
 | `core_preload` | `preload.enabled` | off | on | Fetches the media around the selection once the wheel stops. | Your own preloading is the only one. |
 | `core_launch_indicator` | `launch_indicator.enabled` | off | on | Draws a spinner in every window while a game launches. | You draw your own, see [Loading Overlay During Game Launch](#loading-overlay-during-game-launch). |
+| `core_loading_screen` | `loading_screen.enabled` | off | on | Shows the loading media the person chose over the controller window while a game launches, and plays the launch audio they chose. | Dim and spinner stay as they were, and you draw your own, see [Loading Screen](#loading-screen). |
 | `core_attract` | `attract.enabled` | off | on | Moves the selection on its own once nobody has pressed anything. | You run your own idle timer, see [Attract Mode](#attract-mode). |
 | `core_launch_dim` | `launch_dim.enabled` | on | on | Dims each window while a game launches. | Your windows stay as they are. |
 | `core_launch_quiet` | `launch_quiet.enabled` | on | on | Pauses each window's playing video, sound and CSS animations while a game runs. | They keep running behind the game, see [Quiet While a Game Runs](#quiet-while-a-game-runs). |
@@ -817,7 +818,7 @@ Events are sent between windows via `receiveEvent()`. These are the built-in eve
 | Event Type | Properties | Description |
 |------------|------------|-------------|
 | `TableIndexUpdate` | `index`, `previous`, `direction`, `reason`, `source`, `moving`, `scrubbing`, `group`, `groupKind`, `list`, `kind` | The selection moved. Sent by the controller to every window, on every path, and to one window alone when it asks with `SelectionRequest`. Also sent to the other windows, with `reason` `"restore"`, when a data change the backend raised takes the controller's game out of its list and the wheel lands on another. |
-| `TableLaunching` | — | A game is about to launch. Frontend keyboard/gamepad routing is suspended until `TableLaunchComplete`; use this to fade out, stop audio, etc. |
+| `TableLaunching` | `table_id`, `loading_screen` | A game is about to launch. Frontend keyboard/gamepad routing is suspended until `TableLaunchComplete`; use this to fade out, stop audio, etc. `table_id` names the table being launched, and `loading_screen` carries what the person chose for the [Loading Screen](#loading-screen). |
 | `TableRunning` | — | The launched game has finished loading and is now running. Sent when the table writes "Startup done" to its log. |
 | `TableLaunchComplete` | — | The launched game has exited and frontend input routing is restored. Use this to fade back in, resume audio. |
 | `PlayersChanged` | `state` | The roster changed - a player added, removed, or who is up. `state` is the same shape `vpin.players` holds, and core updates that property from it before your handler runs, so reading `vpin.players` again is enough; nothing needs to come from the message itself. |
@@ -942,7 +943,8 @@ You can also define custom event types and send them with `vpin.sendMessageToAll
 **Core draws one for you.** On contract 2, every window shows a spinner from `TableLaunching`
 until `TableRunning`, or `TableLaunchComplete` for a launch that never got as far as
 running. It is a `div.vpinfe-launch-indicator`, added to `<html>` and removed again, so a
-theme restyles it in CSS and has nothing to wire up. A theme that wants a loading image of
+theme restyles it in CSS and has nothing to wire up. Where the [Loading Screen](#loading-screen)
+shows a video or picture, or the person chose Off, core draws no spinner. A theme that wants a loading image of
 its own sets `launch_indicator.enabled` to `false` in its `config.json` and draws it as
 below.
 
@@ -1022,6 +1024,52 @@ async function receiveEvent(message) {
 
 If the controller launches the game from local input, remember that `vpin.sendMessageToAllWindows(...)` excludes the sender. Call `showTableLoadingOverlay()` directly in the local `joyselect` path before `await vpin.launchTable(...)`, or send the event with `vpin.sendMessageToAllWindowsIncSelf(...)`.
 
+### Loading Screen
+
+**Core shows it for you.** On contract 2, from `TableLaunching` until `TableRunning` (or
+`TableLaunchComplete` for a launch that never got that far), the controller window is covered
+by one thing the person chose under **Loading Screen** on the Behaviors page. Each choice has a
+second, **When the Table Has No ...** (or **When the Theme Has No ...**), tried when the first
+has nothing for that table, and the spinner is the last step:
+
+| Choice | What the controller window shows |
+|---|---|
+| The Table's Loading Video | The table's own Loading Video. |
+| The Table's Loading Image | The table's own Loading Image. |
+| The Table's Playfield Image | The table's own Playfield picture. |
+| The Theme's Loading Video / Image | The file your theme names, below. |
+| A Video / An Image You Choose | A file the person added in the picker, the same on every table. |
+| Spinner | A spinner on a dark screen. |
+| Off | A dark screen. |
+
+When the Loading Video ends it stays on its last frame, or repeats, as the person chose. Windows
+other than the controller keep their own art, undimmed. **Launch Audio** works the same way:
+the table's Launch Audio, the theme's, a sound the person chose, or silence, played once from
+`TableLaunching`, unless the person turned it off or muted the frontend.
+
+A theme can ship its own files for the person to pick. Name them in `config.json`, each a path
+inside the theme's own folder:
+
+```json
+"loading_screen": {
+  "video": "media/loading.mp4",
+  "image": "media/loading.png",
+  "audio": "media/launch.mp3"
+}
+```
+
+Each key is optional, and a name that is not a file of the right type in your folder, or that
+leaves it, is ignored. On a cabinet that turns the playfield, core turns your files with it;
+the table's own files and the person's are shown as they are.
+
+The screen is a `div.vpinfe-loading-screen` holding a `video` or an `img`, added to `<html>` and
+removed again, so a theme restyles it in CSS. Under Off core draws no spinner. A theme that draws
+its own sets `loading_screen.enabled` to `false`, beside those keys: the person's choice is then
+ignored, and the dim and the spinner are as `launch_dim.enabled` and `launch_indicator.enabled`
+say. On Windows the windows are minimized for a launch unless the person turned on Experimental
+Table Focus, so the choice is Spinner there and the launch audio is off. A picture or video that
+cannot be loaded gives way to the next step, so the screen is never left empty.
+
 ### Quiet While a Game Runs
 
 A window faded to nothing is still running, and the table needs the GPU and the CPU. On
@@ -1030,6 +1078,7 @@ whoever started it, and every CSS animation (transitions, the dim and core's own
 left running). On `TableLaunchComplete` it starts again only what it paused, so a video your
 theme had paused stays paused.
 
+- The loading screen's video, its launch audio and its picture are left playing.
 - A video or sound that starts playing during the game is paused as it starts.
 - A sound made with `new Audio()` that is never added to the page cannot be found. Stop it
   yourself on `TableLaunching`.
@@ -1798,6 +1847,7 @@ Twenty-four. `entry.media` lists the ones a game has a file for, using exactly t
 | `scoreview_video` | `dmd.mp4` | `(DMD)` | |
 | `topper_video` | `topper.mp4` | `(Topper)` | |
 | `loading` | `loading.mp4` | `(Loading)` | |
+| `loading_image` | `loading.png` | `(Loading)` | |
 | `audio` | `audio.mp3` | `(Audio)` | |
 | `audio_launch` | `audiolaunch.mp3` | `(AudioLaunch)` | |
 | `rule_sheet` | `rulesheet.pdf` | `(RuleSheet)` | |

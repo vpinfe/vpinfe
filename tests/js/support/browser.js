@@ -98,11 +98,11 @@ class FakeImage {
 FakeImage.requested = [];
 
 class FakeAudio {
-  constructor() {
+  constructor(src = "") {
     this.loop = false;
     this.muted = false;
     this.volume = 1;
-    this.src = "";
+    this.src = src;
     this.paused = true;
   }
   play() { this.paused = false; return Promise.resolve(); }
@@ -137,6 +137,7 @@ export function makeBrowser({ windowName = "table", search = null, pathname = "/
       className: "",
       textContent: "",
       setAttribute(name, value) { el.attributes[name] = value; },
+      canPlayType() { return ""; },
       appendChild(child) { el.children.push(child); documentStub._byId[child.id] = child; },
       remove() {
         const parent = documentStub.body.children.includes(el)

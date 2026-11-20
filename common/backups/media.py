@@ -15,16 +15,21 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from common import atomic_write, kept_copies, service_errors
+from common.config.config_access import ConfigSource
 from common.games import info_migration
 from common.i18n import t
+from common.media import launch_media
 
 from . import folder as backup_folder
-from .copies import REASON_TURN
+from .copies import REASON_DELETE, REASON_TURN
 
 MEDIA = "media"
 ASSETS = "assets"
 TABLES = "tables"
 AREAS = (MEDIA, ASSETS, TABLES)
+# A file taken out of the launch media folder is kept under this id in the media area, where
+# a game's id would be.
+LAUNCH_ID = "launch-media"
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,27 @@ def keep(folder: Path, game_id: str, source: Path, relative: str,
     kept.parent.mkdir(parents=True, exist_ok=True)
     with atomic_write.staged_for(kept) as staged:
         shutil.copy2(source, staged)
+    return kept
+
+
+def keep_launch(source: Path, reason: str) -> Path:
+    """Copy a file of the launch media folder into the backups folder."""
+    return keep(backup_folder.for_writing(), LAUNCH_ID, source, source.name, reason)
+
+
+def remove_launch(name: str, config: ConfigSource | None = None) -> Path:
+    """Take a file out of the launch media folder, keeping a copy, and return the copy. The
+    file a setting plays is refused."""
+    path = launch_media.path_of(name)
+    if path is None:
+        raise service_errors.NotFoundError(t("error.launch_media.gone", name=name))
+    if launch_media.in_use(name, config):
+        raise service_errors.RefusedError(t("error.launch_media.in_use", name=name))
+    kept = keep_launch(path, REASON_DELETE)
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise service_errors.RefusedError(t("error.launch_media.remove", name=name)) from exc
     return kept
 
 

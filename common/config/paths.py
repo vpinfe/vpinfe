@@ -122,6 +122,7 @@ VPSDB_PATH = CACHE_DIR / "vpsdb.json"
 STAMPS_PATH = CACHE_DIR / "stamps.json"
 PLUGIN_PROFILES_DIR = CONFIG_DIR / "plugin_profiles"
 LAUNCHER_SETTINGS_DIR = CONFIG_DIR / "launcher_settings"
+LAUNCH_MEDIA_DIR = CONFIG_DIR / "launch_media"
 SECRETS_PATH = CONFIG_DIR / "secrets.json"
 ACCEPTED_PATH = CONFIG_DIR / "accepted.json"
 # Where VPinFE installs the extensions it takes from the official list, apart from the
