@@ -235,7 +235,12 @@ def configure_logging(log_dir: Path, ini_config: Any = None,
         )
         if not _FILE_LOG_INITIALIZED and log_path.exists() and log_path.stat().st_size:
             # Start each run in a fresh file, with the previous run kept as a backup.
-            file_handler.doRollover()
+            try:
+                file_handler.doRollover()
+            except OSError:
+                # Windows refuses to rename a log another VPinFE process still has open;
+                # this run appends to it instead of failing to start.
+                pass
         file_handler.setFormatter(formatter)
         file_handler.addFilter(_TerminalOnlyFilter())
         file_handler.addFilter(_ExpectedNoiseFilter())
