@@ -174,9 +174,11 @@ it declared:
 loads      example_scores 0.1.0
 author     Example Author
 source     https://github.com/example/example_scores
+warns      no README.md in the folder - Help on its page opens it unless `home` points elsewhere
 ```
 
-It sends nothing and changes nothing.  It exits with 1 when something would not pass, so you can
+The last line is a reminder, not a failure: the extension has no README yet, and Lesson 10 writes
+one.  It sends nothing and changes nothing.  It exits with 1 when something would not pass, so you can
 run it from a script.
 
 ### Try it
@@ -1150,8 +1152,13 @@ the extension was built against, and this build offers 1.  `platforms` is not he
 extension runs wherever VPinFE does; when one does not, it is a list of `linux`, `windows`,
 `macos` or the name of a Linux distribution.
 
-A README tells whoever has the folder what it is, what it asks for and why.  The whole of it is in
-the listing below.
+A README is the help.  On the extension's page, **Help** opens the `home` address from the manifest
+and, with none, the README in the `source` repository, so it is the first page a person reads
+about your extension.  Write it for the person running it: what it does, how to start, what each
+setting and action does, the common problems and where to ask.  What it asks for and why belongs
+there too.  Notes for developers go at the bottom.  If the help grows
+past a page, put it in a `docs/` folder in the repository and point `home` at it.  The whole README
+for this lesson is in the listing below.
 
 ### See it
 
@@ -1192,8 +1199,8 @@ catalog.  Put it back.
 - **It listed what the extension asks for.**  The page's Reported Capabilities is the manifest's
   scopes and capabilities in words, with a line that says they are reported by its author and
   VPinFE can't check them.  Both are declarations, so the person who installs it can see
-  them before it does anything.  Above them are the author, the version, the source as
-  `owner/repo` with a link, and the folder it was found in.  See [scopes and tiers](how-it-works.md#scopes-and-tiers).
+  them before it does anything.  Above them are the author, the version, Help and Source Code links, and the
+  folder it was found in.  See [scopes and tiers](how-it-works.md#scopes-and-tiers).
 - **It ran the extension in VPinFE's own process.**  An extension is Python code on the device
   it is installed on, which is why putting a folder in `extensions/` is a decision a person makes.
   See [one process, so trusting it is a decision](how-it-works.md#one-process-so-trusting-it-is-a-decision).
@@ -1505,7 +1512,7 @@ Each of these is a small complete extension in the [Cookbook](cookbook.md).
   list](cookbook.md#11-a-game-in-a-list) and [a pane beside a list](cookbook.md#12-a-pane-beside-a-list).
 - **Something per player.**  [An account per player](cookbook.md#13-an-account-per-player).
 - **Something on a game.**  [A group on a game's panel](cookbook.md#14-a-group-on-a-games-panel).
-- **A page that is not a list.**  [A page of one subject](cookbook.md#16-a-page-of-one-subject) and
+- **A page that is not a list.**  [A panel of one subject](cookbook.md#16-a-panel-of-one-subject) and
   [a page of your own](cookbook.md#17-a-page-of-your-own).
 - **Tell the person something needs them.**  [Asking for attention on
   Overview](cookbook.md#18-asking-for-attention-on-overview).

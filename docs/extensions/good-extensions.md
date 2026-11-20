@@ -121,6 +121,9 @@ a port of its own, and the Manager links to it.  See
 - [ ] A Private game is never sent anywhere.  See [Private games never
   leave](how-it-works.md#private-games-never-leave).
 - [ ] The manifest asks for what is used and nothing more, and the README says why for each.
+- [ ] The README is written for the person running the extension: what it does, how to start,
+  each setting and action, the common problems and where to ask.  `--check-extension` has no
+  `warns` line.
 - [ ] Nothing asks to run as root, and a change to the device goes through `ctx.os`.
 - [ ] `display_name`, `version` and `requires_platform` are set, and `platforms` is there if it
   runs on one system.

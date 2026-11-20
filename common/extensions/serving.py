@@ -123,12 +123,12 @@ def _need(record: Record, need: Need | None, function: Any, base: str, surface: 
 
 
 def surface_tier(record: Record, kind: str, key: str) -> str:
-    """The tier a list, page, group (by subject), dialog or library entry sits at, which
-    is what reading it needs."""
+    """The tier a list, section, group (by subject), dialog or library entry sits at,
+    which is what reading it needs."""
     if kind == "list":
         return str(_list(record, key).tier)
-    if kind == "page":
-        return str(_page(record, key).tier)
+    if kind == "section":
+        return str(_section(record, key).tier)
     if kind == "group":
         return str(_group(record, key).tier)
     if kind == "action":
@@ -434,67 +434,56 @@ def list_save(record: Record, key: str, row_id: str, values: dict,
     return list_detail(record, key, row_id)
 
 
-# -- pages -----------------------------------------------------------------------------
+# -- sections --------------------------------------------------------------------------
 
 
-def _page(record: Record, key: str) -> Any:
-    found = _context(record).ui.page_functions.get(key)
+def _section(record: Record, key: str) -> Any:
+    found = _context(record).ui.section_functions.get(key)
     if found is None:
-        raise NotFoundError(i18n.t("error.extensions.no_page", display=record.display_name,
+        raise NotFoundError(i18n.t("error.extensions.no_section", display=record.display_name,
                                    key=key))
     return found
 
 
-def page_read(record: Record, key: str) -> dict:
-    """A page as the Manager draws it: the extension's `read()`, checked, with each picture
-    turned into core's own address and each secret held back."""
-    at = f"page {key}"
-    answer = plain(record, at, called(record, at, _page(record, key).read))
+def section_read(record: Record, key: str) -> dict:
+    """A section of the extension's panel as the Manager draws it: the extension's
+    `read()`, checked, with each picture turned into core's own address and each secret
+    held back. `section` is None where it has nothing to say."""
+    at = f"section {key}"
+    answer = plain(record, at, called(record, at, _section(record, key).read))
     try:
-        shown = pane.shaped(answer, key)
+        shown = pane.grouped(answer)
     except pane.PaneError as exc:
-        raise ExtensionError(i18n.t(exc.line, display=record.display_name, id=f"its page {key}",
-                                    **exc.params)) from exc
+        raise ExtensionError(i18n.t(exc.line, display=record.display_name,
+                                    id=f"its section {key}", **exc.params)) from exc
     try:
-        if shown["picture"]:
-            shown["picture"] = pictures.address(record, shown["picture"])
-        for section in shown["sections"]:
-            _addressed_facts(record, section["facts"])
+        _addressed_facts(record, (shown or {}).get("facts", []))
     except pictures.OutboundNotDeclaredError as exc:
         raise ExtensionError(i18n.t("error.extensions.picture_outbound",
                                     display=record.display_name, key=at)) from exc
-    return shown
+    return {"key": key, "section": shown}
 
 
-def page_save(record: Record, key: str, values: dict, need: Need | None = None) -> dict:
-    """Write the fields a page offers, then answer the page as it stands. The keys must be
-    fields the extension's own answer offers now."""
-    functions = _page(record, key)
+def section_save(record: Record, key: str, values: dict, need: Need | None = None) -> dict:
+    """Write the fields a section offers, then answer the section as it stands. The keys
+    must be fields the extension's own answer offers now."""
+    functions = _section(record, key)
     if functions.save is None:
-        raise NotFoundError(i18n.t("error.extensions.no_page_save",
+        raise NotFoundError(i18n.t("error.extensions.no_section_save",
                                    display=record.display_name, key=key))
-    _need(record, need, functions.save, functions.tier, f"page:{key}")
-    offered = [one for section in page_read(record, key)["sections"]
-               for one in section["fields"]]
+    _need(record, need, functions.save, functions.tier, f"section:{key}")
+    offered = (section_read(record, key)["section"] or {}).get("fields", [])
     changes = pane.accepted(
         offered, values or {},
         lambda line, **params: RefusedError(i18n.t(line, display=record.display_name,
                                                    **params)))
     if changes:
         try:
-            called(record, f"page {key} save", functions.save, changes)
+            called(record, f"section {key} save", functions.save, changes)
         except ExtensionError as exc:
             exc.field = next(iter(changes))
             raise
-    return page_read(record, key)
-
-
-def page_about(record: Record, key: str) -> dict:
-    return {"acts": _menu(record, "page", key, _page(record, key))}
-
-
-def page_act(record: Record, key: str, act: str, need: Need | None = None) -> dict:
-    return _act(record, "page", key, _page(record, key), act, need)
+    return section_read(record, key)
 
 
 # -- panel groups ----------------------------------------------------------------------
@@ -852,7 +841,7 @@ def job_stop(record: Record, kind: str) -> dict:
 SOURCE_ANSWER_KEYS = frozenset({"rows", "note", "link"})
 SOURCE_ROW_KEYS = frozenset({"key", "name", "site", "page", "note", "picture", "tag", "current",
                              "vps_file_id", "state", "acts"})
-SOURCE_LINK_KEYS = frozenset({"text", "to", "page", "settings"})
+SOURCE_LINK_KEYS = frozenset({"text", "to", "section", "settings"})
 SOURCE_TAKE_KEYS = frozenset({"job", "action", "message"})
 SOURCE_STATE_KEYS = frozenset({"text", "level", "hint"})
 SOURCE_STATE_LEVELS = ("on", "off", "unknown", "warn", "bad")
@@ -967,18 +956,18 @@ def _source_link(record: Record, at: str, link: Any) -> dict | None:
         raise _shape(record, at, "a link",
                      f"an object with {', '.join(sorted(SOURCE_LINK_KEYS))}")
     text = _source_text(record, at, link, "text", required=True)
-    chosen = [key for key in ("to", "page", "settings") if link.get(key)]
+    chosen = [key for key in ("to", "section", "settings") if link.get(key)]
     if len(chosen) != 1:
-        raise _shape(record, at, "a link", "one of to, page or settings")
+        raise _shape(record, at, "a link", "one of to, section or settings")
     if "to" in chosen:
         if not isinstance(link["to"], str) or not pictures.is_openable(link["to"]):
             raise _shape(record, at, "a link's to", "an http or https address")
         return {"text": text, "to": link["to"]}
-    if "page" in chosen:
-        if not isinstance(link["page"], str) or link["page"] not in {
-                one["key"] for one in record.declared_pages}:
-            raise _shape(record, at, "a link's page", "a page the extension declared")
-        return {"text": text, "page": link["page"]}
+    if "section" in chosen:
+        if not isinstance(link["section"], str) or link["section"] not in {
+                one["key"] for one in record.declared_sections}:
+            raise _shape(record, at, "a link's section", "a section the extension declared")
+        return {"text": text, "section": link["section"]}
     return {"text": text, "settings": True}
 
 

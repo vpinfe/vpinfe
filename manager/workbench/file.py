@@ -295,7 +295,7 @@ def _asset_details(context: dict[str, Any], detail: dict[str, Any],
     facts.append((t("word.source"),
                   media_ownership.source_name(origin) or media_ownership.UNKNOWN))
     return [(panel.HEADING, t("manager.workbench.details")),
-            *((panel.READ, one) for one in facts)] if facts else []
+            *facts] if facts else []
 
 
 async def _asset_file_block(context: dict[str, Any]) -> None:

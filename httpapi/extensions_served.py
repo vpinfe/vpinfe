@@ -44,14 +44,14 @@ def answering_at(tier: str) -> Any:
 def router(name: str, running: Any) -> APIRouter:
     """The routes for extension `name`, each behind `running` and the Play tier, which every
     caller of the extension holds. The handler then holds the caller to the tier of the
-    list, page, group, dialog or act it reaches, which only the extension's declaration
+    list, section, group, dialog or act it reaches, which only the extension's declaration
     knows. Every route answers at Library at most; only an act declared Protected keeps more."""
     floor = requires(scopes.extension_scope(name, reach.PLAY))
     answering = answering_at(reach.LIBRARY)
     found = APIRouter(tags=["extensions"])
 
     def reading(request: Request, kind: str, key: str) -> None:
-        """Hold the caller to what reading a list, page, group or dialog needs."""
+        """Hold the caller to what reading a list, section, group or dialog needs."""
         tier = ask(serving.surface_tier, kind, key)
         require(request, scopes.extension_scope(name, reach.for_reading(tier)))
 
@@ -135,25 +135,16 @@ def router(name: str, running: Any) -> APIRouter:
             library(request)
         return responses.media_file(ask(serving.picture, picture_id), request, "")
 
-    # -- pages ---------------------------------------------------------------------
+    # -- sections ------------------------------------------------------------------
 
-    @get("/pages/{key}", "What a page the extension declared shows")
-    def get_page(request: Request, key: str) -> dict:
-        reading(request, "page", key)
-        return ask(serving.page_read, key)
+    @get("/sections/{key}", "What a section of the extension's panel shows")
+    def get_section(request: Request, key: str) -> dict:
+        reading(request, "section", key)
+        return ask(serving.section_read, key)
 
-    @put("/pages/{key}", "Change fields on a page")
-    def put_page(request: Request, key: str, body: models.ExtensionValues) -> dict:
-        return ask(serving.page_save, key, body.values, changing(request))
-
-    @get("/pages/{key}/about", "What a page offers to do")
-    def get_page_about(request: Request, key: str) -> dict:
-        reading(request, "page", key)
-        return ask(serving.page_about, key)
-
-    @post("/pages/{key}/about/acts/{act}", "Do one of a page's acts")
-    def post_page_act(request: Request, key: str, act: str) -> dict:
-        return ask(serving.page_act, key, act, changing(request))
+    @put("/sections/{key}", "Change fields in a section of the extension's panel")
+    def put_section(request: Request, key: str, body: models.ExtensionValues) -> dict:
+        return ask(serving.section_save, key, body.values, changing(request))
 
     # -- panel groups --------------------------------------------------------------
 

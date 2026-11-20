@@ -95,7 +95,7 @@ def _replaced(made: package.Package) -> list[tuple[Any, ...]]:
                 (panel.FULL, lambda: ui.label(t("manager.support.privacy.nothing"))
                  .classes("manager-help"))]
     return [(panel.HEADING, t("manager.support.privacy.replaced")),
-            *[(panel.READ, (support_inspect.kind_label(kind), str(count)))
+            *[(support_inspect.kind_label(kind), str(count))
               for kind, count in counts]]
 
 
@@ -224,9 +224,8 @@ def _draw_share(draft: Draft) -> None:
             _copy(t("manager.support.share.copy_markdown"), summary,
                   t("manager.support.share.copy_markdown_hint")))),
         panel.note(t("manager.support.share.markdown_help")),
-        (panel.READ, (t("manager.support.share.checksum"),
-                      panel.copyable_value(made.checksum,
-                                           t("manager.support.share.copy_checksum")))),
+        (t("manager.support.share.checksum"),
+         panel.copyable_value(made.checksum, t("manager.support.share.copy_checksum"))),
     ])
 
 

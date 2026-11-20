@@ -1,7 +1,7 @@
 # Actions and dialogs
 
-`ctx.ui.action(key, dialog, *, label, description)`.  An extension does not draw.  It declares
-an **action** and core shows it, so every action looks like the Manager and keeps working if
+`ctx.ui.action(key, dialog, *, label, description, icon, section)`.  An extension does not draw.  It declares
+an **action** and core shows it as a line in the extension's panel (see [`ctx.ui.action`](ui.md#ctxuiaction)), so every action looks like the Manager and keeps working if
 that extension later runs out of process.
 
 The dialog is any object.  It must have `ask`; core uses the rest if they are there:

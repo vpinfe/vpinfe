@@ -172,6 +172,18 @@ def repo_page(url: str) -> str:
     return f"{parsed.scheme or 'https'}://{host}/{named}"
 
 
+def list_name(theme: dict[str, Any]) -> str:
+    """The list a theme comes from, as a person knows it: the VPinFE Theme List's title, the
+    name given on Theme Sources, or the repository the list lives in."""
+    registry = str(theme.get("registry") or "")
+    if not registry:
+        return ""
+    trust = theme.get("trust") or {}
+    if trust.get("origin") == accepted.STOCK:
+        return t("manager.theme_sources.stock")
+    return str(trust.get("source_name") or "") or repo_name(registry)
+
+
 def rows(themes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [when.said(_row(theme), "updated") for theme in themes]
 
@@ -182,7 +194,7 @@ def _row(theme: dict[str, Any]) -> dict[str, Any]:
             "trust": trust_state(theme),
             "made_for": made_for(theme),
             "author": str(theme.get("author") or ""),
-            "registry": repo_name(str(theme["registry"])) if theme.get("registry") else "",
+            "registry": list_name(theme),
             "repository": repo_name(str(theme["url"])) if theme.get("url") else "",
             "updated": str(theme.get("updated") or ""),
             "said": theme_card.said(theme)}
@@ -409,7 +421,9 @@ async def details(context: dict[str, Any]) -> None:
         if theme.get("description"):
             entries.append(panel.intro(str(theme["description"])))
         entries.append((t("word.status"), _status_value(context, library, theme)))
-        if trust_state(theme):
+        if not theme.get("url"):
+            entries.append(panel.note(t("manager.themes.no_source")))
+        if theme.get("trust"):
             entries.append((t("manager.themes.trust"), _trust_value(theme)))
         if theme_card.version_said(theme):
             entries.append((t("word.version"), theme_card.version_said(theme)))
@@ -419,16 +433,11 @@ async def details(context: dict[str, Any]) -> None:
             entries.append((t("manager.themes.updated"), when.ago(theme["updated"])))
         if made_for(theme):
             entries.append((t("manager.themes.made_for"), MADE_FOR[made_for(theme)]))
-        if theme.get("registry"):
-            registry = str(theme["registry"])
-            entries.append((t("manager.themes.list"),
-                            panel.link_out(repo_name(registry), to=repo_page(registry))))
         if theme.get("url"):
-            entries.append((t("manager.themes.repository"),
-                            panel.link_out(repo_name(str(theme["url"])), to=str(theme["url"]))))
-        else:
-            entries += [(t("manager.themes.repository"), t("word.none")),
-                        panel.note(t("manager.themes.no_source"))]
+            repository = repo_page(str(theme["url"]))
+            entries.append((t("word.links"), panel.links(
+                (t("word.help"), panel.readme_page(repository)),
+                (t("word.source_code"), repository))))
         copies = await backup_rows.listed(library, "theme", str(theme["key"]))
         if copies:
             entries.append(backup_rows.entry(
@@ -512,11 +521,13 @@ def _status_value(context: dict[str, Any], library: Library,
     return draw
 
 
-def _trust_value(theme: dict[str, Any]) -> Callable[[], None]:
+def _trust_value(theme: dict[str, Any]) -> Callable[[], None] | str:
     """The chip a theme carries when it is not from the VPinFE Theme List, with where it
-    comes from beside it."""
+    comes from beside it; plain text for one that is."""
     kind = trust_state(theme)
     trust = theme.get("trust") or {}
+    if not kind:
+        return t("manager.themes.on_stock_list")
     where = (str(trust.get("source_name") or "")
              or (repo_name(str(trust["source"])) if trust.get("source") else "")
              or t("manager.themes.in_folder"))

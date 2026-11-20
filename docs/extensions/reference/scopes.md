@@ -25,7 +25,7 @@ extension's settings, accounts and job stop at Library, whatever the manifest sa
 
 Play is different, because a Remote pass belongs to somebody who is not the Owner.  The manifest's
 `play` names each surface a Remote can open, as `router`, `action:<key>`, `list:<key>`,
-`page:<key>`, `group:<subject>` or `verb:<subject>:<key>`.  The install page shows the list as
+`section:<key>`, `group:<subject>` or `verb:<subject>:<key>`.  The install page shows the list as
 "A Remote Can Open" before the Owner trusts it.  A surface put at Play that `play` does not name fails
 when it is declared, and an act marked `@tier(PLAY)` on a surface that is not Play is refused when it
 is called.  An update that adds a surface asks the Owner again, and only about the one added.

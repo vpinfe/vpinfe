@@ -27,7 +27,6 @@ from common.online.vpsdb_media import MANIFEST_KINDS
 from manager.extensions import ext_lists, ext_page
 from manager.kit import (
     candidates,
-    deeplink,
     game_tables,
     kind_words,
     offload,
@@ -596,9 +595,9 @@ class Online:
     def _source_link(self, source: dict[str, Any], link: dict[str, Any]) -> None:
         if link.get("to"):
             panel.link_out(link["text"], to=link["to"])()
-        elif link.get("page"):
-            panel.link(link["text"], to="/manager?" + deeplink.query(
-                {"view": ext_lists.page_view_key(source["extension"], link["page"])}))()
+        elif link.get("section"):
+            panel.link(link["text"], to=ext_page.address(
+                source["extension"], link["section"]))()
         else:
             panel.link(link["text"], to=ext_page.address(source["extension"]))()
 

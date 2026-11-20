@@ -247,16 +247,18 @@ def _unread(failed: Any) -> str:
 
 def extension_rows(raised: Any) -> list[Need]:
     """The rows running extensions raise, after core's own, in the order they answered."""
-    from manager.extensions import ext_lists
+    from manager.extensions import ext_lists, ext_sections
 
     out = []
     for one in raised:
         if str(one.get("opens") or "") == "action":
             opens = Opens(extension=str(one["extension"]), action=str(one["to"]))
+        elif str(one.get("opens") or "") == "section":
+            opens = Opens("extensions", keys={
+                "extension": str(one["extension"]),
+                "section": ext_sections.SECTION_PREFIX + str(one["to"])})
         else:
-            make = ext_lists.page_view_key if one.get("opens") == "page" \
-                else ext_lists.view_key
-            opens = Opens(make(str(one["extension"]), str(one["to"])))
+            opens = Opens(ext_lists.view_key(str(one["extension"]), str(one["to"])))
         out.append(Need(str(one["key"]), str(one["label"]), str(one.get("says") or ""),
                         str(one.get("tone") or WARM), ext_lists.ICON, opens,
                         token=tuple(str(each) for each in one.get("covered") or ()),

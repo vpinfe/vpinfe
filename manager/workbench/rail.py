@@ -124,7 +124,7 @@ async def _rail(context: dict[str, Any], subject: str,
     to the open one, the work, then the rest. The markup is the same at either width, so
     nothing is rebuilt on a drag.
     """
-    header = state.get("subject_menu")
+    header = context.get("menu") or state.get("subject_menu")
     verbs_of = SUBJECT_VERBS.get(subject)
     if header is not None and verbs_of is not None:
         panel.subject_menu(header, verbs_of(context))
@@ -289,6 +289,9 @@ SECTIONS: tuple[Section, ...] = (
     Section("extension_settings", lambda _: t("manager.extensions.settings"),
             extensions_page.settings_section, subjects=frozenset({"extension"}),
             shown=extensions_page.has_settings, titled=True),
+    Section("extension_actions", lambda _: t("word.actions"),
+            extensions_page.actions_section, subjects=frozenset({"extension"}),
+            shown=extensions_page.has_actions, titled=True),
     # A player: who they are, then an account per running extension offering one, which
     # the panel puts between these two, then what they have played.
     Section("player_details", lambda _: t("manager.workbench.details"),

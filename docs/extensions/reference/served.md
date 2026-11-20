@@ -17,10 +17,8 @@ and says why.
 | `GET /lists/{key}/about` | `{"status": ..., "acts": [{key, label[, url][, action]}]}` |
 | `POST /lists/{key}/about/acts/{act}` | `{"message"?, "url"?}` |
 | `POST /lists/{key}/verbs/{verb}` | Body `{"ids": [...]}`.  `{"message"?, "url"?}` |
-| `GET /pages/{key}` | A page's answer as the extension read it: `{title, under?, picture?, sections}`.  A secret field has `set` instead of `value` |
-| `PUT /pages/{key}` | Body `{"values": {...}}`.  Saves, answers as `GET` does.  A refusal is a `400` with the field, and a `404` for a page with no `save` |
-| `GET /pages/{key}/about` | `{"acts": [{key, label[, url][, action]}]}` |
-| `POST /pages/{key}/about/acts/{act}` | `{"message"?, "url"?}` |
+| `GET /sections/{key}` | A section of the extension's own panel as the extension read it: `{key, section: {facts, fields, rows}}`.  A secret field has `set` instead of `value` |
+| `PUT /sections/{key}` | Body `{"values": {...}}`.  Saves, answers as `GET` does.  A refusal is a `400` with the field, and a `404` for a section with no `save` |
 | `GET /groups/game/{game_id}` | `{"title", "section", "acts": [{key, label[, url]}]}`: the group's section, or `null` for a game marked Private or a group with nothing in it, and no acts then |
 | `POST /groups/game/{game_id}/acts/{act}` | `{"message"?, "url"?}`.  A `404` for a game marked Private.  Likewise `POST /groups/table/{game_id}/{table_id}/acts/{act}` |
 | `GET /groups/table/{game_id}/{table_id}` | As the game's, for one table |

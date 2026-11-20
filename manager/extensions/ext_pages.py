@@ -1,9 +1,8 @@
-"""An extension's own page: one subject drawn as a panel, with no grid.
+"""An extension's whole panel as an entry of its own in the navigation.
 
-The extension answers `read()` with a title, a line under it and sections of facts, fields
-and rows, as a list's pane does for a row, and core draws them as it draws every other
-panel. A field is written when it is set, and the answer to that write is the page drawn
-again. The title menu is the page's acts, with the extension's Settings after them.
+The panel is the one the Extensions page draws for the extension, at full width: Details,
+Settings, the extension's own sections, then Actions. Where the extension names no area
+the Extensions page is its only home.
 """
 
 from __future__ import annotations
@@ -11,104 +10,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from nicegui import ui
-
-from common.failures import why
-from common.i18n import t
-from manager.extensions import ext_cells, ext_lists, ext_row
-from manager.kit import busy, offload, panel
-from manager.kit.api import ApiClient
-from manager.kit.on_page import on_page
+from manager.extensions import ext_lists
 
 
-def is_page(view: str) -> bool:
-    return view.startswith(ext_lists.PAGE_PREFIX)
+def is_panel(view: str) -> bool:
+    return view.startswith(ext_lists.PANEL_PREFIX)
 
 
-def pages(extensions: Sequence[dict[str, Any]]) -> list[tuple[dict, dict]]:
-    """(extension, page) for every page a running extension declares."""
+def panels(extensions: Sequence[dict[str, Any]]) -> list[tuple[dict, dict]]:
+    """(extension, panel) for every running extension that put its panel in the
+    navigation."""
     return [(one, declared) for one in extensions
             if str(one.get("state") or "") == "loaded"
-            for declared in one.get("pages") or []]
+            for declared in one.get("panels") or []]
 
 
 def find(view: str, extensions: Sequence[dict[str, Any]]) -> tuple[dict, dict] | None:
-    return next(((one, declared) for one, declared in pages(extensions)
-                 if ext_lists.page_view_key(str(one.get("name") or ""),
-                                            str(declared.get("key") or "")) == view), None)
-
-
-def route(extension: dict[str, Any], declared: dict[str, Any]) -> str:
-    return f"/ext/{extension.get('name')}{declared['base']}"
-
-
-def build(extension: dict[str, Any], declared: dict[str, Any], library: Any = None,
-          subject: Any = None, host: str = "") -> None:
-    """`subject` is the page header's slot for the page's menu. `host` is where the Manager
-    was opened, which a link fact's `{host}` is filled with. `library` is what a game or
-    table fact is looked up in."""
-    body = ui.column().classes("w-full grow min-h-0 gap-3 px-3 py-2")
-    busy.fill(body, lambda: show(body, extension, declared, subject, host, None, library))
-
-
-@on_page
-async def show(body: Any, extension: dict[str, Any], declared: dict[str, Any],
-               subject: Any, host: str, answer: dict[str, Any] | None,
-               library: Any = None) -> None:
-    """The page from `answer` where the write that came just before it gave one, else read
-    again. The menu is read again either way: an act can change what the next one is."""
-    said = str(extension.get("display_name") or extension.get("name") or "")
-    where = route(extension, declared)
-    if answer is None:
-        try:
-            answer = dict(await offload.io(ApiClient().ext_get, where))
-        except Exception as exc:  # noqa: BLE001 - the extension's words, or the API's
-            if body.is_deleted:
-                return
-            body.clear()
-            with body:
-                panel.facts(ui, [panel.intro(t("manager.community.read_failed", name=said),
-                                             hint=why(exc))])
-            await menu(subject, extension, declared, body, host, library)
-            return
-    if body.is_deleted:
-        return
-
-    async def redraw(new: dict[str, Any] | None) -> None:
-        await show(body, extension, declared, subject, host, new, library)
-
-    sections = answer.get("sections") or []
-    held = await ext_cells.prepared(
-        {"state": {"host": host}, "route": where, "redraw": redraw, "again": None,
-         "library": library}, sections)
-    entries: list[tuple[Any, ...]] = [(panel.HEADING, str(answer.get("title") or ""))]
-    if answer.get("under"):
-        entries.append(panel.note(str(answer["under"])))
-    for one in answer.get("sections") or []:
-        if one.get("label"):
-            entries.append((panel.HEADING, str(one["label"])))
-        entries += ext_row.section_entries(one, held)
-    if body.is_deleted:
-        return
-    body.clear()
-    with body:
-        if answer.get("picture"):
-            ui.image(answer["picture"]).classes("manager-pane-picture")
-        panel.facts(ui, entries)
-    await menu(subject, extension, declared, body, host, library)
-
-
-async def menu(subject: Any, extension: dict[str, Any], declared: dict[str, Any],
-               body: Any, host: str, library: Any = None) -> None:
-    """The page's acts, in the header, read now."""
-    if subject is None or subject.is_deleted:
-        return
-    about = str(declared.get("about") or "")
-    now = await offload.io(ext_lists.as_it_stands, extension)
-    found = await offload.io(ext_lists.standing, str(extension.get("name") or ""), about)
-
-    async def after_act() -> None:
-        await show(body, extension, declared, subject, host, None, library)
-
-    panel.subject_menu(subject, ext_lists.acts(
-        now, found, lambda act: ext_lists.run_act(now, about, act, after_act)))
+    return next(((one, declared) for one, declared in panels(extensions)
+                 if ext_lists.panel_view_key(str(one.get("name") or "")) == view), None)

@@ -71,7 +71,7 @@ LONGEST_ADDRESS = 300
 PICTURE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
 
 # How a manifest names a surface a Remote can open.
-PLAY_SURFACE = re.compile(r"router|(action|list|page|group):\S(.*\S)?|verb:[^:\s]+:\S(.*\S)?")
+PLAY_SURFACE = re.compile(r"router|(action|list|section|group):\S(.*\S)?|verb:[^:\s]+:\S(.*\S)?")
 
 # What an install can be meant to do, read from the one list rather than restated: a
 # second copy would be right until somebody added a feature.
@@ -194,7 +194,7 @@ class Manifest:
     # extension's, and Play is never listed here: see `play`.
     tiers: tuple[str, ...] = ()
     # The surfaces a Remote can open, by name: "router", "action:<key>", "list:<key>",
-    # "page:<key>", "group:<subject>" or "verb:<subject>:<key>". The Owner is shown the list
+    # "section:<key>", "group:<subject>" or "verb:<subject>:<key>". The Owner is shown the list
     # before accepting, and a Play surface registered without a line here fails to load.
     play: tuple[str, ...] = ()
     # Where it is described, when that is not the repository. Empty is not shown apart.

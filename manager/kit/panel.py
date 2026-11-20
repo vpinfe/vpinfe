@@ -16,8 +16,10 @@ import json
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
+from pathlib import PurePosixPath
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlparse
 
 from nicegui import background_tasks, ui
 
@@ -45,10 +47,6 @@ ASIDE = object()
 # heading and leaves room before the first row, so it reads as part of the heading
 # rather than as something between two groups.
 LEDE = object()
-# A fact that is only read, as (READ, (label, value)): no control to centre, so its row is
-# as tall as the words and a run of them sits close together. A plain-text value is one
-# without being marked; a value drawn by a function keeps the taller row of a control.
-READ = object()
 # A fact about the row above it, as (SUB, (label, value)): its label is indented behind an
 # elbow so it reads as part of that row.
 SUB = object()
@@ -204,11 +202,6 @@ def _fact_row(target: Any, label: Any, value: Any) -> None:
         with target.element("div").classes("manager-fact-full manager-fact-lede"):
             value()
         return
-    if label is READ:
-        name, shown = value
-        target.label(str(name)).classes("manager-fact-label manager-fact-read")
-        _draw_value(target, shown)
-        return
     if label is SUB:
         name, shown = value
         target.label(str(name)).classes("manager-fact-label manager-fact-sub")
@@ -225,8 +218,7 @@ def _fact_row(target: Any, label: Any, value: Any) -> None:
     # re-casing it is how "RAR Tool Path" reached a user as "Rar Tool Path" -
     # the casing rule is a fallback for a bare key, not a filter over finished
     # words. A surface that writes its labels in prose cases them on the way in.
-    target.label(str(label)).classes(
-        "manager-fact-label" if callable(value) else "manager-fact-label manager-fact-read")
+    target.label(str(label)).classes("manager-fact-label")
     _draw_value(target, value)
 
 
@@ -259,6 +251,16 @@ def _draw_value(target: Any, value: Any) -> None:
         return
     target.label(str(value)).classes("manager-fact-value truncate min-w-0") \
         .tooltip(str(value))
+
+
+def wrapped(text: str) -> Callable[[], None]:
+    """A fact's value that runs onto further lines instead of being cut at the row's end.
+    For a sentence; a name, a path or an address stays a plain value and is cut with a
+    tooltip."""
+    def draw() -> None:
+        ui.label(text).classes("manager-fact-value manager-fact-wrapped min-w-0")
+
+    return draw
 
 
 class Region:
@@ -2293,6 +2295,27 @@ def link_out(label: str, *, to: str, hint: str = "", opener: bool = False,
             ui.icon("open_in_new")
         if hint:
             row.tooltip(hint)
+
+    return draw
+
+
+def readme_page(repository: str) -> str:
+    """The README shown on a repository's own page, or the address given where it is not
+    one (a repository host shows the README under its file list)."""
+    parsed = urlparse(repository)
+    parts = [part for part in PurePosixPath(parsed.path).parts if part != "/"]
+    if parsed.scheme != "https" or len(parts) != 2 or parsed.fragment:
+        return repository
+    return f"https://{parsed.netloc}/{parts[0]}/{parts[1].removesuffix('.git')}#readme"
+
+
+def links(*pairs: tuple[str, str]) -> Callable[[], None]:
+    """A fact's value that is several ways out, as (label, address) pairs. Each shows its
+    address as a tooltip rather than on screen."""
+    def draw() -> None:
+        with ui.row().classes("items-center gap-x-4 gap-y-1 min-w-0"):
+            for label, address in pairs:
+                link_out(label, to=address, hint=address, rel="noopener noreferrer")()
 
     return draw
 

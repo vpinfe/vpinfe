@@ -8,7 +8,7 @@ callers only go on to accept on a True.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from nicegui import ui
@@ -18,16 +18,7 @@ from manager.extensions import ext_mark
 from manager.kit import dialog as frame
 from manager.kit import panel, verbs
 
-__all__ = ["chips", "extension", "theme", "themes"]
-
-
-def chips(words: Sequence[str]) -> Callable[[], None]:
-    def draw() -> None:
-        with ui.element("div").classes("manager-chips"):
-            for word in words:
-                ui.label(word).classes("manager-tier manager-tier--on")
-
-    return draw
+__all__ = ["extension", "theme", "themes"]
 
 
 async def _ask(title: str, lines: Sequence[str], answer: str, *,
@@ -49,15 +40,6 @@ async def _ask(title: str, lines: Sequence[str], answer: str, *,
             frame.cancel(lambda: box.submit(False))
             frame.answer(answer, lambda: box.submit(True), icon=verbs.ACCEPT, needs=ticked)
     return bool(await box)
-
-
-def _capability_rows(uses: Sequence[str], remote: Sequence[str]) -> list[tuple[Any, ...]]:
-    rows: list[tuple[Any, ...]] = []
-    if uses:
-        rows.append((t("manager.trust.uses"), chips(uses)))
-    if remote:
-        rows.append((t("manager.trust.remote"), chips(remote)))
-    return rows
 
 
 async def theme(name: str, *, source: str = "", installing: bool = False) -> bool:
@@ -87,16 +69,16 @@ async def themes(found: Sequence[tuple[str, str]]) -> bool:
 
 
 async def extension(name: str, version: str, *, author: str, source: str, path: str,
-                    uses: Sequence[str], remote: Sequence[str] = (), replaces: str = "",
+                    reach: Sequence[tuple[Any, ...]] = (), replaces: str = "",
                     changed: int = 0, claims_team: bool = False,
-                    added: Sequence[str] = (), was: str = "") -> bool:
+                    added: Sequence[tuple[Any, ...]] = (), was: str = "") -> bool:
     """Whether to turn this unofficial extension on, asked every time it goes from off to on.
 
-    `uses` is what it says it uses, in words; `remote` is what a Remote can open. `replaces`
+    `reach` is the rows saying what it can do, as the extension's panel draws them. `replaces`
     names the included extension whose name it uses, `changed` is how many of the files of
     one installed from the Extension List differ since, and `claims_team` is an extension
-    that names the VPinFE team as its author or source. `added` is what a newer version asks
-    for beyond what was trusted, and `was` the version that was.
+    that names the VPinFE team as its author or source. `added` is the rows for what a newer
+    version asks for beyond what was trusted, and `was` the version that was.
     """
     lines = [t("manager.trust.ext_body", name=name)]
     if replaces:
@@ -115,9 +97,14 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
                                     rel="noopener noreferrer")))
     if path:
         rows.append((t("manager.ext_page.folder_path"), panel.path_value(path)))
-    rows += _capability_rows(uses or [t("word.none")], remote)
+    if reach:
+        rows.append((panel.HEADING, t("manager.extensions.reach")))
+        rows += reach
+    else:
+        rows.append((t("manager.extensions.reach"), t("word.none")))
     if added:
-        rows.append((t("manager.trust.new_capabilities"), chips(added)))
+        rows.append((panel.HEADING, t("manager.trust.new_reach")))
+        rows += added
     return await _ask(t("manager.trust.ext_title"), lines, t("manager.trust.ext_button"),
                       rows=rows, closing=t("manager.trust.ext_reported"),
                       warning=t("manager.trust.ext_unsupported"),

@@ -71,7 +71,7 @@ _FIELDS = (
 # Media selects a game, a table and a slot the same way the other two do - a row there
 # is one game's slot - so leaving it out would drop the whole selection in silence.
 _PANEL = ("games", "tables", "media", "assets")
-_ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": _PANEL, "slot": _PANEL,
+_ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": (*_PANEL, "extensions"), "slot": _PANEL,
             "file": ("media", "assets"),
             "page": ("settings",), "log": ("logs",), "tab": ("discovery",),
             "collection": ("collections", "games"),
@@ -89,6 +89,10 @@ LOG_VIEWS = ("digest",)
 
 # An extension's list is a view of its own, named `community:<extension>:<list>`.
 COMMUNITY_PREFIX = "community:"
+# An extension's whole panel, as an entry of its own in the navigation: `panel:<extension>`.
+PANEL_PREFIX = "panel:"
+# A section an extension declared for its own panel, as its rail key and in the address.
+SECTION_PREFIX = "own:"
 
 # What the address calls a panel with nothing open.
 NO_SECTION = "none"
@@ -145,6 +149,8 @@ def _slot_file(state: dict[str, Any]) -> str:
 def _meant_for(name: str, view: str) -> bool:
     if name == "row":
         return view.startswith(COMMUNITY_PREFIX)
+    if name == "section" and view.startswith(PANEL_PREFIX):
+        return True
     return view in _ONLY_ON.get(name, (view,))
 
 

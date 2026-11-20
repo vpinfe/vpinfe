@@ -88,10 +88,12 @@ def register(ctx: Any) -> None:
 
 
 def build(root: Path, body: str | None = None, *, name: str = NAME,
-          words: dict | None = None, **manifest: Any) -> Path:
+          words: dict | None = None, readme: bool = True, **manifest: Any) -> Path:
     """An extension in `root`; its `register` is the one above unless `body` is given."""
     directory = root / name
     (directory / "i18n").mkdir(parents=True)
+    if readme:
+        (directory / "README.md").write_text("# Checked\n", encoding="utf-8")
     (directory / "extension.json").write_text(json.dumps({
         "name": name, "display_name": "Checked", "version": "1.2.3",
         "description": "Declares what the check reads.",
@@ -122,6 +124,23 @@ class CheckCase(unittest.TestCase):
         found = [one for one in lines if one.startswith(start)]
         self.assertEqual(len(found), 1, f"{start!r} in {lines}")
         return found[0]
+
+
+class AMissingReadme(CheckCase):
+    def test_it_warns_and_still_passes(self) -> None:
+        lines, passed = self.checked(build(self.root, readme=False))
+
+        self.assertTrue(passed)
+        self.assertTrue(self.line(lines, "warns").startswith("warns      no README.md"))
+        self.assertEqual(lines[-1], self.line(lines, "warns"))
+
+    def test_a_readme_in_any_case_is_found(self) -> None:
+        directory = build(self.root, readme=False)
+        (directory / "readme.txt").write_text("Help\n", encoding="utf-8")
+
+        lines, _ = self.checked(directory)
+
+        self.assertFalse([one for one in lines if one.startswith("warns")])
 
 
 class AGroupOnAPanel(CheckCase):
@@ -163,26 +182,28 @@ class AVerbInAMenu(CheckCase):
         self.assertTrue(passed, lines)
 
 
-class APage(CheckCase):
+class ASection(CheckCase):
     BODY = (
         "def register(ctx):\n"
-        "    ctx.ui.page('week', lambda: {'title': 'Week'}, title='Week', area='system',\n"
-        "                save=lambda values: None, acts={'x': lambda: None})\n")
+        "    ctx.ui.section('week', lambda: {'facts': []}, title='Week',\n"
+        "                   save=lambda values: None)\n"
+        "    ctx.ui.panel(area='system')\n")
 
-    def test_it_says_the_page_and_reads_it(self) -> None:
+    def test_it_says_the_section_and_the_panel_and_reads_the_section(self) -> None:
         lines, passed = check.check(build(self.root, self.BODY, words={}))
 
-        self.assertIn("page       week in system, with fields", lines)
-        self.assertIn("reads      page week: 0 sections, acts: x", lines)
+        self.assertIn("section    week, with fields", lines)
+        self.assertIn("panel      in system", lines)
+        self.assertIn("reads      section week: 0 facts, 0 fields, 0 rows", lines)
         self.assertTrue(passed, lines)
 
-    def test_a_page_whose_answer_core_cannot_draw_fails(self) -> None:
-        body = self.BODY.replace("{'title': 'Week'}", "{'under': 'no title'}")
+    def test_a_section_whose_answer_core_cannot_draw_fails(self) -> None:
+        body = self.BODY.replace("{'facts': []}", "{'color': 'red'}")
 
         lines, passed = check.check(build(self.root, body, words={}))
 
         self.assertFalse(passed)
-        self.assertTrue(any(one.startswith("fails      page week") for one in lines), lines)
+        self.assertTrue(any(one.startswith("fails      section week") for one in lines), lines)
 
 
 class ANeed(CheckCase):

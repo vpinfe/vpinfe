@@ -345,13 +345,18 @@ async def _pane_build(container: ui.column, state: dict[str, Any],
             await draw()
 
 
-def _blank(container: ui.column, title: ui.column, heading: str, said: str) -> None:
+def _blank(container: ui.column, title: ui.column | None, heading: str, said: str) -> None:
     """The panel with nothing to show. Its own helper so the drawing paths can read
-    their subject before clearing, and still say this when there is none."""
+    their subject before clearing, and still say this when there is none. With no title
+    slot the panel is a page's, and says it in its body."""
     container.clear()
-    title.clear()
+    if title is not None:
+        title.clear()
+        with container:
+            _title(title, heading, said)
+        return
     with container:
-        _title(title, heading, said)
+        ui.label(said).classes("manager-empty-title")
 
 
 def _section_row(context: dict[str, Any], section: Section, open_now: bool,
@@ -412,11 +417,22 @@ def _choose(context: dict[str, Any], key: str) -> None:
     asyncio.create_task(context.get("reopen", context["rebuild"])())
 
 
-def _title(target: ui.column, name: str, subtitle: str) -> None:
-    with target:
+def _title(target: ui.column, name: str, subtitle: str,
+           picture: Callable[[], None] | None = None) -> None:
+    """The pane's name and what is under it, with `picture` as a frame before both."""
+    def words() -> None:
         ui.label(name).classes("text-base manager-workbench-title leading-tight truncate") \
             .tooltip(name)
         ui.label(subtitle).classes("text-xs manager-workbench-label leading-none truncate")
+
+    with target:
+        if picture is None:
+            words()
+            return
+        with ui.row().classes("items-center no-wrap gap-2 min-w-0"):
+            picture()
+            with ui.column().classes("gap-0 min-w-0"):
+                words()
 
 
 def _table_address(context: dict[str, Any], table_id: str) -> str:

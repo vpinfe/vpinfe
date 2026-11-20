@@ -196,15 +196,16 @@ class TheRepositoryFact(unittest.IsolatedAsyncioTestCase):
     async def test_a_theme_no_source_offers_says_so(self) -> None:
         entries = await self._entries(_theme(key="k", url=""))
 
-        self.assertIn(("Repository", "None"), entries)
-        self.assertIn(("note", "No source offers this theme, so it gets no updates"), entries)
+        self.assertNotIn("Links", [one[0] for one in entries])
+        self.assertEqual(entries[1], ("note", "No source offers this theme, so it gets no updates"))
 
-    async def test_a_theme_a_source_offers_links_to_its_repository(self) -> None:
+    async def test_a_theme_a_source_offers_has_a_links_row_and_no_repository_row(self) -> None:
         entries = await self._entries(_theme(key="k", url="https://github.com/owner/theme"))
 
-        self.assertIn(("Repository", ("owner/theme", "https://github.com/owner/theme")),
-                      entries)
-        self.assertNotIn("None", [value for _label, value in entries if _label == "Repository"])
+        labels = [one[0] for one in entries]
+        self.assertIn("Links", labels)
+        self.assertNotIn("Repository", labels)
+        self.assertNotIn("Theme List", labels)
 
 
 class TheChangelog(unittest.TestCase):

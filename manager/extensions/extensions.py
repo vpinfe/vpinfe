@@ -85,7 +85,7 @@ COLUMNS: list[dict[str, Any]] = [
     grid.column("repository", t("manager.extensions.repository"), 280, help=grid.NO_HELP),
 ]
 _ALL = [one["field"] for one in COLUMNS]
-_SHOWN = tuple(_ALL)
+_SHOWN = tuple(one for one in _ALL if one != "repository")
 
 VIEWS: dict[str, list[str] | views.Preset] = {
     "manager.view.everything": views.Preset(
@@ -107,10 +107,11 @@ VIEWS: dict[str, list[str] | views.Preset] = {
 def entries_of(records: list[dict[str, Any]], listing: dict[str, Any]) -> list[dict[str, Any]]:
     """Every installed extension and every listed one, once, with what each says."""
     listed = {str(one["name"]): one for one in listing.get("entries") or []}
+    where, checked = str(listing.get("list") or ""), bool(listing.get("checked"))
     found = [{"name": str(one["name"]), "record": one, "listed": listed.get(str(one["name"])),
-              "list": str(listing.get("list") or "")} for one in records]
+              "list": where, "checked": checked} for one in records]
     held = {one["name"] for one in found}
-    found += [{"name": name, "record": None, "listed": one, "list": str(listing.get("list") or "")}
+    found += [{"name": name, "record": None, "listed": one, "list": where, "checked": checked}
               for name, one in listed.items() if name not in held]
     return sorted(found, key=lambda one: shown(one).lower())
 
@@ -181,10 +182,16 @@ def version_of(entry: dict[str, Any]) -> str:
     return str(record.get("version") or listed.get("version") or "")
 
 
-def home_of(entry: dict[str, Any]) -> str:
+def repository_of(entry: dict[str, Any]) -> str:
     """The repository address: the list's for a listed extension, the manifest's otherwise."""
     record, listed = entry["record"] or {}, entry["listed"] or {}
     return str(listed.get("url") or record.get("source") or "")
+
+
+def help_of(entry: dict[str, Any]) -> str:
+    """Where its help is: the manifest's `home`, else the README in its repository."""
+    return str((entry["record"] or {}).get("home") or "") or panel.readme_page(
+        repository_of(entry))
 
 
 def _picture(entry: dict[str, Any]) -> str:
@@ -198,13 +205,20 @@ def rows(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [when.said(_row(one), "updated") for one in entries]
 
 
-def _row(entry: dict[str, Any]) -> dict[str, Any]:
+def author_of(entry: dict[str, Any]) -> str:
+    """The line under the name, in the grid and over the panel alike."""
     record, listed = entry["record"] or {}, entry["listed"] or {}
+    return str(record.get("author") or listed.get("author") or "")
+
+
+def _row(entry: dict[str, Any]) -> dict[str, Any]:
+    listed = entry["listed"] or {}
     return {"id": entry["name"], "name": shown(entry), "picture": _picture(entry),
-            "said": str(record.get("author") or listed.get("author") or ""),
+            "said": author_of(entry),
             "status": status(entry), "trust": trust_state(entry),
             "version": version_of(entry), "updated": str(listed.get("updated") or ""),
-            "repository": ext_mark.source_shown(home_of(entry)) if home_of(entry) else ""}
+            "repository": (ext_mark.source_shown(repository_of(entry))
+                           if repository_of(entry) else "")}
 
 
 # -- the page ---------------------------------------------------------------------
@@ -351,7 +365,7 @@ async def changed(context: dict[str, Any]) -> None:
         ui.notify(t("manager.extensions.read_failed"), caption=why(exc), type="negative")
 
 
-def _refiller(context: dict[str, Any]) -> Callable[[], Any]:
+def refiller(context: dict[str, Any]) -> Callable[[], Any]:
     """What the pieces in `ext_page` call to draw the panel again, from code that is not
     async."""
     return lambda: background_tasks.create(on_page(changed)(context),
@@ -396,16 +410,24 @@ async def details(context: dict[str, Any]) -> None:
     library = context["library"]
     record = entry["record"]
     listed = entry["listed"] or {}
-    refill = _refiller(context)
+    refill = refiller(context)
 
     async def again() -> None:
         await changed(context)
 
+    @on_page
+    async def check() -> None:
+        try:
+            await offload.io(library.extension_list, True)
+        except Exception as exc:  # noqa: BLE001 - the kept list stays what the panel reads
+            ui.notify(t("manager.extensions.check_failed"), caption=why(exc), type="negative")
+            return
+        recount = context["state"].get("recount_extensions")
+        if callable(recount):
+            await recount()
+        await again()
+
     with ui.column().classes("gap-0 manager-form w-full min-w-0"):
-        if record is not None:
-            picture = ext_page.picture(record)
-            if picture is not None:
-                picture()
         entries: list[tuple[Any, ...]] = []
         description = str((record or {}).get("description") or listed.get("description") or "")
         if description:
@@ -413,32 +435,26 @@ async def details(context: dict[str, Any]) -> None:
         entries += [(panel.FULL, one) for one in _findings(entry, library, again, refill)]
         if record is not None:
             entries.append(ext_page.enabled_row(record, refill))
-        entries.append((t("manager.extensions.updates"), _updates_value(library, entry, again)))
+        entries.append((t("manager.extensions.updates"),
+                        _updates_value(library, entry, again, check)))
         entries.append((t("manager.extensions.trust"), _trust_value(entry)))
         if version_of(entry):
             entries.append((t("word.version"), version_of(entry)))
         author = str((record or {}).get("author") or listed.get("author") or "")
         if author:
             entries.append((t("word.author"), author))
+        if repository_of(entry):
+            entries.append((t("word.links"), panel.links(
+                (t("word.help"), help_of(entry)),
+                (t("word.source_code"), repository_of(entry)))))
         if listed.get("updated"):
             entries.append((t("manager.extensions.updated"), when.ago(listed["updated"])))
         if listed.get("needs"):
             entries.append((t("manager.extensions.made_for"),
                             t("manager.extensions.made_for_value", version=listed["needs"])))
-        if listed and entry["list"]:
-            entries.append((t("manager.extensions.list"),
-                            panel.link_out(ext_mark.source_shown(entry["list"]),
-                                           to=entry["list"], rel="noopener noreferrer")))
-        home = home_of(entry)
-        if home:
-            entries.append((t("manager.extensions.repository"),
-                            panel.link_out(ext_mark.source_shown(home), to=home, hint=home,
-                                           rel="noopener noreferrer")))
-        if trust_state(entry):
-            entries.append(panel.note(t("manager.extensions.files_say")))
-            if (record or {}).get("path"):
-                entries.append((t("manager.ext_page.folder_path"),
-                                panel.path_value(str(record["path"]))))
+        if trust_state(entry) and (record or {}).get("path"):
+            entries.append((t("manager.ext_page.folder_path"),
+                            panel.path_value(str(record["path"]))))
         if record is not None:
             reached = ext_page.reported_rows(
                 record, t("manager.ext_page.reach_help") if trust_state(entry)
@@ -466,20 +482,28 @@ def _foot(entry: dict[str, Any]) -> str:
 
 async def settings_section(context: dict[str, Any]) -> None:
     record = context["extension"]["record"] or {}
-    refill = _refiller(context)
+    refill = refiller(context)
     found = await ext_page.read(record)
     with ui.column().classes("gap-0 manager-form w-full"):
         panel.facts(ui, ext_page.settings_entries(record, found, refill))
 
 
 def has_settings(context: dict[str, Any]) -> bool:
+    return bool((context["extension"]["record"] or {}).get("has_settings"))
+
+
+async def actions_section(context: dict[str, Any]) -> None:
     record = context["extension"]["record"] or {}
-    return bool(record.get("has_settings") or (
-        record.get("state") == host.LOADED and record.get("actions")))
+    with ui.column().classes("gap-0 manager-form w-full"):
+        panel.facts(ui, ext_page.action_entries(record, refiller(context)))
 
 
-def _updates_value(library: Library, entry: dict[str, Any],
-                   again: Callable[[], Any]) -> Callable[[], Any]:
+def has_actions(context: dict[str, Any]) -> bool:
+    return bool(ext_page.unplaced(context["extension"]["record"] or {}))
+
+
+def _updates_value(library: Library, entry: dict[str, Any], again: Callable[[], Any],
+                   check: Callable[[], Any]) -> Callable[[], Any] | str:
     record, listed = entry["record"], entry["listed"] or {}
     if record is None:
         def install() -> None:
@@ -490,8 +514,6 @@ def _updates_value(library: Library, entry: dict[str, Any],
                          icon=verbs.FETCH, inline=True,
                          hint=t("manager.extensions.install.help"))()
         return install
-    if not listed and not _official(record):
-        return lambda: ui.label(t("manager.extensions.not_checked")).classes("manager-fact-value")
     if listed.get("update"):
         def newer() -> None:
             with ui.row().classes("items-center gap-2 no-wrap"):
@@ -502,18 +524,26 @@ def _updates_value(library: Library, entry: dict[str, Any],
                                            "manager.extensions.update_failed", again),
                              icon=verbs.UPDATE, inline=True, hint=panel.NO_HINT)()
         return newer
-    if not listed:
-        return lambda: ui.label(t("manager.extensions.not_checked")).classes("manager-fact-value")
-    return lambda: ui.label(t("manager.extensions.current")).classes("manager-fact-value")
+    if listed:
+        return t("manager.extensions.current")
+    if record.get("bundled"):
+        return t("manager.extensions.bundled_updates")
+    if entry["checked"]:
+        return t("manager.extensions.not_listed")
+
+    def ask() -> None:
+        with ui.row().classes("items-center gap-2 no-wrap"):
+            panel.action(t("manager.extensions.check_updates"), check, icon=verbs.REFRESH,
+                         inline=True, hint=panel.NO_HINT)()
+    return ask
 
 
-def _trust_value(entry: dict[str, Any]) -> Callable[[], Any]:
+def _trust_value(entry: dict[str, Any]) -> Callable[[], Any] | str:
     record = entry["record"] or {}
     kind = trust_state(entry)
     if not kind:
-        said = t("manager.extensions.trust_shipped") if record.get("bundled") \
+        return t("manager.extensions.trust_shipped") if record.get("bundled") \
             else t("manager.extensions.trust_listed")
-        return lambda: ui.label(said).classes("manager-fact-value")
     if record.get("left_list"):
         where = t("manager.extensions.trust_left")
     elif record.get("origin") == accepted.CHANGED:

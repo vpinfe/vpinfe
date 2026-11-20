@@ -3,7 +3,7 @@
 One line for each thing declared, then one for each read: only functions that read are
 called (settings, `rows()`, `status()`, a dialog's first `ask()`), so nothing is sent,
 saved or run. An extension whose service is down is told so, not failed: that is not
-a mistake in what it declared.
+a mistake in what it declared. A missing README is a `warns` line: it never fails the check.
 """
 
 from __future__ import annotations
@@ -80,9 +80,13 @@ def _report(record: Record, lines: list[str]) -> bool:
                      f"{len(declared['verbs'])} verbs"
                      + (f", adds {' '.join(declared['add'])}" if declared["add"] else "")
                      + (", opens a pane" if declared["detail"] else ""))
-    for declared in record.declared_pages:
-        lines.append(f"page       {declared['key']} in {declared['area']}"
-                     + (", with fields" if declared["save"] else ""))
+    for declared in record.declared_sections:
+        placed = [one["key"] for one in record.actions if one["section"] == declared["key"]]
+        lines.append(f"section    {declared['key']}"
+                     + (", with fields" if declared["save"] else "")
+                     + (f", holds {' '.join(placed)}" if placed else ""))
+    if record.declared_panel:
+        lines.append(f"panel      in {record.declared_panel['area']}")
     for declared in record.declared_groups:
         lines.append(f"group      on a {declared['subject']}'s panel, "
                      + (f"at the end of {declared['section']}" if declared["section"]
@@ -117,8 +121,9 @@ def _report(record: Record, lines: list[str]) -> bool:
 
     for key in ui.list_functions:
         _read(lines, problems, record, f"list {key}", lambda key=key: _read_list(record, key))
-    for key in ui.page_functions:
-        _read(lines, problems, record, f"page {key}", lambda key=key: _read_page(record, key))
+    for key in ui.section_functions:
+        _read(lines, problems, record, f"section {key}",
+              lambda key=key: _read_section(record, key))
     if ui.needs_function is not None:
         _read(lines, problems, record, "needs", lambda: _read_needs(record))
     if ui.settings_declared:
@@ -131,7 +136,14 @@ def _report(record: Record, lines: list[str]) -> bool:
     for key, why in _missing(record, ui):
         problems.append(f"missing    {key} - {why}")
     lines.extend(problems)
+    if not _has_readme(record.directory):
+        lines.append("warns      no README.md in the folder - Help on its page opens it unless "
+                     "`home` points elsewhere")
     return not problems
+
+
+def _has_readme(directory: Path) -> bool:
+    return any(one.is_file() and one.stem.lower() == "readme" for one in directory.iterdir())
 
 
 def _read(lines: list[str], problems: list[str], record: Record, what: str,
@@ -165,11 +177,11 @@ def _read_list(record: Record, key: str) -> tuple[str, Any]:
     return said, found
 
 
-def _read_page(record: Record, key: str) -> tuple[str, Any]:
-    shown = serving.page_read(record, key)
-    about = serving.page_about(record, key)
-    acts = ", ".join(one["key"] for one in about["acts"]) or "none"
-    return f"{len(shown['sections'])} sections, acts: {acts}", [shown, about]
+def _read_section(record: Record, key: str) -> tuple[str, Any]:
+    shown = serving.section_read(record, key)
+    found = shown["section"] or {"facts": [], "fields": [], "rows": []}
+    return (f"{len(found['facts'])} facts, {len(found['fields'])} fields, "
+            f"{len(found['rows'])} rows"), shown
 
 
 def _read_needs(record: Record) -> tuple[str, Any]:
@@ -235,6 +247,8 @@ def _missing(record: Record, ui: Any) -> list[tuple[str, str]]:
                 wanted.append((f"{at}.confirm", "the question a danger verb asks"))
             if verb["needs"]:
                 wanted.append((f"{at}.needs", "why a verb is not for a row"))
+    wanted.extend((f"section.{one['key']}.title", "a section's title")
+                  for one in ui.declared_sections if not one["title"])
     wanted.extend((f"need.{one['kind']}.label", "a need's label")
                   for one in record.declared_needs)
     wanted.extend((f"link.{one['key']}.label", "a link's label")

@@ -321,21 +321,22 @@ class NextPlayerNoteRecipe(TierCase):
     def test_a_remote_pass_reads_the_page_saves_it_and_clears_it(self) -> None:
         remote = _identity(sign_in.REMOTE, "play", name=self.name)
 
-        saved = self.call(remote, "/pages/note", "put", {"values": {"note": "Left flipper sticks"}})
-        read = self.call(remote, "/pages/note", "get")
-        cleared = self.call(remote, "/pages/note/about/acts/clear")
+        saved = self.call(remote, "/sections/note", "put",
+                          {"values": {"note": "Left flipper sticks"}})
+        read = self.call(remote, "/sections/note", "get")
+        cleared = self.call(remote, "/actions/clear/run", "post", {"values": {}})
 
         self.assertEqual((saved.status_code, read.status_code, cleared.status_code),
                          (200, 200, 200), saved.text + read.text + cleared.text)
-        self.assertEqual(read.json()["sections"][0]["fields"][0]["value"], "Left flipper sticks")
+        self.assertEqual(read.json()["section"]["fields"][0]["value"], "Left flipper sticks")
         self.assertEqual(cleared.json(), {"message": "Cleared"})
         self.assertEqual(self.note(), "")
 
-    def test_a_remote_pass_for_another_extension_cannot_reach_the_page(self) -> None:
+    def test_a_remote_pass_for_another_extension_cannot_reach_the_section(self) -> None:
         stranger = _identity(sign_in.REMOTE, "play", name="another")
 
-        read = self.call(stranger, "/pages/note", "get")
-        saved = self.call(stranger, "/pages/note", "put", {"values": {"note": "x"}})
+        read = self.call(stranger, "/sections/note", "get")
+        saved = self.call(stranger, "/sections/note", "put", {"values": {"note": "x"}})
 
         self.assertEqual((read.status_code, saved.status_code), (403, 403))
         self.assertEqual(self.note(), "")
@@ -352,7 +353,7 @@ class NextPlayerNoteRecipe(TierCase):
             record = self.registry.load(folder)
 
         self.assertNotEqual(record.state, host.LOADED)
-        self.assertIn("page:note", record.error)
+        self.assertIn("section:note", record.error)
 
 
 class Marking(unittest.TestCase):

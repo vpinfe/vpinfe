@@ -38,7 +38,7 @@ it, what you will see, a few variations and the mistake people make with it.
 - [13. An account per player](#13-an-account-per-player)
 - [14. A group on a game's panel](#14-a-group-on-a-games-panel)
 - [15. An entry in a game's menu](#15-an-entry-in-a-games-menu)
-- [16. A page of one subject](#16-a-page-of-one-subject)
+- [16. A panel of one subject](#16-a-panel-of-one-subject)
 - [17. A page of your own](#17-a-page-of-your-own)
 - [18. Asking for attention on Overview](#18-asking-for-attention-on-overview)
 - [19. An extension for one Linux distribution](#19-an-extension-for-one-linux-distribution)
@@ -168,11 +168,11 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** on the extension's page in Settings, as a field and as a button.
-**What triggers it:** the person typing in the field, or pressing the Enter the Key button. Nothing
+**Where it appears:** on the extension's page in Settings, as a field and as a line under Actions.
+**What triggers it:** the person typing in the field, or pressing the Enter the Key line. Nothing
 runs in between.
 
-**What you'll see:** Settings, then Extensions, then Secret Key: a masked Key field saying Not set. Type a key and leave the field, and it says Set, with Clear beside it. Clear asks first, then empties it. The Enter the Key button opens a dialog with the same field, and pressing the Enter the Key button with it empty leaves the key as it was.
+**What you'll see:** Settings, then Extensions, then Secret Key: a masked Key field saying Not set. Type a key and leave the field, and it says Set, with Clear beside it. Clear asks first, then empties it. The Enter the Key line under Actions opens a dialog with the same field, and pressing Enter the Key with it empty leaves the key as it was.
 
 **Variations:**
 
@@ -234,11 +234,11 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** as a button on the extension's page in Settings. **What triggers it:**
+**Where it appears:** as a line under Actions on the extension's page in Settings. **What triggers it:**
 the person pressing Say Hello. Nothing in VPinFE changes, so the only effect is the line
 `run` returns.
 
-**What you'll see:** Settings, then Extensions, then Hello Dialog, with a Say Hello button. It
+**What you'll see:** Settings, then Extensions, then Hello Dialog, with Say Hello under Actions. It
 opens a dialog with one question, and the line `run` returns is shown when it is done.
 
 **Variations:**
@@ -366,11 +366,11 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** as a button on the extension's page in Settings. **What triggers it:**
+**Where it appears:** as a line under Actions on the extension's page in Settings. **What triggers it:**
 the person pressing Post a Score. Each press of Next calls `check`. Only the Post button on the
 summary calls `run`, and that is the one step that changes anything, by posting to the site.
 
-**What you'll see:** Settings, then Extensions, then Post Score, with a Post a Score button.
+**What you'll see:** Settings, then Extensions, then Post Score, with Post a Score under Actions.
 It asks for a key and refuses a wrong one under the field. A right one leads to the score, and
 then to a summary with a Post button. The practice site has the score afterward.
 
@@ -454,11 +454,11 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** as a button on the extension's page in Settings, and then in Jobs.
+**Where it appears:** as a line under Actions on the extension's page in Settings, and then in Jobs.
 **What triggers it:** the person pressing Start on the summary. The work then runs on its own
 thread until it finishes or the person presses Stop.
 
-**What you'll see:** a Start the Sync button on the extension's page. It opens a summary with
+**What you'll see:** a Start the Sync line under Actions on the extension's page. It opens a summary with
 a Start button, and the job appears in Jobs with its step count and a Stop button.
 
 **Variations:**
@@ -610,7 +610,7 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** as its own page in the rail, under Community. **What triggers it:** the
+**Where it appears:** as its own entry in the rail, under Community. **What triggers it:** the
 person opening the page or pressing refresh. Core calls `rows` each time.
 
 **What you'll see:** Top Scores under Community in the rail. Until the key is set under
@@ -1480,11 +1480,11 @@ without it the extension is turned down with the reason when it starts.
 
 ## Beyond the Manager
 
-### 16. A page of one subject
+### 16. A panel of one subject
 
 **Use it when:** the extension has one thing to show and not a list of them, such as this machine's start up, one board, or one account, and a grid of one row would be a click charged for nothing.
 
-`ctx.ui.page` declares an entry in the rail that opens a panel.  You answer `read` with a title, a line under it and sections of facts and fields, as a [pane](#12-a-pane-beside-a-list) does, and core draws them full width.  Give it `save` and the fields can be changed, each written as it is set.  `acts` is the menu at the end of the page title.
+Every extension has a panel under Settings > Extensions, with Details and Settings, and what it can do under Actions.  `ctx.ui.section` adds an entry of its own after those: you answer `read` with facts, fields and rows, as a [pane](#12-a-pane-beside-a-list) does, and core draws them.  Give it `save` and the fields can be changed, each written as it is set.  `ctx.ui.panel(area=)` puts the whole panel in the navigation as well, at full width.  Something to do is an action: give `ctx.ui.action` the key of the section as `section=`, and it is a line at the top of that section instead of in Actions.
 
 `recipes/machine_page/extension.json`
 
@@ -1505,33 +1505,39 @@ without it the extension is turned down with the reason when it starts.
 MACHINE = {"boot": "play", "checked": "never"}
 
 
+class Check:
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def ask(self, step):
+        return {"summary": [[self.ctx.t("section.state.checked"), MACHINE["checked"]]],
+                "confirm": self.ctx.t("action.check.confirm")}
+
+    def run(self, values):
+        MACHINE["checked"] = self.ctx.t("section.state.checked.now")
+        return self.ctx.t("section.state.checked.said")
+
+
 def register(ctx):
-    def read():
-        return {
-            "title": ctx.t("page.machine.heading"),
-            "under": ctx.t("page.machine.under"),
-            "sections": [
-                {"key": "state", "label": ctx.t("page.machine.state"), "facts": [
-                    {"label": ctx.t("page.machine.checked"), "value": MACHINE["checked"]},
-                ]},
-                {"key": "boot", "label": ctx.t("page.machine.boot"), "fields": [
-                    {"key": "boot", "type": "select", "label": ctx.t("page.machine.boot.mode"),
-                     "value": MACHINE["boot"],
-                     "choices": [["play", ctx.t("page.machine.boot.play")],
-                                 ["desk", ctx.t("page.machine.boot.desk")]]},
-                ]},
-            ],
-        }
+    def read_state():
+        return {"facts": [{"label": ctx.t("section.state.checked"),
+                           "value": MACHINE["checked"]}]}
+
+    def read_boot():
+        return {"fields": [
+            {"key": "boot", "type": "select", "label": ctx.t("section.boot.mode"),
+             "value": MACHINE["boot"],
+             "choices": [["play", ctx.t("section.boot.play")],
+                         ["desk", ctx.t("section.boot.desk")]]},
+        ]}
 
     def save(values):
         MACHINE.update(values)
 
-    def check():
-        MACHINE["checked"] = ctx.t("page.machine.checked.now")
-        return ctx.t("page.machine.checked.said")
-
-    ctx.ui.page("machine", read, area="system", save=save,
-                acts={"check": check, "manual": "https://machine.example.com/manual"})
+    ctx.ui.section("state", read_state)
+    ctx.ui.section("boot", read_boot, save=save)
+    ctx.ui.action("check", Check(ctx), section="state")
+    ctx.ui.panel(area="system")
 ```
 
 `recipes/machine_page/i18n/en.json`
@@ -1539,34 +1545,33 @@ def register(ctx):
 ```json
 {
   "name": "Machine Page",
-  "description": "A page in the rail for the machine itself: a fact, a choice and an act.",
-  "page.machine.title": "Machine",
-  "page.machine.act.check.label": "Check Now",
-  "page.machine.act.manual.label": "Manual",
-  "page.machine.heading": "This Machine",
-  "page.machine.under": "How it starts",
-  "page.machine.state": "State",
-  "page.machine.checked": "Last Checked",
-  "page.machine.checked.now": "Just now",
-  "page.machine.checked.said": "Checked",
-  "page.machine.boot": "Start Up",
-  "page.machine.boot.mode": "Starts Into",
-  "page.machine.boot.play": "Play",
-  "page.machine.boot.desk": "Desktop"
+  "description": "A panel for the machine itself: a fact, a choice and an action.",
+  "panel.title": "Machine",
+  "section.state.title": "State",
+  "section.state.checked": "Last Checked",
+  "section.state.checked.now": "Just now",
+  "section.state.checked.said": "Checked",
+  "section.boot.title": "Start Up",
+  "section.boot.mode": "Starts Into",
+  "section.boot.play": "Play",
+  "section.boot.desk": "Desktop",
+  "action.check.label": "Check Now",
+  "action.check.description": "Look at the machine again",
+  "action.check.confirm": "Check"
 }
 ```
 
-**Where it appears:** in the rail under System, above About.  **What triggers it:** the person opening it.  Core reads the page then, and again after each change and each act.
+**Where it appears:** in the navigation under System, above About, and as State and Start Up in the extension's panel under Settings > Extensions.  **What triggers it:** the person opening it.  Core reads a section then, and again after each change and each action.
 
-**What you'll see:** Machine in System, just above About.  The page is headed Machine, with This Machine and "How it starts" under it as the subject.  State shows Last Checked: never, and Start Up holds a choice, Starts Into, set to Play.  Change it and the page redraws with the choice kept.  The menu at the end of the title holds Check Now, which runs and says "Checked" and shows Just now in State, and Manual, which opens the address in a new tab.
+**What you'll see:** Machine in System, just above About.  Its list holds Details, Settings, State and Start Up, and no Actions, because the only action sits in State.  State shows Last Checked: never, with Check Now above it as a line that says what it does.  Start Up holds a choice, Starts Into, set to Play.  Change it and the section redraws with the choice kept.  Check Now asks, runs, says "Checked" and State then shows Just now.
 
 **Variations:**
 
-- Return one section with a title that says what it holds, or none: the page is then its heading alone.
-- A `picture` in the answer is drawn above the sections.
-- An act can open a dialog, as a list's can: give it `{"action": "<dialog key>"}`.
+- Return only `facts`, `fields` or `rows`: a section draws what it is given.
+- Leave `section=` off an action and it is listed under Actions, the last entry, which is there only while some action is not placed in a section.
+- Leave `ctx.ui.panel` out and the panel is reached only from Settings > Extensions.
 
-**Watch out:** the page is read each time it opens, so a slow service makes it late; keep what you can in memory.  The title in the rail is `page.<key>.title` and is held to the same rule as a list's: not a core page's name, and not another list's or page's in the same area.
+**Watch out:** a section is read each time it opens, so a slow service makes it late; keep what you can in memory.  The panel's name in the navigation is `panel.title` and a section's is `section.<key>.title`.  Both are held to the same rule as a list's: not a core page's name, and not another entry's in the same area.
 
 ### 17. A page of your own
 
@@ -1712,7 +1717,7 @@ def register(ctx):
 
 **Variations:**
 
-- Open a page with `"page": "week"`, or a dialog with `"action": "update"`.  A dialog opens over no rows, and Overview is drawn again once it closes.
+- Open a section with `"section": "week"`, or a dialog with `"action": "update"`.  A dialog opens over no rows, and Overview is drawn again once it closes.
 - Answer `{"kind": "update_ready", "count": 1, "token": "2.1"}` where there are no ids to list.  The row stays away until the token is another.
 - Give a kind `"tone": "muted"` for something to know, not to do.  See [`ctx.ui.needs`](reference/ui.md#ctxuineeds).
 
@@ -1888,7 +1893,7 @@ def register(ctx):
 }
 ```
 
-**Where it appears:** on a VPinOS cabinet, as two actions on the extension's page, System Updates and Restart.  Restart is also a Needs You row, which shows while the system says it needs a restart (`/run/reboot-required` exists) or after an install that upgraded VPinFE itself.  **What triggers it:** pressing System Updates.  `ask` runs when the dialog opens and reads `updates.check`, which changes nothing.  `run` runs when Install is pressed, in that request, and starts a job that calls `updates.apply`.  The helper answers `installed`, `reboot_required` and `vpinfe_upgraded`; the job keeps the last in memory, and reads each as true only when it is `true`.
+**Where it appears:** on a VPinOS cabinet, as two lines under Actions on the extension's page, System Updates and Restart.  Restart is also a Needs You row, which shows while the system says it needs a restart (`/run/reboot-required` exists) or after an install that upgraded VPinFE itself.  **What triggers it:** pressing System Updates.  `ask` runs when the dialog opens and reads `updates.check`, which changes nothing.  `run` runs when Install is pressed, in that request, and starts a job that calls `updates.apply`.  The helper answers `installed`, `reboot_required` and `vpinfe_upgraded`; the job keeps the last in memory, and reads each as true only when it is `true`.
 
 **What you'll see:** the dialog lists how many updates are waiting and, under This Will, core's own sentence for the change: "Install system updates on this device".  The extension chose the label and the layout, and core chose the sentence, so the extension cannot word a change that needs a Confirm as a harmless one.  Pressing Install asks the Owner to confirm, then closes the dialog and the job runs in Jobs.  When it is done the Needs You row reads "Restart to finish the updates", and pressing it opens a dialog that says whether it will restart this device or restart VPinFE.  Where no helper answers, the System Updates dialog says "This device has no system helper" and holds Install.  A token or a Remote pass that tries the install is refused before `run` starts, with "Only this device, or an Owner with a Confirm, can do this".
 
@@ -2067,7 +2072,7 @@ def register(ctx):
 
 A device is a dict of `kind`, `vendor_id`, `product_id`, `vendor`, `product`, `name`, `port` and `accessible`.  The ids are four lowercase hex digits, or `""` where the device has none.  `accessible` is `True` or `False` when the operating system can say whether VPinFE may open the device, and `None` when it cannot say without opening it, so the list has a third word for it.
 
-**Where it appears:** on the rail under System, as Plugged In.  **What triggers it:** the person opening the page.  USB devices and serial ports are read each time, so plugging a board in and opening the page again shows it.
+**Where it appears:** on the rail under System, as Plugged In.  **What triggers it:** the person opening the list.  USB devices and serial ports are read each time, so plugging a board in and opening the page again shows it.
 
 **What you'll see:** Plugged In lists each device with its kind as USB, Serial Port or Display.  A display has no ids, so that cell is empty.  Can Open reads Yes, No in red, or Not Known.  Where a device reads No, a line under the list says what to change on this operating system: a udev rule on Linux, a Privacy setting on macOS, a driver on Windows.  Hovering the red No says "VPinFE may not open this device".
 
@@ -2083,9 +2088,9 @@ A device is a dict of `kind`, `vendor_id`, `product_id`, `vendor`, `product`, `n
 
 **Use it when:** something belongs on a Remote, such as a note for whoever plays next, and the program holding the Remote's pass should not need the Owner's sign-in to read or change it.
 
-A Remote pass reaches only what an extension puts at the Play tier, and the Owner is asked about that when the extension is installed.  VPinFE's own Remote screens do not draw an extension's pages.  A page at Play is reached at its address by whatever holds a Remote pass, such as a tool you write.  Two lines say it.  The manifest's `play` list names the surface, as `page:note`, and the surface is declared with `tier=PLAY`.  Each without the other fails: a surface at Play that the list does not name is refused when it is declared, and a name on the list that is not at Play fails the load.  An update that adds a name asks the Owner again.
+A Remote pass reaches only what an extension puts at the Play tier, and the Owner is asked about that when the extension is installed.  VPinFE's own Remote screens do not draw an extension's sections.  A section at Play is reached at its address by whatever holds a Remote pass, such as a tool you write.  Two lines say it.  The manifest's `play` list names the surface, as `section:note`, and the surface is declared with `tier=PLAY`.  Each without the other fails: a surface at Play that the list does not name is refused when it is declared, and a name on the list that is not at Play fails the load.  An update that adds a name asks the Owner again.
 
-The `play` list names a page as `page:<key>`, a list as `list:<key>`, an action as `action:<key>`, a section on a game's panel as `group:<subject>`, an entry in a game's menu as `verb:<subject>:<key>`, and `router` for the web addresses of an extension's own router.
+The `play` list names a section as `section:<key>`, a list as `list:<key>`, an action as `action:<key>`, a section on a game's panel as `group:<subject>`, an entry in a game's menu as `verb:<subject>:<key>`, and `router` for the web addresses of an extension's own router.
 
 `recipes/next_player_note/extension.json`
 
@@ -2097,7 +2102,7 @@ The `play` list names a page as `page:<key>`, a list as `list:<key>`, an action 
   "source": "https://github.com/example/next_player_note",
   "requires_platform": 1,
   "capabilities": ["config:own", "ui:mount"],
-  "play": ["page:note"]
+  "play": ["section:note", "action:clear"]
 }
 ```
 
@@ -2107,26 +2112,32 @@ The `play` list names a page as `page:<key>`, a list as `list:<key>`, an action 
 from common.extensions.contract import PLAY
 
 
+class Clear:
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def ask(self, step):
+        return {"summary": [[self.ctx.t("section.note.field"), self.ctx.config.get("note") or ""]],
+                "confirm": self.ctx.t("action.clear.confirm")}
+
+    def run(self, values):
+        self.ctx.config.set("note", "")
+        return self.ctx.t("section.note.cleared")
+
+
 def register(ctx):
     def read():
-        return {
-            "title": ctx.t("page.note.heading"),
-            "sections": [
-                {"key": "note", "label": ctx.t("page.note.section"), "fields": [
-                    {"key": "note", "type": "string", "label": ctx.t("page.note.field"),
-                     "value": ctx.config.get("note") or ""},
-                ]},
-            ],
-        }
+        return {"fields": [
+            {"key": "note", "type": "string", "label": ctx.t("section.note.field"),
+             "value": ctx.config.get("note") or ""},
+        ]}
 
     def save(values):
         ctx.config.set("note", values["note"])
 
-    def clear():
-        ctx.config.set("note", "")
-        return ctx.t("page.note.cleared")
-
-    ctx.ui.page("note", read, area="community", save=save, acts={"clear": clear}, tier=PLAY)
+    ctx.ui.section("note", read, save=save, tier=PLAY)
+    ctx.ui.action("clear", Clear(ctx), section="note", tier=PLAY)
+    ctx.ui.panel(area="community")
 ```
 
 `recipes/next_player_note/i18n/en.json`
@@ -2135,20 +2146,21 @@ def register(ctx):
 {
   "name": "Next Player Note",
   "description": "A note for whoever plays next, which a Remote can read and change.",
-  "page.note.title": "Next Player Note",
-  "page.note.act.clear.label": "Clear Note",
-  "page.note.heading": "Next Player Note",
-  "page.note.section": "Leave a Note",
-  "page.note.field": "Note",
-  "page.note.cleared": "Cleared"
+  "panel.title": "Next Player Note",
+  "section.note.title": "Note",
+  "section.note.field": "Note",
+  "section.note.cleared": "Cleared",
+  "action.clear.label": "Clear Note",
+  "action.clear.description": "Empty the note for the next player",
+  "action.clear.confirm": "Clear"
 }
 ```
 
-The page is read, saved and cleared at `/api/v1/ext/next_player_note/pages/note` and the addresses under it, as [what core serves](reference/served.md) lists.  A request with a Remote pass is answered there, and a request with a Remote pass to anything the extension declared at the Library tier is refused.
+The section is read and saved at `/api/v1/ext/next_player_note/sections/note`, and the action is asked and run under `/api/v1/ext/next_player_note/actions/clear`, as [what core serves](reference/served.md) lists.  A request with a Remote pass is answered there, and a request with a Remote pass to anything the extension declared at the Library tier is refused.
 
-**Where it appears:** in the Manager as Next Player Note under Community, like any page.  On the extension's page, under A Remote Can Open, a chip reads "the note page".  **What triggers it:** the person opening the page, changing the field or pressing Clear Note.
+**Where it appears:** in the navigation as Next Player Note under Community, and in the extension's panel under Settings > Extensions as Note.  On the extension's panel, under A Remote Can Open, a chip reads "The Note Section".  **What triggers it:** the person opening the section, changing the field or pressing Clear Note.
 
-**What you'll see:** the page is headed Next Player Note, with a Leave a Note section holding one field, Note.  Type a note and leave the field, and it is there the next time the page opens.  The menu at the end of the title holds Clear Note, which empties the field and says "Cleared".  When the extension is installed from a folder, the dialog that asks the Owner to accept it lists "the note page" under A Remote Can Open, so the Owner sees before accepting that a Remote can change the note.
+**What you'll see:** the Note section holds one field, Note, with Clear Note above it.  Type a note and leave the field, and it is there the next time the section opens.  Clear Note asks, empties the field and says "Cleared".  When the extension is installed from a folder, the dialog that asks the Owner to accept it lists "The Note Section" and "The Clear Action" under A Remote Can Open, so the Owner sees before accepting that a Remote can change the note.
 
 **Variations:**
 
@@ -2238,7 +2250,7 @@ def register(ctx):
 
 The plan lists each thing it found with where it will go, and `blocked` is what it will not do and why, which goes in as notes.  `execute` imports every item the plan lists unless `selected=` names which.  `set_roots` runs each time rather than once in `register`, so a changed setting is followed.  `execute` with the same arguments does what the summary showed, and it reads the folder again when it runs, so it imports what is there then.
 
-**Where it appears:** as a button on the extension's page in Settings, with the setting beside it.  **What triggers it:** the person pressing Import the Folder.
+**Where it appears:** as a line under Actions on the extension's page in Settings, with the setting beside it.  **What triggers it:** the person pressing Import the Folder.
 
 **What you'll see:** with no folder chosen, the step says "Choose a folder in the extension's settings first" and its Import button is held.  With a folder holding a table and its backglass, the step lists each with where it will go.  Pressing Import closes the dialog, the job appears in Jobs, and the new game appears in the library.
 

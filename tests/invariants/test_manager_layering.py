@@ -65,7 +65,8 @@ AREAS: dict[str, tuple[str, ...]] = {
     "frontend": ("themes", "theme_card", "theme_sources", "launchers", "players",
                  "settings_file_choice"),
     "extensions": ("ext_action", "ext_cells", "ext_groups", "ext_links", "ext_mark",
-                   "ext_page", "ext_pages", "ext_row", "ext_verbs", "ext_lists", "extensions"),
+                   "ext_page", "ext_pages", "ext_row", "ext_sections", "ext_verbs", "ext_lists",
+                   "extensions"),
     "devices": ("devices", "browser_state", "mobile_add", "pairing", "plays_on",
                 "send_to_device"),
     "setup": ("setup", "setup_appearance", "setup_controls", "setup_screens", "setup_tables",
@@ -97,6 +98,7 @@ UPWARD = {
     ("game_acts", "game_match"),
     ("launchers", "all_settings"),
     ("ext_row", "core"),
+    ("ext_sections", "core"),
 }
 
 

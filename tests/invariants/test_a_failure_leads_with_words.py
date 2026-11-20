@@ -28,6 +28,8 @@ REPR = re.compile(r"\{[^{}]*![rsa]\}")
 LOGGED = {"debug", "info", "warning", "warn", "error", "exception", "critical", "log"}
 # Functions that hand on a caught exception's own text as it is, and who reads it there.
 HANDED_ON = {
+    "apps/vpx/controllers.py": {
+        "_run": "the controllers page's status line; an app may not import common.failures"},
     "common/extensions/check.py": {
         "_read": "the report `--check-extension` prints for a developer"},
     "common/extensions/context.py": {

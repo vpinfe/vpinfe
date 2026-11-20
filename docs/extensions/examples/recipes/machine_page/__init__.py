@@ -1,30 +1,36 @@
 MACHINE = {"boot": "play", "checked": "never"}
 
 
+class Check:
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def ask(self, step):
+        return {"summary": [[self.ctx.t("section.state.checked"), MACHINE["checked"]]],
+                "confirm": self.ctx.t("action.check.confirm")}
+
+    def run(self, values):
+        MACHINE["checked"] = self.ctx.t("section.state.checked.now")
+        return self.ctx.t("section.state.checked.said")
+
+
 def register(ctx):
-    def read():
-        return {
-            "title": ctx.t("page.machine.heading"),
-            "under": ctx.t("page.machine.under"),
-            "sections": [
-                {"key": "state", "label": ctx.t("page.machine.state"), "facts": [
-                    {"label": ctx.t("page.machine.checked"), "value": MACHINE["checked"]},
-                ]},
-                {"key": "boot", "label": ctx.t("page.machine.boot"), "fields": [
-                    {"key": "boot", "type": "select", "label": ctx.t("page.machine.boot.mode"),
-                     "value": MACHINE["boot"],
-                     "choices": [["play", ctx.t("page.machine.boot.play")],
-                                 ["desk", ctx.t("page.machine.boot.desk")]]},
-                ]},
-            ],
-        }
+    def read_state():
+        return {"facts": [{"label": ctx.t("section.state.checked"),
+                           "value": MACHINE["checked"]}]}
+
+    def read_boot():
+        return {"fields": [
+            {"key": "boot", "type": "select", "label": ctx.t("section.boot.mode"),
+             "value": MACHINE["boot"],
+             "choices": [["play", ctx.t("section.boot.play")],
+                         ["desk", ctx.t("section.boot.desk")]]},
+        ]}
 
     def save(values):
         MACHINE.update(values)
 
-    def check():
-        MACHINE["checked"] = ctx.t("page.machine.checked.now")
-        return ctx.t("page.machine.checked.said")
-
-    ctx.ui.page("machine", read, area="system", save=save,
-                acts={"check": check, "manual": "https://machine.example.com/manual"})
+    ctx.ui.section("state", read_state)
+    ctx.ui.section("boot", read_boot, save=save)
+    ctx.ui.action("check", Check(ctx), section="state")
+    ctx.ui.panel(area="system")

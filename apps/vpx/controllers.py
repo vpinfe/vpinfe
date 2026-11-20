@@ -24,8 +24,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from common.failures import why
-
 from . import bindings
 from .bindings import DeviceInfo
 
@@ -462,7 +460,7 @@ class _Reader:
             sdl = _Sdl(self.library)
             self.error = sdl.start()
         except (OSError, AttributeError) as exc:
-            self.error = f"{self.library.name} did not load: {why(exc)}"
+            self.error = f"{self.library.name} did not load: {exc}"
         self._ready.set()
         if sdl is None:
             return
@@ -474,7 +472,7 @@ class _Reader:
             self._loop(sdl, pads)
         except Exception as exc:  # noqa: BLE001 - a listener that died says so to the next ask
             log.warning("Controller listener stopped", exc_info=True)
-            self.error = f"the controller listener stopped: {why(exc)}"
+            self.error = f"the controller listener stopped: {exc}"
         finally:
             for pad in pads.values():
                 sdl.cdll.SDL_CloseJoystick(pad.handle)

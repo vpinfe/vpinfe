@@ -5,7 +5,7 @@ What an extension offers a person.  You declare it and core serves it: you hand 
 needs the `ui:mount` capability, and every call here raises `ContractError` without it.  The
 sections after this one describe each declaration in full.
 
-A list, page, group, verb or action takes `tier=`, from `common.extensions.contract`: `PLAY`
+A list, section, group, verb or action takes `tier=`, from `common.extensions.contract`: `PLAY`
 for what a Remote pass may reach, `LIBRARY` when it says nothing, `PROTECTED` for what changes
 the device and so needs a Confirm.  A single act or a `save` that differs from its surface
 takes `@tier(...)` over the function.  The manifest's `tiers` must list `protected` where it is
@@ -86,7 +86,7 @@ extension never declared.
 
 ### Rail icons
 
-A list, a page or a link wears the icon its `icon` names in the rail, one of these Material icon
+A list, a section, a panel, an action or a link wears the icon its `icon` names in the rail, one of these Material icon
 names, and the extension icon where it names none.  A name that is not here raises
 `ContractError` from `register`, and the error lists the names.
 
@@ -100,50 +100,60 @@ names, and the extension icon where it names none.  A name that is not here rais
 
 The set is `RAIL_ICONS` in `common/extensions/context.py`.
 
-## `ctx.ui.page`
+## `ctx.ui.section`
 
-`ctx.ui.page(key, read, *, area, title="", icon="", acts=None, save=None,
-tier=LIBRARY)`.
-Required: `key`, `read`, `area`.
+`ctx.ui.section(key, read, *, title="", icon="", save=None, tier=LIBRARY)`.
+Required: `key`, `read`.
 
-Declare a page: an entry in the rail under `area` that opens one subject drawn as a panel, with
-no grid.  `read()` answers what a [pane's](settings-and-lists.md#lists) `detail` does: a `title`
-(required), a line `under` it, an optional `picture`, and `sections` of `facts`, `fields` and
-`rows`.  Core draws them full width, as it draws every other panel.
+Add an entry of the extension's own to its panel under Settings > Extensions, after Details
+and Settings and before Actions.  `read()` answers what a [pane's](settings-and-lists.md#lists)
+section does: `facts`, `fields` and `rows`, any of them.  Core draws them as it draws every
+other panel.
 
 ```python
 def read():
-    return {"title": ctx.t("page.machine.heading"),
-            "sections": [{"key": "boot", "label": ctx.t("page.machine.boot"), "fields": [
-                {"key": "boot", "type": "select", "label": ctx.t("page.machine.boot.mode"),
-                 "value": MACHINE["boot"], "choices": [["play", "Play"], ["desk", "Desktop"]]}]}]}
+    return {"fields": [
+        {"key": "boot", "type": "select", "label": ctx.t("section.boot.mode"),
+         "value": MACHINE["boot"], "choices": [["play", "Play"], ["desk", "Desktop"]]}]}
 
 
 def save(values):
     MACHINE.update(values)
 
 
-ctx.ui.page("machine", read, area="system", save=save, acts={"check": check})
+ctx.ui.section("boot", read, save=save)
 ```
 
 With `save(values)` the fields can be changed: each is written as it is set, with the keys that
-changed, and core reads the page again to draw what was kept.  It is handed only keys the page
-offers now, and it refuses a value by raising, as a pane's `save` does.  `acts` is the page's
-menu, written as a list's acts are: a function, an address, or a dialog to open.  Each is a
-button in the menu at the end of the page title, with the extension's Settings after them.
+changed, and core reads the section again to draw what was kept.  It is handed only keys the
+section offers now, and it refuses a value by raising, as a pane's `save` does.  Something to
+do is an action declared with `section=` this key: it is a line at the top of the section.
 
-A person sees the page in the rail under `area`, after core's own entries and the extension's
-lists (and before About, in System).  The rail entry and the title are `title`, else `page.<key>.title` in the extension's catalog,
-else the extension's name.  The answer's own `title` is the heading over the page.  The page is
-served at `GET /api/v1/ext/<name>/pages/<key>`, changed with `PUT` at the same address and
-`{"values": {...}}`, and its acts are at `.../pages/<key>/about`.  They are served at the page's
-`tier=`.
+A person sees the entry in the extension's panel, in the order declared, named `title`, else
+`section.<key>.title` in the extension's catalog, else its key, with `icon`.  `read` is asked
+when the entry is opened, and served at `GET /api/v1/ext/<name>/sections/<key>`, changed with
+`PUT` at the same address and `{"values": {...}}`, at the section's `tier=`.
 
-It raises `ContractError` without `ui:mount`, for a missing or unknown area, a missing key, a key declared
-twice, and a `read` or `save` that is not a function.  After `register` returns, it also raises
-when the title matches a core page's title or another running extension's list or page in the
-same area, and when an act opens a dialog the extension never declared.  `--check-extension`
-says each page it finds and reads it once.
+It raises `ContractError` without `ui:mount`, for a key that is not lower-case words joined by
+underscores or is declared twice, and for a `read` or `save` that is not a function.  After
+`register` returns, it also raises when an action names a section the extension never declares.
+`--check-extension` says each section it finds and reads it once.
+
+## `ctx.ui.panel`
+
+`ctx.ui.panel(*, area, icon="", title="")`.  Required: `area`.
+
+Put the extension's whole panel in the navigation too, under `area`, as an entry drawn at full
+width: Details, Settings, the sections of its own and Actions.  Without it the panel under
+Settings > Extensions is its only home.  It can be declared once.
+
+A person sees the entry under `area`, after core's own entries and the extension's lists (and
+before About, in System).  It is named `title`, else `panel.title` in the extension's catalog,
+else the extension's name, and drawn with `icon`.
+
+It raises `ContractError` without `ui:mount`, for a missing or unknown area, and when called
+twice.  After `register` returns, it also raises when the title matches a core page's title or
+another running extension's entry in the same area.
 
 ## `ctx.ui.panel_group`
 
@@ -248,7 +258,7 @@ a function.  `--check-extension` says each entry it finds.
 
 Ask for a person's attention on Overview, under Needs You, with the rows core's own checks
 raise.  `kinds` names each thing you may ask for, and what a click on its row opens: exactly
-one of `"list"`, `"page"` or `"action"`, naming something this extension declares, and an
+one of `"list"`, `"section"` or `"action"`, naming something this extension declares, and an
 optional `"tone"` of `danger`, `warm` (the default), `accent` or `muted`.  `read` is a function
 core calls each time Overview is drawn.  It answers a list of `{"kind", "ids"}` or
 `{"kind", "count", "token"}`, one for each kind that has something to ask for now, each kind
@@ -285,9 +295,9 @@ Manager reads every running extension's rows from `GET /api/v1/extensions/needs`
 
 It raises `ContractError` without `ui:mount`, when called twice, for `kinds` that is empty or
 not a dict, for a kind that is empty or has a `:`, `/` or a space in it, for a kind that does
-not name exactly one of `list`, `page` and `action`, for a `tone` that is not one of the four,
+not name exactly one of `list`, `section` and `action`, for a `tone` that is not one of the four,
 and for a `read` that is not a function.  The same check as for any declaration refuses a kind that
-opens a list, page or action the extension never offers.  `--check-extension` says each kind and
+opens a list, section or action the extension never offers.  `--check-extension` says each kind and
 calls `read` once.
 
 ## `ctx.ui.kept`
@@ -308,8 +318,9 @@ It raises nothing beyond the `ui:mount` check.
 
 ## `ctx.ui.action`
 
-`ctx.ui.action(key, dialog, *, label="", description="", tier=LIBRARY)`.  Required: `key`,
-`dialog`.  It raises `ContractError` for a `tier` the manifest does not list.
+`ctx.ui.action(key, dialog, *, label="", description="", icon="", section="",
+tier=LIBRARY)`.  Required: `key`, `dialog`.  It raises `ContractError` for a `tier` the
+manifest does not list.
 
 Offer a dialog that core shows.  `dialog` is an object with `ask(step)` and, as far as the
 action needs them, `check`, `act`, `run` and `progress`.  See
@@ -327,10 +338,14 @@ class Reset:
 ctx.ui.action("reset", Reset())
 ```
 
-A person sees a button under Actions on the extension's page, and it opens the dialog.  A list
-can open the same dialog from a button above it, from a verb or from an act.  It raises
-`ContractError` for a key that is empty or already used, or a `dialog` without a callable
-`ask`.
+A person sees a line, with `icon` (a play mark where there is none), the action's name and
+`description`, and it opens the dialog.  With no `section` it is under Actions, the last entry
+of the extension's panel, which is there only while some action is not placed.  With a
+`section`, the key of one declared with `ctx.ui.section`, it is a line at the top of that
+section instead.  A list can open the same dialog from a button above it, from a verb or from
+an act.  It raises `ContractError` for a key that is empty or already used, or a `dialog`
+without a callable `ask`, and after `register` returns for a `section` the extension never
+declares.
 
 ## `ctx.ui.link`
 

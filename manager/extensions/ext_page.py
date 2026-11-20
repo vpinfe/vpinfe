@@ -23,7 +23,7 @@ from common.failures import why
 from common.i18n import t
 from common.security import accepted
 from manager.extensions import ext_action, ext_mark
-from manager.kit import confirm, deeplink, offload, panel, verbs
+from manager.kit import confirm, deeplink, folder_picker, offload, panel, verbs
 from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.security import accept
@@ -32,9 +32,13 @@ STATE_WORDS = {host.FAILED: "manager.ext_page.failed",
                host.DISABLED: "manager.ext_page.stopped"}
 
 
-def address(name: str) -> str:
-    """Where one extension is, for a link from anywhere in the Manager."""
-    return "/manager?" + deeplink.query({"view": "extensions", "extension": name})
+def address(name: str, section: str = "") -> str:
+    """Where one extension is, for a link from anywhere in the Manager, at one of the
+    sections it declared where that is given."""
+    where = {"view": "extensions", "extension": name}
+    if section:
+        where["section"] = deeplink.SECTION_PREFIX + section
+    return "/manager?" + deeplink.query(where)
 
 
 async def read(extension: dict) -> dict[str, Any]:
@@ -74,8 +78,7 @@ def enabled_row(extension: dict, refill: Callable[[], None]) -> tuple[Any, ...]:
 
 def settings_entries(extension: dict, settings: dict[str, Any],
                      refill: Callable[[], None]) -> list[tuple[Any, ...]]:
-    """What the extension is set to and what it can be asked to do, from what `read`
-    found. Nothing for an extension that has neither."""
+    """What the extension is set to, from what `read` found."""
     name = str(extension.get("name") or "")
     running = extension.get("state") == host.LOADED
     surfaces = dict(extension.get("surfaces") or {})
@@ -83,11 +86,43 @@ def settings_entries(extension: dict, settings: dict[str, Any],
                            settings, refill)
     if extension.get("has_settings") and not running and not cannot_run(extension):
         entries.append(panel.note(t("manager.ext_page.settings_when_running")))
-    offered = list(extension.get("actions") or []) if running else []
-    if offered:
-        entries += [(panel.HEADING, t("word.actions")),
-                    (panel.FULL, lambda: _actions(offered, name, refill))]
     return entries
+
+
+def line_only(extension: dict) -> set[str]:
+    """The actions that mean something only over a line of the extension's own list: a
+    list verb opens one over the rows chosen, and no list's + opens it with nothing."""
+    lists = extension.get("lists") or []
+    over_rows = {str(verb["action"]) for one in lists for verb in one.get("verbs") or []
+                 if verb.get("action") and (verb.get("one") or verb.get("each"))}
+    from_add = {str(key) for one in lists for key in one.get("add") or []}
+    return over_rows - from_add
+
+
+def unplaced(extension: dict) -> list[dict]:
+    """What the Actions entry holds: every action of a running extension that its author
+    has not placed in a section, less the ones that need a line chosen."""
+    if extension.get("state") != host.LOADED:
+        return []
+    only = line_only(extension)
+    return [one for one in extension.get("actions") or []
+            if not one.get("section") and one.get("key") not in only]
+
+
+def placed(extension: dict, section: str) -> list[dict]:
+    """The actions the author put in one section."""
+    if extension.get("state") != host.LOADED:
+        return []
+    return [one for one in extension.get("actions") or [] if one.get("section") == section]
+
+
+def action_entries(extension: dict, refill: Callable[[], None]) -> list[tuple[Any, ...]]:
+    """What the extension can be asked to do, where its author has not said where."""
+    offered = unplaced(extension)
+    if not offered:
+        return []
+    return [(panel.FULL, lambda: action_lines(offered, str(extension.get("name") or ""),
+                                              refill))]
 
 
 def origin_chip(extension: dict) -> Callable[[], None] | None:
@@ -109,9 +144,9 @@ def origin_chip(extension: dict) -> Callable[[], None] | None:
 
 
 def picture(extension: dict) -> Callable[[], None] | None:
-    """The frame before the name: its own picture once it is shipped or accepted, and the
-    mark every extension has until then. None for one whose manifest was refused, which
-    has no identity to show."""
+    """The frame beside the name in the pane's title: its own picture once it is shipped or
+    accepted, and the mark every extension has until then or when its picture will not load.
+    None for one whose manifest was refused, which has no identity to show."""
     if not extension.get("author"):
         return None
     name = quote(str(extension.get("name") or ""), safe="")
@@ -119,30 +154,67 @@ def picture(extension: dict) -> Callable[[], None] | None:
     shown = bool(extension.get("picture_shown"))
 
     def draw() -> None:
-        with ui.element("div").classes("manager-ext-picture"):
-            ui.icon(ext_mark.PICTURE_GLYPH).classes("manager-ext-picture-glyph")
+        with ui.element("div").classes("manager-ext-picture manager-ext-picture--title"):
+            mark = ui.icon(ext_mark.PICTURE_GLYPH).classes("manager-ext-picture-glyph")
             if shown:
+                mark.set_visibility(False)
                 image = ui.image(address).props("fit=cover no-spinner").classes(
                     "manager-ext-picture-image")
-                image.on("error", lambda: image.set_visibility(False))
+
+                def failed() -> None:
+                    image.set_visibility(False)
+                    mark.set_visibility(True)
+
+                image.on("error", failed)
 
     return draw
 
 
 def reported_rows(extension: dict, help_line: str) -> list[tuple[Any, ...]]:
-    """What the author says it uses, each word saying what it touches, with `help_line`
-    under it when there is something to say about how far that can be trusted."""
-    words = [_plainly(str(one)) for one in
-             [*(extension.get("scopes") or []), *(extension.get("capabilities") or [])]]
-    _, remote = _remote_names([f"{PLAY_PREFIX}{one}" for one in extension.get("play") or []])
-    entries: list[tuple[Any, ...]] = []
-    if words:
-        entries.append((t("manager.trust.uses"), _chips(words)))
-    if remote:
-        entries.append((t("manager.trust.remote"), _chips(remote)))
+    """What the author says it uses, one row for each thing it touches, with `help_line`
+    under them when there is something to say about how far that can be trusted. What
+    reaches outside VPinFE comes first."""
+    entries = reach_entries([*(str(one) for one in extension.get("scopes") or []),
+                             *(str(one) for one in extension.get("capabilities") or []),
+                             *(f"{PLAY_PREFIX}{one}" for one in extension.get("play") or [])])
     if entries and help_line:
         entries.append(panel.note(help_line))
     return entries
+
+
+def reach_entries(words: list[str]) -> list[tuple[Any, ...]]:
+    """The rows for a list of scopes, capabilities and `play:` surfaces, in sentences that
+    run onto further lines where the panel is narrow."""
+    used, remote = _remote_names(words)
+    entries: list[tuple[Any, ...]] = [
+        (t(area), panel.wrapped(_sentence(does))) for area, does in _by_area(used)]
+    if remote:
+        entries.append((t("manager.trust.remote"), panel.wrapped(", ".join(remote))))
+    return entries
+
+
+def _by_area(used: list[str]) -> list[tuple[str, list[str]]]:
+    """What a manifest names, gathered under what it touches and in the order of AREAS. A name
+    VPinFE has no words for is shown as it is, under Other."""
+    found: dict[str, list[str]] = {}
+    unknown: list[str] = []
+    for name in used:
+        area_does = SAYS.get(name)
+        if area_does is None:
+            unknown.append(name)
+            continue
+        area, does = area_does
+        if t(does) not in found.setdefault(area, []):
+            found[area].append(t(does))
+    rows = [(area, found[area]) for area in AREAS if area in found]
+    if unknown:
+        rows.append(("manager.ext_page.area_other", unknown))
+    return rows
+
+
+def _sentence(parts: list[str]) -> str:
+    """Several short phrases as one line, only the first capitalized."""
+    return ", ".join([parts[0], *(one[:1].lower() + one[1:] for one in parts[1:])])
 
 
 def cannot_run(extension: dict) -> bool:
@@ -212,18 +284,16 @@ async def trust_and_turn_on(extension: dict, copy: dict) -> bool:
     name = str(extension.get("name") or "")
     trust = dict(copy.get("trust") or {})
     shown = str(extension.get("display_name") or name)
-    used, remote = _remote_names(
-        [str(one) for one in trust.get("uses") or copy.get("uses") or []])
-    new, new_remote = _remote_names([str(one) for one in trust.get("new_access") or []])
     before = bool(trust.get("accepted_before"))
     yes = await accept.extension(
         shown, str(copy.get("version") or ""), author=str(copy.get("author") or ""),
         source=str(copy.get("source") or ""), path=str(copy.get("path") or ""),
-        uses=[_plainly(one) for one in used], remote=remote,
+        reach=reach_entries([str(one) for one in trust.get("uses") or copy.get("uses") or []]),
         replaces=shown if trust.get("origin") == accepted.REPLACES else "",
         changed=len(trust.get("changed_files") or []),
         claims_team=bool(trust.get("claims_team")),
-        added=[*(_plainly(one) for one in new), *new_remote] if before else [],
+        added=reach_entries([str(one) for one in trust.get("new_access") or []])
+        if before else [],
         was=str(trust.get("accepted_version") or "") if before else "")
     if not yes:
         return False
@@ -386,65 +456,67 @@ def secret_control(label: str, is_set: bool, save_typed: Callable[[str], Any],
 
 def _path_control(client: Any, field: dict, value: str,
                   save_text: Callable[[str], Awaitable[str]]) -> Callable[[], None]:
-    """A path, saved when the field is left, and at once when Browse chose it."""
-    def draw() -> None:
-        control = panel.path_field(str(field.get("placeholder") or ""),
-                                   wants=str(field.get("wants") or "dir"), value=value,
-                                   browse=client.folders)
-        state = {"focused": False, "saved": value}
+    """A path, saved when the field is left, and at once when Browse chose it. It is the
+    settings page's own path field, so it sits in the row as the boxes beside it do."""
+    wants = str(field.get("wants") or "dir")
 
-        async def leave() -> None:
-            state["focused"] = False
-            text = str(control.value or "").strip()
-            if text == state["saved"]:
-                return
-            state["saved"] = text
-            said = await save_text(text)
-            control.props["error"] = bool(said)
-            control.props["error-message"] = said
-            control.update()
+    async def browsed(current: str) -> str | None:
+        return await folder_picker.pick_path(client.folders, current, kind=wants)
 
-        control.on("focus", lambda: state.update(focused=True))
-        control.on("blur", leave)
-        control.on("keydown.enter", lambda: control.run_method("blur"))
-        # A value that changes while the field is not focused was chosen in Browse.
-        control.on_value_change(lambda: None if state["focused"] else leave())
-
-    return draw
+    return panel.field(value, save_text, refuses=True, browse=browsed,
+                       placeholder=str(field.get("placeholder") or ""))
 
 
-def _actions(offered: list[dict], name: str, refill: Callable[[], None]) -> None:
-    """Refills once an action has run: it may have changed a setting shown above it."""
+def action_lines(offered: list[dict], name: str, refill: Callable[[], None]) -> None:
+    """One line for each action: its picture, its name, what it does. The whole line opens
+    the dialog, and the panel is drawn again once it has run, since it may have changed
+    what is shown beside it."""
     @on_page
     async def run_one(action: dict) -> None:
         if await ext_action.open_action(name, action):
             refill()
 
-    with ui.element("div").classes("manager-slot-actions"):
+    with ui.element("div").classes("manager-acts"):
         for action in offered:
-            panel.action(str(action.get("label") or action.get("key") or ""),
-                         lambda _e=None, action=action: run_one(action),
-                         icon=verbs.RUN, hint=str(action.get("description") or ""))()
+            with ui.element("div").props("role=button tabindex=0") \
+                    .classes("manager-act") \
+                    .on("click", lambda _e=None, action=action: run_one(action)) \
+                    .on("keydown.enter", lambda _e=None, action=action: run_one(action)):
+                ui.icon(str(action.get("icon") or verbs.RUN)).classes("manager-act-icon")
+                with ui.element("div").classes("min-w-0"):
+                    ui.label(t("manager.ext_page.action_opens",
+                               name=str(action.get("label") or action.get("key") or ""))) \
+                        .classes("manager-act-name")
+                    if action.get("description"):
+                        ui.label(str(action["description"])).classes("manager-act-does")
 
 
-# What a scope or capability is called on screen. The wire says `games:write`; a person
-# reading a consent list should not have to work out what that lets somebody do.
-PLAINLY = {
-    "games:read": "manager.ext_page.read_library",
-    "games:write": "manager.ext_page.games_write",
-    "input:read": "manager.ext_page.input_read",
-    "players:read": "manager.ext_page.see_players",
-    "filesystem:read": "manager.ext_page.filesystem_read",
-    "config:read": "manager.ext_page.config_read",
-    "config:write": "manager.ext_page.config_write",
-    "ui:mount": "manager.ext_page.ui_mount",
-    "config:own": "manager.ext_page.config_own",
-    "net:outbound": "manager.ext_page.reach_internet",
-    "proc:spawn": "manager.ext_page.proc_spawn",
-    "hardware:usb": "manager.ext_page.hardware_usb",
-    "fs:read": "manager.ext_page.read_files",
-    "fs:write": "manager.ext_page.write_files",
-    "os:updates": "manager.ext_page.os_updates",
+# The rows of What It Can Do, outside VPinFE first, so what could matter most is read first.
+AREAS = (
+    "manager.ext_page.area_internet", "manager.ext_page.area_programs",
+    "manager.ext_page.area_usb", "manager.ext_page.area_device",
+    "manager.ext_page.area_files", "manager.ext_page.area_library",
+    "manager.ext_page.area_players", "manager.ext_page.area_controls",
+    "manager.ext_page.area_vpinfe",
+)
+
+# Each scope or capability: the row it belongs to and what it lets the extension do there.
+SAYS = {
+    "net:outbound": ("manager.ext_page.area_internet", "manager.ext_page.does_internet"),
+    "proc:spawn": ("manager.ext_page.area_programs", "manager.ext_page.does_programs"),
+    "hardware:usb": ("manager.ext_page.area_usb", "manager.ext_page.does_usb"),
+    "os:updates": ("manager.ext_page.area_device", "manager.ext_page.does_updates"),
+    "fs:read": ("manager.ext_page.area_files", "manager.ext_page.does_files_read"),
+    "fs:write": ("manager.ext_page.area_files", "manager.ext_page.does_files_write"),
+    "filesystem:read": ("manager.ext_page.area_files", "manager.ext_page.does_folders"),
+    "games:read": ("manager.ext_page.area_library", "manager.ext_page.does_library_read"),
+    "games:write": ("manager.ext_page.area_library", "manager.ext_page.does_games_write"),
+    "config:read": ("manager.ext_page.area_library", "manager.ext_page.does_where_kept"),
+    "players:read": ("manager.ext_page.area_players", "manager.ext_page.does_players"),
+    "input:read": ("manager.ext_page.area_controls", "manager.ext_page.does_controls"),
+    "config:write": ("manager.ext_page.area_vpinfe", "manager.ext_page.does_folders_add"),
+    "ui:mount": ("manager.ext_page.area_vpinfe", "manager.ext_page.does_page"),
+    "config:own": ("manager.ext_page.area_vpinfe", "manager.ext_page.does_settings"),
 }
 
 PLAY_PREFIX = "play:"
@@ -471,14 +543,3 @@ def _remote_names(words: list[str]) -> tuple[list[str], list[str]]:
     rest = [one for one in words if not one.startswith(PLAY_PREFIX)]
     return rest, [_remote_name(one[len(PLAY_PREFIX):])
                   for one in words if one.startswith(PLAY_PREFIX)]
-
-
-def _plainly(name: str) -> str:
-    """Its own name is the fallback, never a guess: an unknown scope shown as prose
-    somebody invented is worse than one shown as it is."""
-    key = PLAINLY.get(name)
-    return t(key) if key else name
-
-
-def _chips(words: list[str]) -> Callable[[], None]:
-    return accept.chips(words)

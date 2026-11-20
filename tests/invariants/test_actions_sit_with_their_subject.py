@@ -26,9 +26,10 @@ def _at(name: str) -> pathlib.Path:
     return found
 
 
-# `panel.py` is the ⋮ that opens a subject's verbs. `ext_page.py` heads the buttons an
-# extension declares, which have no subject menu to sit in.
-ACTIONS_WORD_AT = {"panel.py", "ext_page.py"}
+# `panel.py` is the ⋮ that opens a subject's verbs. `rail.py` names the one section that
+# holds the buttons an extension declares, which have no subject menu to sit in.
+ACTIONS_WORD_AT = {"panel.py", "rail.py"}
+EXTENSION_ACTIONS_SECTION = "extension_actions"
 
 # Every subject with a panel ⋮: the module and function that write its list of verbs, and
 # the module whose grid row menu draws it.
@@ -228,7 +229,8 @@ class TestActionsSitWithTheirSubject(unittest.TestCase):
                 and node.args and isinstance(node.args[0], ast.Constant)
                 and isinstance(node.args[0].value, str)]
         self.assertTrue(keys)
-        self.assertEqual([key for key in keys if key.endswith("_actions")], [])
+        self.assertEqual([key for key in keys if key.endswith("_actions")
+                          and key != EXTENSION_ACTIONS_SECTION], [])
 
     def test_a_subject_menu_and_its_row_menu_share_one_list(self) -> None:
         self.assertEqual(_subject_verbs(), set(GRID_OF))

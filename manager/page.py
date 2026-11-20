@@ -32,7 +32,7 @@ from manager import power, rail_marks
 from manager import update_count as update_count_module
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
-from manager.extensions import ext_links, ext_mark, ext_pages
+from manager.extensions import ext_links, ext_mark, ext_pages, ext_sections
 from manager.extensions import ext_lists as community_page
 from manager.extensions import extensions as extensions_page
 from manager.frontend import launchers as launchers_page
@@ -813,7 +813,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                            "tab": tab, "pane": pane, "file": file,
                            "extension": extension},
                    views=[key for key, _label, _icon, _feature in nav_items],
-                   sections=[*(item.key for item in rail.SECTIONS), *discovery_kinds.vocabulary()])
+                   sections=[*(item.key for item in rail.SECTIONS), *discovery_kinds.vocabulary(),
+                             *ext_sections.keys(installed_extensions)])
 
     # The saved views, read before anything draws: a grid asks for them while it is
     # being built, which is on the loop, and the client refuses an HTTP call there.
@@ -1882,7 +1883,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
             return str(listed[1].get("title") or "")
         paged = ext_pages.find(view, state["extensions"])
         if paged is not None:
-            return str(paged[1].get("title") or "")
+            return str(paged[1].get("title") or paged[0].get("display_name")
+                       or paged[0].get("name") or "")
         return t(SECTIONS.get(view, view.title()))
 
     state["place_title"] = lambda: t("manager.page.place_title", place=place_name())
@@ -1974,10 +1976,13 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                 if listed is not None:
                     community_page.build(*listed, library, subject=menu,
                                          on_open=show_extension_row)
-            elif ext_pages.is_page(view):
+            elif ext_pages.is_panel(view):
                 paged = ext_pages.find(view, state["extensions"])
                 if paged is not None:
-                    ext_pages.build(*paged, library, subject=menu, host=state["host"])
+                    body = ui.column().classes("w-full grow min-h-0 gap-0")
+                    name = str(paged[0].get("name") or "")
+                    busy.fill(body, lambda: builds.build_extension(
+                        body, None, library, name, state, menu=menu))
             elif view == "media":
                 media_page.build(library.media_rows(), library, show_slot, state,
                                  rescan=_rescan)
@@ -2267,7 +2272,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                     views=[key for _parent, items in nav_groups for key, *_rest in items
                            if not ext_links.is_link(key)],
                     sections=[*(item.key for item in rail.SECTIONS),
-                              *discovery_kinds.vocabulary()])
+                              *discovery_kinds.vocabulary(),
+                              *ext_sections.keys(state["extensions"])])
                 if state.get("stacked") and deeplink.same_place(state, target):
                     if target.get("pane") == "open":
                         open_pane()

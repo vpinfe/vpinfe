@@ -50,7 +50,7 @@ from manager.library import collection_rules
 logger = logging.getLogger("vpinfe.manager.extensions.ext_lists")
 
 PREFIX = "community:"
-PAGE_PREFIX = "page:"
+PANEL_PREFIX = deeplink.PANEL_PREFIX
 ICON = "extension"
 HELD = "held"
 UNDER = "under_said"
@@ -78,9 +78,9 @@ def view_key(extension: str, key: str) -> str:
     return f"{PREFIX}{extension}:{key}"
 
 
-def page_view_key(extension: str, key: str) -> str:
-    """The rail entry of one of an extension's pages, which has no grid to be a list."""
-    return f"{PAGE_PREFIX}{extension}:{key}"
+def panel_view_key(extension: str) -> str:
+    """The rail entry of an extension's whole panel, which has no grid to be a list."""
+    return f"{PANEL_PREFIX}{extension}"
 
 
 def address(extension: str, key: str) -> str:
@@ -101,8 +101,8 @@ AREA_FEATURE = {"library": install_identity.LIBRARY, "frontend": install_identit
 
 
 def nav_items(extensions: Sequence[dict[str, Any]]) -> dict[str, tuple]:
-    """The rail entries extensions add, by the area each list, page or link asked for. An
-    extension's lists come first, then its pages, then its links."""
+    """The rail entries extensions add, by the area each list, panel or link asked for. An
+    extension's lists come first, then its panel, then its links."""
     found: dict[str, list] = {}
     for one in extensions:
         if str(one.get("state") or "") != "loaded":
@@ -114,10 +114,10 @@ def nav_items(extensions: Sequence[dict[str, Any]]) -> dict[str, tuple]:
                 view_key(name, str(declared.get("key") or "")),
                 str(declared.get("title") or ""), str(declared.get("icon") or ICON),
                 AREA_FEATURE.get(area, install_identity.CORE)))
-        for declared in one.get("pages") or []:
+        for declared in one.get("panels") or []:
             area = str(declared["area"])
             found.setdefault(area, []).append((
-                page_view_key(name, str(declared.get("key") or "")),
+                panel_view_key(name),
                 str(declared.get("title") or ""), str(declared.get("icon") or ICON),
                 AREA_FEATURE.get(area, install_identity.CORE)))
         for link in one.get("links") or []:

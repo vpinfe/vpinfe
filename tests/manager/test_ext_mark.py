@@ -114,11 +114,11 @@ class InAPanel(unittest.TestCase):
 
 
 class InTheRailAndSettings(unittest.TestCase):
-    def test_a_rail_entry_is_owned_by_the_extension_that_declared_its_page(self) -> None:
-        page = {"key": "board", "base": "/board"}
-        found = _found(state="loaded", pages=[page])
-        shipped = _found(accepted.SHIPPED, name="pins", state="loaded", pages=[page])
-        view = ext_lists.page_view_key("tally", "board")
+    def test_a_rail_entry_is_owned_by_the_extension_that_declared_its_panel(self) -> None:
+        panel_entry = {"key": "panel", "area": "community"}
+        found = _found(state="loaded", panels=[panel_entry])
+        shipped = _found(accepted.SHIPPED, name="pins", state="loaded", panels=[panel_entry])
+        view = ext_lists.panel_view_key("tally")
         self.assertIs(app_page._owner_of(view, [shipped, found]), found)
         self.assertIsNone(app_page._owner_of("games", [found]))
 

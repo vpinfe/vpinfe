@@ -130,12 +130,12 @@ manifest's `play` names at least one surface.
 
 ```python
 if "play" in ctx.reaches:
-    ctx.ui.page("scores", read_scores, area="community", tier=PLAY)
+    ctx.ui.section("scores", read_scores, tier=PLAY)
 ```
 
-The manifest names the page under `play`: `"play": ["page:scores"]`.
+The manifest names the section under `play`: `"play": ["section:scores"]`.
 
-Nothing is drawn.  A list, page, group, action, verb or router at a tier that is not in it
+Nothing is drawn.  A list, section, group, action, verb or router at a tier that is not in it
 raises `ContractError` when it is declared, and an act marked `@tier(...)` at one is refused
 when it is called.  See [Scopes](scopes.md).
 

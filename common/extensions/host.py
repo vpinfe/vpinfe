@@ -133,7 +133,8 @@ class Record:
     declared_links: list[dict] = field(default_factory=list)
     declared_groups: list[dict] = field(default_factory=list)
     declared_library_verbs: list[dict] = field(default_factory=list)
-    declared_pages: list[dict] = field(default_factory=list)
+    declared_sections: list[dict] = field(default_factory=list)
+    declared_panel: dict = field(default_factory=dict)
     declared_needs: list[dict] = field(default_factory=list)
     # The registration core calls the functions of; None while it is not running.
     context: ExtensionContext | None = None
@@ -374,11 +375,20 @@ class Record:
             "accepted_version": accepted.accepted_version(self.name, self.origin, self.folder),
         }
 
-    def pages(self) -> list[dict]:
-        """Its pages, titled in the language now set."""
-        return [{**one, "title": self.said(one["title"], f"page.{one['key']}.title",
-                                           self.display_name)[0]}
-                for one in self.declared_pages]
+    def sections(self) -> list[dict]:
+        """Its sections, in the order declared, titled in the language now set."""
+        return [{**one, "title": self.said(one["title"], f"section.{one['key']}.title",
+                                           one["key"])[0]}
+                for one in self.declared_sections]
+
+    def panels(self) -> list[dict]:
+        """Its panel as an entry in the navigation, as a list of one, or none where it
+        names no area."""
+        if not self.declared_panel:
+            return []
+        one = self.declared_panel
+        return [{**one, "title": self.said(one["title"], "panel.title",
+                                           self.display_name)[0]}]
 
     def links(self) -> list[dict]:
         """Its links, with the address each answers now and the words in the language now
@@ -500,7 +510,8 @@ class Record:
                 "origin": self.origin,
                 "trust": self.trust(),
                 "waiting": self._waiting(),
-                "pages": self.pages() if self.running else [],
+                "sections": self.sections() if self.running else [],
+                "panels": self.panels() if self.running else [],
                 "needs": [dict(one) for one in self.declared_needs] if self.running else [],
                 "account": self.account_declared() if self.running else {}}
 
@@ -714,7 +725,8 @@ class Registry:
             record.declared_links = list(context.ui.declared_links)
             record.declared_groups = list(context.ui.declared_groups)
             record.declared_library_verbs = list(context.ui.declared_library_verbs)
-            record.declared_pages = list(context.ui.declared_pages)
+            record.declared_sections = list(context.ui.declared_sections)
+            record.declared_panel = dict(context.ui.declared_panel)
             record.declared_needs = list(context.ui.declared_needs)
             self._check_titles(record)
         except Exception as exc:
@@ -724,7 +736,8 @@ class Registry:
             record.declared_links = []
             record.declared_groups = []
             record.declared_library_verbs = []
-            record.declared_pages = []
+            record.declared_sections = []
+            record.declared_panel = {}
             record.declared_needs = []
             if context is not None:
                 _withdraw(record.name, context.events.registered, context.apps)
@@ -748,20 +761,20 @@ class Registry:
         logger.info("Extension %s %s loaded", record.name, manifest.version)
 
     def _check_titles(self, record: Record) -> None:
-        """A list or a page is not titled as a core entry, nor as another list or page in its
-        area: the rail would show two of the same name, and one of them is not what it
+        """A list or a panel is not titled as a core entry, nor as another list or panel in
+        its area: the rail would show two of the same name, and one of them is not what it
         says."""
         core = {i18n.t(f"manager.section.{one}").casefold() for one in CORE_SECTIONS}
         theirs = {(one["area"], one["title"].casefold())
                   for other in self._records.values() if other is not record and other.running
-                  for one in [*other.lists(), *other.pages()]}
-        for kind, shown in (("list", record.lists()), ("page", record.pages())):
+                  for one in [*other.lists(), *other.panels()]}
+        for kind, shown in (("list", record.lists()), ("panel", record.panels())):
             for one in shown:
                 title = one["title"].casefold()
                 if title in core or (one["area"], title) in theirs:
                     raise ContractError(f"{record.name} titles a {kind} {one['title']!r}, "
                                         "which is the name of a page core has or of another "
-                                        "list or page in its area")
+                                        "list or panel in its area")
                 theirs.add((one["area"], title))
 
     # -- the switch ----------------------------------------------------------

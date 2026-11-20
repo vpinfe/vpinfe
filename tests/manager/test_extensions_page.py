@@ -82,12 +82,12 @@ class Page:
 class RemoteNameTests(unittest.TestCase):
     def test_a_surface_a_remote_can_open_is_named_by_its_kind_and_key(self) -> None:
         used, remote = ext_page._remote_names([
-            "games:read", "play:router", "play:list:scores", "play:page:scores",
+            "games:read", "play:router", "play:list:scores", "play:section:scores",
             "play:action:reset_all", "play:group:game", "play:verb:game:rate_all"])
 
         self.assertEqual(used, ["games:read"])
         self.assertEqual(remote, [
-            "Its Web Addresses", "The Scores List", "The Scores Page", "The Reset All Action",
+            "Its Web Addresses", "The Scores List", "The Scores Section", "The Reset All Action",
             "Its Section on the Game Panel", "The Rate All Button on the Game Panel"])
 
 
@@ -144,39 +144,42 @@ class SwitchRowTests(unittest.TestCase):
 
 class ActionsGroupTests(unittest.TestCase):
     ACTIONS = [{"key": "run", "label": "Import a Library", "description": "Imports one"}]
-    HEADING = (ext_page.panel.HEADING, i18n.t("word.actions"))
 
     def entries(self, found: dict) -> list[tuple[Any, ...]]:
-        with mock.patch.object(ext_page, "ApiClient"):
-            return ext_page.settings_entries(found, {}, mock.Mock())
+        return ext_page.action_entries(found, mock.Mock())
 
-    def test_a_running_extension_offers_its_actions_under_a_heading(self) -> None:
-        self.assertIn(self.HEADING, self.entries({**RUNNING, "actions": self.ACTIONS}))
+    def test_a_running_extension_offers_its_actions(self) -> None:
+        self.assertEqual(len(self.entries({**RUNNING, "actions": self.ACTIONS})), 1)
 
     def test_one_that_is_not_running_offers_none(self) -> None:
-        self.assertNotIn(self.HEADING, self.entries({**SWITCHED_OFF, "actions": self.ACTIONS}))
+        self.assertEqual(self.entries({**SWITCHED_OFF, "actions": self.ACTIONS}), [])
 
-    def test_one_with_none_draws_no_empty_heading(self) -> None:
-        self.assertNotIn(self.HEADING, self.entries(RUNNING))
+    def test_one_with_none_offers_nothing(self) -> None:
+        self.assertEqual(self.entries(RUNNING), [])
+
+    def test_the_settings_never_carry_the_actions(self) -> None:
+        with mock.patch.object(ext_page, "ApiClient"):
+            entries = ext_page.settings_entries(
+                {**RUNNING, "actions": self.ACTIONS}, {}, mock.Mock())
+        self.assertEqual(entries, [])
 
     def _pressed(self, ran: bool) -> mock.Mock:
-        pressed: list[Callable[[], Any]] = []
+        handlers: list[Callable[..., Any]] = []
         redraw = mock.Mock()
 
-        def action(label: str, on_click: Callable[[], Any], **kwargs: Any) -> Callable[[], None]:
-            pressed.append(on_click)
-            return lambda: None
+        def on_page(handler: Callable[..., Any]) -> Callable[..., Any]:
+            handlers.append(handler)
+            return handler
 
         for target, name, replacement in (
-                (ext_page.panel, "action", action),
-                (ext_page, "on_page", lambda handler: handler),
+                (ext_page, "on_page", on_page),
                 (ext_page.ext_action, "open_action", mock.AsyncMock(return_value=ran))):
             patch = mock.patch.object(target, name, replacement)
             patch.start()
             self.addCleanup(patch.stop)
         with ui.column():
-            ext_page._actions(self.ACTIONS, "sample", redraw)
-        asyncio.run(pressed[0]())
+            ext_page.action_lines(self.ACTIONS, "sample", redraw)
+        asyncio.run(handlers[0](self.ACTIONS[0]))
         return redraw
 
     def test_the_page_is_drawn_again_once_an_action_has_run(self) -> None:
@@ -429,13 +432,14 @@ class LanguageTests(unittest.TestCase):
         self.addCleanup(i18n.set_language, i18n.language())
 
     def test_what_a_scope_allows_is_read_in_the_language_set(self) -> None:
-        english = ext_page._plainly("games:read")
+        english = ext_page._by_area(["games:read"])[0][1]
         i18n.set_language("qps")
 
-        self.assertNotEqual(english, ext_page._plainly("games:read"))
+        self.assertNotEqual(english, ext_page._by_area(["games:read"])[0][1])
 
     def test_a_scope_nobody_described_is_shown_as_it_is(self) -> None:
-        self.assertEqual("games:teleport", ext_page._plainly("games:teleport"))
+        self.assertEqual([("manager.ext_page.area_other", ["games:teleport"])],
+                         ext_page._by_area(["games:teleport"]))
 
 
 def _said(job: dict, under: str = "ext.sample.action.run") -> list[str]:

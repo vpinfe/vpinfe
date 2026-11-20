@@ -21,7 +21,7 @@ NAME = "asking"
 STATE: dict[str, Any] = {}
 
 KINDS = {"share_down": {"list": "plays"}, "update_ready": {"action": "update", "tone": "accent"},
-         "review": {"page": "week", "tone": "danger"}}
+         "review": {"section": "week", "tone": "danger"}}
 
 
 def fresh_state() -> None:
@@ -41,7 +41,7 @@ def asking(ctx: Any) -> None:
         return STATE["answer"]
 
     ctx.ui.list("plays", lambda: [], columns=[{"field": "name"}], title="Plays", area="community")
-    ctx.ui.page("week", lambda: {"title": "Week", "sections": []}, title="Week", area="community")
+    ctx.ui.section("week", lambda: {}, title="Week")
     ctx.ui.action("update", Dialog(), label="Update")
     ctx.ui.needs(KINDS, read)
 
@@ -77,7 +77,7 @@ class Declaring(unittest.TestCase):
             [(one["kind"], one["opens"], one["to"], one["tone"]) for one in ui.declared_needs],
             [("share_down", "list", "plays", "warm"),
              ("update_ready", "action", "update", "accent"),
-             ("review", "page", "week", "danger")])
+             ("review", "section", "week", "danger")])
 
     def test_needs_want_the_ui_capability(self) -> None:
         with self.assertRaisesRegex(contract.ContractError, "ui:mount"):
@@ -87,9 +87,9 @@ class Declaring(unittest.TestCase):
         ui = self.ui()
         for kinds, why in (({}, "dict of kinds"),
                            ({"a:b": {"list": "x"}}, "colon"),
-                           ({"a": {}}, "no list or page or action"),
-                           ({"a": {"list": "x", "page": "y"}}, "more than one"),
-                           ({"a": {"list": ""}}, "no list or page or action|more than one"),
+                           ({"a": {}}, "no list or section or action"),
+                           ({"a": {"list": "x", "section": "y"}}, "more than one"),
+                           ({"a": {"list": ""}}, "no list or section or action|more than one"),
                            ({"a": {"list": "x", "tone": "loud"}}, "tone")):
             with self.subTest(kinds=kinds), self.assertRaisesRegex(contract.ContractError, why):
                 ui.needs(kinds, lambda: [])

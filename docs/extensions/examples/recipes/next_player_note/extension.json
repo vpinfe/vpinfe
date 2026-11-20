@@ -5,5 +5,5 @@
   "source": "https://github.com/example/next_player_note",
   "requires_platform": 1,
   "capabilities": ["config:own", "ui:mount"],
-  "play": ["page:note"]
+  "play": ["section:note", "action:clear"]
 }

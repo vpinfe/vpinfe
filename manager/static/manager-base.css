@@ -2108,8 +2108,8 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
 }
 /* The header's own line, inside the rule with the name it belongs to. */
 .manager-panel-note { margin-top: 4px; }
-/* An extension's picture, or the mark it has until it has one. The image sits over the
-   mark, so one that fails to load shows the mark again. */
+/* An extension's picture, or the mark it has until it has one. The picture hides the mark
+   (a transparent picture would show it through); one that fails to load shows it again. */
 .manager-ext-picture {
   position: relative;
   flex: none;
@@ -2123,6 +2123,8 @@ body:has(.q-menu.manager-detailed) .q-tooltip.manager-menu-tip { display: none !
   background: var(--surface-sunken);
   color: var(--ink-3);
 }
+/* Beside the name in the pane's title, inside the height the title has. */
+.manager-ext-picture--title { width: 36px; height: 36px; border-radius: 8px; }
 .manager-ext-picture-glyph { font-size: var(--icon-slot); }
 .manager-ext-picture-image { position: absolute; inset: 0; width: 100%; height: 100%; }
 .manager-workbench { overflow-x: hidden !important; }
@@ -3238,12 +3240,20 @@ body.manager-dragging-rows .q-drawer--mini .manager-rail-drops {
    the value it names and only one step of grey from the help under it. Contrast is the
    lever: --ink-2 is the documented secondary at 11.1:1, and the help is --ink-3 at the
    caption size, so the three read as three. */
-.manager-fact-label { font-size: var(--fs-body); color: var(--ink-2); line-height: 1.3;
-                      padding-block: calc((var(--fact-row) - 1.3em) / 2); }
-.manager-fact-label:has(+ .manager-fact-edit .q-field--with-bottom) { align-self: start; }
-/* A fact nothing sets has no control to centre in a row, so the row is the height of its
-   words and the run of them reads as one block rather than a ladder. */
-.manager-fact-label.manager-fact-read { padding-block: 0; }
+.manager-fact-label { font-size: var(--fs-body); color: var(--ink-2); line-height: 1.3; }
+/* A row is the height of its words. Only a full-size control (a switch, a field, a select)
+   makes it taller, and the label then centres in the control's height. The control is
+   told by its own class, or by the Quasar control it holds; a chip, a link or a small
+   button in a row is not one. `:where` keeps the padding below any rule that sets a
+   label's own, such as the stacked layout under 660px. */
+:where(.manager-fact-label:has(+ :is(.manager-field-line, .manager-field-row,
+                                     .manager-fact-switch, .manager-waiting-row, .manager-kind,
+                                     .q-field, .q-toggle, .q-select)),
+       .manager-fact-label:has(+ * :is(.q-field, .q-toggle, .q-select))) {
+  padding-block: calc((var(--fact-row) - 1.3em) / 2);
+}
+.manager-fact-label:has(+ .manager-fact-edit .q-field--with-bottom),
+.manager-fact-label:has(+ .manager-fact-wrapped) { align-self: start; }
 /* Sized to its text: a tooltip anchors to its parent, and a full-width label puts the
    bubble beside the word rather than under it. `max-width` keeps the truncation. */
 /* Under the page name, in the supporting voice: it is read once on arrival and never
@@ -4118,6 +4128,18 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 }
 
 .manager-slot-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+
+/* An extension's actions: one line for each, the whole line opens its dialog. */
+.manager-acts { display: flex; flex-direction: column; }
+.manager-act {
+  display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px; cursor: pointer;
+  border-bottom: 1px solid var(--line-soft); border-radius: 4px;
+}
+.manager-act:last-child { border-bottom: 0; }
+.manager-act:hover, .manager-act:focus-visible { background: var(--surface-hover); outline: none; }
+.manager-act-icon { font-size: var(--icon-act); color: var(--accent); flex: none; margin-top: 1px; }
+.manager-act-name { font-size: var(--fs-body); color: var(--ink); }
+.manager-act-does { font-size: var(--fs-caption); color: var(--ink-3); }
 
 /* Room to judge the art when there is width to spare: at 240px a backglass in a
    half-window panel is a thumbnail beside a lot of nothing, and judging art is what

@@ -67,8 +67,8 @@ DECLARES: dict[str, list[str]] = {
     "game_verbs": ["verb       flag in the game menu",
                    "verb       unflag in the game menu, asks first",
                    "verb       version in the table menu"],
-    "machine_page": ["page       machine in system, with fields",
-                     "reads      page machine: 2 sections, acts: check, manual"],
+    "machine_page": ["section    state, holds check", "section    boot, with fields",
+                     "panel      in system", "reads      section boot: 0 facts, 1 fields, 0 rows"],
     "review_queue": ["list       queue in community: 3 columns",
                      "need       to_review opens the list queue, danger"],
     "secret_key": ["settings   key (secret)", "dialog     connect: ask run"],
@@ -80,8 +80,8 @@ DECLARES: dict[str, list[str]] = {
     "weekend_picks": ["settings   collection (string, default 'Weekend Picks')",
                       "verb       pick in the game menu", "verb       unpick in the game menu"],
     "plugged_in": ["list       devices in system: 4 columns, 0 views, 0 verbs"],
-    "next_player_note": ["page       note in community, with fields",
-                         "reads      page note: 1 sections, acts: clear"],
+    "next_player_note": ["section    note, with fields, holds clear", "panel      in community",
+                         "reads      section note: 0 facts, 1 fields, 0 rows"],
     "import_folder": ["settings   folder (path", "dialog     import_folder: ask run"],
 }
 

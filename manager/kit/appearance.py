@@ -523,6 +523,8 @@ _STRUCTURE = """
   --icon-menu: 16px;
   /* A state drawn as a glyph beside a value, in a panel or a list. */
   --icon-mark: 18px;
+  /* The glyph that leads an action's line. */
+  --icon-act: 22px;
   /* A glyph that is the whole of a control - a nav row, a tab. */
   --icon-nav: 19px;
   /* Art standing in for a picture that is not there, sized to the box it fills. */

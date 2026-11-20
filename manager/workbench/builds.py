@@ -14,11 +14,11 @@ from common.games.collection_store import BUILTIN_ALL
 from common.i18n import t
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
-from manager.extensions import ext_row
+from manager.extensions import ext_page, ext_row, ext_sections
 from manager.extensions import extensions as extensions_page
 from manager.frontend import launchers as launchers_page
 from manager.frontend import players as players_page
-from manager.frontend import themes as themes_page
+from manager.frontend import theme_card
 from manager.kit import game_tables, offload, panel, verbs
 from manager.kit.data import Library
 from manager.kit.on_page import on_page
@@ -659,8 +659,7 @@ async def _draw_theme(container: ui.column, title: ui.column, library: Library,
     container.clear()
     title.clear()
     with container:
-        _title(title, str(theme.get("name") or key),
-               themes_page.STATUS.word(themes_page.status(theme)))
+        _title(title, str(theme.get("name") or key), theme_card.said(theme))
         context: dict[str, Any] = {"library": library, "theme": theme, "state": state,
                                    "redraws": [], "dock": None}
         context["rebuild"] = _rebuilds(
@@ -669,34 +668,49 @@ async def _draw_theme(container: ui.column, title: ui.column, library: Library,
         await _rail(context, "theme", state)
 
 
-async def build_extension(container: ui.column, title: ui.column, library: Library,
-                          name: str | None, state: dict[str, Any]) -> None:
-    """The panel, for an extension installed here or offered on the VPinFE Extension List."""
+async def build_extension(container: ui.column, title: ui.column | None, library: Library,
+                          name: str | None, state: dict[str, Any],
+                          menu: ui.element | None = None) -> None:
+    """The panel, for an extension installed here or offered on the VPinFE Extension List.
+
+    `title` is the workbench header's slot, and `menu` the slot a page header gives its
+    acts: the panel as a page of its own has the page header in place of the first, and
+    draws its menu in the second.
+    """
     await _pane_build(container, state,
-                      lambda: _draw_extension(container, title, library, name, state))
+                      lambda: _draw_extension(container, title, library, name, state, menu))
 
 
-async def _draw_extension(container: ui.column, title: ui.column, library: Library,
-                          name: str | None, state: dict[str, Any]) -> None:
+async def _draw_extension(container: ui.column, title: ui.column | None, library: Library,
+                          name: str | None, state: dict[str, Any],
+                          menu: ui.element | None) -> None:
     if not name:
         _blank(container, title, t("manager.page.extension"),
                t("manager.page.select_extension"))
         return
-    found, _listing = await extensions_page.load(library)
+    with container:
+        found, _listing = await extensions_page.load(library)
     entry = next((one for one in found if one["name"] == name), None)
     if entry is None:
         _blank(container, title, t("manager.page.extension"), t("manager.page.gone"))
         return
     container.clear()
-    title.clear()
+    if title is not None:
+        title.clear()
     with container:
-        _title(title, extensions_page.shown(entry),
-               extensions_page.STATUS.word(extensions_page.status(entry)))
+        if title is not None:
+            _title(title, extensions_page.shown(entry), extensions_page.author_of(entry),
+                   ext_page.picture(entry["record"]) if entry["record"] else None)
         context: dict[str, Any] = {"library": library, "extension": entry, "state": state,
-                                   "redraws": [], "dock": None}
+                                   "redraws": [], "dock": None, "menu": menu}
         context["rebuild"] = _rebuilds(
             context, f"extension:{name}",
-            lambda: build_extension(container, title, library, name, state))
+            lambda: build_extension(container, title, library, name, state, menu))
+        context["refill"] = extensions_page.refiller(context)
+        fixed = sections_for("extension")
+        context["rail"] = (*(one for one in fixed if one.key != "extension_actions"),
+                           *ext_sections.sections(context),
+                           *(one for one in fixed if one.key == "extension_actions"))
         await _rail(context, "extension", state)
 
 

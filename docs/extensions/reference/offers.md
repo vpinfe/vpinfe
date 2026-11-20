@@ -164,8 +164,8 @@ Core draws what the source answers and keeps the rest to itself:
 A row is `key` and `name`, both required, and `site`, `page`, `note`, `picture`, `tag` and
 `current`, which is true or false.  `page` is an http or https address, and `picture` is a file
 path or a web address, which needs `net:outbound` in the manifest's `capabilities`.  `note` under
-the rows is a line of words, and `link` is `{"text", "to"}` for an address, `{"text", "page"}` for
-one of the extension's pages, or `{"text", "settings": True}` for its Settings page.
+the rows is a line of words, and `link` is `{"text", "to"}` for an address, `{"text", "section"}` for
+a section of the extension's own panel, or `{"text", "settings": True}` for its Settings page.
 
 A pick answers one of three things.  `{"job": id}` is a job the extension started, so the
 dialog closes and says so, in the `message` beside it if there is one.  `{"action": dialog_key}`

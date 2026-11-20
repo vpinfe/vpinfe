@@ -308,11 +308,10 @@ class ListFunctions:
 
 
 @dataclass
-class PageFunctions:
-    """What a page's extension answers with."""
+class SectionFunctions:
+    """What a section's extension answers with."""
 
     read: Callable[[], Any]
-    acts: Any = None
     save: Callable[[dict], Any] | None = None
     tier: str = reach.LIBRARY
 
@@ -334,8 +333,8 @@ GROUP_SUBJECTS = ("game", "table")
 # How much a kind of need costs to leave alone, as Overview draws it; warm unless said.
 NEED_TONES = ("danger", "warm", "accent", "muted")
 DEFAULT_NEED_TONE = "warm"
-# What a kind opens: one of the extension's lists, one of its pages, or one of its dialogs.
-NEED_OPENS = ("list", "page", "action")
+# What a kind opens: one of the extension's lists, one of its sections, or one of its dialogs.
+NEED_OPENS = ("list", "section", "action")
 
 
 @dataclass
@@ -380,8 +379,9 @@ class ExtensionUI:
         self.action_objects: dict[str, Any] = {}
         self.declared_lists: list[dict] = []
         self.list_functions: dict[str, ListFunctions] = {}
-        self.declared_pages: list[dict] = []
-        self.page_functions: dict[str, PageFunctions] = {}
+        self.declared_sections: list[dict] = []
+        self.section_functions: dict[str, SectionFunctions] = {}
+        self.declared_panel: dict = {}
         self.declared_needs: list[dict] = []
         self.needs_function: Callable[[], Any] | None = None
         self.declared_links: list[dict] = []
@@ -435,12 +435,18 @@ class ExtensionUI:
         return {one["key"]: one["default"] for one in self.settings_declared}
 
     def action(self, key: str, dialog: Any, *, label: str = "",
-               description: str = "", tier: str = reach.LIBRARY) -> None:
+               description: str = "", icon: str = "", section: str = "",
+               tier: str = reach.LIBRARY) -> None:
         """A verb somebody can press, in the vocabulary the rest of the app uses.
 
         `dialog` has `ask(step)`, answering the dialog for that step, and any of
         `check(values)`, `act(key, values)` and `run(values, progress)`. A method that
         names `step` or `progress` among its arguments is handed it.
+
+        It is drawn as a line: `icon`, one of `RAIL_ICONS` (a play mark where none is
+        given), its name, and `description`. With no `section` it is in the Actions entry
+        of the extension's panel; with one, the key of a section declared with `section()`,
+        it is a line at the top of that section only.
 
         `tier` is who may press it: `act` and `run` need it, and `PROTECTED` asks for the
         Confirm first. Looking at the dialog needs Library, or Play where `tier` is.
@@ -455,11 +461,14 @@ class ExtensionUI:
             raise ContractError(f"{self._name} offers the action {wanted!r} with an "
                                 "object that has no ask(step)")
         held = self._tier(tier, f"the action {wanted!r}", f"action:{wanted}")
+        glyph = self._rail_icon(f"the action {wanted!r}", icon)
         self.action_objects[wanted] = dialog
         self.actions.append({
             "key": wanted,
             "label": str(label or "").strip(),
             "description": str(description or "").strip(),
+            "icon": glyph,
+            "section": str(section or "").strip(),
             "base": f"/actions/{wanted}",
             "tier": held,
         })
@@ -651,8 +660,9 @@ class ExtensionUI:
     def needs(self, kinds: dict[str, dict], read: Callable[[], Any]) -> None:
         """The kinds of thing this extension can ask for on Overview, under Needs You.
 
-        `kinds` maps each kind to the one thing a click opens: `{"list": key}`, `{"page":
-        key}` or `{"action": key}` for a list, page or dialog it declares, with an optional
+        `kinds` maps each kind to the one thing a click opens: `{"list": key}`,
+        `{"section": key}` or `{"action": key}` for a list, a section of its panel or a
+        dialog it declares, with an optional
         `"tone"` of danger, warm, accent or muted. `read()` answers the kinds that hold
         now, `[{"kind", "ids"}]`: the ids are what the row counts, and what a dismissal is
         kept against. A kind with no ids to name answers `{"kind", "count", "token"}`, and
@@ -690,44 +700,53 @@ class ExtensionUI:
         self.declared_needs = declared
         self.needs_function = read
 
-    def page(self, key: str, read: Callable[[], Any], *, area: str = "",
-             title: str = "", icon: str = "", acts: Any = None,
-             save: Callable[[dict], Any] | None = None, tier: str = reach.LIBRARY) -> None:
-        """A page of this extension's own, shown in the rail under `area`, which it must
-        name: one subject drawn as a panel, with no grid.
+    def section(self, key: str, read: Callable[[], Any], *, title: str = "",
+                icon: str = "", save: Callable[[dict], Any] | None = None,
+                tier: str = reach.LIBRARY) -> None:
+        """An entry in this extension's own panel, in the order declared, after Details
+        and Settings and before Actions.
 
-        `read()` answers what a list's `detail` does: `{"title", "under", "picture",
-        "sections": [{"key", "label", "facts", "fields", "rows"}]}`, drawn the same way.
-        `acts` is the title menu, as a list's is. A field is written when it is set:
-        `save(values)` is called with the keys changed, answers nothing, and core asks
-        `read` again to draw the page.
+        `read()` answers the section, `{"facts", "fields", "rows"}`, as a panel group's
+        does, and is asked when the entry is opened. A field is written when it is set:
+        `save(values)` is called with the keys changed and answers nothing, and core asks
+        `read` again to draw the section. Something to do is an action declared with
+        `section=` this key, drawn as a line at the top of the section.
 
-        The rail entry is named `title`, else `page.<key>.title` in the extension's
-        catalog, else the extension's name, and drawn with `icon`, one of `RAIL_ICONS`.
-        `tier` is who may read and change the page, and `contract.tier` marks one act or
-        the save that differs.
+        The entry is named `title`, else `section.<key>.title` in the extension's
+        catalog, else its key, and drawn with `icon`, one of `RAIL_ICONS`. `tier` is who
+        may read and change the section, and `contract.tier` marks the save that differs.
         """
-        self._needs_ui("a page")
+        self._needs_ui("a section")
         wanted = str(key or "").strip()
-        where = self._area(f"the page {wanted!r}", area)
-        if not wanted:
-            raise ContractError(f"{self._name} declares a page with no key")
-        if wanted in self.page_functions:
-            raise ContractError(f"{self._name} declares the page {wanted!r} twice")
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", wanted):
+            raise ContractError(f"{self._name} gives a section {wanted!r} for a key, which "
+                                "is not lower-case words joined by underscores")
+        if wanted in self.section_functions:
+            raise ContractError(f"{self._name} declares the section {wanted!r} twice")
         if not callable(read) or (save is not None and not callable(save)):
-            raise ContractError(f"{self._name} gives the page {wanted!r} a read or a save "
+            raise ContractError(f"{self._name} gives the section {wanted!r} a read or a save "
                                 "that is not a function")
-        if acts is not None and not callable(acts) and not isinstance(acts, dict):
-            raise ContractError(f"{self._name} gives the page {wanted!r} acts that are "
-                                "neither a dict nor a function")
-        held = self._tier(tier, f"the page {wanted!r}", f"page:{wanted}")
-        self.page_functions[wanted] = PageFunctions(read=read, acts=acts, save=save, tier=held)
-        self.declared_pages.append({"key": wanted, "area": where, "tier": held,
-                                    "icon": self._rail_icon(f"the page {wanted!r}", icon),
-                                    "title": str(title or "").strip(),
-                                    "base": f"/pages/{wanted}",
-                                    "about": f"/pages/{wanted}/about",
-                                    "save": save is not None})
+        held = self._tier(tier, f"the section {wanted!r}", f"section:{wanted}")
+        self.section_functions[wanted] = SectionFunctions(read=read, save=save, tier=held)
+        self.declared_sections.append({
+            "key": wanted, "title": str(title or "").strip(), "tier": held,
+            "icon": self._rail_icon(f"the section {wanted!r}", icon),
+            "base": f"/sections/{wanted}", "save": save is not None})
+
+    def panel(self, *, area: str, icon: str = "", title: str = "") -> None:
+        """Put this extension's whole panel in the navigation too, under `area`, as an
+        entry drawn at full width. Without it the panel in Settings > Extensions is its
+        only home.
+
+        The entry is named `title`, else `panel.title` in the extension's catalog, else
+        the extension's name, and drawn with `icon`, one of `RAIL_ICONS`.
+        """
+        self._needs_ui("a panel")
+        if self.declared_panel:
+            raise ContractError(f"{self._name} declares its panel twice")
+        self.declared_panel = {"key": "panel", "area": self._area("its panel", area),
+                               "icon": self._rail_icon("its panel", icon),
+                               "title": str(title or "").strip()}
 
     def _area(self, whose: str, area: Any) -> str:
         """`area` as the rail names it, or a ContractError where it is blank or not one the
@@ -1042,15 +1061,20 @@ PLAYERS_READ = "players:read"
 
 
 def check_references(ui: ExtensionUI) -> None:
-    """Refuse a list that opens an action the extension never declared. Run once
+    """Refuse a list that opens an action, or an action that sits in a section, the
+    extension never declared. Run once
     `register` has returned, since an action may be declared after the list."""
     added = {one["key"]: one["add"] for one in ui.declared_lists}
     held = [("list", key, found.acts, [*(one["action"] for one in found.verbs.values()
                                          if one["action"]), *added.get(key, [])])
             for key, found in ui.list_functions.items()]
-    held += [("page", key, found.acts, []) for key, found in ui.page_functions.items()]
     places: dict[str, Mapping[str, Any]] = {
-        "list": ui.list_functions, "page": ui.page_functions, "action": ui.action_objects}
+        "list": ui.list_functions, "section": ui.section_functions,
+        "action": ui.action_objects}
+    for one in ui.actions:
+        if one["section"] and one["section"] not in ui.section_functions:
+            raise ContractError(f"{ui._name} puts the action {one['key']!r} in the section "
+                                f"{one['section']!r}, which it never declares")
     for one in ui.declared_needs:
         if one["to"] not in places[one["opens"]]:
             raise ContractError(f"{ui._name} has a need {one['kind']!r} that opens the "
@@ -1237,10 +1261,11 @@ class ExtensionSources:
         `offers(who, kind)` answers `{"rows": [{key, name, site, page, note, picture, tag,
         current, vps_file_id, state, acts}], "note", "link"}`: `site` names the place and
         `page` is the file's page there, `current` says the slot already holds it, and
-        `link` is `{"text", "to"}`, `{"text", "page"}` for an extension page or
-        `{"text", "settings": True}` for its Settings page, drawn under the rows beside
-        `note`.  `vps_file_id` ties a row to the file Discovery lists under the same id, so
-        the row is drawn there instead of among the other sources.  `state` is `{"text",
+        `link` is `{"text", "to"}`, `{"text", "section"}` for a section of the
+        extension's panel or `{"text", "settings": True}` for its Settings page, drawn
+        under the rows beside `note`.  `vps_file_id` ties a row to the file Discovery lists
+        under the same id, so the row is drawn there instead of among the other sources.
+        `state` is `{"text",
         "level", "hint"}`, drawn on the row, `level` one of `on`, `off`, `unknown`, `warn`,
         `bad`, and `acts` is `[{"key", "label"}]`, one button each.
         `who` is `{"game_id", "vps_id", "name", "table_id"}`: the game the slot belongs to,

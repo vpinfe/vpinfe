@@ -867,10 +867,11 @@ class WhatExtensionsAskFor(unittest.TestCase):
 
     def test_each_kind_of_act_opens_its_own_place(self):
         opened = {kind: needs.extension_rows([{**RAISED, "opens": kind, "to": "x"}])[0].opens
-                  for kind in ("list", "page", "action")}
+                  for kind in ("list", "section", "action")}
 
         self.assertEqual("community:site:x", opened["list"].view)
-        self.assertEqual("page:site:x", opened["page"].view)
+        self.assertEqual(("extensions", {"extension": "site", "section": "own:x"}),
+                         (opened["section"].view, opened["section"].keys))
         self.assertEqual(("site", "x", ""),
                          (opened["action"].extension, opened["action"].action,
                           opened["action"].view))

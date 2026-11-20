@@ -233,7 +233,6 @@ tests/extensions/test_needs.py
 tests/extensions/test_offered_operations.py
 tests/extensions/test_online_sources.py
 tests/extensions/test_os_channel.py
-tests/extensions/test_pages.py
 tests/extensions/test_pane.py
 tests/extensions/test_panel_groups.py
 tests/extensions/test_pictures.py
@@ -582,7 +581,6 @@ tests/manager/test_every_view_control_is_wired.py
 tests/manager/test_ext_cells.py
 tests/manager/test_ext_groups.py
 tests/manager/test_ext_mark.py
-tests/manager/test_ext_pages.py
 tests/manager/test_ext_row.py
 tests/manager/test_ext_verbs.py
 tests/manager/test_extensions_page.py

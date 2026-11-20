@@ -137,24 +137,24 @@ class AnExtensionInAFolder(Case):
         (directory / "extension.json").write_text(json.dumps({
             "name": "tool", "version": "2.0.0", "requires_platform": contract.PLATFORM_ABI,
             **IDENTITY,
-            "play": ["list:scores", "page:rank"]}), encoding="utf-8")
+            "play": ["list:scores", "section:rank"]}), encoding="utf-8")
 
         with self.assertLogs("vpinfe.common.extensions", "WARNING"):
             record = self.registry.load(directory)
 
-        self.assertEqual(record.as_dict()["trust"]["new_access"], ["play:page:rank"])
+        self.assertEqual(record.as_dict()["trust"]["new_access"], ["play:section:rank"])
 
     def test_that_names_a_surface_whose_key_has_a_space_or_colon_is_accepted(self) -> None:
         directory = _write(self.folder, "tool")
         (directory / "extension.json").write_text(json.dumps({
             "name": "tool", "version": "1.0.0", "requires_platform": contract.PLATFORM_ABI,
             **IDENTITY,
-            "play": ["page:my scores", "verb:game:rate:all"]}), encoding="utf-8")
+            "play": ["section:my scores", "verb:game:rate:all"]}), encoding="utf-8")
 
         record = self.registry.load(directory)
 
         assert record.manifest is not None
-        self.assertEqual(record.manifest.play, ("page:my scores", "verb:game:rate:all"))
+        self.assertEqual(record.manifest.play, ("section:my scores", "verb:game:rate:all"))
 
     def test_that_names_a_surface_with_no_key_is_refused(self) -> None:
         directory = _write(self.folder, "tool")

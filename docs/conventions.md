@@ -1021,6 +1021,12 @@ called Actions, which names the mechanism and says nothing about the subject.
 | one value | inline, beside the value |
 | a dialog | the footer |
 
+- **An extension's own buttons are the exception to the heading.** The panel is the extension's
+  home and its list is the extension's table of contents, so what it can do is described there
+  as lines: an icon, the name and one line on what it does.  They are in an Actions entry, last
+  in the panel's list after Details, Settings and the extension's own sections, or at the top
+  of the section an action names.  Settings never holds them, and Actions is absent when every
+  action is placed in a section.
 - **A Needs You row is the exception to "one row".** Its fix (Download Media, Update, Download) is
   the first entry of the row's menu and the row's end carries only `more_vert`.
 - **One list per subject.** Each subject's module has an `acts()` returning `panel.Verb`s;

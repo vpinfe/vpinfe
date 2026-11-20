@@ -1,10 +1,11 @@
 {
   "name": "Next Player Note",
   "description": "A note for whoever plays next, which a Remote can read and change.",
-  "page.note.title": "Next Player Note",
-  "page.note.act.clear.label": "Clear Note",
-  "page.note.heading": "Next Player Note",
-  "page.note.section": "Leave a Note",
-  "page.note.field": "Note",
-  "page.note.cleared": "Cleared"
+  "panel.title": "Next Player Note",
+  "section.note.title": "Note",
+  "section.note.field": "Note",
+  "section.note.cleared": "Cleared",
+  "action.clear.label": "Clear Note",
+  "action.clear.description": "Empty the note for the next player",
+  "action.clear.confirm": "Clear"
 }

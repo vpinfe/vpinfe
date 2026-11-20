@@ -6,7 +6,9 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from common.security import accepted
+from manager.extensions import ext_page
 from manager.frontend import themes
+from manager.kit import panel
 from manager.security import accept
 
 
@@ -110,16 +112,19 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
 
     async def test_an_extension_says_what_it_says_it_uses(self) -> None:
         title, lines, answer, kept = await self.asked(
-            accept.extension("Tool", "1.0.0", uses=["Read Your Library"], **self.OWN))
+            accept.extension("Tool", "1.0.0", reach=ext_page.reach_entries(["games:read"]),
+                             **self.OWN))
 
         self.assertEqual(title, "Trust an Unofficial Extension?")
         self.assertIn("isn't made or endorsed by the VPinFE team", lines[0])
-        self.assertEqual(kept["rows"][-1][0], "Reported Capabilities")
+        self.assertIs(kept["rows"][-2][0], panel.HEADING)
+        self.assertEqual(kept["rows"][-2][1], "What It Can Do")
+        self.assertEqual(kept["rows"][-1][0], "Your library")
         self.assertEqual(answer, "Trust and Turn On")
 
     async def test_the_answer_waits_for_the_tick_that_says_it_is_unsupported(self) -> None:
         _title, _lines, _answer, kept = await self.asked(
-            accept.extension("Tool", "1.0.0", uses=[], **self.OWN))
+            accept.extension("Tool", "1.0.0", **self.OWN))
 
         self.assertEqual(kept["understood"],
                          "I understand the VPinFE team won't support this setup while it's on")
@@ -127,15 +132,16 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
 
     async def test_it_is_shown_whose_it_is_and_where_it_comes_from(self) -> None:
         _title, _lines, _answer, kept = await self.asked(
-            accept.extension("Tool", "1.0.0", uses=[], **self.OWN))
+            accept.extension("Tool", "1.0.0", **self.OWN))
 
         self.assertEqual(kept["rows"][:2], [("Author", "Example Author"), ("Version", "1.0.0")])
-        self.assertEqual([one[0] for one in kept["rows"]],
-                         ["Author", "Version", "Source", "Folder Path", "Reported Capabilities"])
+        self.assertEqual([one[0] for one in kept["rows"][:4]],
+                         ["Author", "Version", "Source", "Folder Path"])
+        self.assertEqual(kept["rows"][4], ("What It Can Do", "None"))
 
     async def test_a_copy_a_changed_one_and_one_claiming_the_team_each_say_so(self) -> None:
         _title, lines, _answer, _kept = await self.asked(
-            accept.extension("Tool", "2.0.0", uses=[], replaces="Tool", changed=3,
+            accept.extension("Tool", "2.0.0", replaces="Tool", changed=3,
                              claims_team=True, **self.OWN))
 
         self.assertEqual(lines[1:], [
@@ -146,17 +152,18 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_newer_version_says_what_it_was_and_what_it_adds(self) -> None:
         _title, lines, _answer, kept = await self.asked(
-            accept.extension("Tool", "2.0.0", uses=["Read Your Library"],
-                             added=["Read Your Library"], was="1.0.0", **self.OWN))
+            accept.extension("Tool", "2.0.0", reach=ext_page.reach_entries(["games:read"]),
+                             added=ext_page.reach_entries(["games:write"]), was="1.0.0",
+                             **self.OWN))
 
         self.assertEqual(lines[-1], "Updated from 1.0.0 to 2.0.0.")
-        self.assertEqual(kept["rows"][-1][0], "New Capabilities")
+        self.assertEqual(kept["rows"][-2][1], "What It Can Now Also Do")
 
     async def test_more_access_at_the_same_version_does_not_claim_an_update_between_them(
             self) -> None:
         _title, lines, _answer, _kept = await self.asked(
-            accept.extension("Tool", "1.0.0", uses=[], added=["Read Your Library"], was="1.0.0",
-                             **self.OWN))
+            accept.extension("Tool", "1.0.0", added=ext_page.reach_entries(["games:write"]),
+                             was="1.0.0", **self.OWN))
 
         self.assertEqual(len(lines), 1)
 
