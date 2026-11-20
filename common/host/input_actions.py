@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from common import events
@@ -53,6 +54,11 @@ _lock = threading.Lock()
 # input design notes for the trigger that reopens it.
 _held: dict[str, threading.Timer] = {}
 _announcer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="input-heard")
+# Freezing a table waits for it to say it paused, so presses answered here run one at a
+# time on a worker of their own and never hold up the caller or each other.
+_playing = ThreadPoolExecutor(max_workers=1, thread_name_prefix="input-play")
+# A press answered here that has not been let go of, and until when it counts as held.
+_answered: dict[str, float] = {}
 
 
 def known(action: str) -> bool:
@@ -91,6 +97,7 @@ def release(action: str, *, source: str) -> None:
     """
     with _lock:
         _disarm(action)
+        _answered.pop(action, None)
     logger.debug("input: %s released by %s", action, source)
     events.emit(events.INPUT_ACTION, action=action, phase=RELEASE, source=source)
 
@@ -119,8 +126,43 @@ def heard(action: str) -> bool:
     return True
 
 
+def answers_here(action: str) -> bool:
+    """Whether a press of this action is answered in this process rather than by a window:
+    Take Picture and Back while a table runs.
+
+    A window in the background is not reliably running its page, and the page is not what
+    freezes a table, so these never go through it.
+    """
+    if action not in input_registry.IN_PLAY:
+        return False
+    from common.host import launch_state
+
+    state = launch_state.current()
+    return state.launching and state.source != launch_state.SOURCE_CAPTURE
+
+
+def play(action: str, *, source: str) -> None:
+    """Answer one Take Picture or Back press here. Announced as `answered`, with no release
+    after it, so a window is told how it went and never handed the press."""
+    _playing.submit(_answer, action, source)
+
+
+def _answer(action: str, source: str) -> None:
+    from common.capture import freeze
+
+    try:
+        said = freeze.take_picture() if action == "take_picture" else freeze.resume()
+    except Exception:  # noqa: BLE001 - one press must not end the worker
+        logger.exception("input: %s pressed by %s was not answered", action, source)
+        said = {}
+    events.emit(events.INPUT_ACTION, action=action, phase=PRESS, source=source,
+                answered=True, state=said.get("state", ""))
+
+
 def settle() -> None:
-    """Returns once every announcement made so far has been delivered. For tests."""
+    """Returns once every announcement and answer made so far has been delivered. For
+    tests."""
+    _playing.submit(lambda: None).result(timeout=5)
     _announcer.submit(lambda: None).result(timeout=5)
 
 
@@ -147,7 +189,9 @@ def act(action: str, phase: str, *, source: str,
         raise service_errors.RefusedError(
             t("error.input.unknown_phase", phases=", ".join(PHASES), phase=(phase)))
 
-    if phase == RELEASE:
+    if answers_here(action):
+        _answer_here(action, phase, source, clamp_ttl(ttl_ms))
+    elif phase == RELEASE:
         release(action, source=source)
     elif phase == PRESS:
         press(action, source=source, ttl_ms=ttl_ms)
@@ -155,6 +199,20 @@ def act(action: str, phase: str, *, source: str,
         tap(action, source=source)
     return {"action": action, "phase": phase, "ttl_ms": clamp_ttl(ttl_ms),
             "holding": sorted(holding())}
+
+
+def _answer_here(action: str, phase: str, source: str, ttl: int) -> None:
+    """A press renewed while it is held is the same press, as it is everywhere else."""
+    now = time.monotonic()
+    with _lock:
+        if phase == RELEASE:
+            _answered.pop(action, None)
+            return
+        first = phase == TAP or now >= _answered.get(action, 0.0)
+        if phase == PRESS:
+            _answered[action] = now + ttl / 1000
+    if first:
+        play(action, source=source)
 
 
 def release_all(*, source: str = "shutdown") -> None:

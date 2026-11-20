@@ -95,7 +95,9 @@ CAPTURE_RUN_CHANGED = "capture.run_changed"
 # A player pressed something outside the browser. Subscribers only, and deliberately:
 # a press is not an operation anything may refuse, and a hook that could stop one would
 # be a way for a plugin to make a cabinet button do nothing.
-#   input.action  {action, phase: press|release, source, ttl_ms?, expired?}
+#   input.action  {action, phase: press|release, source, ttl_ms?, expired?, answered?, state?}
+# `answered` marks a Take Picture or Back press the host acted on itself, with `state` what
+# came of it and no release after.
 INPUT_ACTION = "input.action"
 
 # A Manager's Input page has asked for this device's controller, so its buttons and keys go

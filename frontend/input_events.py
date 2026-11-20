@@ -28,22 +28,32 @@ logger = logging.getLogger("vpinfe.frontend.input_events")
 # rather than for where it came from: a theme never sees it, and the window that answers
 # it does not care whether a thumb or a button board produced it.
 MESSAGE_TYPE = "InputAction"
+# Tells the controller window how a Take Picture the host answered went, so it can play the
+# tone for it. Never a press: the host has already acted.
+TONE_TYPE = "PlayTone"
 
 _registered = False
 _bridge = None
 
 
 def on_input_action(*, action: str, phase: str, source: str = "",
-                    **_payload: Any) -> None:
+                    answered: bool = False, state: str = "", **_payload: Any) -> None:
     """Put one press or release in front of every window.
 
     `source` stays here and in the log. A theme that behaved differently depending on
     where a press came from would be a bug surface, and a contract 1 theme cannot see it
     in any case - so what reaches the theme is exactly what a keystroke reaches it with.
 
-    Not a press the page itself reported: it has answered that one already.
+    Not a press the page itself reported, and not one the host answered: both are done.
+    The window hears only what a host-answered press came to.
     """
-    if _bridge is None or source == input_actions.PAGE:
+    if _bridge is None:
+        return
+    if answered:
+        if state:
+            _bridge.send_event_all_with_iframe({"type": TONE_TYPE, "state": state})
+        return
+    if source == input_actions.PAGE:
         return
     _bridge.send_event_all_with_iframe({"type": MESSAGE_TYPE,
                                         "action": action, "phase": phase})

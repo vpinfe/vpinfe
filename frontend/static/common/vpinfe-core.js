@@ -1877,6 +1877,11 @@ class VPinFECore {
       if (this.isController()) this.#applyRemoteInput(message);
       return;
     }
+    // How a Take Picture the host answered came out, for the tone the page makes.
+    if (message.type === "PlayTone") {
+      if (this.isController()) this.#toneFor(String(message.state || ""));
+      return;
+    }
     if (message.type === "CaptureArm") {
       this.#armCapture(!!message.armed, Number(message.ttl_ms) || 0,
                        { browser: message.browser, device: message.device });
@@ -3808,7 +3813,10 @@ class VPinFECore {
       this.call("console_out", `Take Picture: ${err.message}`);
       return;
     }
-    const state = answer && answer.state;
+    this.#toneFor(answer && answer.state);
+  }
+
+  #toneFor(state) {
     if (state === "frozen") this.#tone("ready");
     else if (state === "taken") this.#tone("shutter");
   }
