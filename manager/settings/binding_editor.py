@@ -31,6 +31,7 @@ RING_AFTER_MS = 250
 LISTEN_JS = """(() => {
   const listen = window.__bindingListen = window.__bindingListen || {};
   listen.id = %(id)d;
+  listen.noPads = %(no_pads)s;
   if (listen.installed) return;
   listen.installed = true;
   listen.row = '';
@@ -160,7 +161,7 @@ LISTEN_JS = """(() => {
   window.addEventListener('blur', clear);
 
   setInterval(() => {
-    if (!active()) return;
+    if (!active() || listen.noPads) return;
     for (const pad of pads()) {
       pad.buttons.forEach((b, i) => {
         const seat = pad.index + ':' + i;
@@ -211,10 +212,11 @@ LISTEN_JS = """(() => {
 })()"""
 
 
-def listen_js(line_id: int) -> str:
-    """The listener, told which element carries the table's events."""
+def listen_js(line_id: int, *, pads: bool = True) -> str:
+    """The listener, told which element carries the table's events. With `pads` False the
+    browser's own gamepad poll is left off, for a table that hears controllers itself."""
     return LISTEN_JS % {"id": line_id, "hold_at": HOLD_AT_MS, "ring_after": RING_AFTER_MS,
-                        "pad_token": PAD_TOKEN_JS}
+                        "pad_token": PAD_TOKEN_JS, "no_pads": "false" if pads else "true"}
 
 
 def focus_label(name: str) -> None:

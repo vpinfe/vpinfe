@@ -50,3 +50,46 @@ async def held(redraw: Callable[[], Awaitable[None]], scroller: str = BODY) -> N
     await redraw()
     if not client.is_deleted:
         client.run_javascript(_PUT % selector)
+
+
+_KEEP = """
+(() => {
+  let tries = 0;
+  const start = () => {
+    const grid = document.getElementById('c%d');
+    if (!grid) return ++tries < 60 && requestAnimationFrame(start);
+    if (grid.__keepsScroll) return;
+    grid.__keepsScroll = true;
+    const scroller = () => {
+      for (let el = grid.parentElement; el; el = el.parentElement) {
+        const y = getComputedStyle(el).overflowY;
+        if (y === 'auto' || y === 'scroll') return el;
+      }
+      return document.scrollingElement;
+    };
+    let top = 0, redrawn = false;
+    document.addEventListener('scroll', (event) => {
+      const s = scroller();
+      if (!redrawn && (event.target === s || event.target === document)) top = s.scrollTop;
+    }, true);
+    new MutationObserver(() => {
+      const s = scroller();
+      redrawn = true;
+      if (s.scrollTop + 1 < top) s.scrollTop = top;
+      requestAnimationFrame(() => requestAnimationFrame(() => { redrawn = false; }));
+    }).observe(grid, {childList: true});
+  };
+  start();
+})()
+"""
+
+
+def keep(element: ui.element) -> None:
+    """Keeps the page's place across a redraw that empties `element` and fills it again.
+
+    Something in that redraw makes the browser lay the page out while `element` is empty,
+    which puts the scroller at the top, and a script sent from the server arrives after the
+    rows do. So the page itself notes where its scroller stands and puts it back as the rows
+    arrive. Call it once, where `element` is built.
+    """
+    ui.run_javascript(_KEEP % element.id)

@@ -1,9 +1,10 @@
 """Visual Pinball X's key actions, and what a `Mapping.<Name>` value says about their keys.
 
 A value is alternatives joined by ` | `, each one parts joined by ` & ` that are down
-together, each part `<device>;<id>`. Only the keys are read and written here, as sets of
-`KeyboardEvent.code` names; an alternative that is anything else - a controller button -
-is kept as it stands.
+together, each part `<device>;<id>`. Keys are read and written as sets of
+`KeyboardEvent.code` names. A controller's button, hat direction or axis side is read and
+written too where the caller asks for it, as a member named `vpx:<device>;<id>`; without
+that, and for any other device, an alternative that is not keys is kept as it stands.
 
 Blank means the program's default, so a value that says the default is written blank, and
 nothing can be written for an action that has a default and no key.
@@ -12,6 +13,7 @@ nothing can be written for an action that has a default and no key.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from . import keys
@@ -21,6 +23,10 @@ PREFIX = "Mapping."
 _ALTERNATIVES = " | "
 _TOGETHER = " & "
 _KEY_PART = re.compile(r"Key;(\d+)")
+_CONTROLLER_PART = re.compile(
+    r"(SDLJoy_[0-9A-Fa-f]+_\d+);(\d+)(?:;([ox]);(-?\d+(?:\.\d+)?))?")
+CONTROLLER_PREFIX = "vpx:"
+JOYSTICK = 2
 
 FLIPPERS = "flippers"
 PLAY = "play"
@@ -128,58 +134,121 @@ Chord = tuple[str, ...]
 
 @dataclass(frozen=True)
 class Held:
-    """What a value maps an action to: `keys`, each a chord of one or more key codes in
-    a settled order, and `kept`, the alternatives that are not keys, each as written."""
+    """What a value maps an action to: `keys`, each a chord of one or more members down
+    together in a settled order, and `kept`, the alternatives this does not read, each as
+    written. A member is a key code, or a controller part as
+    `vpx:<device>;<id>[;o|x;<threshold>]`."""
 
     keys: tuple[Chord, ...] = ()
     kept: tuple[str, ...] = ()
 
 
-def _chord(alternative: str) -> Chord:
-    """The key codes an alternative holds down together, or () if any part is not a key
-    this table has a name for."""
-    codes = []
+def is_controller(member: str) -> bool:
+    return member.startswith(CONTROLLER_PREFIX)
+
+
+def controller_member(part: str) -> str:
+    """The member a part of a mapping names, or "" if it is not a joystick's."""
+    found = _CONTROLLER_PART.fullmatch(part.strip())
+    if not found:
+        return ""
+    device, element, side, threshold = found.groups()
+    return controller_of(device, int(element), float(threshold or 0), side == "x")
+
+
+def controller_part(member: str) -> tuple[str, int, float, bool]:
+    """A controller member as its device, element number, threshold and whether the press
+    is below the threshold rather than above it."""
+    found = _CONTROLLER_PART.fullmatch(member[len(CONTROLLER_PREFIX):])
+    if not found:
+        raise ValueError(member)
+    device, element, side, threshold = found.groups()
+    return device, int(element), float(threshold or 0), side == "x"
+
+
+def controller_of(device: str, element: int, threshold: float = 0.0,
+                  reversed_: bool = False) -> str:
+    """The member for one press: an element of a device, and for an axis the side of the
+    threshold it counts on."""
+    member = f"{CONTROLLER_PREFIX}{device};{element}"
+    if threshold or reversed_:
+        member += f";{'x' if reversed_ else 'o'};{threshold:g}"
+    return member
+
+
+def _controller_term(member: str) -> str:
+    device, element, threshold, reversed_ = controller_part(member)
+    term = f"{device};{element}"
+    if threshold or reversed_:
+        term += f";{'x' if reversed_ else 'o'};{threshold:.6f}"
+    return term
+
+
+def _chord(alternative: str, controllers: bool = False) -> Chord:
+    """What an alternative holds down together, or () if any part is not a key this table
+    has a name for - or, where `controllers` is on, a joystick's."""
+    members = []
     for part in alternative.split("&"):
         found = _KEY_PART.fullmatch(part.strip())
-        code = keys.code_of(int(found[1])) if found else ""
-        if not code:
+        member = keys.code_of(int(found[1])) if found else ""
+        if not member and controllers:
+            member = controller_member(part)
+        if not member:
             return ()
-        codes.append(code)
-    return tuple(sorted(set(codes)))
+        members.append(member)
+    return tuple(sorted(set(members)))
 
 
 def _alternatives(value: str) -> list[str]:
     return [one.strip() for one in value.split("|") if one.strip()]
 
 
-def parse(value: str, default: str = "") -> Held:
+def parse(value: str, default: str = "", *, controllers: bool = False) -> Held:
     """What `value` maps an action to; the default's keys where it is blank."""
     found = _alternatives(value) or _alternatives(default)
-    chords = [(_chord(one), one) for one in found]
+    chords = [(_chord(one, controllers), one) for one in found]
     return Held(tuple(chord for chord, _ in chords if chord),
                 tuple(one for chord, one in chords if not chord))
 
 
+def _numbered(member: str) -> bool:
+    if not is_controller(member):
+        return member in _SCANCODES
+    try:
+        controller_part(member)
+    except ValueError:
+        return False
+    return True
+
+
 def writable(chord: Chord) -> bool:
-    """Whether the program has a scancode for every key of the chord."""
-    return bool(chord) and all(code in _SCANCODES for code in chord)
+    """Whether the program has a number for every member of the chord."""
+    return bool(chord) and all(_numbered(member) for member in chord)
 
 
 def _term(chord: Chord) -> str:
-    return _TOGETHER.join(_key(_SCANCODES[code]) for code in chord)
+    return _TOGETHER.join(_controller_term(member) if is_controller(member)
+                          else _key(_SCANCODES[member]) for member in chord)
 
 
-def value_of(chords: list[Chord], value: str, default: str = "") -> str:
+def devices_in(chords: list[Chord]) -> list[str]:
+    """The joysticks a set of chords names, each once, in the order met."""
+    return list(dict.fromkeys(controller_part(member)[0] for chord in chords
+                              for member in chord if is_controller(member) and _numbered(member)))
+
+
+def value_of(chords: list[Chord], value: str, default: str = "", *,
+             controllers: bool = False) -> str:
     """The value that maps an action to `chords`, kept alternatives and all.
 
-    The keys take the place the value's first key had; the rest of its keys go. Written
-    blank where that says the default.
+    The chords take the place the value's first readable alternative had; the rest of
+    those go. Written blank where that says the default.
     """
     terms = [_term(one) for one in chords if writable(one)]
     out: list[str] = []
     placed = False
     for alternative in _alternatives(value) or _alternatives(default):
-        if not _chord(alternative):
+        if not _chord(alternative, controllers):
             out.append(alternative)
         elif not placed:
             out += terms
@@ -187,7 +256,48 @@ def value_of(chords: list[Chord], value: str, default: str = "") -> str:
     if not placed:
         out += terms
     shipped = parse("", default)
-    if (not any(not _chord(one) for one in out) and not shipped.kept
+    if (not any(not _chord(one, controllers) for one in out) and not shipped.kept
             and {tuple(sorted(set(one))) for one in chords} == set(shipped.keys)):
         return ""
     return _ALTERNATIVES.join(out)
+
+
+@dataclass(frozen=True)
+class DeviceInfo:
+    """A joystick as the program lists it: its name, and its elements as
+    `(number, is_axis, name)`."""
+
+    name: str
+    elements: tuple[tuple[int, bool, str], ...] = ()
+
+
+def _device_key(device: str, field: str) -> str:
+    return f"{SECTION}.Device.{device}.{field}"
+
+
+def device_writes(chords: list[Chord], devices: str,
+                  known: Mapping[str, DeviceInfo]) -> dict[str, str]:
+    """The program's own record of joysticks, as the launcher keys to write so it reads
+    `chords` as given: each joystick they name is listed in `devices` (the value now in
+    the file) with its name, type and elements if it was not, and has its automatic
+    layout turned off.
+
+    The layout is never turned back on: the program offers to replace every mapping of a
+    joystick it has not been told to leave alone.
+    """
+    listed = [one for one in devices.split(";") if one]
+    writes: dict[str, str] = {}
+    for device in devices_in(chords):
+        writes[_device_key(device, "NoAutoLayout")] = "1"
+        info = known.get(device)
+        if device in listed or info is None:
+            continue
+        listed.append(device)
+        writes[_device_key(device, "Name")] = info.name
+        writes[_device_key(device, "Type")] = str(JOYSTICK)
+        for index, (number, axis, name) in enumerate(info.elements):
+            writes[_device_key(device, f"Element{index}")] = (
+                f"{number};{'A' if axis else 'B'};{name}")
+    if len(listed) > len([one for one in devices.split(";") if one]):
+        writes[f"{SECTION}.Devices"] = ";".join(listed)
+    return writes

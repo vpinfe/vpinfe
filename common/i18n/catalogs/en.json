@@ -4931,6 +4931,7 @@
   "manager.vpx_input.how_body": "Controller buttons can't be set here. Set them in Visual Pinball.",
   "manager.vpx_input.how_relay": "Map {device}'s keys from this device. {device} stops using them while it's on.",
   "manager.vpx_input.how_step_2": "Press the key you want, or two together for a chord. It's saved as you press.",
+  "manager.vpx_input.how_step_buttons": "Press the button or key you want, or two together. It's saved as you press.",
   "manager.vpx_input.send_events": "Use {device}'s Keys",
   "manager.vpx_input.send_events.help": "Hear {device}'s keys here instead of on {device}",
   "manager.vpx_input.where_device": "Listening to {device}'s keys. Press one on it.",

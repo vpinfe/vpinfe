@@ -8,12 +8,14 @@ second would silently never fire.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from nicegui import ui
 
@@ -24,7 +26,7 @@ from common.failures import why
 from common.host import peer_name
 from common.i18n import t
 from common.security import sign_in
-from manager.kit import confirm, offload, panel, verbs
+from manager.kit import confirm, offload, panel, scroll, verbs
 from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.settings import binding_editor, input_relay
@@ -52,6 +54,7 @@ HOLD_STOPS = (0, 500, 1000, 1500, 2000, 3000)
 _LIVE_JS = """(() => {
   const live = window.__bindingLive = window.__bindingLive || {};
   live.id = %(id)d;
+  live.noPads = %(no_pads)s;
   if (live.listening) return;
   live.listening = true;
   const busy = () => (window.__bindingListen || {}).row
@@ -87,6 +90,7 @@ _LIVE_JS = """(() => {
   const relayed = new Set();
   live.relayed = report;
   live.relay = (token, isDown) => {
+    if (live.noPads && token.startsWith('pad:')) return;
     const listen = window.__bindingListen;
     if (listen && listen.relay) listen.relay(token, isDown);
     else if (isDown) report(token);
@@ -131,6 +135,7 @@ _LIVE_JS = """(() => {
     }
   });
   setInterval(() => {
+    if (live.noPads) return;
     for (const pad of (navigator.getGamepads ? navigator.getGamepads() : [])) {
       if (!pad) continue;
       pad.buttons.forEach((b, i) => {
@@ -147,6 +152,8 @@ _LIVE_JS = """(() => {
 
 
 _DROP_RELAYED_JS = "window.__bindingLive && window.__bindingLive.dropRelayed()"
+_RELAY_JS = ("((batch) => { const l = window.__bindingLive;"
+             " if (l) batch.forEach(([token, down]) => l.relay(token, down)); })(%s)")
 
 
 @dataclass(frozen=True)
@@ -198,6 +205,25 @@ class Words:
 
 
 VPINFE_WORDS = Words()
+
+
+class Host(Protocol):
+    """Controller buttons a table hears itself, in place of the browser's gamepad poll.
+
+    `owns` says which binding members are the host's; `label` names one as a chip and a
+    tooltip. `poll` returns the presses since the last call, as tokens the page relays,
+    and whether device names appeared since, which redraws the chips.
+    """
+
+    def is_open(self) -> bool: ...
+    async def open(self) -> bool: ...
+    def close(self) -> None: ...
+    def owns(self, member: str) -> bool: ...
+    def label(self, member: str) -> tuple[str, str]: ...
+    def poll(self) -> tuple[list[tuple[str, bool]], bool]: ...
+
+
+PUMP_S = 0.05
 
 
 @dataclass(frozen=True)
@@ -337,10 +363,24 @@ def _lit(element: ui.element, on: bool) -> None:
         element.classes(remove="manager-binding-lit")
 
 
-def said(bindings: Sequence[str]) -> str:
+def said(bindings: Sequence[str],
+         describe: Callable[[str], str] = input_registry.describe) -> str:
     """Bindings read out mid-sentence, a held one closing its own aside with a comma."""
-    text = listed(input_registry.describe(one) for one in bindings)
+    text = listed(describe(one) for one in bindings)
     return f"{text}," if bindings and input_registry.hold_ms(bindings[-1]) else text
+
+
+class _Body(ui.element):
+    """The table's container, which says when the page takes it away: the page redraws
+    in place without the client going, and a host held for it must be let go then."""
+
+    def __init__(self, gone: Callable[[], None]) -> None:
+        super().__init__("div")
+        self._gone = gone
+
+    def _handle_delete(self) -> None:
+        self._gone()
+        super()._handle_delete()
 
 
 class Table:
@@ -365,8 +405,13 @@ class Table:
                  source: str, writable: bool = True, shares: bool = False,
                  refuses: Callable[[str], str] | None = None,
                  pads_when_heard: bool = False, how_open: bool | None = None,
-                 words: Words = VPINFE_WORDS) -> None:
+                 words: Words = VPINFE_WORDS, host: Host | None = None) -> None:
         self.words = words
+        self.host = host
+        self._hosted = host is not None and host.is_open()
+        self._host_failed = False
+        self._hosting = False
+        self._host_task: asyncio.Future[None] | None = None
         self.rows = tuple(rows)
         self.by_name = {row.name: row for row in self.rows}
         self.bound = {row.name: selectors(bound.get(row.name)) for row in self.rows}
@@ -396,7 +441,8 @@ class Table:
         self._chips: dict[tuple[str, str], ui.element] = {}
         self._where: ui.label | None = None
         self._relay: ui.element | None = None
-        with ui.element("div").classes("w-full") as self.container:
+        self._client = ui.context.client
+        with _Body(self._release_host).classes("w-full") as self.container:
             if how_open is not None:
                 self._draw_how(how_open)
             ui.label(t("manager.binding_table.tester")) \
@@ -408,23 +454,28 @@ class Table:
             if how_open is not None and self.elsewhere:
                 self._draw_relay_words()
             self.grid = ui.element("div").classes("manager-facts manager-bindings")
-        self._client = ui.context.client
+        scroll.keep(self.grid)
         self._asker = _asker()
         self.line.on("heard", self._heard, js_handler="(e) => emit(e.detail)")
         self.line.on("released", self._let_go, js_handler="(e) => emit(e.detail)")
         self.line.on("taken", self._taken, js_handler="(e) => emit()")
         self.line.on("visible", self._shown, js_handler="(e) => emit(e.detail)")
         self.line.on("touched", self._touched, js_handler="(e) => emit()")
-        ui.run_javascript(_LIVE_JS % {"id": self.line.id,
-                                      "pad_token": binding_editor.PAD_TOKEN_JS})
+        ui.run_javascript(_LIVE_JS % {"id": self.line.id, "pad_token": binding_editor.PAD_TOKEN_JS,
+                                      "no_pads": "true" if host is not None else "false"})
         if writable:
             self.line.on("listen", self._listening, js_handler="(e) => emit(e.detail)")
             self.line.on("captured", self._captured, js_handler="(e) => emit(e.detail)")
-            ui.run_javascript(binding_editor.listen_js(self.line.id))
+            ui.run_javascript(binding_editor.listen_js(self.line.id, pads=host is None))
         input_relay.present(self._client)
+        if host is not None:
+            self._client.on_disconnect(self._release_host)
+            self._client.on_delete(self._release_host)
         with self.container:
             ui.timer(0.2, self._begin, once=True)
             ui.timer(input_relay.REFRESH_S, self._keep)
+            if host is not None:
+                ui.timer(PUMP_S, self._pump)
         self._draw_live()
         self._draw_send()
         self.draw()
@@ -432,6 +483,32 @@ class Table:
     def label_of(self, name: str) -> str:
         row = self.by_name.get(name)
         return row.label if row is not None else name
+
+    def _members(self, binding: str) -> tuple[str, ...]:
+        text = input_registry.identity(binding)
+        return input_registry.chord_members(text) or (text,)
+
+    def _is_pad(self, binding: str) -> bool:
+        """Whether pressing this means pressing something on a controller."""
+        if self.host is not None and any(self.host.owns(one) for one in self._members(binding)):
+            return True
+        return input_registry.is_pad(binding)
+
+    def _describe(self, binding: str) -> str:
+        """One binding as a person reads it, the host's members under the host's names."""
+        host = self.host
+        if host is None or not any(host.owns(one) for one in self._members(binding)):
+            return input_registry.describe(binding)
+        return " + ".join(host.label(one)[0] if host.owns(one) else input_registry.describe(one)
+                          for one in self._members(binding))
+
+    def _tip(self, binding: str) -> str:
+        """What the host says of a binding's controller members, beside their names."""
+        host = self.host
+        if host is None:
+            return ""
+        return "; ".join(tip for one in self._members(binding) if host.owns(one)
+                         and (tip := host.label(one)[1]))
 
     def draw(self) -> None:
         if self.container.is_deleted:
@@ -479,9 +556,9 @@ class Table:
 
     def _chips_of(self, row: Row, clashes: Mapping[str, list[str]]) -> None:
         held = [one for one in self.bound[row.name]
-                if not (self.pads_hidden and input_registry.is_pad(one))]
+                if not (self.pads_hidden and self._is_pad(one))]
         # Keys before controller buttons, whichever order they were mapped in.
-        for binding in sorted(held, key=input_registry.is_pad):
+        for binding in sorted(held, key=self._is_pad):
             self._chip(row, binding, clashes.get(input_registry.contention(binding)) or [])
         for one in row.kept:
             with ui.element("div").classes("manager-chip-holder"):
@@ -497,22 +574,22 @@ class Table:
                 .tooltip(t("manager.binding_table.nothing_mapped.help"))
 
     def _chip(self, row: Row, binding: str, claimed_by: list[str]) -> None:
-        shown = input_registry.describe(binding)
+        shown = self._describe(binding)
         crowded = len(claimed_by) > 1 and not self.shares
         with ui.element("div").classes("manager-chip-holder"):
             with ui.element("div").classes(
                     "manager-member-chip "
                     + ("manager-chip-warn" if crowded else "manager-chip-quiet")) as chip:
-                if input_registry.is_pad(binding):
+                if self._is_pad(binding):
                     ui.icon(verbs.CONTROLLER).classes("manager-chip-glyph")
                 ui.label(shown)
             self._chips[(row.name, binding)] = chip
-            if crowded:
-                chip.tooltip(t("manager.binding_editor.shared", others=listed(
-                    self.label_of(name) for name in claimed_by if name != row.name)))
-            elif len(claimed_by) > 1:
-                chip.tooltip(t("manager.binding_table.also_does", others=listed(
-                    self.label_of(name) for name in claimed_by if name != row.name)))
+            others = listed(self.label_of(name) for name in claimed_by if name != row.name)
+            note = (t("manager.binding_editor.shared", others=others) if crowded
+                    else t("manager.binding_table.also_does", others=others)
+                    if len(claimed_by) > 1 else "")
+            if tip := "\n".join(part for part in (self._tip(binding), note) if part):
+                chip.tooltip(tip)
             if not self.writable:
                 return
             if row.holds:
@@ -534,7 +611,7 @@ class Table:
                 .classes("manager-binding-hold")
 
     def _revert_mark(self, row: Row) -> None:
-        back = listed(t("manager.binding_table.quoted", binding=input_registry.describe(one))
+        back = listed(t("manager.binding_table.quoted", binding=self._describe(one))
                       for one in row.defaults) or t("manager.binding_table.nothing")
         ui.icon(verbs.REVERT).classes("manager-revert") \
             .on("click", lambda: self._revert(row)) \
@@ -576,7 +653,8 @@ class Table:
         with panel.disclosure(t(self.words.how_title)) \
                 .classes("manager-binding-how") as how:
             with ui.column().classes("gap-1 w-full"):
-                ui.label(t(self.words.how_body)).classes("manager-help")
+                if self.words.how_body:
+                    ui.label(t(self.words.how_body)).classes("manager-help")
                 with ui.element("ol").classes("manager-help manager-binding-steps"):
                     with ui.element("li"):
                         ui.label(t(self.words.how_step_1))
@@ -685,12 +763,11 @@ class Table:
                 if input_registry.press(one) == wanted]
 
     def _show(self, token: str, *, does: str = "", nothing: str = "") -> None:
-        if self.pads_hidden and input_registry.is_pad(token):
+        if self.pads_hidden and self._is_pad(token):
             self.pads_hidden = False
             self.draw()
         self.lit = input_registry.press(token)
-        self.live = Live(input_registry.describe(token),
-                         input_registry.is_pad(token), does, nothing)
+        self.live = Live(self._describe(token), self._is_pad(token), does, nothing)
         self._draw_live()
         self._light()
 
@@ -752,6 +829,7 @@ class Table:
         self.sending = False
         self.off_reason = reason
         input_relay.disarm(self._client)
+        self._sync_host()
         self._draw_send()
 
     def _switched(self, event: Any) -> None:
@@ -773,6 +851,56 @@ class Table:
             input_relay.arm(self._client, browser=browser, device=device)
         elif input_relay.disarm(self._client):
             self._client.run_javascript(_DROP_RELAYED_JS)
+        self._sync_host()
+
+    def _host_wanted(self) -> bool:
+        """The host listens while the buttons are, and not while a table plays: it holds
+        the controller, which the table needs."""
+        return (self.sending and self._visible and not self._playing
+                and not self._client.is_deleted and not self.container.is_deleted)
+
+    def _sync_host(self) -> None:
+        if self.host is None:
+            return
+        if self._host_wanted():
+            if not self._hosted and not self._hosting and not self._host_failed:
+                self._hosting = True
+                self._host_task = asyncio.ensure_future(self._open_host())
+        elif self._hosted:
+            self._release_host()
+
+    def _release_host(self) -> None:
+        if self.host is None or not self._hosted:
+            return
+        self._hosted = False
+        self.host.close()
+        if not self._client.is_deleted:
+            self._client.run_javascript(_DROP_RELAYED_JS)
+
+    async def _open_host(self) -> None:
+        try:
+            opened = await self.host.open() if self.host is not None else False
+        except Exception:  # noqa: BLE001 - the keys still work without the controllers
+            logger.warning("Could not listen for controller buttons", exc_info=True)
+            opened = False
+        self._hosting = False
+        if not opened:
+            self._host_failed = True
+            return
+        self._hosted = True
+        if not self._host_wanted():
+            self._release_host()
+
+    def _pump(self) -> None:
+        """Hands the controller presses heard since the last tick to the page, which maps
+        them as it does the cabinet's."""
+        if self.host is None or not self._hosted or self.container.is_deleted:
+            return
+        presses, changed = self.host.poll()
+        if presses:
+            self._client.run_javascript(_RELAY_JS % json.dumps(presses))
+        if changed:
+            self.draw()
 
     async def _begin(self) -> None:
         """Names who is asking, which needs a lookup, and then asks."""
@@ -900,15 +1028,15 @@ class Table:
         after = after_adding(self.bound, row.name, binding, old=old, take=True)
         theirs = next(one for one in self.bound[holders[0]]
                       if input_registry.contention(one) == input_registry.contention(binding))
-        mapped = t("manager.binding_table.mapped_to", binding=said([theirs]),
+        mapped = t("manager.binding_table.mapped_to", binding=said([theirs], self._describe),
                    rows=listed(self.label_of(name) for name in holders))
         if input_registry.hold_ms(theirs) != input_registry.hold_ms(binding):
-            mapped += " " + t("manager.binding_table.one_hold", binding=input_registry.describe(
+            mapped += " " + t("manager.binding_table.one_hold", binding=self._describe(
                 input_registry.with_hold(binding, 0)))
         if self.shares:
             if not await confirm.ask(
                     t("manager.binding_table.share_question",
-                      binding=input_registry.describe(binding), row=row.label),
+                      binding=self._describe(binding), row=row.label),
                     detail=[mapped],
                     confirm=t("manager.binding_table.share", count=len(holders)),
                     icon=verbs.ADD, danger=False):
@@ -917,7 +1045,7 @@ class Table:
             await self._apply(after_adding(self.bound, row.name, binding, old=old), binding)
             return
         question = t("manager.binding_table.move_question",
-                     binding=input_registry.describe(binding), row=row.label)
+                     binding=self._describe(binding), row=row.label)
         detail = [mapped, *self._emptied(after, holders), *self._slowing(after)]
         if not await confirm.ask(question, detail=detail, confirm=t("word.move"),
                                  icon=verbs.MOVE, danger=False):
@@ -931,11 +1059,11 @@ class Table:
         after = after_adding(self.bound, row.name, binding, old=old)
         if notes := self._slowing(after):
             held = bool(input_registry.hold_ms(binding))
-            bare = input_registry.describe(input_registry.with_hold(binding, 0))
+            bare = self._describe(input_registry.with_hold(binding, 0))
             answer = await confirm.ask(
                 t("manager.binding_table.hold_question" if held
                   else "manager.binding_table.add_question",
-                  binding=bare if held else input_registry.describe(binding), row=row.label),
+                  binding=bare if held else self._describe(binding), row=row.label),
                 detail=notes,
                 confirm=t("manager.binding_table.add_hold") if held else t("word.add"),
                 icon=verbs.ADD, danger=False)
@@ -949,7 +1077,7 @@ class Table:
         # Asked only for a binding no press can make again, a modifier or an axis, because
         # removing it is permanent.
         if not input_registry.capturable(binding) and not await confirm.ask(
-                t("manager.binding_editor.remove_2", shown=input_registry.describe(binding)),
+                t("manager.binding_editor.remove_2", shown=self._describe(binding)),
                 detail=t("manager.binding_editor.remove_detail"),
                 confirm=t("word.remove"), icon=verbs.REMOVE):
             return
@@ -968,7 +1096,7 @@ class Table:
         if given or notes:
             moving = [one for lost in given.values() for one in lost]
             lines = [t("manager.binding_table.moves_back", count=len(moving),
-                       binding=said(moving),
+                       binding=said(moving, self._describe),
                        rows=listed(self.label_of(name) for name in given)) if given else "",
                      *emptied, *notes]
             if not await confirm.ask(
@@ -989,9 +1117,10 @@ class Table:
         out = []
         for one in input_registry.newly_stalled(self.bound, after):
             row = self.label_of(one.action)
-            binding = input_registry.describe(one.binding)
+            binding = self._describe(one.binding)
             if one.hold in self.bound.get(one.holder, ()):
-                out.append(t("manager.binding_table.slowed_by", hold=said([one.hold]),
+                out.append(t("manager.binding_table.slowed_by",
+                             hold=said([one.hold], self._describe),
                              holder=self.label_of(one.holder), row=row, binding=binding))
             else:
                 out.append(t("manager.binding_table.slowed", row=row, binding=binding))

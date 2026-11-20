@@ -908,7 +908,7 @@ class AnActedOnTable(unittest.IsolatedAsyncioTestCase):
             with self.body:
                 control = Table(ROWS, SHIPPED, write=_kept, source=SOURCE)
 
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
         self.assertEqual({one.type for one in control.line._event_listeners.values()},
                          {"heard", "released", "listen", "captured", "taken", "visible", "touched"})
 
@@ -917,9 +917,16 @@ class AnActedOnTable(unittest.IsolatedAsyncioTestCase):
             with self.body:
                 control = Table(ROWS, SHIPPED, write=_kept, source=SOURCE, writable=False)
 
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_count, 2)
         self.assertEqual({one.type for one in control.line._event_listeners.values()},
                          {"heard", "released", "taken", "visible", "touched"})
+
+    async def test_a_table_has_the_page_keep_its_place_across_a_redraw(self) -> None:
+        with patch.object(ui, "run_javascript") as run:
+            with self.body:
+                Table(ROWS, SHIPPED, write=_kept, source=SOURCE)
+
+        self.assertTrue(any("__keepsScroll" in one.args[0] for one in run.call_args_list))
 
     async def test_drawing_after_the_page_is_gone_draws_nothing(self) -> None:
         control = self.drawn()
@@ -1029,6 +1036,172 @@ class ASharingTable(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_chips(wrapper), ["Controller button"])
         self.assertNotIn(t("manager.binding_table.nothing_mapped"), _chips(wrapper))
         self.assertEqual(control.bound["tilt"], [])
+
+
+class _Host:
+    """A table's own listener for controllers, standing in for the program's."""
+
+    def __init__(self, *, open_: bool = True, opens: bool = True) -> None:
+        self.opened = open_
+        self.opens = opens
+        self.closed = 0
+        self.waiting: list[tuple[str, bool]] = []
+        self.renamed = False
+
+    def is_open(self) -> bool:
+        return self.opened
+
+    async def open(self) -> bool:
+        self.opened = self.opens
+        return self.opens
+
+    def close(self) -> None:
+        self.opened = False
+        self.closed += 1
+
+    def owns(self, member: str) -> bool:
+        return member.startswith("vpx:")
+
+    def label(self, member: str) -> tuple[str, str]:
+        return "Left Flipper Button", f"Pad - {member}"
+
+    def poll(self) -> tuple[list[tuple[str, bool]], bool]:
+        out, self.waiting = self.waiting, []
+        changed, self.renamed = self.renamed, False
+        return out, changed
+
+
+class AHostedTable(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.body = ui.column()
+        self.sent: list[str] = []
+
+    def drawn(self, host: _Host, bound: dict[str, Any] | None = None) -> Table:
+        with patch.object(ui, "run_javascript", side_effect=self.sent.append), self.body:
+            control = Table(ROWS, bound or {**SHIPPED, "next": ["key:ShiftRight", "vpx:Pad_1;3"]},
+                            write=_kept, source=SOURCE, host=host)
+        return control
+
+    def test_the_browsers_own_controller_poll_is_turned_off(self) -> None:
+        self.drawn(_Host())
+
+        self.assertTrue(any("live.noPads = true" in one for one in self.sent))
+        self.assertTrue(any("listen.noPads = true" in one for one in self.sent))
+
+    def test_a_table_with_no_host_leaves_the_browsers_poll_on(self) -> None:
+        with patch.object(ui, "run_javascript", side_effect=self.sent.append), self.body:
+            Table(ROWS, SHIPPED, write=_kept, source=SOURCE)
+
+        self.assertTrue(any("live.noPads = false" in one for one in self.sent))
+        self.assertTrue(any("listen.noPads = false" in one for one in self.sent))
+
+    def test_a_controller_member_is_named_by_the_host_and_its_tooltip_says_where_from(
+            self) -> None:
+        control = self.drawn(_Host())
+
+        self.assertEqual(_chips(_wrappers(self.body)["Next"]),
+                         ["Right Shift", "Left Flipper Button"])
+        self.assertEqual(control._describe("chord(key:KeyA+vpx:Pad_1;3)"),
+                         "A + Left Flipper Button")
+        self.assertEqual(control._tip("vpx:Pad_1;3"), "Pad - vpx:Pad_1;3")
+        self.assertTrue(control._is_pad("chord(key:KeyA+vpx:Pad_1;3)"))
+        self.assertFalse(control._is_pad("key:KeyA"))
+
+    async def test_presses_the_host_heard_are_given_to_the_page(self) -> None:
+        host = _Host()
+        control = self.drawn(host)
+        host.waiting = [("vpx:Pad_1;3", True), ("vpx:Pad_1;3", False)]
+
+        with patch.object(control._client, "run_javascript") as run:
+            control._pump()
+
+        [script] = run.call_args.args
+        self.assertIn('[["vpx:Pad_1;3", true], ["vpx:Pad_1;3", false]]', script)
+
+    async def test_new_device_names_redraw_the_chips(self) -> None:
+        host = _Host()
+        control = self.drawn(host)
+        host.renamed = True
+
+        with patch.object(control, "draw") as draw:
+            control._pump()
+
+        draw.assert_called_once()
+
+    async def test_nothing_is_heard_once_the_host_is_let_go(self) -> None:
+        host = _Host()
+        control = self.drawn(host)
+        with patch.object(control._client, "run_javascript") as run:
+            control._release_host()
+            run.reset_mock()
+            host.waiting = [("vpx:Pad_1;3", True)]
+            control._pump()
+
+        run.assert_not_called()
+        self.assertEqual(host.closed, 1)
+
+    async def test_the_host_is_let_go_when_the_switch_goes_off_or_a_table_plays(self) -> None:
+        host = _Host()
+        control = self.drawn(host)
+
+        control.sending = False
+        with patch.object(control._client, "run_javascript"):
+            control._sync_host()
+        self.assertEqual(host.closed, 1)
+
+        host.opened, control._hosted = True, True
+        control.sending, control._playing = True, True
+        with patch.object(control._client, "run_javascript"):
+            control._sync_host()
+        self.assertEqual(host.closed, 2)
+
+    async def test_the_host_is_asked_for_again_when_the_buttons_are_wanted(self) -> None:
+        host = _Host(open_=False)
+        control = self.drawn(host)
+
+        control._sync_host()
+        control._sync_host()
+        assert control._host_task is not None
+        await control._host_task
+
+        self.assertTrue(control._hosted)
+        self.assertEqual(host.closed, 0)
+
+    async def test_a_host_that_cannot_open_is_not_asked_again(self) -> None:
+        host = _Host(open_=False, opens=False)
+        control = self.drawn(host)
+
+        control._sync_host()
+        assert control._host_task is not None
+        await control._host_task
+        host.opens = True
+        control._sync_host()
+
+        self.assertFalse(control._hosted)
+        self.assertFalse(host.opened)
+
+    def test_the_host_is_let_go_when_the_page_redraws_in_place(self) -> None:
+        host = _Host()
+        control = self.drawn(host)
+
+        with patch.object(control._client, "run_javascript"):
+            control.container.delete()
+
+        self.assertEqual(host.closed, 1)
+        self.assertFalse(control._hosted)
+
+    async def test_a_host_opened_after_the_table_stopped_wanting_it_is_let_go(self) -> None:
+        host = _Host(open_=False)
+        control = self.drawn(host)
+
+        control._sync_host()
+        control.sending = False
+        assert control._host_task is not None
+        with patch.object(control._client, "run_javascript"):
+            await control._host_task
+
+        self.assertFalse(control._hosted)
+        self.assertEqual(host.closed, 1)
 
 
 if __name__ == "__main__":

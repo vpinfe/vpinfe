@@ -14,6 +14,7 @@
 - **Manager** - Choose a Visual Pinball launcher's settings file when you add or copy it. A launcher copied to another device takes its file along.
 - **Manager** - Setup has Visual Pinball write its own settings file, so every setting has its label and choices.
 - **Manager** - Visual Pinball launchers take Arguments, and show the command that starts a table.
+- **Manager** - Set a Visual Pinball table's buttons with a controller as well as a keyboard: press the button on the controller and it is saved as you press.
 - **Manager** - Add on Games, Tables, Media and Assets, from this device or the VPinFE device.
 - **Manager** - Match to VPS… walks through several tables or files at once, and a ROM zip named exactly as its VPS ROM matches on its own.
 - **Manager** - Discovery shows when a game you have has an update, and lets you skip it or ignore updates for a table.

@@ -31,7 +31,6 @@ from manager.kit.api import ApiClient
 from manager.kit.data import config_groups
 from manager.kit.on_page import on_page
 from manager.settings import vpx_find, vpx_input
-from manager.settings.binding_table import Table
 from manager.settings.vpx_find import Find
 from manager.setup import glass_art
 
@@ -595,6 +594,7 @@ async def ask_keys(vpx: Vpx) -> dict[str, Any]:
     step: dict[str, Any] = {"title": t("manager.setup.vpxkeys.title"),
                             "help": t("manager.setup.vpxkeys.lead")}
     flat = _flat(found)
+    program = str(vpx.launcher.settings.get("bin_path") or "").strip()
 
     def draw(_values: dict[str, Any]) -> None:
         holder = ui.element("div").classes("w-full px-3")
@@ -603,11 +603,9 @@ async def ask_keys(vpx: Vpx) -> dict[str, Any]:
 
         def fill() -> None:
             holder.clear()
-            page = vpx_input.Page(context["library"], context, group, flat)
+            page = vpx_input.Page(context["library"], context, group, flat, program)
             with holder:
-                Table(vpx_input.table_rows(group, flat), page.bound(), write=page.put,
-                      source=t("manager.vpx_input.defaults"), shares=True,
-                      refuses=page.refuse)
+                page.show(ui.element("div").classes("w-full"), how=False)
 
         async def rebuild() -> None:
             flat.clear()
