@@ -4,6 +4,7 @@ record one, which way its frames come, and what it says it cannot do."""
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -80,7 +81,7 @@ DXGI = [ffmpeg.DxgiOutput(0, "\\\\.\\DISPLAY2", 1920, 0, 3000, 1920, True, 4),
 
 class WindowsTests(unittest.TestCase):
     def _adapter(self, **probe: Any) -> ffmpeg.WindowsAdapter:
-        return ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(**probe))
+        return ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(**probe), lambda _: True)
 
     def test_each_attached_output_is_ddagrabs_index_by_windows_own_name(self) -> None:
         outputs = self._adapter().outputs()
@@ -110,6 +111,28 @@ class WindowsTests(unittest.TestCase):
 
                 self.assertEqual(adapter.id, expected)
                 self.assertEqual(adapter.grabs(adapter._ffmpeg), grabs)
+
+    def test_gdigrab_is_chosen_up_front_where_ddagrab_cannot_take_a_frame(self) -> None:
+        both = {"filters": frozenset({"ddagrab"}), "inputs": frozenset({"gdigrab"})}
+        adapter = ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(**both), lambda _: False)
+        assert adapter._ffmpeg is not None
+        argv = adapter.still(_found(adapter._ffmpeg), adapter.outputs()[1], Path("pf.png"))
+
+        self.assertEqual(adapter.id, "gdigrab")
+        self.assertEqual(argv[5:7], ["-f", "gdigrab"])
+
+    def test_ddagrab_is_not_tried_where_there_is_no_gdigrab_to_fall_back_on(self) -> None:
+        tried: list[tools.Found] = []
+        for probe in ({"filters": frozenset({"ddagrab"})}, {"inputs": frozenset({"gdigrab"})}):
+            def probe_fails(found: tools.Found) -> bool:
+                tried.append(found)
+                return False
+
+            adapter = ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(**probe), probe_fails)
+
+            self.assertEqual(adapter.id, "gdigrab" if "inputs" in probe else "ddagrab")
+
+        self.assertEqual(tried, [])
 
     def test_ddagrabs_frame_is_the_outputs_before_windows_turns_it(self) -> None:
         adapter = self._adapter(filters=frozenset({"ddagrab"}))
@@ -379,13 +402,108 @@ class ReportTests(unittest.TestCase):
                          commands.own_record(commands.X11GRAB, x11, ""))
 
     def test_windows_says_sound_is_not_supported_yet(self) -> None:
-        adapter = ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(filters=frozenset({"ddagrab"})))
+        adapter = ffmpeg.WindowsAdapter(lambda: DXGI, _ffmpeg(filters=frozenset({"ddagrab"})),
+                                        lambda _: True)
 
         assert adapter._ffmpeg is not None
         said = report(adapter, found=_found(adapter._ffmpeg), probe_hardware=False)
 
         self.assertEqual(said["sound"]["reason"]["key"], adapters.SOUND_NOT_YET)
         self.assertEqual(said["adapter"], "ddagrab")
+
+
+class DdagrabWorksTests(unittest.TestCase):
+    def setUp(self) -> None:
+        ffmpeg._ddagrab_works.clear()
+        self.addCleanup(ffmpeg._ddagrab_works.clear)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.program = Path(folder.name) / "ffmpeg.exe"
+        self.program.write_bytes(b"one")
+        self.found = tools.Found(tools.FFMPEG, tools.State.FOUND, self.program, None)
+
+    def _ran(self, **said: Any) -> tuple[bool, list[list[str]]]:
+        ran: list[list[str]] = []
+
+        def run(argv: list[str], **_: Any) -> Any:
+            ran.append(argv)
+            if "raises" in said:
+                raise said["raises"]
+            return SimpleNamespace(returncode=said.get("returncode", 0),
+                                   stderr=said.get("stderr", ""))
+        return ffmpeg.ddagrab_works(self.found, run), ran
+
+    def _asked(self, times: int, **said: Any) -> int:
+        count = 0
+        for _ in range(times):
+            count += len(self._ran(**said)[1])
+        return count
+
+    def test_a_frame_that_comes_out_is_a_ddagrab_that_works(self) -> None:
+        works, ran = self._ran()
+
+        self.assertTrue(works)
+        self.assertEqual(ran[0][-5:], ["-frames:v", "1", "-f", "null", "-"])
+        self.assertIn("ddagrab=output_idx=0:framerate=1:draw_mouse=0,hwdownload,format=bgra",
+                      ran[0])
+
+    def test_a_failed_frame_or_a_program_that_will_not_run_is_one_that_does_not(self) -> None:
+        answers: dict[str, dict[str, Any]] = {
+            "fails": {"returncode": 1, "stderr": "Failed to create D3D11VA"},
+            "will not start": {"raises": OSError("nope")},
+            "hangs": {"raises": subprocess.TimeoutExpired("ffmpeg", 10)}}
+        for name, said in answers.items():
+            with self.subTest(name):
+                ffmpeg._ddagrab_works.clear()
+
+                self.assertFalse(self._ran(**said)[0])
+
+    def test_a_machine_with_no_direct3d_device_is_asked_once(self) -> None:
+        self.assertEqual(self._asked(3, returncode=1, stderr="Failed to create D3D11VA device."), 1)
+
+    def test_a_grab_that_works_is_asked_once(self) -> None:
+        self.assertEqual(self._asked(3), 1)
+
+    def test_any_other_failure_is_asked_again_after_a_minute(self) -> None:
+        said = {"returncode": 1, "stderr": "Access is denied."}
+        now = [1000.0]
+        with patch.object(ffmpeg.time, "monotonic", lambda: now[0]):
+            first = self._asked(2, **said)
+            now[0] += ffmpeg.DDAGRAB_RETRY_AFTER + 1
+            later = self._asked(1, **said)
+
+        self.assertEqual((first, later), (1, 1))
+
+    def test_a_failure_that_passes_gives_a_ddagrab_after_the_minute(self) -> None:
+        now = [1000.0]
+        with patch.object(ffmpeg.time, "monotonic", lambda: now[0]):
+            self.assertFalse(self._ran(returncode=1, stderr="Access is denied.")[0])
+            now[0] += ffmpeg.DDAGRAB_RETRY_AFTER + 1
+
+            self.assertTrue(self._ran()[0])
+
+    def test_a_program_installed_over_the_old_one_is_asked_again(self) -> None:
+        self.assertFalse(self._ran(returncode=1, stderr="Failed to create D3D11VA device.")[0])
+        self.program.write_bytes(b"a newer build")
+
+        self.assertTrue(self._ran()[0])
+
+    def test_a_program_that_is_not_there_is_not_asked(self) -> None:
+        self.program.unlink()
+
+        works, ran = self._ran()
+
+        self.assertEqual((works, ran), (False, []))
+
+
+class WarmTests(unittest.TestCase):
+    def test_only_windows_asks_which_grab_it_can_use(self) -> None:
+        for here, asks in ((tools.WINDOWS, 1), (tools.LINUX, 0), (tools.DARWIN, 0)):
+            with self.subTest(here), patch.object(adapters.tools, "here", return_value=here), \
+                    patch.object(ffmpeg.WindowsAdapter, "warm") as warm:
+                adapters.warm()
+
+                self.assertEqual(warm.call_count, asks)
 
 
 if __name__ == "__main__":

@@ -63,6 +63,7 @@ import requests
 # device_migration and the games modules below register the seeds the 2.x conversion runs,
 # so they have to be in before the ConfigStore is made.
 from common import events, extensions, i18n
+from common.capture import adapters as capture_adapters
 from common.config.config_store import ConfigStore
 from common.config.paths import (
     LOG_DIR,
@@ -276,6 +277,7 @@ def _a_screen_can_show_a_code() -> bool:
 
 sign_in.instance().screen = _a_screen_can_show_a_code
 this_machine.warm()
+capture_adapters.warm()
 
 # Register frontend theme assets before NiceGUI can start on the first-run path.
 mount_points = runtime.build_mount_points(base_path, config_dir, config_store)

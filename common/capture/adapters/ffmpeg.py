@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
+import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from common.failures import why as why_failed
 from common.host import tools
 
 from .. import commands, geometry
@@ -22,6 +26,8 @@ from . import (
     Window,
 )
 from .wlr import vaapi_node
+
+logger = logging.getLogger("vpinfe.common.capture.adapters.ffmpeg")
 
 Run = Callable[..., Any]
 
@@ -242,22 +248,85 @@ def dxgi_outputs() -> list[DxgiOutput]:
         method(factory, release)()
 
 
+# What was asked of each FFmpeg file (path, modified, size): whether `ddagrab` can take a frame
+# here, and until when that stands (None: for the life of the process).
+_ddagrab_works: dict[tuple[str, int, int], tuple[bool, float | None]] = {}
+_ddagrab_lock = threading.Lock()
+# A failure that is not the machine's own (the lock screen, another capture program holding the
+# desktop, a slow first start) can pass, so it is asked again after this many seconds.
+DDAGRAB_RETRY_AFTER = 60.0
+
+
+def ddagrab_probe(ffmpeg: Path) -> list[str]:
+    """One frame of the first output through `ddagrab`, to nowhere."""
+    return [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+            "ddagrab=output_idx=0:framerate=1:draw_mouse=0,hwdownload,format=bgra",
+            "-frames:v", "1", "-f", "null", "-"]
+
+
+def ddagrab_works(ffmpeg: tools.Found, run: Run = subprocess.run) -> bool:
+    """Whether `ddagrab` takes a frame on this device. A machine without Direct3D 11 video (a
+    virtual machine, an old driver) has the filter and cannot use it: that is asked once for
+    a given FFmpeg file. Any other failure stands for `DDAGRAB_RETRY_AFTER` seconds."""
+    if ffmpeg.path is None:
+        return False
+    try:
+        held = ffmpeg.path.stat()
+    except OSError:
+        return False
+    key = (str(ffmpeg.path), held.st_mtime_ns, held.st_size)
+    with _ddagrab_lock:
+        known = _ddagrab_works.get(key)
+        if known is not None and (known[1] is None or time.monotonic() < known[1]):
+            return known[0]
+        stands: float | None = None
+        try:
+            done = run(ddagrab_probe(ffmpeg.path), capture_output=True, text=True,
+                       errors="replace", stdin=subprocess.DEVNULL,
+                       timeout=tools.TIMEOUT, check=False, creationflags=tools.NO_WINDOW)
+            said = (done.stderr or "").strip().splitlines()
+            works = done.returncode == 0
+            why = "it took a frame" if works \
+                else (said[-1] if said else f"it exited with {done.returncode}")
+            if not works and "D3D11" not in (done.stderr or ""):
+                stands = time.monotonic() + DDAGRAB_RETRY_AFTER
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            works = False
+            why = why_failed(exc)
+            stands = time.monotonic() + DDAGRAB_RETRY_AFTER
+        _ddagrab_works[key] = (works, stands)
+        logger.info("Windows screen grab: %s, because ddagrab %s: %s",
+                    commands.DDAGRAB if works else commands.GDIGRAB,
+                    "works" if works else "cannot take a frame", why)
+        return works
+
+
 class WindowsAdapter(FfmpegAdapter):
-    """`ddagrab`, Desktop Duplication, where the FFmpeg has it; `gdigrab` otherwise."""
+    """`ddagrab`, Desktop Duplication, where the FFmpeg has it and a frame comes out of it;
+    `gdigrab` otherwise."""
 
     def __init__(self, enumerate_outputs: Callable[[], Sequence[DxgiOutput]] = dxgi_outputs,
-                 ffmpeg: tools.Found | None = None) -> None:
+                 ffmpeg: tools.Found | None = None,
+                 tries_ddagrab: Callable[[tools.Found], bool] = ddagrab_works) -> None:
         self._enumerate = enumerate_outputs
         self._ffmpeg = ffmpeg
+        self._tries = tries_ddagrab
 
     @property
     def id(self) -> str:  # type: ignore[override]
         if self._ffmpeg is None:
             self._ffmpeg = tools.resolve(tools.FFMPEG)
         probe = self._ffmpeg.probe
-        missing = probe is not None and not probe.has(tools.FILTERS, commands.DDAGRAB) \
-            and probe.has(tools.INPUTS, commands.GDIGRAB)
-        return commands.GDIGRAB if missing else commands.DDAGRAB
+        if probe is None or not probe.has(tools.INPUTS, commands.GDIGRAB):
+            return commands.DDAGRAB
+        if not probe.has(tools.FILTERS, commands.DDAGRAB):
+            return commands.GDIGRAB
+        return commands.DDAGRAB if self._tries(self._ffmpeg) else commands.GDIGRAB
+
+    def warm(self) -> None:
+        """Ask now, from a thread, so the first picture does not wait on the probe."""
+        threading.Thread(target=lambda: self.id, daemon=True,
+                         name="windows-grab-warm").start()
 
     def outputs(self) -> list[Output]:
         return windows_outputs(self._enumerate())

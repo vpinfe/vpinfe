@@ -158,6 +158,9 @@ def start() -> jobs.Job:
                                         done=size(done), total=size(total)))
 
         dest = get(said, chosen=chosen)
+        from common.capture import adapters
+
+        adapters.warm()
         return {"path": str(dest), "version": chosen.version}
 
     return jobs.submit(jobs.KIND_TOOL_GET, work)

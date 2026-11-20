@@ -221,6 +221,15 @@ def resolve(env: Mapping[str, str] | None = None,
     return Unsupported("none", NO_SESSION)
 
 
+def warm() -> None:
+    """On Windows, ask now which screen grab this device can use, from a thread, so the
+    first picture does not wait on it. Nowhere else has anything to ask."""
+    if tools.here() == tools.WINDOWS:
+        from .ffmpeg import WindowsAdapter
+
+        WindowsAdapter().warm()
+
+
 def _matches(output: Output, monitor: Any) -> bool:
     return (int(monitor.x), int(monitor.y), int(monitor.width), int(monitor.height)) \
         == (output.x, output.y, output.width, output.height)
