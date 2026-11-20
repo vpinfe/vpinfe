@@ -1,5 +1,57 @@
 ## VPinFE Release Notes
 
+### New in beta.4
+
+#### Highlights
+- **Core** - VPinFE for Mac is signed and notarized, so it opens without the Open Anyway steps.
+- **Core** - The Mac app updates itself from the Devices page, as Windows and Linux already did, and says why when it can't.
+- **Core** - Experimental Table Focus hands a starting table the keyboard, so it doesn't start paused. Off by default. (#103)
+- **Core** - Visual Pinball 10.9 is supported: VPinFE reads the version of the launcher you set up and edits its settings in that version's own folder, so a 10.9 launcher and a 10.8 one each keep their own.
+- **Frontend** - Choose what plays while a table starts: its own loading video, its loading picture, its playfield picture, the theme's, or a spinner. (#105)
+- **Extensions** - Extensions have their own page of official extensions, can add actions to a page's + and to a game's or table's menu, can list the dependencies they need, and update from their own repository.
+
+#### New
+- **Frontend** - Videos, sound and animations stop while a table runs, and pick up again when it closes.
+- **Core** - Experimental Table Focus works on Windows, macOS, Linux and, through a small add-on, GNOME. (#103, #107)
+- **Extensions** - System > Extensions lists the official extensions, and asks before an unofficial one is turned on.
+- **Extensions** - An extension can add an action to the + of a page and to a game's or table's menu, and show Links and Help in its panel.
+- **Extensions** - An extension can keep media of a kind VPinFE has no slot for.
+- **Extensions** - An extension is updated from its own repository, including one you added by hand.
+- **Extensions** - An extension can list the dependencies it needs. VPinFE shows them before you turn it on and fetches them with Get Its Dependencies, then starts it without a restart.
+- **Manager** - Set a Visual Pinball table's buttons with a controller as well as a keyboard: press the button on the controller and it is saved as you press.
+- **Manager** - Import a Library appears in the + of Games and Tables.
+
+#### Improved
+- **Manager** - Replace is offered beside Add on a table's panel when the file is the game's shared one.
+- **Manager** - The Overview says when Visual Pinball logging is off, and Turn On Logging fixes it.
+- **Manager** - Rows alternate in the folder chooser.
+- **Manager** - Import a Library asks for a folder only where the source uses one, and calls it Importing From.
+- **Manager** - Importing from PinUp Popper reads Popper's own media folders and keeps media VPinFE has no slot for. (#104)
+- **Core** - Tables start full screen on a Mac, so the Dock and menu bar stay hidden.
+- **Core** - Signed Mac downloads are named like the unsigned ones.
+- **Extensions** - Only the Library Importer comes with VPinFE; VPinPlay is added from the Extension List.
+
+#### Fixed
+- **Core** - Windows: a table that starts paused is brought to the front and starts playing, with no key press sent, and the screen grab is chosen once at startup.
+- **Core** - Windows: Get FFmpeg unpacks the pinned build.
+- **Core** - Windows: Visual Pinball makes a launcher's settings file in under a second, and its version box no longer shows.
+- **Frontend** - Take Picture and Back keep working from the Remote and the API while a table is running. (#102)
+- **Core** - Windows: VPinFE picks the PinMAME library that matches its own 32 or 64 bit, stops retrying one that won't load, and no command window opens.
+- **Core** - VPinFE starts when another run still holds its log.
+- **Core** - A Windows launcher's Visual Pinball version is read without PowerShell.
+- **Core** - Chromium no longer asks macOS for notification permission.
+
+#### Removed
+- **Extensions** - VPinPlay no longer comes with VPinFE. If you had it on a beta, add it again from the Extension List under System > Extensions, and your VPinPlay settings are still there.
+
+#### For theme and API authors
+- **Core** - Themes gain a Loading Screen capability, and can name their own loading video, picture and sound in `config.json`.
+- **Core** - Themes pause their own drawing loops while a game runs; the theme guide has a section.
+- **Core** - `PUT /api/v1/launchers/mappings/{table_id}` answers 404 for an id that is not a table's own, where it used to store it and answer 200.
+
+#### For extension authors
+- **Extensions** - New: actions in the + of a page and in a game's or table's menu, Links in a panel, and media of a kind VPinFE has no slot for.
+
 ### New in beta.3
 
 #### New
@@ -14,7 +66,6 @@
 - **Manager** - Choose a Visual Pinball launcher's settings file when you add or copy it. A launcher copied to another device takes its file along.
 - **Manager** - Setup has Visual Pinball write its own settings file, so every setting has its label and choices.
 - **Manager** - Visual Pinball launchers take Arguments, and show the command that starts a table.
-- **Manager** - Set a Visual Pinball table's buttons with a controller as well as a keyboard: press the button on the controller and it is saved as you press.
 - **Manager** - Add on Games, Tables, Media and Assets, from this device or the VPinFE device.
 - **Manager** - Match to VPS… walks through several tables or files at once, and a ROM zip named exactly as its VPS ROM matches on its own.
 - **Manager** - Discovery shows when a game you have has an update, and lets you skip it or ignore updates for a table.
@@ -53,7 +104,6 @@
 #### Removed
 - **Manager** - Move to Game for a Table INI.
 - **Manager** - Add a Setting and Commonly Set per Table. All Settings holds every setting the table can have.
-- **Core** - VPinPlay no longer comes with VPinFE. If you had it on a beta, add it again from the Extension List under System > Extensions, and your VPinPlay settings are still there. The Library Importer still comes with VPinFE and takes its updates from the same list.
 
 #### For theme and API authors
 - **Core** - Ratings are 0 to 10 in Contract 2 and the HTTP API. Contract 1 stays on whole stars, 0 to 5.

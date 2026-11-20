@@ -60,6 +60,18 @@ PAGE_WORDS = _without_icons(
     ".map(e => e.getAttribute('aria-label'))].join('\\n')")
 
 
+def _drawn_by(words: list[str]) -> str:
+    """The elements that draw any of `words`, for a failure to say where it came from: an
+    element's own text, or its aria-label, with the grid row it sits in."""
+    return ("(words => [...document.querySelectorAll('body *')]"
+            " .filter(e => e.getClientRects().length && ["
+            "   ...[...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent),"
+            "   e.getAttribute('aria-label') || ''"
+            " ].some(s => words.some(w => new RegExp('\\\\b' + w + '\\\\b', 'i').test(s))))"
+            " .slice(0, 6).map(e => (e.closest('.ag-row') || e).outerHTML.slice(0, 400)))("
+            + json.dumps(words) + ")")
+
+
 def _keys_in(text: str) -> list[str]:
     """Catalog keys on screen as themselves, in either case: `innerText` applies
     `text-transform`."""
@@ -226,12 +238,16 @@ class PseudoLocaleTests(unittest.TestCase):
             if named := _keys_in(text):
                 keys[where] = named
 
+        shown_by: dict[str, list[str]] = {}
+
         async def look(instance) -> None:
             async with BrowserSession(chromium_path() or "") as browser:
                 walk = ManagerWalk(browser, instance)
                 for view in addresses:
                     await walk.visit(f"/manager?{view}")
                     read(view, await browser.evaluate(PAGE_WORDS) + await _picker_text(walk))
+                    if view in found:
+                        shown_by[view] = await browser.evaluate(_drawn_by(found[view]))
                 await walk.visit("/manager?view=settings")
                 async for _page in walk.sections():
                     where = await browser.evaluate("location.search")
@@ -252,7 +268,8 @@ class PseudoLocaleTests(unittest.TestCase):
 
         self.assertIn("?view=settings&page=hardware.input", settings_pages)
         self.assertEqual(keys, {}, "these reached the screen as the catalog's own keys")
-        self.assertEqual(found, {}, "these reached the screen without the catalog")
+        self.assertEqual(found, {}, f"these reached the screen without the catalog, "
+                                    f"drawn by: {shown_by}")
 
 
 class FrontendPseudoLocaleTests(unittest.TestCase):
