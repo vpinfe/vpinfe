@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any
 from urllib.parse import urlsplit
 
 import requests
@@ -35,8 +36,12 @@ class ThemeRegistryClient:
                                        host=urlsplit(url).hostname or url))
         return payload
 
-    def download_zip(self, url: str) -> BytesIO:
+    def fetch_any(self, url: str) -> Any:
+        """JSON that need not be an object, such as a host's list of commits."""
+        return get_json(url, timeout=self.timeout)
+
+    def download_zip(self, url: str, limit: int | None = None) -> BytesIO:
         try:
-            return BytesIO(get_bytes(url))
+            return BytesIO(get_bytes(url, limit=limit))
         except requests.RequestException as exc:
             raise ThemeRegistryError(why(exc, url)) from exc

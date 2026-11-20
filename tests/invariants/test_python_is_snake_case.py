@@ -107,7 +107,7 @@ def _defined(tree: ast.Module) -> list[tuple[int, str, str]]:
 
 def _sources():
     for package in PACKAGES:
-        for path in sorted((REPO / package).rglob("*.py")):
+        for path in sorted(trees.source_files(REPO / package)):
             if "__pycache__" not in path.parts:
                 yield path
     for name in MODULES:

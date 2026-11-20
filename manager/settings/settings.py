@@ -1508,31 +1508,9 @@ IDENTITY_PAGE: DevicePage = (IDENTITY, "manager.settings.page_install", BUILT_PA
 IDENTITY_GROUP = "manager.settings.group_vpinfe"
 
 
-EXTENSIONS_GROUP = "manager.settings.group_extensions"
-
-
-def extension_pages(installed: Any) -> list[tuple[str, DevicePage]]:
-    """A page for every installed extension that can run here, last in the index and by the
-    name it shows. One made for another platform has no page: nothing on it could be
-    changed.
-
-    The label is the extension's own words, already in the language set, so it is not a
-    catalog key.
-    """
-    named = sorted(((str(one.get("display_name") or one.get("name") or ""), str(one["name"]))
-                    for one in installed or []
-                    if one.get("name") and one.get("reason_key") != extension_host.WRONG_PLATFORM),
-                   key=lambda one: (one[0].casefold(), one[1]))
-    return [(EXTENSIONS_GROUP, (ext_page.key(name), shown, BUILT_PAGE, (),
-                                install_identity.CORE))
-            for shown, name in named]
-
-
-def system_pages(features: Any, installed: Any = ()) -> list[tuple[str, DevicePage]]:
-    """This install's own index: identity first, then whatever its features can answer
-    for, then the extensions it has."""
-    return [(IDENTITY_GROUP, IDENTITY_PAGE), *pages_for_features(features),
-            *extension_pages(installed)]
+def system_pages(features: Any) -> list[tuple[str, DevicePage]]:
+    """This install's own index: identity first, then whatever its features can answer for."""
+    return [(IDENTITY_GROUP, IDENTITY_PAGE), *pages_for_features(features)]
 
 
 def _page_holding(section: str) -> str:
@@ -1567,9 +1545,6 @@ def pages_in_trouble(items: Any) -> dict[str, list[Any]]:
         # Only the ones a settings page can fix. A launcher is not a setting, and it
         # carries its own mark on the entry that leads to it.
         if item.where != feature_checks.WHERE_SETTINGS:
-            continue
-        if item.section == feature_checks.EXTENSIONS:
-            found.setdefault(ext_page.key(item.key), []).append(item)
             continue
         page = folders.KEY if item.section == feature_checks.FOLDERS \
             else _page_holding(item.section)
@@ -1807,7 +1782,8 @@ def _extension_trouble() -> list[Any]:
     wrong with it, and which features a device has is the person's choice."""
     return [feature_checks.Unmet(feature=install_identity.CORE,
                                  section=feature_checks.EXTENSIONS, key=record.name,
-                                 state=record.state, reason=record.reason)
+                                 state=record.state, reason=record.reason,
+                                 where=feature_checks.WHERE_EXTENSIONS)
             for record in extensions.records()
             if record.state in (extension_host.FAILED, extension_host.DISABLED)]
 
@@ -2138,7 +2114,7 @@ def build_system(library: Library, state: dict[str, Any], redraw: Callable[[], N
     the install you are reading the Manager from and needs nothing selected to be about
     one.
     """
-    pages = system_pages(discovery.get("features"), state.get("extensions") or [])
+    pages = system_pages(discovery.get("features"))
     known = {page[0]: page for _group, page in pages}
     chosen = str(state.get("settings_page") or "")
     # A page this install has no answer for is not a place to land: an address written
@@ -2152,8 +2128,7 @@ def build_system(library: Library, state: dict[str, Any], redraw: Callable[[], N
                                       rail_px=RAIL_PX, keep="settings")
 
     def reindex() -> None:
-        draw_index(_index_entries(state, system_pages(discovery.get("features"),
-                                                      state.get("extensions") or [])),
+        draw_index(_index_entries(state, system_pages(discovery.get("features"))),
                    str(state.get("settings_page") or ""))
 
     state["reindex_settings"] = reindex
@@ -2172,8 +2147,6 @@ def _index_entries(state: dict[str, Any],
     setting that fixes it: the group, then the page, then the field's own cross."""
     hurt = pages_in_trouble(state.get("trouble") or [])
     groups_hurt = {group for group, page in pages if page[0] in hurt}
-    off = {ext_page.key(str(one.get("name"))) for one in state.get("extensions") or []
-           if one.get("state") == extension_host.OFF}
 
     entries: list[tuple[Any, ...]] = []
     heading = ""
@@ -2184,8 +2157,7 @@ def _index_entries(state: dict[str, Any],
             heading = group
         found = hurt.get(page[0]) or []
         entries.append((page[0], page[1], "",
-                        panel.trouble_mark(_said(found)) if found
-                        else panel.quiet_mark(t("word.off")) if page[0] in off else None))
+                        panel.trouble_mark(_said(found)) if found else None))
     return entries
 
 
@@ -2218,12 +2190,6 @@ async def _draw_system_page(library: Library, redraw: Callable[[], None], body: 
             page_head(key)
             await _identity_page(library, str(discovery.get("display_name") or ""),
                                  redraw, state or {}, str(discovery.get("install_id") or ""))
-        return
-    if key.startswith(ext_page.PREFIX):
-        drawn = _extension_region(redraw, key, state or {})
-        with body:
-            drawn()
-        await drawn.refilled()
         return
     if kind == BUILT_PAGE and key in PAGES:
         draw = await PAGES[key](library, redraw, state if state is not None else {})
@@ -2418,29 +2384,6 @@ async def _themes_listing(library: Library) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - the page is drawn without the theme line
         logger.warning("Could not read the themes: %s", why(exc))
         return {}
-
-
-def _extension_region(redraw: Callable[[], None], key: str,
-                      state: dict[str, Any]) -> panel.Region:
-    """One extension's page: what its settings say is read, then drawn. A change on it
-    reads the extensions again, so the rail follows what is running, and draws this part
-    again in place."""
-    first = {"read": True}
-
-    async def draw() -> None:
-        if not first.pop("read", False) and (again := state.get("read_extensions")) is not None:
-            try:
-                await again()
-            except Exception:  # noqa: BLE001 - the page is drawn from what it already holds
-                logger.exception("Could not read the installed extensions")
-        found: dict[str, Any] = next((one for one in state.get("extensions") or []
-                                      if ext_page.key(str(one.get("name"))) == key), {})
-        settings = await ext_page.read(found)
-        ext_page.build(found, settings, region.refill,
-                       lambda: open_page(state, redraw, IDENTITY))
-
-    region = panel.region(draw)
-    return region
 
 
 async def _theme_sources(library: Library, state: dict[str, Any],

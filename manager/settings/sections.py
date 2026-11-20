@@ -16,6 +16,7 @@ from common.media.media_specs import media_label_map
 from common.online import vps_home
 from common.security import approvals
 from manager.extensions import ext_mark
+from manager.extensions import extensions as extensions_page
 from manager.kit import dialog as frame
 from manager.kit import game_tables, offload, panel, verbs, when
 from manager.kit.data import Library
@@ -228,12 +229,24 @@ def _need_row(need: needs.Need, state: dict[str, Any], fix: Callable[..., Any],
         if said := need.counted() or need.source:
             ui.label(said).classes("manager-need-count shrink-0")
         if not needs.can_set_aside(need.key):
+            if need.fix is not None:
+                _fix_only_menu(need, fix)
             return
         with ui.element("div").classes("manager-need-more").on("click.stop", lambda: None) \
                 .on("keydown.enter.stop", lambda: None):
             _button, menu = panel.menu_button(verbs.MORE, t("manager.needs.row_menu"))
         _need_menu(menu, need, fix, acts)
         _need_menu(ui.context_menu(), need, fix, acts)
+
+
+def _fix_only_menu(need: needs.Need, fix: Callable[..., Any]) -> None:
+    """The menu of a row that cannot be set aside but has something VPinFE can do."""
+    assert need.fix is not None
+    with ui.element("div").classes("manager-need-more").on("click.stop", lambda: None) \
+            .on("keydown.enter.stop", lambda: None):
+        _button, menu = panel.menu_button(verbs.MORE, t("manager.needs.row_menu"))
+    with menu:
+        panel.menu_entry(need.fix.label, lambda: fix(need), says=need.fix.tip)
 
 
 def _ask_row(need: needs.Need, acts: set_aside.Acts) -> None:
@@ -538,6 +551,8 @@ def overview(library: Library, registry: list[dict], discovery: dict,
             return _metadata_action(library, state, drawn_again)("upgrade")
         if need.fix.key == needs.TURN_ON_LOGGING:
             return _turn_on_logging(library, need.token, drawn_again)
+        if need.fix.key in EXTENSION_FIXES:
+            return _extension_fix(library, need, drawn_again)
         from manager.devices import devices
 
         return devices.confirm_update(library, _local_name(registry, discovery),
@@ -632,6 +647,23 @@ def _metadata_action(library: Library, state: dict[str, Any],
         then()
 
     return start
+
+
+EXTENSION_FIXES = {needs.UPDATE_EXTENSIONS: extensions_page.UPDATE_ALL,
+                   needs.REINSTALL_EXTENSION: extensions_page.REINSTALL,
+                   needs.UNINSTALL_EXTENSION: extensions_page.UNINSTALL}
+
+
+@on_page
+async def _extension_fix(library: Library, need: needs.Need,
+                         then: Callable[[], None]) -> None:
+    assert need.fix is not None
+
+    async def again() -> None:
+        library.forget_watched()
+        then()
+
+    await extensions_page.run_fix(library, EXTENSION_FIXES[need.fix.key], need.fix.kind, again)
 
 
 @on_page

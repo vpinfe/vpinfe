@@ -1,0 +1,20 @@
+name: Clone the included extensions
+description: >
+  Puts each extension VPinFE includes under extensions/, from its own repository, so the
+  tests and the checks that read extension code see what a development checkout has.
+  Run after the checkout of VPinFE.
+
+runs:
+  using: composite
+  steps:
+    - name: Clone the VPinPlay extension
+      uses: actions/checkout@v5
+      with:
+        repository: vpinfe/extension-vpinplay
+        path: extensions/vpinplay
+
+    - name: Clone the Library Importer extension
+      uses: actions/checkout@v5
+      with:
+        repository: vpinfe/extension-library-importer
+        path: extensions/library_importer

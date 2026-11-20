@@ -4,6 +4,8 @@ stops growing by habit.
 A module not listed in `tests/protects_baseline.txt` opens its docstring with
 `Protects: (x)`, x being one or more of the letters below. Modules already in the list are
 left as they are, and the list only shrinks: a module removed or given the line comes off it.
+The same holds for the tests an extension carries in `extensions/<name>/tests`, each with
+a `protects_baseline.txt` of its own.
 
     (a) a person's data or files would be lost or damaged
     (b) a promise to a theme, an extension or an API consumer would break
@@ -26,8 +28,7 @@ from tests.support import trees
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = ROOT / "tests"
-BASELINE = TESTS / "protects_baseline.txt"
-CEILING = 970
+CEILING = 930
 PROTECTS = re.compile(r"Protects: \([a-e](?:, [a-e])*\)")
 
 
@@ -36,20 +37,40 @@ def says(tree: ast.Module) -> bool:
     return PROTECTS.match(doc.splitlines()[0] if doc else "") is not None
 
 
-def _modules() -> dict[str, ast.Module]:
-    return {path.relative_to(ROOT).as_posix(): trees.tree_for(path)
-            for path in sorted(TESTS.rglob("test_*.py"))}
+def _roots() -> list[tuple[Path, Path]]:
+    """Each folder of tests with its baseline: ours, then the one of every extension that
+    carries tests, which `extensions/` links in."""
+    found = [(ROOT, TESTS)]
+    for folder in sorted((ROOT / "extensions").glob("*/tests")):
+        if (folder / "__init__.py").is_file():
+            found.append((folder.parent, folder))
+    return found
 
 
-def _listed() -> list[str]:
-    return [line for line in BASELINE.read_text().splitlines() if line.strip()]
+def _baseline(tests: Path) -> Path:
+    return tests / "protects_baseline.txt"
+
+
+def _modules(base: Path, tests: Path) -> dict[str, ast.Module]:
+    return {path.relative_to(base).as_posix(): trees.tree_for(path)
+            for path in sorted(tests.rglob("test_*.py"))
+            if "fixtures" not in path.relative_to(tests).parts}
+
+
+def _listed(tests: Path) -> list[str]:
+    path = _baseline(tests)
+    if not path.is_file():
+        return []
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 class ANewTestModuleSaysWhatItProtects(unittest.TestCase):
     def test_a_module_not_in_the_list_says_which_of_a_to_e_it_protects(self) -> None:
-        listed = set(_listed())
-        silent = [name for name, tree in _modules().items()
-                  if name not in listed and not says(tree)]
+        silent = []
+        for base, tests in _roots():
+            listed = set(_listed(tests))
+            silent += [f"{base.name}/{name}" for name, tree in _modules(base, tests).items()
+                       if name not in listed and not says(tree)]
 
         self.assertEqual([], silent,
                          "Open the module docstring with 'Protects: (x)', x being one or "
@@ -57,18 +78,22 @@ class ANewTestModuleSaysWhatItProtects(unittest.TestCase):
                          "If none fits, the test is not written.")
 
     def test_a_module_in_the_list_is_still_there(self) -> None:
-        gone = [name for name in _listed() if not (ROOT / name).is_file()]
+        gone = [f"{base.name}/{name}" for base, tests in _roots()
+                for name in _listed(tests) if not (base / name).is_file()]
 
-        self.assertEqual([], gone, "Remove the line from tests/protects_baseline.txt.")
+        self.assertEqual([], gone, "Remove the line from the protects_baseline.txt.")
 
     def test_a_module_that_says_what_it_protects_comes_off_the_list(self) -> None:
-        modules = _modules()
-        done = [name for name in _listed() if name in modules and says(modules[name])]
+        done = []
+        for base, tests in _roots():
+            modules = _modules(base, tests)
+            done += [f"{base.name}/{name}" for name in _listed(tests)
+                     if name in modules and says(modules[name])]
 
-        self.assertEqual([], done, "Remove the line from tests/protects_baseline.txt.")
+        self.assertEqual([], done, "Remove the line from the protects_baseline.txt.")
 
     def test_the_list_only_shrinks(self) -> None:
-        self.assertLessEqual(len(_listed()), CEILING,
+        self.assertLessEqual(len(_listed(TESTS)), CEILING,
                              "A module is not added to tests/protects_baseline.txt. "
                              "Lower CEILING when the list gets shorter.")
 

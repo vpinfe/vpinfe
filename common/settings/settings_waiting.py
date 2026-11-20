@@ -156,5 +156,6 @@ def _extensions() -> list[dict[str, Any]]:
              "label": record.display_name, "label_key": "",
              "waits_for": WAITS_RESTART, "in_effect": False, "set": True}
             for record in extensions.records()
-            if record.enabled and record.state == extensions.OFF
-            and record.why == extension_host.STARTS_AT_RESTART]
+            if record.enabled and (record.files_changed or (
+                record.state == extensions.OFF
+                and record.why == extension_host.STARTS_AT_RESTART))]

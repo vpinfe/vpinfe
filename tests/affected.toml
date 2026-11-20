@@ -1,7 +1,8 @@
 # What `python -m tests --affected` runs for files that imports cannot connect to a test:
 # data files that are read, not imported, and the browser drives, which start the app in a
 # subprocess. `paths` are globs on repo-relative file names (`*` crosses folders); `tests` are
-# files under tests/. The invariants always run and need no entry. A file matching no area
+# files under tests/, or under `extensions/<name>/tests/` for an extension's own (left out
+# when that clone is not in `extensions/`). The invariants always run and need no entry. A file matching no area
 # here and reached by no import selects the whole suite.
 #
 # Every module that opens a BrowserSession appears in at least one area
@@ -80,7 +81,7 @@ tests = [
   "tests/theming/test_drop_targets_drive.py",
   "tests/theming/test_escape_in_dialogs_drive.py",
   "tests/theming/test_folder_picker_drive.py",
-  "tests/theming/test_manager_back_button_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
   "tests/theming/test_manager_pages_drive.py",
   "tests/theming/test_panel_pages_stack_drive.py",
   "tests/theming/test_primary_nav_drive.py",
@@ -108,7 +109,7 @@ tests = [
   "tests/theming/test_grid_layout_drive.py",
   "tests/theming/test_grid_selection_drive.py",
   "tests/theming/test_list_columns_drive.py",
-  "tests/theming/test_manager_back_button_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
   "tests/theming/test_source_picker_drive.py",
   "tests/theming/test_manager_pages_drive.py",
   "tests/theming/test_media_fill_drive.py",
@@ -145,11 +146,11 @@ tests = [
 [[area]]
 paths = ["manager/setup/*", "common/uploads/*", "extensions/library_importer/*"]
 tests = [
-  "tests/theming/test_import_a_library_drive.py",
+  "extensions/library_importer/tests/test_import_a_library_drive.py",
   "tests/theming/test_setup_back_drive.py",
   "tests/theming/test_setup_controls_drive.py",
   "tests/theming/test_setup_first_run_drive.py",
-  "tests/theming/test_setup_tables_drive.py",
+  "extensions/library_importer/tests/test_setup_tables_drive.py",
   "tests/theming/test_shape_suggestion_drive.py",
 ]
 
@@ -161,10 +162,10 @@ tests = [
   "tests/theming/test_discovery_shelves_drive.py",
   "tests/theming/test_feature_switch_applies_live_drive.py",
   "tests/theming/test_folders_page_drive.py",
-  "tests/theming/test_import_a_library_drive.py",
+  "extensions/library_importer/tests/test_import_a_library_drive.py",
   "tests/theming/test_input_relay_drive.py",
   "tests/theming/test_input_table_drive.py",
-  "tests/theming/test_manager_back_button_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
   "tests/theming/test_manager_pages_drive.py",
   "tests/theming/test_setup_controls_drive.py",
   "tests/theming/test_vpx_settings_in_place_drive.py",
@@ -200,7 +201,7 @@ paths = ["manager/security/*", "common/security/*"]
 tests = [
   "tests/theming/test_manager_ask_first_drive.py",
   "tests/theming/test_manager_sign_in_notice_drive.py",
-  "tests/theming/test_remote_players_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
   "tests/theming/test_sign_in_drive.py",
 ]
 
@@ -225,7 +226,7 @@ tests = [
   "tests/theming/test_join_redirect_drive.py",
   "tests/theming/test_remote_controls_drive.py",
   "tests/theming/test_remote_games_drive.py",
-  "tests/theming/test_remote_players_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
   "tests/theming/test_remote_shell_drive.py",
   "tests/theming/test_remote_stars_drive.py",
   "tests/theming/test_remote_target_drive.py",
@@ -236,8 +237,8 @@ tests = [
 paths = ["manager/frontend/*", "common/players/*"]
 tests = [
   "tests/theming/test_player_picture_service_drive.py",
-  "tests/theming/test_players_drive.py",
-  "tests/theming/test_remote_players_drive.py",
+  "extensions/vpinplay/tests/test_players_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
 ]
 
 # Extensions, the host that runs them, and VPinPlay.
@@ -246,8 +247,8 @@ paths = ["common/extensions/*", "manager/extensions/*", "extensions/vpinplay/*"]
 tests = [
   "tests/extensions/test_links.py",
   "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
-  "tests/theming/test_community_menu_drive.py",
-  "tests/theming/test_players_drive.py",
+  "extensions/vpinplay/tests/test_community_menu_drive.py",
+  "extensions/vpinplay/tests/test_players_drive.py",
   "tests/theming/test_separation.py",
 ]
 

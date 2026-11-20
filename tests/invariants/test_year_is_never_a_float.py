@@ -27,7 +27,7 @@ SKIP = {"__pycache__", ".venv", "third_party"}
 
 def _sources():
     for area in SCANNED:
-        for path in sorted((REPO / area).rglob("*.py")):
+        for path in sorted(trees.source_files(REPO / area)):
             if not any(part in SKIP for part in path.parts):
                 yield path
 

@@ -29,7 +29,7 @@ ALLOWED: dict[tuple[str, int], str] = {
 
 
 def _sources() -> list[Path]:
-    return [path for root in ROOTS for path in sorted((REPO / root).rglob("*.py"))
+    return [path for root in ROOTS for path in sorted(trees.source_files(REPO / root))
             if path != HOME and "__pycache__" not in path.parts]
 
 

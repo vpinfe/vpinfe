@@ -1191,6 +1191,7 @@ body::before {
   border-top: 1px solid var(--line);
 }
 .manager-dialog-footer > .manager-dialog-aside { margin-right: auto; }
+.manager-dialog-tick { font-size: var(--fs-body); color: var(--ink); }
 .manager-dialog-footer .q-btn .q-icon { font-size: var(--icon-button); }
 /* A heading over what follows, its count or one quiet act on the same line. */
 .manager-band {

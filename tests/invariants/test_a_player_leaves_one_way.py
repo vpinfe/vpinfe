@@ -53,7 +53,7 @@ class APlayerLeavesOneWay(unittest.TestCase):
     def test_only_remove_player_takes_a_player_off_or_forgets_what_they_held(self) -> None:
         found: set[tuple[str, str]] = set()
         for root in SOURCE_ROOTS:
-            for path in sorted((REPO / root).rglob("*.py")):
+            for path in sorted(trees.source_files(REPO / root)):
                 if "__pycache__" not in path.parts:
                     found |= _callers(path, trees.tree_for(path))
 

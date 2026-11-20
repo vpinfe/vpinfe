@@ -63,7 +63,7 @@ def _annotates(tree: ast.Module) -> bool:
 def _modules() -> list[pathlib.Path]:
     out: list[pathlib.Path] = []
     for package in PACKAGES:
-        out.extend(p for p in sorted((REPO / package).rglob("*.py"))
+        out.extend(p for p in sorted(trees.source_files(REPO / package))
                    if "__pycache__" not in p.parts)
     return out
 

@@ -47,6 +47,7 @@ _FIELDS = (
     ("launcher", lambda state: state.get("launcher") or ""),
     ("player", lambda state: state.get("player") or ""),
     ("backup", lambda state: state.get("backup") or ""),
+    ("extension", lambda state: state.get("extension") or ""),
     ("entry", lambda state: state.get("entry") or ""),
     # Whose work Discovery's page shows: an author, a maker or a theme, one at a time.
     ("author", lambda state: _subject(state, "author")),
@@ -76,7 +77,8 @@ _ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": _PANEL, "slot": _PANEL,
             "collection": ("collections", "games"),
             "launcher": ("launchers", "tables"), "sets": ("tables",),
             "report": ("tables",), "group": ("tables", "media"),
-            "player": ("players",), "backup": ("backups",), "entry": ("discovery",),
+            "player": ("players",), "backup": ("backups",), "extension": ("extensions",),
+            "entry": ("discovery",),
             "author": ("discovery",), "maker": ("discovery",), "theme": ("discovery",)}
 
 SUBJECTS = ("author", "maker", "theme")
@@ -113,7 +115,7 @@ PANES = ("open", "list")
 
 # The state key that names the row picked on a page whose rows are not games.
 _PICKED_ON = {"collections": "collection", "launchers": "launcher", "players": "player",
-              "backups": "backup", "discovery": "entry"}
+              "backups": "backup", "extensions": "extension", "discovery": "entry"}
 
 
 def showing(state: dict[str, Any]) -> str:
@@ -273,7 +275,8 @@ def forget(state: dict[str, Any]) -> None:
     names and nothing the last place left behind."""
     for name in ("game", "table", "ext_row", "settings_page"):
         state[name] = ""
-    for name in ("collection", "launcher", "player", "backup", "entry", "sets", "subject"):
+    for name in ("collection", "launcher", "player", "backup", "extension", "entry", "sets",
+                 "subject"):
         state[name] = None
     for name in ("slot", "section", "log_view", "discovery_tab", "opening", "find", "pane"):
         state.pop(name, None)
@@ -334,6 +337,8 @@ def apply(state: dict[str, Any], params: dict[str, str], *,
         state["player"] = str(params["player"]).strip()
     if str(params.get("backup") or "").strip():
         state["backup"] = str(params["backup"]).strip()
+    if str(params.get("extension") or "").strip():
+        state["extension"] = str(params["extension"]).strip()
     if str(params.get("entry") or "").strip():
         state["entry"] = str(params["entry"]).strip()
     for kind in SUBJECTS:

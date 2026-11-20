@@ -85,6 +85,51 @@ class DiscoveryTests(_Probe):
         self.assertEqual(discovered, runner.modules(start, self.top))
 
 
+class ExtensionTestsTests(_Probe):
+    def test_a_linked_extension_s_tests_are_named_from_the_extensions_folder(self) -> None:
+        clone = self.top / "clones" / "alpha"
+        checkout = self.top / "checkout"
+        self.write({})
+        for relative in ("tests/__init__.py", "tests/test_a.py", "tests/inner/__init__.py",
+                         "tests/inner/test_b.py"):
+            (clone / relative).parent.mkdir(parents=True, exist_ok=True)
+            (clone / relative).write_text(textwrap.dedent(PASSING), encoding="utf-8")
+        (checkout / "extensions").mkdir(parents=True)
+        (checkout / "extensions" / "beta").mkdir()
+        try:
+            os.symlink(clone, checkout / "extensions" / "alpha", target_is_directory=True)
+        except OSError:
+            self.skipTest("a link needs a privilege here")
+        folder = checkout / "extensions" / "alpha" / "tests"
+
+        self.assertEqual([folder], runner.extension_tests(checkout))
+        self.assertEqual(["extensions.alpha.tests.inner.test_b", "extensions.alpha.tests.test_a"],
+                         runner.modules(folder, checkout))
+        with mock.patch.object(runner, "extension_tests", return_value=[folder]):
+            self.assertEqual(folder / "test_a.py", runner.locate(clone / "tests" / "test_a.py"))
+            self.assertEqual(folder, runner.locate(folder))
+            self.assertIsNone(runner.locate(self.top))
+
+    def test_a_whole_run_takes_the_tests_of_every_extension_that_has_them(self) -> None:
+        folder = runner.REPO / "extensions" / "alpha" / "tests"
+        real = runner.modules
+        asked: list[list[str]] = []
+
+        def modules(start: Path, top: Path = runner.REPO) -> list[str]:
+            return ["extensions.alpha.tests.test_a"] if start == folder else real(start, top)
+        with mock.patch.object(runner, "run_modules",
+                               side_effect=lambda names, *_: asked.append(list(names))), \
+                mock.patch.object(runner, "extension_tests", return_value=[folder]), \
+                mock.patch.object(runner, "modules", side_effect=modules), \
+                mock.patch.object(runner.wholesuite, "take", return_value=None), \
+                mock.patch.object(runner.wholesuite, "release"), \
+                mock.patch.object(runner.wholesuite, "record"), \
+                mock.patch.object(runner, "write_durations"), \
+                redirect_stderr(io.StringIO()):
+            runner.main(["-j", "1"])
+        self.assertIn("extensions.alpha.tests.test_a", asked[0])
+
+
 class RunTests(_Probe):
     def test_a_module_that_raises_on_import_fails_and_the_next_one_still_runs(self) -> None:
         self.write({"__init__.py": "", "test_a.py": BROKEN, "test_b.py": PASSING,

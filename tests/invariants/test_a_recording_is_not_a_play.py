@@ -85,7 +85,7 @@ def _tree_callers() -> set[tuple[str, str]]:
     writers = _play_data_writers()
     found: set[tuple[str, str]] = set()
     for root in SOURCE_ROOTS:
-        for path in sorted((REPO / root).rglob("*.py")):
+        for path in sorted(trees.source_files(REPO / root)):
             if path != PLAY_SERVICE:
                 found |= _callers_of(path, writers)
     return found

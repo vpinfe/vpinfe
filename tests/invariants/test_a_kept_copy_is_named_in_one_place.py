@@ -46,7 +46,7 @@ class AKeptCopyIsNamedInOnePlace(unittest.TestCase):
     def test_no_other_source_spells_the_marker(self) -> None:
         found = []
         for top in SCANNED:
-            for path in sorted((ROOT / top).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / top)):
                 relative = path.relative_to(ROOT).as_posix()
                 if relative in SPELLS_IT or "__pycache__" in path.parts:
                     continue

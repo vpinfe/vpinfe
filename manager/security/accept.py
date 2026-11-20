@@ -18,7 +18,7 @@ from manager.extensions import ext_mark
 from manager.kit import dialog as frame
 from manager.kit import panel, verbs
 
-__all__ = ["chips", "extension", "new_access", "theme", "themes"]
+__all__ = ["chips", "extension", "theme", "themes"]
 
 
 def chips(words: Sequence[str]) -> Callable[[], None]:
@@ -31,7 +31,8 @@ def chips(words: Sequence[str]) -> Callable[[], None]:
 
 
 async def _ask(title: str, lines: Sequence[str], answer: str, *,
-               rows: Sequence[tuple[Any, ...]] = (), closing: str = "") -> bool:
+               rows: Sequence[tuple[Any, ...]] = (), closing: str = "",
+               warning: str = "", understood: str = "") -> bool:
     with frame.opened(title, size="question") as box:
         for line in lines:
             ui.label(line).classes("manager-help")
@@ -39,9 +40,14 @@ async def _ask(title: str, lines: Sequence[str], answer: str, *,
             panel.facts(ui, rows)
         if closing:
             ui.label(closing).classes("manager-help")
+        if warning:
+            with ui.element("div").classes("manager-attention w-full"):
+                ui.icon(ext_mark.GLYPH).classes("manager-attention-icon")
+                ui.label(warning).classes("manager-attention-line")
+        ticked = frame.tick(understood) if understood else None
         with frame.footer():
             frame.cancel(lambda: box.submit(False))
-            frame.answer(answer, lambda: box.submit(True), icon=verbs.ACCEPT)
+            frame.answer(answer, lambda: box.submit(True), icon=verbs.ACCEPT, needs=ticked)
     return bool(await box)
 
 
@@ -82,15 +88,25 @@ async def themes(found: Sequence[tuple[str, str]]) -> bool:
 
 async def extension(name: str, version: str, *, author: str, source: str, path: str,
                     uses: Sequence[str], remote: Sequence[str] = (), replaces: str = "",
-                    replaces_version: str = "") -> bool:
-    """Whether to let this extension run. `uses` is what it says it uses, in words;
-    `remote` is what a Remote can open; `replaces` names the built-in it stands in for,
-    and `replaces_version` the one that comes with VPinFE."""
+                    changed: int = 0, claims_team: bool = False,
+                    added: Sequence[str] = (), was: str = "") -> bool:
+    """Whether to turn this unofficial extension on, asked every time it goes from off to on.
+
+    `uses` is what it says it uses, in words; `remote` is what a Remote can open. `replaces`
+    names the included extension whose name it uses, `changed` is how many of the files of
+    one installed from the Extension List differ since, and `claims_team` is an extension
+    that names the VPinFE team as its author or source. `added` is what a newer version asks
+    for beyond what was trusted, and `was` the version that was.
+    """
     lines = [t("manager.trust.ext_body", name=name)]
     if replaces:
-        lines.append(t("manager.trust.replaces_version", name=replaces,
-                       version=replaces_version) if replaces_version
-                     else t("manager.trust.replaces", name=replaces))
+        lines.append(t("manager.trust.ext_copy", name=replaces))
+    if changed:
+        lines.append(t("manager.trust.ext_changed", count=changed))
+    if claims_team:
+        lines.append(t("manager.trust.ext_claims_team"))
+    if was and was != version:
+        lines.append(t("manager.trust.access_body", was=was, version=version))
     rows: list[tuple[Any, ...]] = [(t("manager.ext_page.author"), author),
                                    (t("manager.ext_page.version_label"), version)]
     if source:
@@ -100,20 +116,9 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
     if path:
         rows.append((t("manager.ext_page.folder_path"), panel.path_value(path)))
     rows += _capability_rows(uses or [t("word.none")], remote)
-    return await _ask(t("manager.trust.ext_title"), lines, t("manager.trust.trust"),
-                      rows=rows, closing=t("manager.trust.ext_trust"))
-
-
-async def new_access(name: str, version: str, author: str, added: Sequence[str],
-                     remote: Sequence[str] = (), *, was: str = "") -> bool:
-    """Whether to let a newer version of an accepted extension use `added`, and let a Remote
-    open `remote`, which the version accepted did not say. `was` is that version, when it
-    is known. The author is shown again so an update says whose it is."""
-    rows: list[tuple[Any, ...]] = [(t("manager.ext_page.author"), author)]
-    if added or remote:
-        rows.append((t("manager.trust.new_capabilities"), chips([*added, *remote])))
-    body = (t("manager.trust.access_body", was=was, version=version) if was and was != version
-            else t("manager.trust.access_body_to", version=version))
-    return await _ask(t("manager.trust.access_title", name=name), [body],
-                      t("manager.trust.trust"), rows=rows,
-                      closing=t("manager.trust.access_stopped"))
+    if added:
+        rows.append((t("manager.trust.new_capabilities"), chips(added)))
+    return await _ask(t("manager.trust.ext_title"), lines, t("manager.trust.ext_button"),
+                      rows=rows, closing=t("manager.trust.ext_reported"),
+                      warning=t("manager.trust.ext_unsupported"),
+                      understood=t("manager.trust.ext_understand"))

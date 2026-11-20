@@ -8,7 +8,8 @@ from typing import Any
 
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
-from manager.extensions import ext_row
+from manager.extensions import ext_links, ext_row
+from manager.extensions import extensions as extensions_page
 from manager.frontend import launchers as launchers_page
 from manager.frontend import players as players_page
 from manager.frontend import themes as themes_page
@@ -67,6 +68,17 @@ def _launcher_verbs(context: dict[str, Any]) -> list[panel.Verb]:
 def _theme_verbs(context: dict[str, Any]) -> list[panel.Verb]:
     return themes_page.acts(context["library"], [context["theme"]],
                             partial(themes_page.changed, context))
+
+
+def _extension_verbs(context: dict[str, Any]) -> list[panel.Verb]:
+    """What the list can do to it, then the pages the extension itself links to."""
+    entry = context["extension"]
+    opened = [panel.Verb(str(one.get("label") or ""), to=str(one["url"]),
+                         hint=str(one.get("tip") or ""))
+              for one in ext_links.drawn(entry["record"] or {}, context["state"].get("host")
+                                         or ext_links.opened_at())]
+    return [*extensions_page.acts(context["library"], [entry],
+                                  partial(extensions_page.changed, context)), *opened]
 
 
 def _backup_verbs(context: dict[str, Any]) -> list[panel.Verb]:
@@ -199,6 +211,7 @@ SUBJECT_VERBS: dict[str, Callable[[dict[str, Any]], list[panel.Verb]]] = {
     "collection": _collection_verbs,
     "launcher": _launcher_verbs,
     "theme": _theme_verbs,
+    "extension": _extension_verbs,
     "device": _device_verbs,
     "player": _player_verbs,
     "backup": _backup_verbs,

@@ -21,6 +21,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Each included extension is a repository of its own, and its code is checked here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -68,6 +73,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # Each included extension is a repository of its own, and its code is checked here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
 
       - name: Set up Python
         uses: actions/setup-python@v6

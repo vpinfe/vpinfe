@@ -5,6 +5,9 @@
     python -m tests -j 1            in this process, one module after another
     python -m tests tests/theming   only what is under a path
 
+A whole run also takes the `tests` folder of every extension under `extensions/` that has one,
+and a path to such a folder runs just those.
+
 `python -m unittest discover -t . -s tests` stays the reference, and CI's command.
 """
 
@@ -79,8 +82,35 @@ def modules(start: Path, top: Path = REPO) -> list[str]:
     return found
 
 
+def extension_tests(top: Path = REPO) -> list[Path]:
+    """The `tests` folder of each extension under `extensions/` that has one."""
+    return [folder for folder in sorted((top / "extensions").glob("*/tests"))
+            if (folder / "__init__.py").is_file()]
+
+
+def locate(path: Path) -> Path | None:
+    """`path` where the runner names it from, or None when it is not one it runs.
+
+    Under `tests/` that is the resolved path. An extension's tests are named from
+    `extensions/`, where VPinFE loads it from, even when that is a link to a clone that sits
+    outside the checkout.
+    """
+    real = path.resolve()
+    if real.is_relative_to(PACKAGE):
+        return real
+    for folder in extension_tests():
+        inside = folder.resolve()
+        if real.is_relative_to(inside):
+            return folder / real.relative_to(inside)
+    return None
+
+
 def _name(path: Path, top: Path) -> str:
-    return ".".join(path.resolve().relative_to(top.resolve()).with_suffix("").parts)
+    try:
+        relative = Path(os.path.abspath(path)).relative_to(os.path.abspath(top))
+    except ValueError:
+        relative = path.resolve().relative_to(top.resolve())
+    return ".".join(relative.with_suffix("").parts)
 
 
 def _path(name: str, top: Path = REPO) -> Path:
@@ -526,7 +556,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="how many processes; 1 runs in this one (default: three "
                              "fifths of the cores)")
     parser.add_argument("paths", nargs="*", type=Path, default=[PACKAGE],
-                        help="a directory or a test file under tests/ (default: all of it)")
+                        help="a directory or a test file under tests/, or in an extension's "
+                             "tests folder (default: all of it)")
     parser.add_argument("--affected", nargs="?", const="HEAD", metavar="REV",
                         help="only what the changes since REV reach (default: HEAD, so the "
                              "working tree), plus the invariants; see tests/affected.py")
@@ -557,10 +588,14 @@ def main(argv: list[str] | None = None) -> int:
 
     names: list[str] = []
     for path in args.paths:
-        where = path.resolve()
-        if not where.exists() or not where.is_relative_to(PACKAGE):
-            parser.error(f"{path} is not a directory or a file under {PACKAGE}")
+        where = locate(path)
+        if where is None or not where.exists():
+            parser.error(f"{path} is not a directory or a file under {PACKAGE}, "
+                         "or in an extension's tests folder")
         names.extend(name for name in modules(where) if name not in names)
+    if args.paths == [PACKAGE]:
+        for folder in extension_tests():
+            names.extend(name for name in modules(folder) if name not in names)
     left_out: list[str] = []
     if (args.affected or args.paths == [PACKAGE]) and not args.release:
         left_out = release_only(names)

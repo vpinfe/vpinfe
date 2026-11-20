@@ -44,7 +44,7 @@ def owner_accepts(test: unittest.TestCase) -> Path:
     real = host.Registry._register
 
     def accepting(self: Any, record: Any, *, gated: bool = True) -> None:
-        if gated and record.manifest is not None and record.origin != accepted.SHIPPED:
+        if gated and record.manifest is not None and not accepted.is_official(record.origin):
             accepted.accept_extension(
                 record.name, record.origin, folder=record.folder,
                 version=record.manifest.version, scopes=record.manifest.scopes,

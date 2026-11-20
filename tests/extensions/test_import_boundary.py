@@ -18,7 +18,9 @@ import unittest
 
 from tests.support import trees
 
-EXTENSIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "extensions"
+REPO = pathlib.Path(__file__).resolve().parents[2]
+EXTENSIONS_DIR = REPO / "extensions"
+STAND_IN_DIR = REPO / "tests" / "fixtures" / "extensions"
 
 # The one module of ours an extension may import: the manifest types and the ABI. Its
 # reach into everything else is the context, which is handed to it and imported from
@@ -50,14 +52,21 @@ def _imports(tree: ast.AST) -> list[str]:
 
 
 def _sources() -> list[pathlib.Path]:
-    return sorted(path for path in EXTENSIONS_DIR.rglob("*.py")
-                  if "__pycache__" not in path.parts)
+    """Every extension source: the stand-ins, and each extension in `extensions/`, which
+    is a link to a clone, so the walk follows links. An extension's own tests import the
+    test kit and are not extension code."""
+    return sorted([*trees.source_files(STAND_IN_DIR), *trees.source_files(EXTENSIONS_DIR)])
 
 
 class ImportBoundaryTests(unittest.TestCase):
-    def test_there_are_extensions_to_check(self) -> None:
-        """A boundary test over an empty directory passes and means nothing."""
-        self.assertTrue(_sources(), f"No extension sources under {EXTENSIONS_DIR}")
+    def test_the_included_extensions_are_in_the_extensions_folder(self) -> None:
+        """Their code and their tests are repositories of their own, linked or cloned in."""
+        from scripts.fetch_extensions import INCLUDED
+        absent = [name for name in INCLUDED
+                  if not (EXTENSIONS_DIR / name / "extension.json").is_file()]
+        self.assertEqual([], absent,
+                         "Not in extensions/: clone each from its repository into that folder, "
+                         "or link a clone you work in")
 
     def test_an_extension_imports_the_contract_and_nothing_else_of_ours(self) -> None:
         for source in _sources():
@@ -68,9 +77,10 @@ class ImportBoundaryTests(unittest.TestCase):
                     continue
                 if module == CONTRACT or module.startswith(f"{CONTRACT}."):
                     continue
-                with self.subTest(source=source.name, module=module):
+                shown = f"{source.parent.name}/{source.name}"
+                with self.subTest(source=shown, module=module):
                     self.assertNotIn(root, FIRST_PARTY,
-                                     f"{source.relative_to(EXTENSIONS_DIR).as_posix()} imports "
+                                     f"{shown} imports "
                                      f"{module}; an extension reaches core through the "
                                      f"context it is given, or through {CONTRACT}")
 

@@ -38,6 +38,7 @@ GRID_OF = {
     "launcher": ("launchers.py", "acts", "launchers.py"),
     "theme": ("themes.py", "acts", "themes.py"),
     "device": ("devices.py", "acts", "devices.py"),
+    "extension": ("extensions.py", "acts", "extensions.py"),
     "player": ("players.py", "acts", "players.py"),
     "backup": ("backups.py", "acts", "backups.py"),
     "discovery": ("discovery.py", "acts", "discovery.py"),

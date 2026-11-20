@@ -67,6 +67,16 @@ datas = [(str(REPO_ROOT / root), root) for root in DATA_ROOTS]
 # The running release's notes, which the What's new page reads beside the archived ones.
 datas.append((str(REPO_ROOT / "RELEASE_NOTES.md"), "."))
 
+# What the extensions we ship are made of, so a changed one is known from an untouched one
+# on the device. Beside them in the build, never in the tree.
+sys.path.insert(0, str(REPO_ROOT))
+from common.extensions import fingerprint  # noqa: E402
+
+_FINGERPRINTS = fingerprint.write_build_list(
+    REPO_ROOT / "extensions", REPO_ROOT / "build" / "extension_fingerprints" / fingerprint.BUILD_LIST
+)
+datas.append((str(_FINGERPRINTS), "extensions"))
+
 # PyInstaller ships no pynput hook, so the backend it loads by name at runtime is invisible
 # to the import scan. Only X11 matters: the Windows and macOS backends are imported
 # normally.
@@ -77,7 +87,12 @@ def _extension_imports() -> list[str]:
     """Every module a bundled extension imports. Core loads an extension from its
     directory at runtime, so the import scan never reaches one."""
     found = set()
-    for path in (REPO_ROOT / "extensions").rglob("*.py"):
+    # os.walk, because rglob does not follow the links a development tree has in extensions/.
+    sources = [Path(folder) / name
+               for folder, folders, files in os.walk(REPO_ROOT / "extensions", followlinks=True)
+               if "tests" not in Path(folder).relative_to(REPO_ROOT / "extensions").parts[1:]
+               for name in files if name.endswith(".py")]
+    for path in sources:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
                 found.update(alias.name for alias in node.names)

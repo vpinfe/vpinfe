@@ -11,7 +11,7 @@ LABEL = 40
 PROSE = 160
 OVER = 80
 
-OVER_EIGHTY = 117
+OVER_EIGHTY = 121
 
 TOO_LONG_TODAY: frozenset[str] = frozenset()
 

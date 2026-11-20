@@ -332,6 +332,23 @@ class ApiClient:
         """The extension as it stands once accepted."""
         return self._post(f"/extensions/{quote(name, safe='')}/accept", {})
 
+    def extension_list(self) -> dict:
+        """The VPinFE Extension List as last fetched: `checked`, `entries`, `updates`."""
+        return self._get("/extensions/list")
+
+    def check_extension_list(self) -> dict:
+        return self._post("/extensions/list/check", {})
+
+    def update_extensions(self) -> dict:
+        return self._post("/extensions/list/update", {})
+
+    def install_extension(self, name: str) -> dict:
+        """Install, update or reinstall from the list. The list as it stands after."""
+        return self._post(f"/extensions/{quote(name, safe='')}/install", {})
+
+    def remove_extension(self, name: str) -> None:
+        self._delete(f"/extensions/{quote(name, safe='')}")
+
     def set_extension_enabled(self, name: str, on: bool) -> dict:
         """The extension as it stands after the switch."""
         return self._put(f"/extensions/{quote(name, safe='')}/enabled",

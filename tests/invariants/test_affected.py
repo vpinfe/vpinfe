@@ -78,6 +78,25 @@ class SelectionTests(unittest.TestCase):
         picked = self.pick("README.md", "docs/a/page", "releases/3.0")
         self.assertEqual((picked.paths, picked.whole_suite), ([affected.INVARIANTS], False))
 
+    def test_the_tests_an_extension_carries_are_picked_like_any_others(self) -> None:
+        files = {**FILES, "extensions/alpha/__init__.py": "",
+                 "extensions/alpha/tool.py": "import common.mid\n",
+                 "extensions/alpha/tests/__init__.py": "",
+                 "extensions/alpha/tests/test_tool.py": "from extensions.alpha import tool\n"}
+        for name, source in files.items():
+            (self.repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / name).write_text(source, encoding="utf-8")
+        mine = "extensions/alpha/tests/test_tool.py"
+
+        for changed in ("extensions/alpha/tests/test_tool.py", "extensions/alpha/tool.py",
+                        "common/mid.py"):
+            with self.subTest(changed=changed):
+                picked = affected.select(self.repo, [changed], list(files), AREAS)
+                self.assertFalse(picked.whole_suite)
+                self.assertIn(mine, picked.paths)
+        self.assertNotIn(mine, affected.select(self.repo, ["common/alone.py"], list(files),
+                                               AREAS).paths)
+
     def test_a_module_no_test_reaches_selects_the_whole_suite_and_says_which(self) -> None:
         picked = self.pick("common/alone.py")
         self.assertTrue(picked.whole_suite)
@@ -138,6 +157,33 @@ class ChangedFileTests(unittest.TestCase):
         self.assertEqual(affected.changed_files(repo, "HEAD"), ["new.py"])
         self.assertEqual(affected.changed_files(repo, "HEAD~1"), ["edited.py", "new.py"])
 
+    def test_an_extension_that_is_its_own_repository_adds_its_own_changes(self) -> None:
+        repo = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        clone = repo / "extensions" / "alpha"
+        clone.mkdir(parents=True)
+
+        def git(where: Path, *args: str) -> None:
+            subprocess.run(["git", "-C", str(where), "-c", "user.name=t", "-c",
+                            "user.email=t@t", "-c", "commit.gpgsign=false", "-c",
+                            "core.hooksPath=/dev/null", *args], check=True,
+                           capture_output=True, env=affected.git_env())
+        git(repo, "init", "-q")
+        (repo / ".gitignore").write_text("extensions/\n", encoding="utf-8")
+        (repo / "kept.py").write_text("a = 1\n", encoding="utf-8")
+        git(repo, "add", ".")
+        git(repo, "commit", "-q", "-m", "first")
+        git(clone, "init", "-q")
+        (clone / "tool.py").write_text("a = 1\n", encoding="utf-8")
+        git(clone, "add", ".")
+        git(clone, "commit", "-q", "-m", "first")
+        (clone / "tool.py").write_text("a = 2\n", encoding="utf-8")
+        (clone / "new.py").write_text("b = 1\n", encoding="utf-8")
+
+        self.assertEqual(affected.changed_files(repo, "HEAD"),
+                         ["extensions/alpha/new.py", "extensions/alpha/tool.py"])
+        self.assertEqual(affected.python_files(repo),
+                         ["kept.py", "extensions/alpha/new.py", "extensions/alpha/tool.py"])
+
     def test_a_revision_that_names_nothing_is_an_error_with_git_s_words(self) -> None:
         with self.assertRaises(ValueError) as caught:
             affected.changed_files(REPO, "no-such-revision")
@@ -148,6 +194,9 @@ class MapTests(unittest.TestCase):
     def test_every_area_names_files_that_exist(self) -> None:
         for area in affected.read_map():
             for path in area["tests"]:
+                if path.startswith("extensions/") and not (
+                        REPO / path.split("/tests/")[0]).is_dir():
+                    continue
                 self.assertTrue((REPO / path).is_file(), path)
             self.assertTrue(area["paths"], area)
 
@@ -155,6 +204,8 @@ class MapTests(unittest.TestCase):
         tree = affected._git(REPO, "ls-files", "--cached", "--others", "--exclude-standard")
         for area in affected.read_map():
             for pattern in area["paths"]:
+                if pattern.startswith("extensions/"):
+                    continue
                 self.assertTrue(any(fnmatch(name, pattern) for name in tree), pattern)
 
     def test_what_a_test_reads_without_importing_it_selects_that_test(self) -> None:
@@ -169,7 +220,9 @@ class MapTests(unittest.TestCase):
 
     def test_every_module_that_opens_a_browser_is_in_some_area(self) -> None:
         mapped = {path for area in affected.read_map() for path in area["tests"]}
-        drives = {path.relative_to(REPO).as_posix() for path in (REPO / "tests").rglob("test_*.py")
+        found = [*(REPO / "tests").rglob("test_*.py"),
+                 *(REPO / "extensions").glob("*/tests/test_*.py")]
+        drives = {path.relative_to(REPO).as_posix() for path in found
                   if "BrowserSession(" in path.read_text(encoding="utf-8")
                   and "invariants" not in path.parts}
         self.assertEqual(sorted(drives - mapped), [])

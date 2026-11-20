@@ -1,19 +1,17 @@
-"""One extension's own page, in Settings under Extensions: whether it is on, what it is set
-to, what it can be asked to do, what it holds and what it can reach.
+"""The pieces of one extension's panel on the Extensions page that are about the
+extension itself: whether it is on, what it is set to, what it can be asked to do and what
+it says it can reach.
 
 Core draws all of it. The extension says what its settings are, what its actions are and
-what it is holding; none of the treatment is its own, so an extension's page looks like
-the Manager rather than like whoever wrote it - and it keeps working if that extension
-later runs somewhere else.
-
-Who made it and where it comes from come first, under the name, because that is what
-somebody reads before they decide to leave it on.
+what it is holding; none of the treatment is its own, so an extension looks like the
+Manager rather than like whoever wrote it - and it keeps working if that extension later
+runs somewhere else. Where it came from and whether it can be updated belong to the page
+itself (`manager.extensions.extensions`).
 """
 
 from __future__ import annotations
 
 import copy
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import quote
@@ -24,28 +22,19 @@ from common.extensions import host
 from common.failures import why
 from common.i18n import t
 from common.security import accepted
-from manager.extensions import ext_action, ext_links, ext_mark
+from manager.extensions import ext_action, ext_mark
 from manager.kit import confirm, deeplink, offload, panel, verbs
 from manager.kit.api import ApiClient
 from manager.kit.on_page import on_page
 from manager.security import accept
 
-PREFIX = "extensions."
-
 STATE_WORDS = {host.FAILED: "manager.ext_page.failed",
                host.DISABLED: "manager.ext_page.stopped"}
 
 
-def key(name: str) -> str:
-    """The Settings page that is this extension's."""
-    # Lowercase: the address clean-up lowercases `page`, and a refused extension keeps its
-    # folder's name as it was written.
-    return (PREFIX + name).lower()
-
-
 def address(name: str) -> str:
-    """Where one extension's page is, for a link from anywhere in the Manager."""
-    return "/manager?" + deeplink.query({"view": "settings", "settings_page": key(name)})
+    """Where one extension is, for a link from anywhere in the Manager."""
+    return "/manager?" + deeplink.query({"view": "extensions", "extension": name})
 
 
 async def read(extension: dict) -> dict[str, Any]:
@@ -61,63 +50,53 @@ async def read(extension: dict) -> dict[str, Any]:
         return {"error": why(exc)}
 
 
-def build(extension: dict, settings: dict[str, Any], refill: Callable[[], None],
-          open_this_device: Callable[[], None]) -> None:
-    """Draw the page for one extension, from what `read` found."""
+def enabled_row(extension: dict, refill: Callable[[], None]) -> tuple[Any, ...]:
+    """The switch, which shows what was chosen and not what is running. Turning on one that
+    VPinFE does not stand behind asks first."""
     name = str(extension.get("name") or "")
-    running = extension.get("state") == host.LOADED
-    surfaces = dict(extension.get("surfaces") or {})
-    client = ApiClient()
-
-    panel.header(str(extension.get("display_name") or name),
-                 str(extension.get("description") or ""),
-                 _findings(extension, open_this_device, refill),
-                 caption=_caption(extension),
-                 menu=[panel.Verb(one["label"], to=one["url"], tip=one["tip"])
-                       for one in ext_links.drawn(extension, ext_links.opened_at())],
-                 chip=_origin_chip(extension), picture=_picture(extension))
 
     @on_page
     async def flip(event: Any) -> None:
+        if event.value and asks_before_on(extension):
+            await trust_and_turn_on(extension, extension)
+            refill()
+            return
         try:
-            await offload.io(client.set_extension_enabled, name, bool(event.value))
+            await offload.io(ApiClient().set_extension_enabled, name, bool(event.value))
         except Exception as exc:  # noqa: BLE001
             ui.notify(t("said.on_failed" if event.value else "said.off_failed"),
                       caption=why(exc), type="negative")
         refill()
 
-    entries: list[tuple[Any, ...]] = _about_rows(extension)
-    entries += [(panel.HEADING, t("manager.ext_page.settings")),
-                (t("manager.ext_page.enabled"),
-                 panel.switch(bool(extension.get("enabled", True)), flip))]
-    if extension.get("reason_key") == host.STARTS_AT_RESTART:
-        entries.append(panel.note(t(host.STARTS_AT_RESTART)))
-    entries += _setting_rows(client, f"/ext/{name}{surfaces.get('settings', '')}",
-                             settings, refill)
-    if extension.get("has_settings") and not running and not _cannot_run(extension):
-        entries.append(panel.note(t("manager.ext_page.settings_when_running")))
+    return (t("manager.ext_page.enabled"),
+            panel.switch(bool(extension.get("enabled", True)), flip))
 
+
+def settings_entries(extension: dict, settings: dict[str, Any],
+                     refill: Callable[[], None]) -> list[tuple[Any, ...]]:
+    """What the extension is set to and what it can be asked to do, from what `read`
+    found. Nothing for an extension that has neither."""
+    name = str(extension.get("name") or "")
+    running = extension.get("state") == host.LOADED
+    surfaces = dict(extension.get("surfaces") or {})
+    entries = setting_rows(ApiClient(), f"/ext/{name}{surfaces.get('settings', '')}",
+                           settings, refill)
+    if extension.get("has_settings") and not running and not cannot_run(extension):
+        entries.append(panel.note(t("manager.ext_page.settings_when_running")))
     offered = list(extension.get("actions") or []) if running else []
     if offered:
         entries += [(panel.HEADING, t("word.actions")),
                     (panel.FULL, lambda: _actions(offered, name, refill))]
-    panel.facts(ui, entries)
+    return entries
 
 
-def _caption(extension: dict) -> str:
-    """Whose it is and which version, under the name. Either alone when it has only one."""
-    author = str(extension.get("author") or "")
-    version = str(extension.get("version") or "")
-    return " \u00b7 ".join(part for part in (
-        author, t("manager.ext_page.version", version=version) if version else "") if part)
-
-
-def _origin_chip(extension: dict) -> Callable[[], None] | None:
+def origin_chip(extension: dict) -> Callable[[], None] | None:
     """What not coming from VPinFE makes it, by its name, for anything VPinFE did not
-    ship. The picture is the author's to choose, so this is what stops it passing as
-    official."""
+    ship or list. The picture is the author's to choose, so this is what stops it passing
+    as official."""
     trust = dict(extension.get("trust") or {})
-    if not trust or trust.get("origin") == accepted.SHIPPED:
+    if not trust or (accepted.is_official(str(trust.get("origin")))
+                     and not extension.get("left_list")):
         return None
     stopped = not trust.get("accepted")
     tip = t("manager.ext_page.unofficial_tip")
@@ -129,7 +108,7 @@ def _origin_chip(extension: dict) -> Callable[[], None] | None:
                        "bad" if stopped else "warn", hint=tip, glyph=ext_mark.GLYPH)
 
 
-def _picture(extension: dict) -> Callable[[], None] | None:
+def picture(extension: dict) -> Callable[[], None] | None:
     """The frame before the name: its own picture once it is shipped or accepted, and the
     mark every extension has until then. None for one whose manifest was refused, which
     has no identity to show."""
@@ -150,40 +129,9 @@ def _picture(extension: dict) -> Callable[[], None] | None:
     return draw
 
 
-def _home_shown(home: str) -> str:
-    return re.sub(r"^https?://", "", home).rstrip("/")
-
-
-def _about_rows(extension: dict) -> list[tuple[Any, ...]]:
-    """Where it comes from and what its author says it uses, above the switch.
-
-    Nothing for an extension that did not load a manifest: a refused one says why in its
-    finding and has no identity to list. The two addresses are rows of their own even when
-    they are the same, so each can be told apart from the other by its label.
-    """
-    if not extension.get("author"):
-        return []
-    trust = dict(extension.get("trust") or {})
-    entries: list[tuple[Any, ...]] = []
-    home, source = str(extension.get("home") or ""), str(extension.get("source") or "")
-    if home:
-        entries.append((t("manager.ext_page.home"),
-                        panel.link_out(_home_shown(home), to=home, hint=home,
-                                       rel="noopener noreferrer")))
-    if source:
-        entries.append((t("manager.ext_page.source"),
-                        panel.link_out(ext_mark.source_shown(source), to=source, hint=source,
-                                       rel="noopener noreferrer")))
-    if trust and trust.get("origin") != accepted.SHIPPED and extension.get("path"):
-        entries.append((t("manager.ext_page.folder_path"),
-                        panel.path_value(str(extension["path"]))))
-    entries += _reported_rows(extension)
-    return [(panel.HEADING, t("manager.ext_page.about")), *entries]
-
-
-def _reported_rows(extension: dict) -> list[tuple[Any, ...]]:
-    """What the author says it uses, in one row: each word already says what it touches.
-    Last in About, with the line that says VPinFE has not checked it."""
+def reported_rows(extension: dict, help_line: str) -> list[tuple[Any, ...]]:
+    """What the author says it uses, each word saying what it touches, with `help_line`
+    under it when there is something to say about how far that can be trusted."""
     words = [_plainly(str(one)) for one in
              [*(extension.get("scopes") or []), *(extension.get("capabilities") or [])]]
     _, remote = _remote_names([f"{PLAY_PREFIX}{one}" for one in extension.get("play") or []])
@@ -192,16 +140,18 @@ def _reported_rows(extension: dict) -> list[tuple[Any, ...]]:
         entries.append((t("manager.trust.uses"), _chips(words)))
     if remote:
         entries.append((t("manager.trust.remote"), _chips(remote)))
-    return [*entries, panel.note(t("manager.ext_page.reach_help"))] if entries else []
+    if entries and help_line:
+        entries.append(panel.note(help_line))
+    return entries
 
 
-def _cannot_run(extension: dict) -> bool:
+def cannot_run(extension: dict) -> bool:
     """Not offered on this machine, so it never starts and its settings never show."""
     return extension.get("state") == host.OFF and extension.get("reason_key") in (
         host.WRONG_PLATFORM, host.LACKS_FEATURES)
 
 
-def _findings(extension: dict, open_this_device: Callable[[], None],
+def findings(extension: dict, open_this_device: Callable[[], None],
               refill: Callable[[], None]) -> list[Callable[[], None]]:
     """What stops it, under the header. Nothing for one that is running or only switched
     off, which the switch already says."""
@@ -212,15 +162,15 @@ def _findings(extension: dict, open_this_device: Callable[[], None],
     if waiting.get("reason_key") == host.NOT_ACCEPTED:
         return [_unaccepted(extension, waiting, refill)]
     if waiting.get("reason_key") == host.STARTS_AT_RESTART:
-        return [_finding(t("manager.ext_page.replacement_trusted"),
+        return [finding(t("manager.ext_page.replacement_trusted"),
                          t(host.STARTS_AT_RESTART))]
-    if _cannot_run(extension):
+    if cannot_run(extension):
         fix = panel.action(t("manager.ext_page.open_device"), open_this_device,
                            icon=verbs.GO, hint=t("manager.ext_page.open_hint")) \
             if extension.get("reason_key") == host.LACKS_FEATURES else None
-        return [_finding(t("manager.ext_page.cannot_run"), said, fix)]
+        return [finding(t("manager.ext_page.cannot_run"), said, fix)]
     if state in STATE_WORDS:
-        return [_finding(t(STATE_WORDS[str(state)]), said)]
+        return [finding(t(STATE_WORDS[str(state)]), said)]
     return []
 
 
@@ -228,52 +178,67 @@ def _unaccepted(extension: dict, copy: dict, refill: Callable[[], None]
                 ) -> Callable[[], None]:
     """It is stopped until the Owner says yes. `copy` is what would run: the extension
     itself, or the installed copy that would replace this built-in."""
-    name = str(extension.get("name") or "")
-    trust = dict(copy.get("trust") or {})
-    new, new_remote = _remote_names([str(one) for one in trust.get("new_access") or []])
-    new = [_plainly(one) for one in new]
     own = copy is extension
 
     @on_page
     async def decide() -> None:
-        shown = str(extension.get("display_name") or name)
-        version = str(copy.get("version") or "")
-        author = str(copy.get("author") or "")
-        if trust.get("accepted_before"):
-            yes = await accept.new_access(shown, version, author, new, new_remote,
-                                          was=str(trust.get("accepted_version") or ""))
-        else:
-            used, remote = _remote_names(
-                [str(one) for one in trust.get("uses") or copy.get("uses") or []])
-            replacing = trust.get("origin") == accepted.REPLACES and not own
-            yes = await accept.extension(
-                shown, version, author=author, source=str(copy.get("source") or ""),
-                path=str(copy.get("path") or ""),
-                uses=[_plainly(one) for one in used], remote=remote,
-                replaces=shown if replacing else "",
-                replaces_version=str(extension.get("version") or "") if replacing else "")
-        if not yes:
-            return
-        try:
-            await offload.io(ApiClient().accept_extension, name)
-        except Exception as exc:  # noqa: BLE001
-            ui.notify(t("manager.ext_page.trust_failed"), caption=why(exc), type="negative")
-            return
+        await trust_and_turn_on(extension, copy)
         refill()
 
-    fix = panel.action(t("manager.trust.trust"), decide, icon=verbs.ACCEPT,
+    fix = panel.action(t("manager.trust.ext_button"), decide, icon=verbs.ACCEPT,
                        hint=t("manager.ext_page.accept_hint"))
     if own:
-        return _finding(t("manager.ext_page.not_trusted"),
+        return finding(t("manager.ext_page.not_trusted"),
                         t("manager.ext_page.not_trusted_detail"), fix)
-    return _finding(t("manager.ext_page.replacement_waiting"),
+    return finding(t("manager.ext_page.replacement_waiting"),
                     t("manager.ext_page.replacement_detail",
                       version=str(copy.get("version") or ""),
                       author=str(copy.get("author") or "")),
                     fix)
 
 
-def _finding(line: str, detail: str,
+def asks_before_on(extension: dict) -> bool:
+    """Whether turning it on asks first: anything VPinFE did not ship. One whose manifest was
+    refused has nothing to ask about."""
+    trust = dict(extension.get("trust") or {})
+    return bool(trust and extension.get("author")
+                and not accepted.is_official(str(trust.get("origin"))))
+
+
+async def trust_and_turn_on(extension: dict, copy: dict) -> bool:
+    """Ask the notice about `copy`, the extension itself or the installed copy waiting behind
+    an included one, and on a yes record the answer and turn it on. False when it was
+    declined or could not be done; a failure is said on screen."""
+    name = str(extension.get("name") or "")
+    trust = dict(copy.get("trust") or {})
+    shown = str(extension.get("display_name") or name)
+    used, remote = _remote_names(
+        [str(one) for one in trust.get("uses") or copy.get("uses") or []])
+    new, new_remote = _remote_names([str(one) for one in trust.get("new_access") or []])
+    before = bool(trust.get("accepted_before"))
+    yes = await accept.extension(
+        shown, str(copy.get("version") or ""), author=str(copy.get("author") or ""),
+        source=str(copy.get("source") or ""), path=str(copy.get("path") or ""),
+        uses=[_plainly(one) for one in used], remote=remote,
+        replaces=shown if trust.get("origin") == accepted.REPLACES else "",
+        changed=len(trust.get("changed_files") or []),
+        claims_team=bool(trust.get("claims_team")),
+        added=[*(_plainly(one) for one in new), *new_remote] if before else [],
+        was=str(trust.get("accepted_version") or "") if before else "")
+    if not yes:
+        return False
+    try:
+        client = ApiClient()
+        await offload.io(client.accept_extension, name)
+        if copy is extension:
+            await offload.io(client.set_extension_enabled, name, True)
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(t("manager.ext_page.trust_failed"), caption=why(exc), type="negative")
+        return False
+    return True
+
+
+def finding(line: str, detail: str,
              fix: Callable[[], None] | None = None) -> Callable[[], None]:
     def draw() -> None:
         with ui.element("div").classes("manager-attention w-full"):
@@ -288,7 +253,7 @@ def _finding(line: str, detail: str,
     return draw
 
 
-def _setting_rows(client: Any, base: str, found: dict[str, Any],
+def setting_rows(client: Any, base: str, found: dict[str, Any],
                   refill: Callable[[], None]) -> list[tuple[Any, ...]]:
     """What the extension is configured with, saved as each field is left."""
     if found.get("error"):

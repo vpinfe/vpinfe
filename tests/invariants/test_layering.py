@@ -136,7 +136,7 @@ def _upward_imports() -> list[tuple[str, str]]:
 
 def _offenders(package: str, forbidden: set[str]) -> list[str]:
     out = []
-    for path in sorted((REPO / package).rglob("*.py")):
+    for path in sorted(trees.source_files(REPO / package)):
         if "__pycache__" in path.parts:
             continue
         relative = path.relative_to(REPO).as_posix()

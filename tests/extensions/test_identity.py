@@ -380,7 +380,8 @@ class EveryManifestInTheTree(unittest.TestCase):
             with self.subTest(path=path.parent.name):
                 shipped = contract.read_manifest(path.parent)
                 self.assertEqual(shipped.author, "VPinFE")
-                self.assertEqual(shipped.repository, "vpinfe/vpinfe")
+                self.assertEqual(shipped.repository,
+                                 f"vpinfe/extension-{path.parent.name.replace('_', '-')}")
                 self.assertEqual(shipped.picture, "logo.png")
                 contract.check_picture(path.parent, shipped)
 

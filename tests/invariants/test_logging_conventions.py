@@ -35,7 +35,7 @@ def _modules() -> list[pathlib.Path]:
     out: list[pathlib.Path] = []
     for package in AREAS:
         out.extend(
-            path for path in sorted((REPO / package).rglob("*.py"))
+            path for path in sorted(trees.source_files(REPO / package))
             if "__pycache__" not in path.parts
         )
     return out

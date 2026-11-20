@@ -17,6 +17,7 @@ from common.media import folder_browse
 from common.media.media_specs import MEDIA_SPECS, media_family
 from common.online import sources as source_registry
 from common.runtime.jobs import KIND_MEDIA_FILL
+from common.security import accepted
 from manager.kit import art, game_tables, media_ownership, need_keys, thumbnails, when
 from manager.kit.api import ApiClient, updates_shown
 from manager.kit.thumbnails import Look
@@ -153,6 +154,28 @@ def tag_source(said: dict[str, Any]) -> str:
     return t("manager.tags.source", extension=str(said.get("display_name")
                                                  or said.get("extension") or ""),
              title=str(said.get("title") or said.get("list") or ""))
+
+
+def extension_list_held(listed: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the kept extension list and the installed extensions say needs doing: the
+    updates the list offers, the extensions whose files changed since they were installed,
+    and the ones the list dropped."""
+    by_name = {str(one.get("name") or ""): one for one in listed.get("entries") or ()}
+    updates = [{"name": name, "display_name": str((by_name.get(name) or {})
+                                                  .get("display_name") or name)}
+               for name in listed.get("updates") or ()]
+    return {
+        "updates": updates,
+        "changed": [{"name": str(one["name"]),
+                     "display_name": str(one.get("display_name") or one["name"]),
+                     "count": len((one.get("trust") or {}).get("changed_files") or ())}
+                    for one in records
+                    if one.get("origin") == accepted.CHANGED
+                    and one["name"] in by_name
+                    and not (one.get("trust") or {}).get("accepted")],
+        "left": [{"name": str(one["name"]),
+                  "display_name": str(one.get("display_name") or one["name"])}
+                 for one in records if one.get("left_list")]}
 
 
 def read_state(said: dict[str, Any]) -> str:
@@ -743,6 +766,22 @@ class Library:
 
     def accept_extension(self, name: str) -> dict:
         return self._client.accept_extension(name)
+
+    def extension_list(self, check: bool = False) -> dict:
+        """The VPinFE Extension List as last fetched, or fetched again for `check`."""
+        return self._client.check_extension_list() if check else self._client.extension_list()
+
+    def update_extensions(self) -> dict:
+        return self._client.update_extensions()
+
+    def install_extension(self, name: str) -> dict:
+        return self._client.install_extension(name)
+
+    def remove_extension(self, name: str) -> None:
+        self._client.remove_extension(name)
+
+    def set_extension_enabled(self, name: str, on: bool) -> dict:
+        return self._client.set_extension_enabled(name, on)
 
     def remove_theme(self, key: str) -> dict:
         return self._client.remove_theme(key)
@@ -1441,8 +1480,8 @@ class Library:
         for found, unread in together(
                 self._watch_update, self._watch_recordings, self._watch_fill,
                 self._watch_extension_needs, self._watch_unaccepted,
-                self._watch_home, self._watch_leftovers, self._watch_logging,
-                self._watch_asks, self._watch_media):
+                self._watch_extension_list, self._watch_home, self._watch_leftovers,
+                self._watch_logging, self._watch_asks, self._watch_media):
             out.update(found)
             out["unread"] += unread
         return out
@@ -1495,6 +1534,18 @@ class Library:
         except Exception:  # noqa: BLE001 - what waits to be accepted is not Overview's to fail on
             logger.debug("manager: could not read what waits to be accepted", exc_info=True)
             return {}, ["unaccepted"]
+
+    def _watch_extension_list(self) -> tuple[dict[str, Any], list[str]]:
+        """What the extension list and the files on disk say needs doing: updates the list
+        offers, extensions whose files changed, and extensions the list dropped. The kept
+        list is read, never fetched, so being offline changes nothing here."""
+        try:
+            listed = self._client.extension_list()
+            records = self._client.extensions()
+        except Exception:  # noqa: BLE001 - not Overview's to fail on
+            logger.debug("manager: could not read the extension list", exc_info=True)
+            return {}, ["extensions"]
+        return {"extension_list": extension_list_held(listed, records)}, []
 
     def _watch_home(self) -> tuple[dict[str, Any], list[str]]:
         try:

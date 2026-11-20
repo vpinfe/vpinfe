@@ -39,7 +39,7 @@ def _offenders() -> tuple[int, list[str]]:
     walked = 0
     found = []
     for folder in SCANNED:
-        for path in sorted((REPO / folder).rglob("*.py")):
+        for path in sorted(trees.source_files(REPO / folder)):
             rel = path.relative_to(REPO).as_posix()
             for node in ast.walk(trees.tree_for(path)):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

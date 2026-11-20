@@ -13,6 +13,10 @@ A person who needs help makes a package from **About** or **Logs** in the Manage
 
 Every byte went through one redactor and the text is English whatever language the Manager was set to, so a report reads the same from any install.
 
+## While an unofficial extension runs
+
+A package is not made while an extension VPinFE's team does not stand behind is running, because it could have changed what is being reported. The Manager says which ones and offers **Turn Off Unofficial Extensions and Restart**; VPinFE restarts with them off, the package opens again by itself, and the run before the restart is still offered as the Previous Log. The extensions stay off until the person turns them back on from Extensions. The API answers `409` for the same reason.
+
 ## The summary
 
 Sections come in a fixed order, and each is one collector that never raises: a section it could not read says `Not reported` with the reason, which is a finding, not a gap.
@@ -25,7 +29,7 @@ Sections come in a fixed order, and each is one collector that never raises: a s
 | Frontend Browser | The browser the frontend runs in: its version, what it plays, what it can draw and decode (WebGL, WebGPU, H.264 and VP9 at 1080p, whether drawing falls back to the processor), and which options VPinFE adds. Only what the frontend's own window reported: a browser that has not run says `Not tested`, not `Not available` |
 | Launchers And Programs | Each launcher's program and settings file (present, executable, size and date, the version a bundle or file records, the Rev and plugins its settings file lists), the programs VPinFE runs itself, the libraries it ships and the last launch command from the log. Visual Pinball is never run to ask its version |
 | Selected Settings | An allow-list of the settings that decide how VPinFE behaves on the device. A setting is there because it is named, files that hold secrets are never opened and a launcher's free text is left out |
-| Extensions And Themes | What is installed, at which version, and whether VPinFE runs it. Names and versions only |
+| Extensions And Themes | What is installed, at which version, and whether VPinFE runs it. Each extension also says where it is from (included with VPinFE, from the Extension List, changed since VPinFE put it there, or unofficial), its repository and release, and its fingerprint, and a line above the list names the unofficial ones and whether each is on or off. Names, versions and fingerprints only: no path. `vpinfe --support-package` starts no extension, so it reads the extension folders and calls each one on or off by its switch |
 | Where Things Live | The folders and files the install reads, as About lists them, with the person's own folders replaced |
 | Health Now | Error and warning counts in this run's log and the most repeated messages, each with a count (`3x`) |
 

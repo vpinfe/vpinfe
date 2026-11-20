@@ -299,7 +299,7 @@ extension contributes to. `getVPinPlayRating`, `refreshVPinPlayRating` and
 `entry.ext.vpinplay`, so a published theme cannot tell. The one thing a theme could do
 that reading a slot cannot is force a refetch after rating a table, which is what this
 method is for. Covered by `tests/extensions/test_contributions.py` and
-`tests/extensions/test_vpinplay.py`.
+`extensions/vpinplay/tests/test_vpinplay.py`.
 
 **PAR-83 — `Last Played` derives itself instead of being maintained.** It used to be a
 collection the launcher wrote to on every launch — push the game onto the front of a member
@@ -1627,7 +1627,7 @@ wants the video asks for `"full_dmd_video"`.
 file layout names it `(FullDMD)`. PinballX's FullDMD Videos folder and Popper's Menu folder,
 which Popper uses for that screen, import into these kinds.
 Covered by `tests/media/test_media_resolution.py`, `tests/media/test_asset_registry.py` and
-`tests/importer/test_mapping.py`.
+`extensions/library_importer/tests/test_mapping.py`.
 
 **PAR-114 - The page reports the named action it answered.** One WebSocket method,
 `report_input_action`, carries the name of an input action the page just answered (Take Picture,

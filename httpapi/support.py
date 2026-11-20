@@ -33,6 +33,9 @@ def _built(options: models.SupportOptions) -> package.Package:
         return package.hold(package.build_package(chosen))
     except package.PackageTooLargeError:
         raise HTTPException(status_code=413, detail="The package is too large") from None
+    except package.UnofficialRunningError as exc:
+        raise HTTPException(status_code=409, detail="A package is not made while unofficial "
+                            f"extensions run: {', '.join(exc.names)}") from None
 
 
 @router.post("", summary="Make a support package for review",

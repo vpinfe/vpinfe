@@ -17,7 +17,7 @@ def _calls() -> list[tuple[str, ast.Call]]:
     """(where, call) for every `t()` given a parameter."""
     found = []
     for top in SOURCES:
-        for path in sorted((ROOT / top).rglob("*.py")):
+        for path in sorted(trees.source_files(ROOT / top)):
             for node in ast.walk(trees.tree_for(path)):
                 if isinstance(node, ast.Call) and node.keywords and "t" in (
                         getattr(node.func, "id", None), getattr(node.func, "attr", None)):

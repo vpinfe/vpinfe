@@ -23,7 +23,7 @@ from tests.support.browser_session import BrowserSession, chromium_path
 from tests.support.library import game_info, write_game
 from tests.support.live_instance import REPO_ROOT, LiveInstance
 from tests.support.manager_walk import ManagerWalk
-from tests.theming.test_players_drive import (
+from tests.support.players_page import (
     ACTS,
     AT,
     DIALOG,

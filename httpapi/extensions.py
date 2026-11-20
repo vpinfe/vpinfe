@@ -16,9 +16,11 @@ import anyio
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from common import extensions
+from common import extensions, service_errors
 from common.extensions import accounts, pictures, serving
+from common.failures import why
 from common.i18n import t
+from common.online import extension_ops
 
 from . import extensions_served, models, responses, scopes
 from .auth import requires
@@ -45,6 +47,56 @@ def get_extension_needs() -> dict:
     opens. `away` names the extensions whose needs could not be read, which a dismissal
     kept against them must outlast."""
     return serving.needs_all(extensions.records())
+
+
+@router.get("/list", summary="The VPinFE Extension List as last fetched",
+            dependencies=[requires(scopes.INSTANCE_READ)])
+def get_extension_list() -> dict:
+    """`checked` is when it was last fetched, empty if never; each entry says what this
+    install has of it. Makes no request."""
+    return extension_ops.state()
+
+
+@router.post("/list/check", summary="Fetch the VPinFE Extension List again",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def check_extension_list() -> dict:
+    try:
+        return extension_ops.check()
+    except extension_ops.UnavailableError as exc:
+        raise ApiError("extension_list_unreachable", why(exc), status_code=503) from exc
+
+
+@router.post("/list/update", summary="Update every extension the list has a newer version of",
+             dependencies=[requires(scopes.PROTECTED)])
+def update_extensions() -> dict:
+    try:
+        return extension_ops.update_all()
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_install_failed", why(exc), status_code=502) from exc
+
+
+@router.post("/{name}/install", summary="Install, update or reinstall an extension from the list",
+             dependencies=[requires(scopes.PROTECTED)])
+def install_extension(name: str) -> dict:
+    """One call for all three: installing over a copy is what an update and a reinstall
+    are. The extension runs from the next start."""
+    try:
+        return extension_ops.install(name)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_install_failed", why(exc), status_code=502) from exc
+
+
+@router.delete("/{name}", summary="Remove an extension that was installed from the list",
+               dependencies=[requires(scopes.PROTECTED)])
+def remove_extension(name: str) -> dict:
+    try:
+        return extension_ops.remove(name)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_remove_failed", why(exc), status_code=502) from exc
 
 
 @router.get("/{name}/picture", summary="The picture an extension's manifest names",

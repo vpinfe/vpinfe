@@ -35,6 +35,11 @@ EXTENSION = "ext:"
 # accepts it or removes it.
 UNACCEPTED = "unaccepted:"
 
+# The rows for what the extension list and the files on disk say needs doing, keyed
+# `extlist:updates`, `extlist:changed:<name>` and `extlist:left:<name>`. Like the ones above
+# they are about this install and are not set aside.
+EXTLIST = "extlist:"
+
 # A program's ask to make one change, keyed `asked:<id>`. It lapses on its own and is
 # answered, never set aside.
 ASKED = "asked:"
@@ -42,6 +47,8 @@ ASKED = "asked:"
 # A fix VPinFE can do itself, the first entry of the row's menu.
 GET_MEDIA, UPDATE, UPGRADE = "get_media", "update", "upgrade"
 TURN_ON_LOGGING = "turn_on_logging"
+UPDATE_EXTENSIONS, REINSTALL_EXTENSION, UNINSTALL_EXTENSION = (
+    "update_extensions", "reinstall_extension", "uninstall_extension")
 
 # The row for Visual Pinball's log being off, which is also the key it is set aside under.
 LOGGING = "logging_off"
@@ -256,8 +263,6 @@ def extension_rows(raised: Any) -> list[Need]:
 
 def unaccepted_rows(waiting: Mapping[str, Any]) -> list[Need]:
     """A row for each theme and extension that is stopped for want of being accepted."""
-    from manager.extensions import ext_page
-
     out = []
     themes = list(waiting.get("themes") or ())
     if len(themes) > 1:
@@ -278,7 +283,39 @@ def unaccepted_rows(waiting: Mapping[str, Any]) -> list[Need]:
                         t("manager.needs.untrusted",
                           name=extension.get("display_name") or name),
                         t("manager.needs.untrusted.tip"), WARM, verbs.LOCKED,
-                        Opens("settings", keys={"settings_page": ext_page.key(name)})))
+                        Opens("extensions", keys={"extension": name})))
+    return out
+
+
+def extension_list_rows(held: Mapping[str, Any]) -> list[Need]:
+    """The updates the extension list offers, an extension whose files changed since it was
+    installed, and one the list no longer carries."""
+    out = []
+    if updates := list(held.get("updates") or ()):
+        names = ", ".join(str(one["display_name"]) for one in updates)
+        out.append(Need(EXTLIST + "updates",
+                        t("manager.needs.extension_updates", count=len(updates)),
+                        t("manager.needs.extension_updates.tip", names=names), ACCENT,
+                        verbs.UPDATE, Opens("extensions"),
+                        fix=Fix(UPDATE_EXTENSIONS, t("manager.needs.extension_updates.update_all"),
+                                t("manager.needs.extension_updates.update_all.tip")),
+                        total=len(updates)))
+    for one in held.get("changed") or ():
+        name = str(one["name"])
+        out.append(Need(f"{EXTLIST}changed:{name}",
+                        t("manager.needs.extension_changed", name=one["display_name"]),
+                        t("manager.needs.extension_changed.tip"), WARM, verbs.HAD_ERRORS,
+                        Opens("extensions", keys={"extension": name}),
+                        fix=Fix(REINSTALL_EXTENSION, t("manager.extensions.reinstall"),
+                                t("manager.extensions.reinstall.help"), name)))
+    for one in held.get("left") or ():
+        name = str(one["name"])
+        out.append(Need(f"{EXTLIST}left:{name}",
+                        t("manager.needs.extension_left", name=one["display_name"]),
+                        t("manager.needs.extension_left.tip"), WARM, verbs.HAD_ERRORS,
+                        Opens("extensions", keys={"extension": name}),
+                        fix=Fix(UNINSTALL_EXTENSION, t("word.uninstall"),
+                                t("manager.needs.extension_left.uninstall.tip"), name)))
     return out
 
 
@@ -458,6 +495,7 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
                                                              "type": "blank"}})))
     rows += asked_rows(watched.get("asked") or ())
     rows += unaccepted_rows(watched.get("unaccepted") or {})
+    rows += extension_list_rows(watched.get("extension_list") or {})
     rows += extension_rows(watched.get("extension_needs") or ())
     if unread := _unread(watched.get("unread") or ()):
         rows.append(Need("unread", t("manager.needs.unread"),
@@ -704,7 +742,7 @@ def owner_of(need: Need) -> str:
         return EXTENSION + need.key[len(EXTENSION):].partition(":")[0]
     if need.key == "unread":
         return ""
-    return DEVICE if need.key in DEVICE_ROWS or need.key.startswith((UNACCEPTED, ASKED)) \
+    return DEVICE if need.key in DEVICE_ROWS or need.key.startswith((UNACCEPTED, ASKED, EXTLIST)) \
         else LIBRARY
 
 

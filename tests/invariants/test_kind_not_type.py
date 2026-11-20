@@ -82,7 +82,7 @@ def _identifiers(tree: ast.AST) -> set[str]:
 def _offenders() -> list[str]:
     out = []
     for package in PACKAGES:
-        for path in sorted((REPO / package).rglob("*.py")):
+        for path in sorted(trees.source_files(REPO / package)):
             if "__pycache__" in path.parts:
                 continue
             tree = trees.tree_for(path)
@@ -102,7 +102,7 @@ class KindNotTypeTests(unittest.TestCase):
         """An entry nothing uses is an exemption waiting to cover something else."""
         seen: set[str] = set()
         for package in PACKAGES:
-            for path in (REPO / package).rglob("*.py"):
+            for path in trees.source_files(REPO / package):
                 if "__pycache__" in path.parts:
                     continue
                 seen |= _identifiers(trees.tree_for(path))

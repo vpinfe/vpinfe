@@ -176,7 +176,7 @@ def _sources() -> list[Path]:
     paths: list[Path] = []
     for name in CODE:
         path = ROOT / name
-        paths += [path] if path.is_file() else sorted(path.rglob("*.py"))
+        paths += [path] if path.is_file() else sorted(trees.source_files(path))
     return [path for path in paths if "__pycache__" not in path.parts]
 
 

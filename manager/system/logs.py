@@ -107,6 +107,7 @@ def build(library: Library, state: dict[str, Any], redraw: Callable[[], None]) -
     # does not change, so re-reading it is a request that can only return what it just
     # returned.
     ui.timer(EVERY_SECONDS, lambda: load() if held["follow"] and _live(held) else None)
+    support_dialog.open_again_if_asked()
 
 
 def _note_sources(held: dict[str, Any], found: dict[str, Any]) -> None:

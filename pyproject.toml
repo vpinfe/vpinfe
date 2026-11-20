@@ -43,3 +43,9 @@ ignore_missing_imports = true
 # what the wire is built out of: the domain code under common/ and the theme surface.
 module = ["apps.*", "common.*", "manager.*", "extensions.*", "frontend.*", "httpapi.*"]
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The tests an extension carries are held to what tests/ is: checked, not required to be
+# annotated.
+module = ["extensions.*.tests.*"]
+disallow_untyped_defs = false

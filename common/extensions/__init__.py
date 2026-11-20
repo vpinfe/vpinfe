@@ -48,7 +48,7 @@ __all__ = [
     "Record", "Registry", "accept", "clear", "disable", "get_extension_store", "granted_scopes",
     "load_from", "load_installed", "logger_for", "mounted", "parse", "read_manifest",
     "read_roots", "records", "refuse", "registry", "running", "served", "set_registry",
-    "switch",
+    "switch", "unofficial_running", "inventory",
 ]
 
 logger = logging.getLogger("vpinfe.common.extensions")
@@ -85,6 +85,14 @@ def running(name: str) -> bool:
     return registry().running(name)
 
 
+def unofficial_running() -> list[Record]:
+    return registry().unofficial_running()
+
+
+def inventory() -> list[Record]:
+    return registry().inventory()
+
+
 def granted_scopes() -> frozenset[str]:
     return registry().granted_scopes()
 
@@ -112,8 +120,16 @@ def switch(name: str, on: bool) -> Record | None:
     return registry().switch(name, on)
 
 
+def switch_copy(name: str, on: bool) -> Record | None:
+    return registry().switch_copy(name, on)
+
+
 def accept(name: str) -> Record | None:
     return registry().accept(name)
+
+
+def files_replaced(name: str) -> Record | None:
+    return registry().files_replaced(name)
 
 
 def disable(name: str, why: str, **values: str) -> None:

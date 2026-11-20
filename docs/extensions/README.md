@@ -60,6 +60,11 @@ nothing, and it exits with 1 when something would not pass.
   on a game's panel. Each lesson says what you will have, shows it, and says what core did.
 - **[How it works](how-it-works.md)** for the ideas the lessons keep returning to: what core draws,
   what trusting an extension means, scopes, Private games and what a restart is for.
+- **[Official and unofficial extensions](official-extensions.md)** for what the mark means,
+  how an extension gets on the Extension List, what takes it off and what an unofficial one
+  can never do.
+- **[Testing your extension](testing.md)** for where its tests live, how to run them in a VPinFE
+  checkout and what else runs over it.
 - **[Good extensions](good-extensions.md)** for the habits that make an extension feel like
   part of VPinFE, ending in a list to go through before you give one to anybody.
 - **The [Cookbook](cookbook.md)** once you know what you want. Each recipe is a small complete

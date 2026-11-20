@@ -766,7 +766,7 @@ class WhatTheListSays(unittest.TestCase):
         self.assertEqual("", ext_lists.status_of({})["text"])
 
     def test_the_places_are_the_manager_s_own_addresses(self) -> None:
-        self.assertEqual(("/manager?view=players", "/manager?view=settings&page=extensions.site"),
+        self.assertEqual(("/manager?view=players", "/manager?view=extensions&extension=site"),
                          (ext_lists.PLACES["players"]("site"),
                           ext_lists.PLACES["settings"]("site")))
 
@@ -777,7 +777,7 @@ class WhatTheListSays(unittest.TestCase):
 
         self.assertEqual([("Send Now", ""), ("Open Site", "https://site.example"),
                           (t("manager.community.settings"),
-                           "/manager?view=settings&page=extensions.site")],
+                           "/manager?view=extensions&extension=site")],
                          [(one.label, one.to) for one in found])
         assert found[0].run is not None
         found[0].run()

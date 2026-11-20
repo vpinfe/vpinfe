@@ -16,11 +16,9 @@
 
 # The translation catalogs, and the hashes that tell a translator which of their
 # entries were written against English that has since moved. Shipped: without these
-# every label in the app renders as its own key. An app or an extension keeps its own
-# beside it.
+# every label in the app renders as its own key. An app keeps its own beside it.
 !common/i18n/catalogs/*.json
 !apps/*/i18n/*.json
-!extensions/*/i18n/*.json
 
 # The parity gate's committed master snapshot - see docs/compatibility-3.0.md
 !tests/fixtures/parity_baseline_master.json
@@ -65,10 +63,10 @@
 !docs/extensions/examples/scores/*/example_scores/extension.json
 !docs/extensions/examples/scores/*/example_scores/i18n/en.json
 
-# An extension the build ships declares itself in one of these. Without the
-# negation a clean checkout has the code and no manifest, and the host refuses
-# every one of them - which is green here and broken everywhere else.
-!extensions/*/extension.json
+# The included extensions are not part of this repository: each is its own, and a
+# checkout gets them cloned or linked in here (scripts/fetch_extensions.py at build
+# time, the clone steps of the test workflow, the setup of a development tree).
+/extensions/
 
 # Declares the frontend test runner, beside the tests it runs. Named in full: a bare
 # package.json would un-ignore one anywhere in the tree.

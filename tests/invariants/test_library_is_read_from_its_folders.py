@@ -46,7 +46,7 @@ def _offenders(rel: str, tree: ast.AST) -> list[str]:
 
 def _sources():
     for folder in SCANNED:
-        yield from sorted((REPO / folder).rglob("*.py"))
+        yield from sorted(trees.source_files(REPO / folder))
     for name in TOP_LEVEL:
         yield REPO / name
 

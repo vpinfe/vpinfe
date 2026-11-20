@@ -14,11 +14,11 @@ from typing import Any
 from nicegui import run, ui
 
 from common.i18n import t
-from common.support import destinations, package
+from common.support import destinations, package, reopen
 from common.support.draft import Draft
 from manager.kit import clipboard, panel, verbs, wizard
 from manager.kit.on_page import on_page
-from manager.system import support_inspect
+from manager.system import support_inspect, unofficial
 
 WHAT = "what"
 PRIVACY = "privacy"
@@ -248,6 +248,11 @@ def calls(draft: Draft) -> wizard.Calls:
                 found = _what(draft)
                 found["errors"] = {"logs": t("manager.support.too_large")}
                 return found
+            except package.UnofficialRunningError as exc:
+                found = _what(draft)
+                found["errors"] = {"logs": t("manager.support.unofficial_running",
+                                             names=unofficial.named(list(exc.names)))}
+                return found
             return _privacy(draft)
         await run.io_bound(draft.refresh)
         return _share(draft)
@@ -270,7 +275,12 @@ def calls(draft: Draft) -> wizard.Calls:
 @on_page
 async def open_support_package() -> bool:
     """The dialog over the page this is called from, until it is closed. Whatever was
-    gathered is dropped when it is, so nothing waits on a later request."""
+    gathered is dropped when it is, so nothing waits on a later request. While an unofficial
+    extension runs it asks to turn them off and restart instead, and the package opens again
+    when VPinFE is back."""
+    names = unofficial.running()
+    if names:
+        return await unofficial.turn_off_and_restart(names, reopen_package=True)
     draft = Draft()
     try:
         return await wizard.open_dialog(
@@ -280,4 +290,17 @@ async def open_support_package() -> bool:
         draft.drop()
 
 
-__all__ = ["open_support_package", "calls"]
+def open_again_if_asked() -> None:
+    """Once, a moment after the page draws: the package a restart was made for. Unofficial
+    code still in this process means the restart has not happened, so the note stays."""
+    @on_page
+    async def check() -> None:
+        if unofficial.running():
+            return
+        if await run.io_bound(reopen.take):
+            await open_support_package()
+
+    ui.timer(1.0, check, once=True)
+
+
+__all__ = ["open_support_package", "open_again_if_asked", "calls"]

@@ -117,8 +117,8 @@ it.
 === extensions/vpinplay
 loads      vpinplay 1.0.0
 author     VPinFE
-home       https://github.com/vpinfe/vpinfe
-source     https://github.com/vpinfe/vpinfe
+home       https://github.com/vpinfe/extension-vpinplay
+source     https://github.com/vpinfe/extension-vpinplay
 settings   endpoint (string, default 'https://api.vpinplay.com:8888')
 list       tables in community: 10 columns, 5 views
 account    a player can hold one
@@ -127,8 +127,8 @@ reads      settings: 1 fields
 === extensions/library_importer
 loads      library_importer 0.1.0
 author     VPinFE
-home       https://github.com/vpinfe/vpinfe
-source     https://github.com/vpinfe/vpinfe
+home       https://github.com/vpinfe/extension-library-importer
+source     https://github.com/vpinfe/extension-library-importer
 dialog     import: ask check run progress
 routes     its own, on ext:library_importer:library (2 routes)
 routes     its own, on ext:library_importer:library (1 routes)

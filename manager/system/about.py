@@ -29,6 +29,7 @@ from common.i18n import t
 from manager.kit import busy, clipboard, offload, panel, verbs
 from manager.kit.data import Library
 from manager.system import support as support_dialog
+from manager.system import unofficial
 from manager.system import whats_new as whats_new_page
 
 logger = logging.getLogger("vpinfe.manager.system.about")
@@ -54,12 +55,16 @@ def build(library: Library, state: dict[str, Any], redraw: Callable[[], None]) -
         _draw(body, found.get("groups") or [], held, load, library, state)
 
     busy.fill(body, load)
+    support_dialog.open_again_if_asked()
 
 
 def _draw(body: Any, groups: list[dict[str, Any]], held: dict[str, Any],
           reload: Callable[..., Any], library: Library, state: dict[str, Any]) -> None:
     body.clear()
     with body:
+        names = unofficial.running()
+        if names:
+            unofficial.draw_line(names)
         with ui.row().classes("items-center gap-2 w-full no-wrap"):
             ui.label(t("manager.about.copy_note")) \
                 .classes("manager-help grow min-w-0")

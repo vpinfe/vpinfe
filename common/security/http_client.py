@@ -202,10 +202,22 @@ def get_text(url: str, *, timeout: float = DEFAULT_TIMEOUT,
 
 
 def get_bytes(url: str, *, timeout: int = DOWNLOAD_TIMEOUT,
-              headers: dict[str, str] | None = None) -> bytes:
-    response = _asked(requests.get, url, timeout=timeout, headers=headers)
-    response.raise_for_status()
-    return response.content
+              headers: dict[str, str] | None = None, limit: int | None = None) -> bytes:
+    """The body at `url`. With `limit`, a body over that many bytes is refused as it
+    arrives, so a source cannot fill memory by naming something large."""
+    if limit is None:
+        response = _asked(requests.get, url, timeout=timeout, headers=headers)
+        response.raise_for_status()
+        return response.content
+    with _asked(requests.get, url, timeout=timeout, headers=headers, stream=True) as response:
+        response.raise_for_status()
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            body.extend(chunk)
+            if len(body) > limit:
+                raise requests.RequestException(
+                    t("said.why.too_large_at", host=_host(url), size=limit // (1024 * 1024)))
+        return bytes(body)
 
 
 def get_if_changed(url: str, etag: str = "", *, timeout: int = DOWNLOAD_TIMEOUT,

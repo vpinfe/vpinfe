@@ -87,6 +87,10 @@ VPinFE ready to go on http://localhost:8001, and http://192.168.1.228:8001
 Put that address in a browser, on this device or any other on your network.  The frontend's Menu (**M**, or Button 9 on a controller) shows it too, with a QR code to scan from a mobile device.
 Your game folders should follow the [VPinball table organization standard](https://github.com/vpinball/vpinball/blob/master/docs/FileLayout.md).  [Running VPinFE](docs/running.md) shows what a game folder holds and how media and matching work.
 
+## Extensions
+
+Extensions add features to VPinFE, such as VPinPlay and the library importer, which come with it.  Under **System**, **Extensions** lists the ones we stand behind (the Extension List) and installs a pick with one click.  An extension that is not on that list is marked **Unofficial** and does not start until you say yes to it, because an extension runs inside VPinFE and can do what you can do on your device.  A support package is not made while one is running, so turn unofficial extensions off first if we ask for one.  [Official and unofficial extensions](docs/extensions/official-extensions.md) has the details, and [Writing an extension](docs/extensions/README.md) is for authors.
+
 ## Where VPinFE keeps what you set
 
 By default VPinFE keeps what you set in four places, each in the folder the OS gives that kind of file:

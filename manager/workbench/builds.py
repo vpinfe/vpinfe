@@ -15,6 +15,7 @@ from common.i18n import t
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
 from manager.extensions import ext_row
+from manager.extensions import extensions as extensions_page
 from manager.frontend import launchers as launchers_page
 from manager.frontend import players as players_page
 from manager.frontend import themes as themes_page
@@ -666,6 +667,37 @@ async def _draw_theme(container: ui.column, title: ui.column, library: Library,
             context, f"theme:{key}",
             lambda: build_theme(container, title, library, key, state))
         await _rail(context, "theme", state)
+
+
+async def build_extension(container: ui.column, title: ui.column, library: Library,
+                          name: str | None, state: dict[str, Any]) -> None:
+    """The panel, for an extension installed here or offered on the VPinFE Extension List."""
+    await _pane_build(container, state,
+                      lambda: _draw_extension(container, title, library, name, state))
+
+
+async def _draw_extension(container: ui.column, title: ui.column, library: Library,
+                          name: str | None, state: dict[str, Any]) -> None:
+    if not name:
+        _blank(container, title, t("manager.page.extension"),
+               t("manager.page.select_extension"))
+        return
+    found, _listing = await extensions_page.load(library)
+    entry = next((one for one in found if one["name"] == name), None)
+    if entry is None:
+        _blank(container, title, t("manager.page.extension"), t("manager.page.gone"))
+        return
+    container.clear()
+    title.clear()
+    with container:
+        _title(title, extensions_page.shown(entry),
+               extensions_page.STATUS.word(extensions_page.status(entry)))
+        context: dict[str, Any] = {"library": library, "extension": entry, "state": state,
+                                   "redraws": [], "dock": None}
+        context["rebuild"] = _rebuilds(
+            context, f"extension:{name}",
+            lambda: build_extension(container, title, library, name, state))
+        await _rail(context, "extension", state)
 
 
 async def _read_collection(library: Library, name: str,

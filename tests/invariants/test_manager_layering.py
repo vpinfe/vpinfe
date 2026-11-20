@@ -64,13 +64,13 @@ AREAS: dict[str, tuple[str, ...]] = {
     "frontend": ("themes", "theme_card", "theme_sources", "launchers", "players",
                  "settings_file_choice"),
     "extensions": ("ext_action", "ext_cells", "ext_groups", "ext_links", "ext_mark",
-                   "ext_page", "ext_pages", "ext_row", "ext_verbs", "ext_lists"),
+                   "ext_page", "ext_pages", "ext_row", "ext_verbs", "ext_lists", "extensions"),
     "devices": ("devices", "browser_state", "mobile_add", "pairing", "plays_on",
                 "send_to_device"),
     "setup": ("setup", "setup_appearance", "setup_controls", "setup_screens", "setup_tables",
               "setup_vpx", "glass_art"),
     "system": ("about", "early_access", "whats_new", "jobs", "jobs_list", "job_report", "logs",
-               "metrics", "support", "support_inspect"),
+               "metrics", "support", "support_inspect", "unofficial"),
     "backups": ("backups", "backup_cleanup", "backup_go_back", "backup_rows", "backups_move"),
     "security": ("security", "accept", "authenticator_panel", "encrypted_panel",
                  "sign_in_gate", "sign_in_notice", "signed_in_rows", "token_panel",
@@ -82,8 +82,8 @@ AREAS: dict[str, tuple[str, ...]] = {
                   "app_settings",
                   "selection_marks", "discovery_rail", "leftovers"),
     "remote": ("remote", "remote_record"),
-    "shell": ("page", "edit_page", "report_page", "power", "rail_marks", "update_count", "host",
-              "loopback", "app_control"),
+    "shell": ("page", "edit_page", "report_page", "power", "rail_marks", "update_count",
+              "extension_count", "host", "loopback", "app_control"),
 }
 AREA_OF = {module: area for area, modules in AREAS.items() for module in modules}
 

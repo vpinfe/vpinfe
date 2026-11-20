@@ -25,6 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Each included extension is a repository of its own, and its tests are run here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -69,6 +74,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Each included extension is a repository of its own, and its code is imported here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -84,7 +94,10 @@ jobs:
           failed = []
           for package in ("apps", "common", "manager", "extensions", "frontend", "httpapi"):
               for path in sorted(pathlib.Path(package).rglob("*.py")):
-                  name = ".".join(path.with_suffix("").parts)
+                  # An extension's tests need the test dependencies, which this job leaves out.
+                  if package == "extensions" and path.parts[2:3] == ("tests",):
+                      continue
+                  name =".".join(path.with_suffix("").parts)
                   if name.endswith(".__init__"):
                       name = name[: -len(".__init__")]
                   try:

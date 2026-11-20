@@ -109,13 +109,21 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
            "path": "/found/tool"}
 
     async def test_an_extension_says_what_it_says_it_uses(self) -> None:
-        title, lines, _answer, kept = await self.asked(
+        title, lines, answer, kept = await self.asked(
             accept.extension("Tool", "1.0.0", uses=["Read Your Library"], **self.OWN))
 
         self.assertEqual(title, "Trust an Unofficial Extension?")
-        self.assertIn("isn't from VPinFE", lines[0])
+        self.assertIn("isn't made or endorsed by the VPinFE team", lines[0])
         self.assertEqual(kept["rows"][-1][0], "Reported Capabilities")
-        self.assertEqual(kept["closing"], "Run it only if you trust where it came from.")
+        self.assertEqual(answer, "Trust and Turn On")
+
+    async def test_the_answer_waits_for_the_tick_that_says_it_is_unsupported(self) -> None:
+        _title, _lines, _answer, kept = await self.asked(
+            accept.extension("Tool", "1.0.0", uses=[], **self.OWN))
+
+        self.assertEqual(kept["understood"],
+                         "I understand the VPinFE team won't support this setup while it's on")
+        self.assertIn("won't support this setup", kept["warning"])
 
     async def test_it_is_shown_whose_it_is_and_where_it_comes_from(self) -> None:
         _title, _lines, _answer, kept = await self.asked(
@@ -125,35 +133,32 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([one[0] for one in kept["rows"]],
                          ["Author", "Version", "Source", "Folder Path", "Reported Capabilities"])
 
-    async def test_one_that_replaces_a_built_in_says_which_and_what_version(self) -> None:
+    async def test_a_copy_a_changed_one_and_one_claiming_the_team_each_say_so(self) -> None:
         _title, lines, _answer, _kept = await self.asked(
-            accept.extension("Tool", "2.0.0", uses=[], replaces="Tool",
-                             replaces_version="1.0.0", **self.OWN))
+            accept.extension("Tool", "2.0.0", uses=[], replaces="Tool", changed=3,
+                             claims_team=True, **self.OWN))
 
-        self.assertEqual(lines[-1], "Replaces the Tool 1.0.0 that comes with VPinFE.")
+        self.assertEqual(lines[1:], [
+            "It uses the name of the Tool that comes with VPinFE, but it isn't that one.",
+            "It started out as an official VPinFE extension, but 3 of its files have changed, "
+            "so it is no longer the official one.",
+            "It says it's from the VPinFE team, but it isn't."])
 
-    async def test_a_newer_version_says_what_it_was_and_who_made_it(self) -> None:
+    async def test_a_newer_version_says_what_it_was_and_what_it_adds(self) -> None:
         _title, lines, _answer, kept = await self.asked(
-            accept.new_access("Tool", "2.0.0", "Example Author", ["Read Your Library"],
-                              was="1.0.0"))
+            accept.extension("Tool", "2.0.0", uses=["Read Your Library"],
+                             added=["Read Your Library"], was="1.0.0", **self.OWN))
 
-        self.assertEqual(lines, ["Updated from 1.0.0 to 2.0.0."])
-        self.assertEqual(kept["rows"][0], ("Author", "Example Author"))
-        self.assertEqual(kept["rows"][1][0], "New Capabilities")
-
-    async def test_a_newer_version_with_no_known_earlier_one_says_only_where_it_went(self) -> None:
-        _title, lines, _answer, _kept = await self.asked(
-            accept.new_access("Tool", "2.0.0", "Example Author", ["Read Your Library"]))
-
-        self.assertEqual(lines, ["Updated to 2.0.0."])
+        self.assertEqual(lines[-1], "Updated from 1.0.0 to 2.0.0.")
+        self.assertEqual(kept["rows"][-1][0], "New Capabilities")
 
     async def test_more_access_at_the_same_version_does_not_claim_an_update_between_them(
             self) -> None:
         _title, lines, _answer, _kept = await self.asked(
-            accept.new_access("Tool", "1.0.0", "Example Author", ["Read Your Library"],
-                              was="1.0.0"))
+            accept.extension("Tool", "1.0.0", uses=[], added=["Read Your Library"], was="1.0.0",
+                             **self.OWN))
 
-        self.assertEqual(lines, ["Updated to 1.0.0."])
+        self.assertEqual(len(lines), 1)
 
 
 if __name__ == "__main__":

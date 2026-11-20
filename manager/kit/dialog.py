@@ -259,10 +259,20 @@ def aside(label: str, on_click: Callable[[], Any], *, icon: str) -> ui.button:
     return quiet(label, on_click, icon=icon).classes("manager-dialog-aside")
 
 
+def tick(label: str) -> ui.checkbox:
+    """A box the person sets to say they understand something, for an `answer` that takes it
+    as `needs`."""
+    return ui.checkbox(label).props("dense").classes("manager-dialog-tick")
+
+
 def answer(label: str, on_click: Callable[[], Any], *, icon: str,
-           danger: bool = False) -> ui.button:
-    return ui.button(label, icon=icon, on_click=on_click) \
+           danger: bool = False, needs: ui.checkbox | None = None) -> ui.button:
+    """The button that says yes. With `needs`, a `tick`, it does nothing until that is set."""
+    button = ui.button(label, icon=icon, on_click=on_click) \
         .props("no-caps" + (" color=negative" if danger else ""))
+    if needs is not None:
+        button.bind_enabled_from(needs, "value")
+    return button
 
 
 def focus(box: ui.dialog, control: Any, *, select: bool = False) -> None:

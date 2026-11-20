@@ -34,8 +34,9 @@ def source_shown(source: str) -> str:
 def unofficial(extension: dict[str, Any] | None) -> bool:
     """Whether VPinFE did not ship it. One that says nothing of where it came from is
     taken as shipped, so a bare record draws no mark."""
-    return bool(extension) and str((extension or {}).get("origin") or accepted.SHIPPED) \
-        != accepted.SHIPPED
+    return bool(extension) and not accepted.is_official(
+        str((extension or {}).get("origin") or accepted.SHIPPED)
+    )
 
 
 def named(extension: dict[str, Any]) -> str:

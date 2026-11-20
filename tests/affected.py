@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import tomllib
 from collections import defaultdict
@@ -28,6 +29,8 @@ from tests.support import trees
 
 MAP = Path(__file__).resolve().parent / "affected.toml"
 INVARIANTS = "tests/invariants"
+# A test tree: VPinFE's own, or the `tests` folder an extension carries.
+_TEST_TREE = re.compile(r"(?:tests|extensions/[^/]+/tests)/")
 # Files no test outside the invariants reads.
 NO_TEST = ("releases/*", "packaging/*", ".github/*", ".git*", "LICENSE", "requirements*.txt",
            "tests/affected.toml")
@@ -58,13 +61,26 @@ def _git(repo: Path, *args: str) -> list[str]:
     return [line for line in run.stdout.splitlines() if line]
 
 
+def _extension_clones(repo: Path) -> list[Path]:
+    """The extensions under `extensions/` that are a git repository of their own."""
+    return [one for one in sorted((repo / "extensions").glob("*")) if (one / ".git").exists()]
+
+
 def changed_files(repo: Path, since: str) -> list[str]:
     """Tracked changes since `since`, including the working tree, plus untracked files.
+
+    An extension that is a repository of its own is not tracked here, so its working tree
+    changes, against its own HEAD, are added under `extensions/<name>/`. `since` does not
+    apply to it: a commit of its own is not a revision of this repository.
 
     Raises ValueError, carrying git's own words, when `since` names nothing.
     """
     names = _git(repo, "diff", "--name-only", "--no-renames", since, "--")
     names += _git(repo, "ls-files", "--others", "--exclude-standard")
+    for clone in _extension_clones(repo):
+        inside = _git(clone, "diff", "--name-only", "--no-renames", "HEAD", "--")
+        inside += _git(clone, "ls-files", "--others", "--exclude-standard")
+        names += [f"extensions/{clone.name}/{name}" for name in inside]
     return sorted(set(names))
 
 
@@ -117,18 +133,23 @@ def _resolve(names: set[str], known: set[str]) -> set[str]:
 
 def python_files(repo: Path) -> list[str]:
     names = _git(repo, "ls-files", "--cached", "--others", "--exclude-standard", "*.py")
-    return [name for name in names if not name.startswith("docs/")]
+    for folder in sorted((repo / "extensions").glob("*")):
+        for found in sorted(folder.rglob("*.py")):
+            relative = found.relative_to(repo / "extensions").parts
+            if not any(part.startswith(".") for part in relative):
+                names.append("/".join(("extensions", *relative)))
+    return [name for name in dict.fromkeys(names) if not name.startswith("docs/")]
 
 
 def select(repo: Path, changed: list[str], files: list[str] | None = None,
            areas: list[dict] | None = None) -> Selection:
     files = python_files(repo) if files is None else files
     areas = read_map() if areas is None else areas
-    sources = {_module_name(f): f for f in files if not f.startswith("tests/")}
+    sources = {_module_name(f): f for f in files if not _TEST_TREE.match(f)}
     tests = {_module_name(f): f for f in files
-             if f.startswith("tests/") and Path(f).name.startswith("test_")}
+             if _TEST_TREE.match(f) and Path(f).name.startswith("test_")}
     helpers = {_module_name(f): f for f in files
-               if f.startswith("tests/") and not Path(f).name.startswith("test_")}
+               if _TEST_TREE.match(f) and not Path(f).name.startswith("test_")}
     known = set(sources) | set(helpers)
 
     imports_of = {name: _resolve(_imports(repo / path, name), known) - {name}
@@ -155,7 +176,7 @@ def select(repo: Path, changed: list[str], files: list[str] | None = None,
             if name in tests:
                 chosen.add(tests[name])
                 matched = True
-            elif relative.startswith("tests/") and Path(relative).name.startswith("test_"):
+            elif _TEST_TREE.match(relative) and Path(relative).name.startswith("test_"):
                 matched = True  # a test module that is gone has nothing to run
             elif name in known:
                 near = {name} | dependents[name]

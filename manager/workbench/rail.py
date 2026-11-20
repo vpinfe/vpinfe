@@ -11,6 +11,7 @@ from common.i18n import t
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
 from manager.extensions import ext_groups, ext_mark
+from manager.extensions import extensions as extensions_page
 from manager.frontend import players as players_page
 from manager.frontend import themes as themes_page
 from manager.kit import busy, deeplink, game_tables, panel
@@ -283,6 +284,11 @@ SECTIONS: tuple[Section, ...] = (
     Section("theme_settings", lambda _: t("manager.themes.settings"),
             themes_page.settings_section, subjects=frozenset({"theme"}),
             shown=lambda context: bool(context["theme"].get("configurable")), titled=True),
+    Section("extension_details", lambda _: t("manager.workbench.details"),
+            extensions_page.details, subjects=frozenset({"extension"}), titled=True),
+    Section("extension_settings", lambda _: t("manager.extensions.settings"),
+            extensions_page.settings_section, subjects=frozenset({"extension"}),
+            shown=extensions_page.has_settings, titled=True),
     # A player: who they are, then an account per running extension offering one, which
     # the panel puts between these two, then what they have played.
     Section("player_details", lambda _: t("manager.workbench.details"),

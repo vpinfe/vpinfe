@@ -216,7 +216,8 @@ DEFAULT_SECTION = {"game": "game_details", "table": "table_details",
                    # Games, not Details: a collection is opened to see
                    # what is in it far more often than to rename it.
                    "collection": "collection_games",
-                   "theme": "theme_details", "player": "player_details"}
+                   "theme": "theme_details", "player": "player_details",
+                   "extension": "extension_details"}
 
 
 # Below this the outline costs more than it gives: 132px of it against a 320px

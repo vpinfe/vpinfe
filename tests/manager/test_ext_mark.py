@@ -122,16 +122,16 @@ class InTheRailAndSettings(unittest.TestCase):
         self.assertIs(app_page._owner_of(view, [shipped, found]), found)
         self.assertIsNone(app_page._owner_of("games", [found]))
 
-    def test_the_origin_chip_in_settings_carries_the_glyph(self) -> None:
+    def test_the_origin_chip_carries_the_glyph(self) -> None:
         found = _found(trust={"origin": accepted.IN_FOLDER, "accepted": True, "folder": "tally"})
-        chip = ext_page._origin_chip(found)
+        chip = ext_page.origin_chip(found)
         assert chip is not None
         with _PAGE:
             holder = ui.column()
             with holder:
                 chip()
         self.assertEqual(len(_glyphs(holder)), 1)
-        self.assertIsNone(ext_page._origin_chip(
+        self.assertIsNone(ext_page.origin_chip(
             _found(trust={"origin": accepted.SHIPPED, "accepted": True})))
 
 

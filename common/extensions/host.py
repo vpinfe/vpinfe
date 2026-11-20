@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import importlib.util
 import logging
+import re
 import sys
 import threading
 from collections.abc import Iterator
@@ -20,12 +21,13 @@ from typing import Any
 
 from common import events as core_events
 from common import i18n, tokens
-from common.config.paths import CONFIG_DIR, bundled, get_ini_config
+from common.config.paths import CONFIG_DIR, OFFICIAL_EXTENSIONS_DIR, bundled, get_ini_config
 from common.devices import install_identity
 from common.online import sources
 from common.security import accepted
 
 from . import catalogs, contributions, reach
+from . import fingerprint as fingerprints
 from .context import ExtensionApps, ExtensionContext, check_play, check_references
 from .contract import (
     MANIFEST_NAME,
@@ -40,20 +42,23 @@ from .store import ExtensionStore, get_extension_store
 
 logger = logging.getLogger("vpinfe.common.extensions.host")
 
-# Where an install keeps the ones it has, and where the build keeps the ones it ships.
-# Installed first: an extension somebody installed under the same name as one we ship is
-# the one they meant, and shadowing it quietly the other way would be unexplainable.
+# Where people put their own, where VPinFE installs the official ones it takes from the
+# list, and where the build keeps the ones it ships. A folder somebody put under the same
+# name as an official extension is looked at first, and it is never official.
 INSTALLED_DIR = CONFIG_DIR / "extensions"
+OFFICIAL_DIR = OFFICIAL_EXTENSIONS_DIR
 BUNDLED_DIR = bundled("extensions")
-SEARCH_PATH = (INSTALLED_DIR, BUNDLED_DIR)
+SEARCH_PATH = (INSTALLED_DIR, OFFICIAL_DIR, BUNDLED_DIR)
 
 # Running.
 # The names core's rail already uses, by the keys of `manager.section.*`.
 CORE_SECTIONS = ("overview", "games", "tables", "media", "assets", "collections", "tags",
-                 "discovery", "players", "launchers", "themes", "settings", "devices",
+                 "discovery", "players", "launchers", "themes", "settings", "devices", "extensions",
                  "metrics", "logs", "jobs", "backups", "about", "library", "frontend",
                  "community", "system")
 
+# Read, and waiting for the second pass of the start to run it.
+PENDING = "pending"
 LOADED = "loaded"
 # Never got as far as running: a manifest that would not parse, a package that would not
 # import, or a `register` that raised.
@@ -70,6 +75,9 @@ LACKS_FEATURES = "extension.reason.lacks_features"
 # Not shipped with VPinFE and not accepted by the Owner, or accepted before it declared
 # something it declares now. Never imported while this is the reason.
 NOT_ACCEPTED = "extension.reason.not_accepted"
+
+# A manifest that says the team made it.
+_TEAM_REPOSITORY = re.compile(r"^https://github\.com/vpinfe/", re.IGNORECASE)
 
 _PLATFORMS = {"linux": "linux", "win32": "windows", "darwin": "macos"}
 PLATFORM_NAMES = {"linux": "extension.platform.linux",
@@ -138,6 +146,14 @@ class Record:
     # For a built-in that has an installed copy of the same name waiting to be accepted:
     # that copy. It runs only once accepted, at the next start.
     waiting: Record | None = None
+    # Hash of every file in its folder, and the files that are not what VPinFE shipped or
+    # installed. Set once, by `examine`.
+    fingerprint: str = ""
+    differs: list[str] = field(default_factory=list)
+    # Its files were replaced or removed while it runs. The code in memory is the old
+    # code until the next start.
+    files_changed: bool = False
+    _origin: str = ""
 
     @property
     def running(self) -> bool:
@@ -196,13 +212,97 @@ class Record:
 
     @property
     def origin(self) -> str:
-        """SHIPPED, REPLACES a built-in of the same name, or found in a folder. Decided
-        by where the files are, never by what the manifest says."""
+        """Where it came from, decided by where its files are and whether they are still
+        what VPinFE wrote there, never by what the manifest says: SHIPPED or OFFICIAL when
+        they are, CHANGED when they are not, REPLACES for a folder that takes an official
+        extension's name, IN_FOLDER for any other. One the list has dropped is IN_FOLDER from
+        the check that learned it, not from the next start."""
+        if self.left_list:
+            return accepted.IN_FOLDER
+        return self._origin or self.examine()
+
+    @property
+    def from_list(self) -> bool:
+        """Whether VPinFE installed it from the Extension List, into its own folder."""
+        return OFFICIAL_DIR in self.directory.parents
+
+    @property
+    def left_list(self) -> bool:
+        """Whether it was installed from the list and the list, as last fetched, no longer
+        names it. Offline, or before any fetch, nothing has left."""
+        names = fingerprints.held_names()
+        return self.from_list and names is not None and self.name not in names
+
+    @property
+    def official(self) -> bool:
+        return accepted.is_official(self.origin)
+
+    @property
+    def switch_key(self) -> str:
+        """What its switch is kept under. A copy has one of its own, so switching it off
+        lets the official extension of that name run."""
+        return f"{self.name}.copy" if self.origin == accepted.REPLACES else self.name
+
+    def examine(self) -> str:
+        """Hash its folder and settle its origin. Local only: the build's list, the receipt
+        VPinFE kept, or the names it knows."""
+        files = fingerprints.hash_files(self.directory)
+        self.fingerprint, self.differs = fingerprints.digest(files), []
         if self.bundled:
-            return accepted.SHIPPED
-        if (BUNDLED_DIR / self.name / MANIFEST_NAME).is_file():
-            return accepted.REPLACES
-        return accepted.IN_FOLDER
+            built = fingerprints.read_build_list(BUNDLED_DIR)
+            self._origin = (
+                accepted.SHIPPED
+                if built is None
+                else self._against(built.get(self.name), files, accepted.SHIPPED)
+            )
+        elif self.from_list:
+            self._origin = (
+                accepted.IN_FOLDER
+                if self.left_list
+                else self._against(fingerprints.receipt(self.name), files, accepted.OFFICIAL)
+            )
+        elif self.name in official_names():
+            self._origin = accepted.REPLACES
+        else:
+            self._origin = accepted.IN_FOLDER
+        return self._origin
+
+    def _against(
+        self, expected: fingerprints.Receipt | None, files: dict[str, str], origin: str
+    ) -> str:
+        if expected is not None:
+            self.differs = fingerprints.differences(expected.files, files)
+        else:
+            self.differs = sorted(files)
+        return accepted.CHANGED if self.differs else origin
+
+    @property
+    def claims_team(self) -> bool:
+        """Whether an extension that is not VPinFE's says it is: the team as its author or
+        a repository of the team's as its source. Never true of one VPinFE stands behind."""
+        manifest = self.manifest
+        return (
+            manifest is not None
+            and not self.official
+            and (
+                "vpinfe" in manifest.author.casefold()
+                or bool(_TEAM_REPOSITORY.match(manifest.source))
+            )
+        )
+
+    @property
+    def repository_and_release(self) -> tuple[str, str]:
+        """Where it came from and which release: the build's or VPinFE's own record for an
+        included or listed extension, and what its manifest says for any other."""
+        kept = None
+        if self.bundled:
+            kept = (fingerprints.read_build_list(BUNDLED_DIR) or {}).get(self.name)
+        elif self.from_list:
+            kept = fingerprints.receipt(self.name)
+        if kept is not None:
+            return kept.repository, kept.release
+        manifest = self.manifest
+        return (manifest.source, manifest.version) if manifest else ("", "")
 
     @property
     def folder(self) -> str:
@@ -221,8 +321,9 @@ class Record:
         manifest = self.manifest
         if manifest is None or not manifest.picture:
             return False
-        return (self.origin == accepted.SHIPPED or self.is_accepted()) \
-            and (self.directory / manifest.picture).is_file()
+        return (self.official or self.is_accepted()) and (
+            self.directory / manifest.picture
+        ).is_file()
 
     def uses(self) -> list[str]:
         """What it says it uses: the core scopes and capabilities it declares, and
@@ -244,18 +345,34 @@ class Record:
         """Where it came from, whether the Owner has accepted it, and what it declares
         that the acceptance did not cover."""
         if self.manifest is None:
-            return {"origin": self.origin, "accepted": False, "folder": self.folder,
-                    "new_access": [], "accepted_before": False}
-        return {"origin": self.origin, "accepted": self.is_accepted(),
-                "folder": self.folder, "uses": self.uses(),
-                "new_access": accepted.new_access(self.name, self.origin,
-                                                  self.manifest.scopes,
-                                                  self.manifest.capabilities, self.folder,
-                                                  self.manifest.play),
-                "accepted_before": accepted.accepted_before(self.name, self.origin,
-                                                            self.folder),
-                "accepted_version": accepted.accepted_version(self.name, self.origin,
-                                                              self.folder)}
+            return {
+                "origin": self.origin,
+                "accepted": False,
+                "folder": self.folder,
+                "new_access": [],
+                "accepted_before": False,
+                "fingerprint": self.fingerprint,
+                "changed_files": self.differs,
+            }
+        return {
+            "origin": self.origin,
+            "accepted": self.is_accepted(),
+            "folder": self.folder,
+            "uses": self.uses(),
+            "fingerprint": self.fingerprint,
+            "changed_files": self.differs,
+            "claims_team": self.claims_team,
+            "new_access": accepted.new_access(
+                self.name,
+                self.origin,
+                self.manifest.scopes,
+                self.manifest.capabilities,
+                self.folder,
+                self.manifest.play,
+            ),
+            "accepted_before": accepted.accepted_before(self.name, self.origin, self.folder),
+            "accepted_version": accepted.accepted_version(self.name, self.origin, self.folder),
+        }
 
     def pages(self) -> list[dict]:
         """Its pages, titled in the language now set."""
@@ -377,6 +494,9 @@ class Record:
                 "groups": self.groups() if self.running else [],
                 "library_verbs": self.library_verbs() if self.running else [],
                 "bundled": self.bundled,
+                "from_list": self.from_list,
+                "left_list": self.left_list,
+                "files_changed": self.files_changed,
                 "origin": self.origin,
                 "trust": self.trust(),
                 "waiting": self._waiting(),
@@ -394,6 +514,9 @@ class Registry:
         self._lock = threading.RLock()
         # The extensions whose own routers the API has mounted.
         self._mounted: set[str] = set()
+        # Unofficial extensions imported in this process. Switching one off withdraws what
+        # it declared, and its code stays in memory until the next start.
+        self._imported_unofficial: set[str] = set()
 
     # -- reading -------------------------------------------------------------
 
@@ -409,6 +532,20 @@ class Registry:
     def get(self, name: str) -> Record | None:
         with self._lock:
             return self._records.get(str(name or "").strip())
+
+    def unofficial_running(self) -> list[Record]:
+        """The extensions VPinFE's team does not stand behind whose code is in this process:
+        running, or switched off since it was imported."""
+        return [one for one in self.records()
+                if (one.running and not one.official)
+                or one.name in self._imported_unofficial]
+
+    def inventory(self) -> list[Record]:
+        """Every extension folder this install has, read and never imported. For a process
+        that started none, such as the command-line support package."""
+        return sorted((self._prepare(directory)
+                       for root in SEARCH_PATH for directory in _directories(root)),
+                      key=lambda one: one.name)
 
     def running(self, name: str) -> bool:
         found = self.get(name)
@@ -459,31 +596,54 @@ class Registry:
     def load_installed(self) -> list[Record]:
         """Every extension this install has, from every root it keeps them in.
 
+        Two passes. The first reads every folder, settles where each came from and
+        whether its files are what VPinFE wrote, and logs the whole inventory. Only then
+        does the second import anything, so the record of what was there is made before
+        any extension's code can run.
+
         A name already loaded is not loaded again, which is what makes the search order
-        the precedence: an installed copy answers, and the bundled one is left alone
-        rather than replacing it halfway through a run.
+        the precedence: a copy somebody put in a folder answers, and the official one is
+        left alone rather than replacing it halfway through a run. The official one runs
+        in its place while the copy is not accepted or is switched off.
         """
-        found = []
+        groups: dict[str, list[Record]] = {}
         for root in SEARCH_PATH:
             for directory in _directories(root):
                 if self.get(directory.name) is not None:
                     logger.info("Not loading %s from %s: already loaded",
                                 directory.name, root)
                     continue
-                loaded = self.load(directory)
-                found.append(loaded)
-                if loaded.origin == accepted.REPLACES and loaded.why == NOT_ACCEPTED:
-                    # The built-in keeps running until its replacement is accepted.
-                    builtin = self.load(BUNDLED_DIR / loaded.name)
-                    builtin.waiting = loaded
-                    found.append(builtin)
+                groups.setdefault(directory.name, []).append(self._prepare(directory))
+        _log_inventory([one for group in groups.values() for one in group])
+
+        found = []
+        for group in groups.values():
+            first = group[0]
+            found.append(self._start(first))
+            behind = next((one for one in group[1:] if one.official), None)
+            if (
+                first.origin == accepted.REPLACES
+                and behind is not None
+                and first.state == OFF
+                and first.why in (NOT_ACCEPTED, SWITCHED_OFF)
+            ):
+                runs = self._start(behind)
+                runs.waiting = first
+                found.append(runs)
         return found
 
-    def load(self, directory: Path | str, *, any_platform: bool = False,
-             unaccepted: bool = False) -> Record:
-        directory = Path(directory)
-        record = Record(name=directory.name, directory=directory,
-                        enabled=self._store.enabled(directory.name))
+    def load(
+        self, directory: Path | str, *, any_platform: bool = False, unaccepted: bool = False
+    ) -> Record:
+        return self._start(
+            self._prepare(Path(directory)), any_platform=any_platform, unaccepted=unaccepted
+        )
+
+    def _prepare(self, directory: Path) -> Record:
+        """Read the manifest and settle the origin. Imports nothing."""
+        record = Record(name=directory.name, directory=directory)
+        record.examine()
+        record.enabled = self._store.enabled(record.switch_key)
         try:
             record.manifest = _read_manifest(directory)
             record.name = record.manifest.name
@@ -491,17 +651,29 @@ class Registry:
             logger.error("Extension %s: %s", record.name,
                          i18n.t_source(exc.key, **exc.values), exc_info=exc.__cause__)
             record.became(FAILED, exc.key, **exc.values)
+            return record
+        record.became(PENDING)
+        return record
+
+    def _start(
+        self, record: Record, *, any_platform: bool = False, unaccepted: bool = False
+    ) -> Record:
+        """Decide whether a prepared extension runs, and run it."""
+        manifest = record.manifest
+        if manifest is None:
             return self._remember(record)
-        i18n.own(f"ext.{record.name}", directory / "i18n")
+        i18n.own(f"ext.{record.name}", record.directory / "i18n")
 
         record.has_settings = bool(self._store.declared(record.name).get("settings"))
-        why, values = ((SWITCHED_OFF, {}) if not record.enabled
-                       else _cannot_run(record.manifest, any_platform=any_platform))
+        why, values = (
+            (SWITCHED_OFF, {})
+            if not record.enabled
+            else _cannot_run(manifest, any_platform=any_platform)
+        )
         if why:
             record.became(OFF, why, **values)
             if why == WRONG_PLATFORM:
-                logger.info("Extension %s: %s", record.name,
-                            platform_refusal(record.manifest))
+                logger.info("Extension %s: %s", record.name, platform_refusal(manifest))
             return self._remember(record)
 
         self._register(record, gated=not unaccepted)
@@ -522,6 +694,8 @@ class Registry:
             record.became(OFF, NOT_ACCEPTED)
             return
         context: ExtensionContext | None = None
+        if not record.official:
+            self._imported_unofficial.add(record.name)
         try:
             module = _import(manifest.name, record.directory)
             register = getattr(module, "register", None)
@@ -604,7 +778,7 @@ class Registry:
         record = self._records.get(name)
         if record is None:
             return None
-        self._store.set_enabled(record.name, on)
+        self._store.set_enabled(record.switch_key, on)
         record.enabled = on
         logger.info("Extension %s switched %s", record.name, "on" if on else "off")
         # A refused manifest is refused at every start, whatever the switch says.
@@ -613,6 +787,8 @@ class Registry:
         if not on:
             if not self._take_out(record.name, OFF, SWITCHED_OFF):
                 record.became(OFF, SWITCHED_OFF)
+            if record.origin == accepted.REPLACES:
+                return self._fall_back(record)
         elif record.state == OFF:
             why, values = _cannot_run(record.manifest)
             if why:
@@ -620,6 +796,39 @@ class Registry:
             else:
                 self._start_again(record)
         return record
+
+    def switch_copy(self, name: str, on: bool) -> Record | None:
+        """Switch the copy waiting behind an official extension of this name. It takes
+        the name at the next start, as an accepted copy does. None when there is none."""
+        with self._lock:
+            record = self._records.get(str(name or "").strip())
+            copy = record.waiting if record else None
+            if record is None or copy is None:
+                return None
+            self._store.set_enabled(copy.switch_key, on)
+            copy.enabled = on
+            logger.info("Extension %s (copy) switched %s", copy.name, "on" if on else "off")
+            if not on:
+                copy.became(OFF, SWITCHED_OFF)
+            else:
+                copy.became(OFF, STARTS_AT_RESTART if copy.is_accepted() else NOT_ACCEPTED)
+            return record
+
+    def _fall_back(self, copy: Record) -> Record:
+        """A copy that took an official extension's name is off: the official one takes the
+        name back, with the copy waiting behind it. Returns what now holds the name."""
+        for root in SEARCH_PATH:
+            directory = root / copy.name
+            if directory != copy.directory and (directory / MANIFEST_NAME).is_file():
+                official = self._prepare(directory)
+                self._start(official)
+                official.waiting = copy
+                if official.running and (official.routers or official.name in self._mounted):
+                    _withdraw(official.name, official.subscriptions, official.apps)
+                    official.subscriptions, official.context = [], None
+                    official.became(OFF, STARTS_AT_RESTART)
+                return self._remember(official)
+        return copy
 
     def _start_again(self, record: Record) -> None:
         """Register one that was off. Everything it declared with `ctx.ui` is served by
@@ -661,6 +870,28 @@ class Registry:
             logger.info("Extension %s accepted", target.name)
             return record
 
+    def files_replaced(self, name: str) -> Record | None:
+        """The folder under `name` was installed, updated or removed. A running extension
+        keeps running its old code and says so; one that was not running is read again
+        and starts at the next start. None when nothing of that name is left."""
+        name = str(name or "").strip()
+        with self._lock:
+            current = self._records.get(name)
+            if current is not None and current.running:
+                current.files_changed = True
+                return current
+            directory = next((root / name for root in SEARCH_PATH
+                              if (root / name / MANIFEST_NAME).is_file()), None)
+            if directory is None:
+                self._records.pop(name, None)
+                return None
+            fresh = self._prepare(directory)
+            if fresh.manifest is not None:
+                fresh.has_settings = bool(self._store.declared(fresh.name).get("settings"))
+                fresh.became(OFF, STARTS_AT_RESTART if fresh.enabled else SWITCHED_OFF)
+            fresh.waiting = current.waiting if current is not None else None
+            return self._remember(fresh)
+
     # -- the kill switch -----------------------------------------------------
 
     def disable(self, name: str, why: str, **values: str) -> None:
@@ -697,6 +928,7 @@ class Registry:
                 for event, handler in record.subscriptions:
                     core_events.unsubscribe(event, handler)
             self._records.clear()
+            self._imported_unofficial.clear()
 
     def _remember(self, record: Record) -> Record:
         with self._lock:
@@ -704,8 +936,37 @@ class Registry:
         return record
 
 
-def _withdraw(name: str, subscriptions: list[tuple[str, Any]],
-              apps: ExtensionApps | None) -> None:
+def official_names() -> frozenset[str]:
+    """The names VPinFE's team stands behind, which no folder somebody put an extension
+    in takes over unmarked: the ones the build ships, the ones installed from the list,
+    and the ones in the list as it was last fetched. Needs no connection."""
+    return fingerprints.listed_names(
+        one.name for root in (BUNDLED_DIR, OFFICIAL_DIR) for one in _directories(root)
+    )
+
+
+def _log_inventory(records: list[Record]) -> None:
+    logger.info("Extensions found: %d", len(records))
+    for one in records:
+        version = one.manifest.version if one.manifest else "unreadable"
+        logger.info(
+            "Extension inventory: %s %s origin=%s folder=%s fingerprint=%s %s",
+            one.name,
+            version,
+            one.origin,
+            one.folder,
+            one.fingerprint[:16] or "none",
+            "on" if one.enabled else "off",
+        )
+        if one.differs and one.origin == accepted.CHANGED:
+            logger.warning(
+                "Extension %s is not as VPinFE put it there: %s",
+                one.name,
+                ", ".join(one.differs[:10]),
+            )
+
+
+def _withdraw(name: str, subscriptions: list[tuple[str, Any]], apps: ExtensionApps | None) -> None:
     for event, handler in subscriptions:
         core_events.unsubscribe(event, handler)
     contributions.forget(name)

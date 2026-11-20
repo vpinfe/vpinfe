@@ -101,7 +101,7 @@ class LabelsAreTitleCase(unittest.TestCase):
     def test_every_button_the_source_draws_is_title_case(self) -> None:
         drawn: set[str] = set()
         for root in ("manager", "common", "apps", "extensions"):
-            for path in sorted((ROOT / root).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / root)):
                 if "__pycache__" not in path.parts:
                     drawn.update(_button_keys(trees.tree_for(path)))
         self.assertGreater(len(drawn), 40, "an empty sweep passes and measures nothing")

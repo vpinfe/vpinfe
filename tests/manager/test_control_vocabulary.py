@@ -76,9 +76,10 @@ BUDGET = {
     "import_swap.py": (1, "the tick on each file the old table has under its own name, in "
                           "the replace confirmation - a choice among files, which a fact "
                           "row would draw as a switch beside every one"),
-    "dialog.py": (2, "the one-line and the several-line field every dialog asks with - "
+    "dialog.py": (3, "the one-line and the several-line field every dialog asks with - "
                      "the panel's own, in the frame dialogs share, answering nothing until "
-                     "the dialog does"),
+                     "the dialog does; and the tick an answer waits for, an "
+                     "acknowledgement that holds no value"),
     "remote.py": (1, "the find field above the game list, a question about what to show "
                      "rather than a fact row. A library is longer than a screen, and a "
                      "list longer than a screen is typed into rather than scrolled"),

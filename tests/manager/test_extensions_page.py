@@ -1,8 +1,8 @@
-"""One extension's page in Settings, and the rows that lead to it.
+"""What an extension's panel on the Extensions page says and does for itself.
 
 What is worth pinning is that every state the host can reach is shown, by a word or by
-the switch, that a switch somebody set does not read as something that broke, and that
-the index marks only what is wrong or off.
+the switch, that a switch somebody set does not read as something that broke, and that an
+extension that runs code VPinFE cannot check is not turned on without an answer.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from unittest import mock
 from nicegui import ui
 
 from common import i18n
-from common.devices import install_identity
 from common.extensions import host
 from common.settings import feature_checks
 from manager.extensions import ext_page
@@ -62,37 +61,22 @@ STOPPED = {**RUNNING, "state": host.DISABLED, "reason": "It stopped answering"}
 
 
 class Page:
-    """One extension's page drawn, and what is on it."""
+    """What an extension's panel says is stopping it, drawn, and what is on it."""
 
-    def __init__(self, found: dict, settings_read: dict | None = None,
-                 open_this_device: Any = None) -> None:
+    def __init__(self, found: dict, open_this_device: Any = None) -> None:
         self.redraw = mock.Mock()
         self.open_this_device = open_this_device or mock.Mock()
         with ui.column() as self.body:
-            with mock.patch.object(ext_page, "ApiClient"):
-                ext_page.build(found, settings_read or {}, self.redraw,
-                               self.open_this_device)
+            for draw in ext_page.findings(found, self.open_this_device, self.redraw):
+                draw()
 
     def labels(self, *classes: str) -> list[str]:
         return [one.text for one in self.body.descendants()
                 if isinstance(one, ui.label) and all(c in one.classes for c in classes)]
 
     @property
-    def headings(self) -> list[str]:
-        return self.labels("manager-fact-heading")
-
-    @property
-    def rows(self) -> list[str]:
-        return self.labels("manager-fact-label")
-
-    @property
     def buttons(self) -> list[str]:
         return [one.text for one in self.body.descendants() if isinstance(one, ui.button)]
-
-    @property
-    def switches(self) -> list[bool]:
-        return [bool(one.value) for one in self.body.descendants()
-                if isinstance(one, ui.switch)]
 
 
 class RemoteNameTests(unittest.TestCase):
@@ -105,56 +89,6 @@ class RemoteNameTests(unittest.TestCase):
         self.assertEqual(remote, [
             "Its Web Addresses", "The Scores List", "The Scores Page", "The Reset All Action",
             "Its Section on the Game Panel", "The Rate All Button on the Game Panel"])
-
-
-class HeaderTests(unittest.TestCase):
-    def test_the_name_is_the_display_name_with_the_version_under_it(self) -> None:
-        page = Page(RUNNING)
-
-        self.assertEqual(page.labels("manager-workbench-title"), ["Sample"])
-        self.assertEqual(page.labels("manager-workbench-label"), ["Version 1.2.0"])
-
-    def test_no_version_draws_no_caption(self) -> None:
-        page = Page({**RUNNING, "version": ""})
-
-        self.assertEqual(page.labels("manager-workbench-label"), [])
-
-    def test_its_description_is_under_the_name(self) -> None:
-        self.assertEqual(Page(RUNNING).labels("manager-panel-note"), ["Does a thing"])
-
-
-class LinkTests(unittest.TestCase):
-    PANEL = {"key": "panel", "area": "", "label": "Open the panel",
-             "tip": "Opens in a new tab", "url": "http://{host}:9100/ui"}
-
-    def items(self, found: dict) -> list[ui.menu_item]:
-        return [one for one in Page(found).body.descendants() if isinstance(one, ui.menu_item)]
-
-    def test_a_link_is_a_menu_item_at_the_end_of_the_name(self) -> None:
-        (item,) = self.items({**RUNNING, "links": [self.PANEL]})
-
-        self.assertEqual("http://localhost:9100/ui", item.props["href"])
-        self.assertEqual("_blank", item.props["target"])
-        self.assertEqual("noopener noreferrer", item.props["rel"])
-
-    def test_the_menu_is_in_the_heading_with_the_name(self) -> None:
-        page = Page({**RUNNING, "links": [self.PANEL]})
-
-        self.assertEqual(["Sample"], page.labels("manager-workbench-title"))
-        headings = [one for one in page.body.descendants()
-                    if "manager-panel-heading" in one.classes
-                    and not isinstance(one, ui.label)]
-        self.assertEqual(["Open the panel"],
-                         [inner.text for heading in headings for inner in heading.descendants()
-                          if isinstance(inner, ui.label) and inner.text == "Open the panel"])
-
-    def test_an_extension_with_no_links_has_no_menu(self) -> None:
-        self.assertEqual([], self.items(RUNNING))
-        self.assertEqual([], self.items({**RUNNING, "links": []}))
-
-    def test_a_link_whose_address_is_not_a_web_address_is_not_drawn(self) -> None:
-        self.assertEqual([], self.items(
-            {**RUNNING, "links": [{**self.PANEL, "url": "javascript:alert(1)"}]}))
 
 
 class FindingTests(unittest.TestCase):
@@ -195,77 +129,35 @@ class FindingTests(unittest.TestCase):
         opened.assert_called_once_with()
 
 
-class SettingsGroupTests(unittest.TestCase):
-    def test_enabled_is_the_first_row_under_a_headed_settings_group(self) -> None:
-        page = Page(RUNNING)
-
-        self.assertEqual(page.headings[0], i18n.t("manager.ext_page.settings"))
-        self.assertEqual(page.rows[0], i18n.t("manager.ext_page.enabled"))
+class SwitchRowTests(unittest.TestCase):
+    def switches(self, found: dict) -> list[bool]:
+        with ui.column() as body:
+            ext_page.enabled_row(found, mock.Mock())[1]()
+        return [bool(one.value) for one in body.descendants() if isinstance(one, ui.switch)]
 
     def test_the_switch_shows_what_was_chosen_not_what_is_running(self) -> None:
         """Switched on and waiting for a restart is on, though the state is off."""
-        self.assertEqual(Page(WAITING).switches, [True])
-        self.assertEqual(Page(SWITCHED_OFF).switches, [False])
-        self.assertEqual(Page(LACKS).switches, [True])
-
-    def test_one_waiting_for_a_restart_says_so_under_the_switch(self) -> None:
-        self.assertIn(i18n.t(host.STARTS_AT_RESTART), Page(WAITING).labels("manager-help"))
-        self.assertNotIn(i18n.t(host.STARTS_AT_RESTART),
-                         Page(SWITCHED_OFF).labels("manager-help"))
-
-    def test_its_own_settings_are_rows_beside_enabled(self) -> None:
-        page = Page({**RUNNING, "surfaces": {"settings": "/settings"}},
-                    {"fields": [{"key": "endpoint", "label": "Server", "value": "x"}]})
-
-        self.assertEqual(page.rows[:2], [i18n.t("manager.ext_page.enabled"), "Server"])
-
-    def test_a_setting_that_would_not_read_says_why(self) -> None:
-        page = Page({**RUNNING, "surfaces": {"settings": "/settings"}},
-                    {"error": "No answer"})
-
-        self.assertIn(i18n.t("manager.ext_page.list_failed"), page.labels("manager-intro"))
-
-
-class StoppedSettingsLineTests(unittest.TestCase):
-    LINE = i18n.t("manager.ext_page.settings_when_running")
-
-    def says(self, found: dict) -> bool:
-        return self.LINE in Page({**found, "has_settings": True}).labels("manager-help")
-
-    def test_one_that_is_not_running_says_where_its_settings_will_be(self) -> None:
-        for found in (SWITCHED_OFF, WAITING, BROKE, STOPPED):
-            with self.subTest(state=found["state"]):
-                self.assertTrue(self.says(found))
-
-    def test_one_that_is_running_draws_its_settings_instead(self) -> None:
-        self.assertFalse(self.says(RUNNING))
-
-    def test_one_that_cannot_run_here_makes_no_promise(self) -> None:
-        for found in (WRONG_PLATFORM, LACKS):
-            with self.subTest(reason=found["reason_key"]):
-                self.assertFalse(self.says(found))
-
-    def test_one_that_declares_no_settings_says_nothing(self) -> None:
-        self.assertNotIn(self.LINE, Page(SWITCHED_OFF).labels("manager-help"))
+        self.assertEqual(self.switches(WAITING), [True])
+        self.assertEqual(self.switches(SWITCHED_OFF), [False])
+        self.assertEqual(self.switches(LACKS), [True])
 
 
 class ActionsGroupTests(unittest.TestCase):
     ACTIONS = [{"key": "run", "label": "Import a Library", "description": "Imports one"}]
+    HEADING = (ext_page.panel.HEADING, i18n.t("word.actions"))
+
+    def entries(self, found: dict) -> list[tuple[Any, ...]]:
+        with mock.patch.object(ext_page, "ApiClient"):
+            return ext_page.settings_entries(found, {}, mock.Mock())
 
     def test_a_running_extension_offers_its_actions_under_a_heading(self) -> None:
-        page = Page({**RUNNING, "actions": self.ACTIONS})
-
-        self.assertIn(i18n.t("word.actions"), page.headings)
-        self.assertIn("Import a Library", page.buttons)
+        self.assertIn(self.HEADING, self.entries({**RUNNING, "actions": self.ACTIONS}))
 
     def test_one_that_is_not_running_offers_none(self) -> None:
-        page = Page({**SWITCHED_OFF, "actions": self.ACTIONS})
-
-        self.assertNotIn(i18n.t("word.actions"), page.headings)
-        self.assertNotIn("Import a Library", page.buttons)
+        self.assertNotIn(self.HEADING, self.entries({**SWITCHED_OFF, "actions": self.ACTIONS}))
 
     def test_one_with_none_draws_no_empty_heading(self) -> None:
-        self.assertNotIn(i18n.t("word.actions"), Page(RUNNING).headings)
+        self.assertNotIn(self.HEADING, self.entries(RUNNING))
 
     def _pressed(self, ran: bool) -> mock.Mock:
         pressed: list[Callable[[], Any]] = []
@@ -294,127 +186,6 @@ class ActionsGroupTests(unittest.TestCase):
         self._pressed(False).assert_not_called()
 
 
-IDENTIFIED = {**RUNNING, "author": "Example Author", "home": "https://example.net/tally/",
-              "source": "https://github.com/example/tally", "path": "/found/tally",
-              "picture_shown": False,
-              "trust": {"origin": "in_folder", "accepted": True, "folder": "found"}}
-SHIPPED_IDENTITY = {**IDENTIFIED, "trust": {"origin": "shipped", "accepted": True}}
-
-
-def _words(page: Page) -> list[str]:
-    return [one.text for one in page.body.descendants() if isinstance(one, ui.label)]
-
-
-class AboutTests(unittest.TestCase):
-    def test_the_group_comes_before_the_switch(self) -> None:
-        page = Page(IDENTIFIED)
-
-        self.assertEqual(page.headings[:2], [i18n.t("manager.ext_page.about"),
-                                             i18n.t("manager.ext_page.settings")])
-
-    def test_home_and_source_are_rows_of_their_own_even_when_the_same(self) -> None:
-        same = "https://github.com/vpinfe/vpinfe"
-        page = Page({**SHIPPED_IDENTITY, "home": same, "source": same})
-
-        self.assertEqual(page.rows[:2], [i18n.t("manager.ext_page.home"),
-                                         i18n.t("manager.ext_page.source")])
-
-    def test_each_address_is_shown_in_the_short_form_and_links_to_the_full_one(self) -> None:
-        body = Page(IDENTIFIED).body
-
-        links = {one.props["href"]: one for one in body.descendants() if one.props.get("href")}
-        self.assertEqual(set(links), {"https://example.net/tally/",
-                                      "https://github.com/example/tally"})
-        shown = _words(Page(IDENTIFIED))
-        self.assertIn("example.net/tally", shown)
-        self.assertIn("example/tally", shown)
-
-    def test_a_link_out_opens_in_a_new_tab_without_the_referrer(self) -> None:
-        body = Page(IDENTIFIED).body
-
-        links = [one for one in body.descendants() if one.props.get("href")]
-        self.assertEqual(len(links), 2)
-        for one in links:
-            self.assertEqual(one.props.get("target"), "_blank")
-            self.assertEqual(one.props.get("rel"), "noopener noreferrer")
-
-    def test_the_folder_path_is_for_what_was_found_not_what_ships(self) -> None:
-        self.assertIn(i18n.t("manager.ext_page.folder_path"), Page(IDENTIFIED).rows)
-        self.assertNotIn(i18n.t("manager.ext_page.folder_path"), Page(SHIPPED_IDENTITY).rows)
-
-    def test_what_it_reports_is_one_row_last_in_the_group_with_the_line_that_says_so(self) -> None:
-        page = Page({**IDENTIFIED, "scopes": ["games:read"], "capabilities": ["net:outbound"]})
-
-        about = page.rows[:page.rows.index(i18n.t("manager.ext_page.enabled"))]
-        self.assertEqual(about[-1], i18n.t("manager.trust.uses"))
-        self.assertEqual(page.labels("manager-tier", "manager-tier--on"),
-                         [i18n.t("manager.ext_page.read_library"),
-                          i18n.t("manager.ext_page.reach_internet")])
-        self.assertIn(i18n.t("manager.ext_page.reach_help"), page.labels("manager-help"))
-
-    def test_it_is_read_from_the_manifest_whatever_the_state(self) -> None:
-        page = Page({**IDENTIFIED, "state": host.OFF, "enabled": False,
-                     "scopes": ["games:read"]})
-
-        self.assertIn(i18n.t("manager.trust.uses"), page.rows)
-
-    def test_one_that_reports_nothing_draws_no_row_and_no_line(self) -> None:
-        page = Page(IDENTIFIED)
-
-        self.assertNotIn(i18n.t("manager.trust.uses"), page.rows)
-        self.assertNotIn(i18n.t("manager.ext_page.reach_help"), page.labels("manager-help"))
-
-    def test_what_a_remote_can_open_is_its_own_row(self) -> None:
-        page = Page({**IDENTIFIED, "play": ["router"]})
-
-        self.assertIn(i18n.t("manager.trust.remote"), page.rows)
-
-    def test_one_with_no_manifest_draws_no_group(self) -> None:
-        page = Page(RUNNING)
-
-        self.assertNotIn(i18n.t("manager.ext_page.about"), page.headings)
-        self.assertEqual(page.rows, [i18n.t("manager.ext_page.enabled")])
-
-
-class IdentityHeaderTests(unittest.TestCase):
-    def test_the_author_is_beside_the_version_under_the_name(self) -> None:
-        self.assertEqual(Page(IDENTIFIED).labels("manager-workbench-label"),
-                         ["Example Author · Version 1.2.0"])
-
-    def test_a_chip_beside_the_name_says_it_is_not_from_vpinfe(self) -> None:
-        self.assertIn(i18n.t("manager.ext_page.unofficial_chip"), _words(Page(IDENTIFIED)))
-
-    def test_one_not_yet_accepted_says_so_in_the_chip(self) -> None:
-        page = Page({**IDENTIFIED, "trust": {"origin": "in_folder", "accepted": False,
-                                              "folder": "found"}})
-
-        self.assertIn(i18n.t("manager.ext_page.not_trusted_chip"), _words(page))
-
-    def test_one_that_ships_draws_no_chip(self) -> None:
-        words = _words(Page(SHIPPED_IDENTITY))
-
-        self.assertNotIn(i18n.t("manager.ext_page.unofficial_chip"), words)
-        self.assertNotIn(i18n.t("manager.ext_page.not_trusted_chip"), words)
-
-    def test_a_picture_is_drawn_only_once_it_is_to_be_shown(self) -> None:
-        def images(found: dict) -> list[ui.image]:
-            return [one for one in Page(found).body.descendants()
-                    if isinstance(one, ui.image)]
-
-        (image,) = images({**IDENTIFIED, "picture_shown": True})
-
-        self.assertEqual(image.source, "/api/v1/extensions/sample/picture?v=1.2.0")
-        self.assertEqual(images(IDENTIFIED), [])
-
-    def test_one_with_no_manifest_has_no_frame(self) -> None:
-        self.assertEqual([one for one in Page(RUNNING).body.descendants()
-                          if "manager-ext-picture" in one.classes], [])
-
-    def test_the_frame_is_there_whether_or_not_a_picture_follows(self) -> None:
-        self.assertEqual(len([one for one in Page(IDENTIFIED).body.descendants()
-                              if "manager-ext-picture" in one.classes]), 1)
-
-
 class SwitchTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         # Outside the test's task, which has no page to draw into.
@@ -430,7 +201,7 @@ class SwitchTests(unittest.IsolatedAsyncioTestCase):
         self.client = self.enterContext(mock.patch.object(ext_page, "ApiClient")).return_value
         redraw = mock.Mock()
         with self.body:
-            ext_page.build(found, {}, redraw, mock.Mock())
+            ext_page.enabled_row(found, redraw)
         return switch, io, redraw
 
     async def press(self, switch: mock.Mock, value: bool = False) -> None:
@@ -467,48 +238,40 @@ class SwitchTests(unittest.IsolatedAsyncioTestCase):
                                        type="negative")
 
 
-class IndexTests(unittest.TestCase):
-    def test_the_group_is_last_and_lists_each_by_name(self) -> None:
-        pages = settings.system_pages(install_identity.FEATURES, [
-            {"name": "zed", "display_name": "Zed"}, {"name": "ant", "display_name": "ant"},
-            {"name": "mid", "display_name": "Mid"}])
-        tail = [(page[0], page[1]) for group, page in pages
-                if group == settings.EXTENSIONS_GROUP]
+class TrustOnSwitchTests(unittest.IsolatedAsyncioTestCase):
+    """Protects: (a) an unofficial extension that runs code on this device is not turned on
+    without the person's answer, even one trusted before."""
 
-        self.assertEqual(tail, [("extensions.ant", "ant"), ("extensions.mid", "Mid"),
-                                ("extensions.zed", "Zed")])
-        self.assertEqual(pages[-1][0], settings.EXTENSIONS_GROUP)
+    UNOFFICIAL = {**SWITCHED_OFF, "author": "Example Author", "source": "https://example.net/t",
+                  "path": "/found/tally",
+                  "trust": {"origin": "in_folder", "accepted": True, "uses": []}}
 
-    def test_an_extension_for_another_platform_has_no_page_and_one_that_lacks_a_feature_has(
-            self) -> None:
-        pages = settings.system_pages(install_identity.FEATURES, [
-            {"name": "away", "display_name": "Away", "state": "off",
-             "reason_key": host.WRONG_PLATFORM},
-            {"name": "short", "display_name": "Short", "state": "off",
-             "reason_key": host.LACKS_FEATURES}])
+    def setUp(self) -> None:
+        self.body = ui.column()
 
-        self.assertEqual(["extensions.short"], [page[0] for group, page in pages
-                                                if group == settings.EXTENSIONS_GROUP])
+    async def press(self, answer: bool) -> tuple[mock.Mock, mock.Mock]:
+        switch = self.enterContext(mock.patch.object(ext_page.panel, "switch"))
+        io = self.enterContext(mock.patch.object(
+            ext_page.offload, "io", new=mock.AsyncMock(return_value=None)))
+        self.enterContext(mock.patch.object(
+            ext_page.accept, "extension", new=mock.AsyncMock(return_value=answer)))
+        client = self.enterContext(mock.patch.object(ext_page, "ApiClient")).return_value
+        with self.body:
+            ext_page.enabled_row(self.UNOFFICIAL, mock.Mock())
+            await switch.call_args.args[1](SimpleNamespace(value=True))
+        return io, client
 
-    def test_a_page_key_survives_the_address_lowercasing_the_page(self) -> None:
-        self.assertEqual(ext_page.key("My_Ext"), "extensions.my_ext")
+    async def test_declining_the_notice_changes_nothing(self) -> None:
+        io, _client = await self.press(False)
 
-    def test_none_installed_has_no_group(self) -> None:
-        pages = settings.system_pages(install_identity.FEATURES, [])
+        io.assert_not_called()
 
-        self.assertNotIn(settings.EXTENSIONS_GROUP, [group for group, _page in pages])
+    async def test_agreeing_records_the_trust_and_then_turns_it_on(self) -> None:
+        io, client = await self.press(True)
 
-    def test_the_group_is_there_for_an_install_with_nothing_switched_on(self) -> None:
-        pages = settings.system_pages([], [{"name": "ant", "display_name": "Ant"}])
-
-        self.assertIn(settings.EXTENSIONS_GROUP, [group for group, _page in pages])
-
-    def test_an_extension_that_broke_marks_its_page(self) -> None:
-        item = feature_checks.Unmet(feature=install_identity.CORE,
-                                    section=feature_checks.EXTENSIONS, key="sample",
-                                    state="failed", reason="It threw")
-
-        self.assertEqual(settings.pages_in_trouble([item]), {"extensions.sample": [item]})
+        self.assertEqual([call.args for call in io.await_args_list],
+                         [(client.accept_extension, "sample"),
+                          (client.set_extension_enabled, "sample", True)])
 
 
 class TroubleTests(unittest.TestCase):
@@ -528,43 +291,6 @@ class TroubleTests(unittest.TestCase):
     def test_running_and_off_are_not(self) -> None:
         self.assertEqual(self.trouble([self.record(host.LOADED),
                                        self.record(host.OFF)]), [])
-
-
-class IndexMarkTests(unittest.TestCase):
-    def marks(self, installed: list, trouble: list) -> dict[str, Any]:
-        entries: list = []
-
-        def sections(given: list, *_args: Any, **_kwargs: Any) -> Any:
-            entries.extend(given)
-            return ui.column(), lambda *_rows: None
-
-        state = {"extensions": installed, "trouble": trouble,
-                 "settings_page": "extensions.sample"}
-        with mock.patch.object(settings.panel, "sections", sections), \
-                mock.patch.object(settings.busy, "fill"):
-            settings.build_system(mock.Mock(), state, mock.Mock(),
-                                  {"features": list(install_identity.FEATURES)})
-        return {entry[1]: entry[3] for entry in entries if len(entry) > 3}
-
-    def test_off_is_said_at_the_end_of_its_row_and_nowhere_else(self) -> None:
-        marks = self.marks([SWITCHED_OFF, {**RUNNING, "name": "other",
-                                           "display_name": "Other"}], [])
-
-        self.assertIsNotNone(marks["Sample"])
-        self.assertIsNone(marks["Other"])
-        self.assertIsNone(marks[settings.EXTENSIONS_GROUP])
-
-    def test_one_that_broke_wears_the_trouble_mark_and_so_does_its_group(self) -> None:
-        item = feature_checks.Unmet(feature=install_identity.CORE,
-                                    section=feature_checks.EXTENSIONS, key="sample",
-                                    state="failed", reason="It threw")
-        marks = self.marks([BROKE], [item])
-
-        self.assertIsNotNone(marks["Sample"])
-        self.assertIsNotNone(marks[settings.EXTENSIONS_GROUP])
-
-    def test_one_running_is_marked_with_nothing(self) -> None:
-        self.assertIsNone(self.marks([RUNNING], [])["Sample"])
 
 
 class SecretSettingTests(unittest.TestCase):

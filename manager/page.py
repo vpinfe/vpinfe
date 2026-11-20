@@ -27,12 +27,14 @@ from common.runtime.jobs import (
     KIND_MEDIA_CAPTURE,
     KIND_VPS_ROLLUP,
 )
+from manager import extension_count as extension_count_module
 from manager import power, rail_marks
 from manager import update_count as update_count_module
 from manager.backups import backups as backups_page
 from manager.devices import devices as devices_page
 from manager.extensions import ext_links, ext_mark, ext_pages
 from manager.extensions import ext_lists as community_page
+from manager.extensions import extensions as extensions_page
 from manager.frontend import launchers as launchers_page
 from manager.frontend import players as players_page
 from manager.frontend import theme_sources
@@ -188,6 +190,8 @@ NAV_GROUPS: tuple[tuple[tuple[str, str, str] | None, tuple[NavItem, ...]], ...] 
     # install knows about, then its records, then what it is.
     (NAV_SYSTEM, (("settings", "manager.section.settings", "tune", install_identity.CORE),
                   ("devices", "manager.section.devices", "devices", install_identity.DEVICES),
+                  ("extensions", "manager.section.extensions", "extension",
+                   install_identity.CORE),
                   ("metrics", "manager.section.metrics", "monitor_heart", install_identity.CORE),
                   ("logs", "manager.section.logs", "description", install_identity.CORE),
                   ("jobs", "manager.section.jobs", "work_history", install_identity.CORE),
@@ -262,6 +266,7 @@ SECTIONS = {
     "media": "manager.section.media",
     "assets": "manager.section.assets",
     "devices": "manager.section.devices",
+    "extensions": "manager.section.extensions",
     "settings": "manager.section.settings",
     "launchers": "manager.section.launchers",
     "themes": "manager.section.themes",
@@ -365,6 +370,7 @@ EMPTY_PANE = {
     "media": ("manager.page.media", "manager.page.select_media"),
     "assets": ("manager.page.assets", "manager.page.select_asset"),
     "devices": ("manager.page.device", "manager.page.select_device"),
+    "extensions": ("manager.page.extension", "manager.page.select_extension"),
     "launchers": ("manager.page.launcher", "manager.page.select_launcher"),
     "themes": ("manager.page.theme", "manager.page.select_theme"),
     "players": ("manager.page.player", "manager.page.select_player"),
@@ -689,7 +695,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                    backup: str = "", report: str = "", group: str = "",
                    entry: str = "", row: str = "", author: str = "", maker: str = "",
                    theme: str = "", tab: str = "", pane: str = "",
-                   file: str = "") -> None:
+                   file: str = "", extension: str = "") -> None:
     """The Manager. Query parameters say where in it, so a place can be linked to."""
     # 2.x's own page keys, still sitting in bookmarks and manager-ui-state.json.
     if page.strip().lower() in ("vpinplay_account", "vpinplay_player"):
@@ -804,7 +810,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                            "player": player, "log": log, "find": find, "backup": backup,
                            "report": report, "group": group, "entry": entry,
                            "row": row, "author": author, "maker": maker, "theme": theme,
-                           "tab": tab, "pane": pane, "file": file},
+                           "tab": tab, "pane": pane, "file": file,
+                           "extension": extension},
                    views=[key for key, _label, _icon, _feature in nav_items],
                    sections=[*(item.key for item in rail.SECTIONS), *discovery_kinds.vocabulary()])
 
@@ -1336,6 +1343,10 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
     state["recount_updates"] = update_count.recount
     ui.timer(0.2, update_count.recount, once=True)
 
+    extension_count = extension_count_module.Count(warm, lambda: mark_findings())
+    state["recount_extensions"] = extension_count.recount
+    ui.timer(0.3, extension_count.recount, once=True)
+
     loop = asyncio.get_running_loop()
 
     def _tie_written() -> None:
@@ -1821,6 +1832,15 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         deeplink.sync(state)
 
     @on_page
+    async def show_extension(row: dict | None) -> None:
+        """What the Extensions grid has selected is what the workbench is about, the same
+        rule every other subject follows."""
+        state["extension"] = (row or {}).get("id")
+        await builds.build_extension(panel, workbench_title, library, state["extension"],
+                                     state)
+        deeplink.sync(state)
+
+    @on_page
     async def show_extension_row(extension: dict, declared: dict, rows: list[dict],
                                  again: Any) -> None:
         """What an extension's list has open is what the workbench is about, the same rule
@@ -1969,6 +1989,9 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
                                    probe=_probe_devices,
                                    local_device_id=discovery.get("install_id"),
                                    rerender=redraw)
+            elif view == "extensions":
+                state["rerender"] = redraw
+                extensions_page.build(library, state, show_extension, redraw)
             elif view == "settings":
                 settings_page.build_system(library, state, redraw, discovery)
             elif view == "launchers":
@@ -2081,6 +2104,7 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
         state["extensions"] = await offload.io(ApiClient().extensions)
         refresh_rail()
         await recheck_trouble()
+        await extension_count.recount()
 
     state["read_extensions"] = read_extensions
 
@@ -2189,6 +2213,8 @@ async def manager_page(view: str = "", game: str = "", table: str = "", section:
             arrival = show_player({"id": state["player"]})
         elif state["view"] == "backups" and state.get("backup"):
             arrival = show_backup({"id": state["backup"]})
+        elif state["view"] == "extensions" and state.get("extension"):
+            arrival = show_extension({"id": state["extension"]})
         elif state["view"] == "discovery" and state.get("entry"):
             arrival = show_discovery({"id": state["entry"]})
         elif state.get("ext_row") and community_page.find(state["view"], state["extensions"]):
@@ -2392,6 +2418,8 @@ def _land(state: dict[str, Any]) -> None:
         grid.land_on(players_page.SCOPE, {"id": str(state["player"])})
     elif view == "backups" and state.get("backup"):
         grid.land_on(backups_page.SCOPE, {"id": str(state["backup"])})
+    elif view == "extensions" and state.get("extension"):
+        grid.land_on(extensions_page.SCOPE, {"id": str(state["extension"])})
     elif view == "discovery" and state.get("entry"):
         grid.land_on(discovery_page.SCOPE, {"id": str(state["entry"])})
         grid.land_on(discovery_releases_page.SCOPE, {"game_id": str(state["entry"])})
@@ -2464,6 +2492,7 @@ def leave_for(state: dict[str, Any], view: str) -> None:
         state["launcher"] = None
         state["player"] = None
         state["backup"] = None
+        state["extension"] = None
         state["entry"] = None
         state["ext_row"] = ""
         state["sets"] = None

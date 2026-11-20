@@ -67,9 +67,12 @@ page, in the README.
 
 First met in [lesson 10](tutorial.md#lesson-10-shipping-it).
 
-VPinFE tells a person which extensions it did not ship.  An extension VPinFE ships, such as
-VPinPlay or the library importer, carries no mark.  Every other extension is marked Unofficial,
-including one in the extensions folder that has the name of one VPinFE ships:
+VPinFE tells a person which extensions we do not stand behind.  An extension that came with
+VPinFE, such as VPinPlay or the library importer, or that VPinFE installed from the Extension List
+and has not been edited since, carries no mark.  Every other extension is marked Unofficial,
+including one in the extensions folder that has the name of one we list, and one that was edited
+after VPinFE installed it.  [Official and unofficial extensions](official-extensions.md) says what
+that means and how an extension gets on the list:
 
 - **Before it runs.**  A prompt, "Trust an Unofficial Extension?", and a row under Needs You on
   Overview while it waits.  Until an owner trusts it, it does not start.

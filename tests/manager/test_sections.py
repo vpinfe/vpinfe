@@ -150,25 +150,24 @@ class CollectionAddressTests(unittest.TestCase):
 
 
 class ExtensionAddressTests(unittest.TestCase):
-    """An extension's own page is a page of Settings, so it has an address that reloads
-    onto it."""
+    """An extension has an address that reloads onto its panel on the Extensions page."""
 
-    def _seed(self, query: dict, views: tuple[str, ...] = ("games", "settings")) -> dict:
+    def _seed(self, query: dict,
+              views: tuple[str, ...] = ("games", "settings", "extensions")) -> dict:
         state: dict = {}
         deeplink.apply(state, query, views=views, sections=[])
         return state
 
     def test_an_extension_s_page_survives_the_round_trip(self) -> None:
-        state = self._seed({"view": "settings", "page": "extensions.vpinplay"})
+        state = self._seed({"view": "extensions", "extension": "vpinplay"})
 
-        self.assertEqual((state["view"], state["settings_page"]),
-                         ("settings", "extensions.vpinplay"))
-        self.assertEqual("view=settings&page=extensions.vpinplay", deeplink.query(state))
+        self.assertEqual((state["view"], state["extension"]), ("extensions", "vpinplay"))
+        self.assertEqual("view=extensions&extension=vpinplay", deeplink.query(state))
 
     def test_the_address_is_the_one_its_page_links_to(self) -> None:
         from manager.extensions import ext_page
 
-        self.assertEqual("/manager?view=settings&page=extensions.vpinplay",
+        self.assertEqual("/manager?view=extensions&extension=vpinplay",
                          ext_page.address("vpinplay"))
 
     def test_the_old_view_is_not_one(self) -> None:

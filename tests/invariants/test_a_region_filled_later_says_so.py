@@ -23,6 +23,9 @@ NOT_A_REGION: dict[tuple[str, str], str] = {
         "Starts the replan a sheet with a preselected group needs once the dialog is drawn. "
         "The replan holds the go button and the sheet's scroll itself, and its rows are "
         "already there.",
+    ("support.py", "open_again_if_asked"):
+        "Opens the Support Package dialog once, a second after About or Logs is drawn, when "
+        "the note left before a restart is still there. It fills no region.",
     ("page.py", "manager_page"):
         "Puts the update count on the Devices entry once the devices have answered: "
         "a badge in the nav, not a region's content.",

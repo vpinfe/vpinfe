@@ -131,6 +131,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-build.txt
 
+      # The included extensions live in their own repositories. This puts the version the
+      # Extension List names under extensions/, where the spec fingerprints and ships it,
+      # and fails the build rather than ship without one.
+      - name: Fetch the included extensions
+        run: python scripts/fetch_extensions.py
+
       - name: Create Chromium directories (Linux/macOS)
         if: runner.os != 'Windows'
         run: |

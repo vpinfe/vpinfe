@@ -229,7 +229,7 @@ class AReadThatFailedIsSaid(unittest.TestCase):
                                  jobs=lambda limit: refuse(),
                                  extension_needs=lambda: {"needs": []},
                                  unaccepted_themes=lambda: {"themes": []},
-                                 extensions=lambda: [],
+                                 extensions=lambda: [], extension_list=lambda: {},
                                  launchers=lambda: {"launchers": []},
                                  all_media=lambda: [], devices=lambda: [],
                                  library_policy=lambda: {})
@@ -946,7 +946,7 @@ class WhatExtensionsAskFor(unittest.TestCase):
             jobs=lambda limit: [],
             extension_needs=lambda: {"needs": [RAISED], "away": ["old"], "failed": ["old"]},
             unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [],
-            launchers=lambda: {"launchers": []},
+            extension_list=lambda: {}, launchers=lambda: {"launchers": []},
             all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
         library = Library.__new__(Library)
         library._client = client
@@ -975,7 +975,8 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
         self.assertEqual(t("manager.needs.untrusted", name="My Theme"), theme.label)
         self.assertEqual(t("manager.needs.untrusted", name="Tool"), extension.label)
         self.assertEqual("themes", theme.opens.view)
-        self.assertEqual("settings", extension.opens.view)
+        self.assertEqual(("extensions", {"extension": "tool"}),
+                         (extension.opens.view, extension.opens.keys))
         self.assertEqual(t("manager.needs.untrusted.tip"), theme.tip)
 
     def test_two_themes_are_one_row_and_an_extension_still_has_its_own(self):
@@ -1026,7 +1027,7 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
             update_check=lambda: {}, capture_proposals=lambda: {"proposals": []},
             jobs=lambda limit: [], extension_needs=lambda: {},
             unaccepted_themes=lambda: {"themes": [self.THEME]}, extensions=lambda: [],
-            launchers=lambda: {"launchers": []},
+            extension_list=lambda: {}, launchers=lambda: {"launchers": []},
             all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
         for name, value in replaced.items():
             setattr(client, name, value)
@@ -1081,7 +1082,7 @@ class WhatProgramsAsk(unittest.TestCase):
                 update_check=lambda: {}, capture_proposals=lambda: {"proposals": []},
                 jobs=lambda limit: [], extension_needs=lambda: {},
                 unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [], asks=asks,
-                launchers=lambda: {"launchers": []},
+                extension_list=lambda: {}, launchers=lambda: {"launchers": []},
                 all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
             read = Library.__new__(Library)
             read._client = client

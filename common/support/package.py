@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from common import i18n, vpinfe_version
+from common import extensions, i18n, vpinfe_version
 from common.host import log_sources
 from common.runtime import log_setup
 from common.support import redact, sections
@@ -67,6 +67,15 @@ KIND_LABELS = {
 
 class PackageTooLargeError(Exception):
     """The finished zip is over the cap on what one package may hold."""
+
+
+class UnofficialRunningError(Exception):
+    """An extension VPinFE's team does not stand behind is running, so this run is not one a
+    package can speak for. `names` says which."""
+
+    def __init__(self, names: tuple[str, ...]) -> None:
+        super().__init__(", ".join(names))
+        self.names = names
 
 
 @dataclass(frozen=True)
@@ -307,7 +316,11 @@ class Raw:
 
 def collect(options: Options | None = None) -> Raw:
     """Runs the probes and reads the logs. Which parts are gathered is the options'
-    `logs`, `previous_log` and `settings`; what is hidden is decided by `assemble`."""
+    `logs`, `previous_log` and `settings`; what is hidden is decided by `assemble`.
+    Raises UnofficialRunningError while an unofficial extension is running."""
+    running = extensions.unofficial_running()
+    if running:
+        raise UnofficialRunningError(tuple(one.name for one in running))
     options = options or Options()
     moment = _local_now()
     with i18n.in_source_language():

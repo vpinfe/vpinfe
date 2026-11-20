@@ -43,7 +43,7 @@ class AStagedFileIsMadeOneWayTests(unittest.TestCase):
     def test_nothing_else_stages_a_file(self) -> None:
         found = []
         for package in PACKAGES:
-            for path in sorted((REPO / package).rglob("*.py")):
+            for path in sorted(trees.source_files(REPO / package)):
                 if path != HELPER:
                     found += [f"{path.relative_to(REPO).as_posix()}:{line}"
                               for line in _offenders(trees.tree_for(path))]

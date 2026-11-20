@@ -29,6 +29,18 @@ IN_FOLDER = "folder"
 # Where an extension came from.
 SHIPPED = "shipped"
 REPLACES = "replaces"
+# Installed by VPinFE from the official list, files as VPinFE wrote them.
+OFFICIAL = "official"
+# Shipped or installed by VPinFE, and its files are no longer what VPinFE wrote.
+CHANGED = "changed"
+
+# The origins VPinFE's team stands behind, and which run with no acceptance.
+OFFICIAL_ORIGINS = frozenset({SHIPPED, OFFICIAL})
+
+
+def is_official(origin: str) -> bool:
+    return origin in OFFICIAL_ORIGINS
+
 
 _THEMES = "themes"
 _EXTENSIONS = "extensions"
@@ -169,7 +181,7 @@ def extension_accepted(name: str, origin: str, scopes: Collection[str],
     """Whether this extension may run: shipped with VPinFE, or accepted from where it is
     now with at least the access it declares now. `folder` is the folder it is in, and
     an acceptance given for another folder does not cover it; None leaves the folder out."""
-    if origin == SHIPPED:
+    if is_official(origin):
         return True
     return (not new_access(name, origin, scopes, capabilities, folder, play)
             and _kept(name, origin, folder) is not None)

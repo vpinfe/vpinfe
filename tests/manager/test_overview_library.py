@@ -21,6 +21,8 @@ from manager.settings import sections
 def library(games: dict[str, dict[str, bool]], *, hidden: tuple[str, ...] = (),
             listed: list[dict] | None = None) -> Library:
     client = Mock()
+    client.extension_list.return_value = {}
+    client.extensions.return_value = []
     client.library_policy.return_value = {"hidden_media_kinds": list(hidden)}
     client.put_library_policy.side_effect = lambda changes: {"hidden_media_kinds":
                                                               changes["hidden_media_kinds"]}

@@ -128,7 +128,7 @@ class TestRegistriesHoldNoWords(unittest.TestCase):
     def test_no_converted_declaration_carries_a_literal(self) -> None:
         offenders = [f"{path.relative_to(ROOT).as_posix()}:{line} {said}"
                      for root in ("common", "apps")
-                     for path in sorted((ROOT / root).rglob("*.py"))
+                     for path in sorted(trees.source_files(ROOT / root))
                      if "__pycache__" not in path.parts
                      for line, said in _literal_words(trees.tree_for(path))]
         self.assertEqual(offenders, [], "the catalog owns these words now")
@@ -231,7 +231,7 @@ READ_FOR = {
 
 def _modules_under(roots: tuple[str, ...]) -> list[str]:
     return [path.relative_to(ROOT).as_posix()
-            for root in roots for path in sorted((ROOT / root).rglob("*.py"))
+            for root in roots for path in sorted(trees.source_files(ROOT / root))
             if "__pycache__" not in path.parts]
 
 
@@ -1598,7 +1598,7 @@ class TestPluralsComeFromTheCatalog(unittest.TestCase):
     def test_no_screen_word_is_pluralised_in_code(self) -> None:
         offenders = []
         for folder in ("manager", "common", "httpapi"):
-            for path in sorted((ROOT / folder).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / folder)):
                 if "__pycache__" in path.parts:
                     continue
                 seen = _PluralSuffixes()
@@ -1662,7 +1662,7 @@ class TestNumbersAreWrittenByTheCatalog(unittest.TestCase):
     def test_nothing_groups_digits_with_a_comma_of_its_own(self) -> None:
         offenders = []
         for folder in ("manager", "common", "frontend", "httpapi", "apps", "extensions"):
-            for path in sorted((ROOT / folder).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / folder)):
                 name = path.relative_to(ROOT).as_posix()
                 if "__pycache__" in path.parts or name in GROUPED_NOT_SAID:
                     continue
@@ -1790,7 +1790,7 @@ class TestEveryKeyIsServed(unittest.TestCase):
         # `tests` is in here because a re-key that rewrites the source and forgets the
         # suite leaves an assertion naming a key nothing serves.
         for root in ("manager", "frontend", "httpapi", "common", "tests"):
-            for path in sorted((ROOT / root).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / root)):
                 if "__pycache__" in path.parts:
                     continue
                 for node in ast.walk(trees.tree_for(path)):
@@ -1869,7 +1869,7 @@ class TestParametersMatchTheirTemplate(unittest.TestCase):
     def test_every_call_fills_exactly_the_slots_its_entry_has(self) -> None:
         offenders = []
         for root in ("manager", "frontend", "httpapi", "common"):
-            for path in sorted((ROOT / root).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / root)):
                 if "__pycache__" in path.parts:
                     continue
                 for node in ast.walk(trees.tree_for(path)):
@@ -1907,7 +1907,7 @@ class TestASlotIsNamedForWhatItHolds(unittest.TestCase):
     def test_no_slot_is_named_after_the_call_that_fills_it(self) -> None:
         offenders = []
         for root in ("manager", "frontend", "httpapi", "common", "extensions"):
-            for path in sorted((ROOT / root).rglob("*.py")):
+            for path in sorted(trees.source_files(ROOT / root)):
                 if "__pycache__" in path.parts:
                     continue
                 for node in ast.walk(trees.tree_for(path)):
@@ -2122,7 +2122,8 @@ def _extensions() -> list[Path]:
 
 def _modules(package: Path) -> list[tuple[Path, ast.Module]]:
     return [(path, trees.tree_for(path))
-            for path in sorted(package.rglob("*.py")) if "__pycache__" not in path.parts]
+            for path in trees.source_files(package)
+            if path.relative_to(package).parts[0] != "tests"]
 
 
 def _a_sentence(said: str) -> bool:
@@ -2201,13 +2202,18 @@ def _asks(tree: ast.AST) -> list[tuple[int, str | re.Pattern, set[str]]]:
         if not isinstance(node, ast.Call) or not node.args \
            or (getattr(node.func, "attr", None) or getattr(node.func, "id", None)) != "t":
             continue
-        key, fills = node.args[0], {kw.arg for kw in node.keywords if kw.arg}
-        if isinstance(key, ast.Constant) and isinstance(key.value, str):
-            found.append((node.lineno, key.value, fills))
-        elif isinstance(key, ast.JoinedStr):
-            shape = "".join(re.escape(str(part.value)) if isinstance(part, ast.Constant)
-                            else "[a-z0-9_]+" for part in key.values)
-            found.append((node.lineno, re.compile(shape), fills))
+        fills = {kw.arg for kw in node.keywords if kw.arg}
+        choices = [node.args[0]]
+        while choices:
+            key = choices.pop()
+            if isinstance(key, ast.IfExp):
+                choices += [key.body, key.orelse]
+            elif isinstance(key, ast.Constant) and isinstance(key.value, str):
+                found.append((node.lineno, key.value, fills))
+            elif isinstance(key, ast.JoinedStr):
+                shape = "".join(re.escape(str(part.value)) if isinstance(part, ast.Constant)
+                                else "[a-z0-9_]+" for part in key.values)
+                found.append((node.lineno, re.compile(shape), fills))
     return found
 
 

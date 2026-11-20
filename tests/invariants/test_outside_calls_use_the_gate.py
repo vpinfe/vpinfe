@@ -52,7 +52,7 @@ def _files() -> list[Path]:
     found: list[Path] = []
     for name in CODE:
         base = ROOT / name
-        found += [base] if base.is_file() else sorted(base.rglob("*.py"))
+        found += [base] if base.is_file() else sorted(trees.source_files(base))
     return [one for one in found if one.relative_to(ROOT).as_posix() != GATE]
 
 

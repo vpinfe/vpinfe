@@ -9,6 +9,7 @@ tree builds its own copy.
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 from typing import Literal, overload
 
@@ -55,6 +56,25 @@ def reparsed(path: Path) -> ast.Module:
     resolved = Path(path).resolve()
     source = resolved.read_text(encoding="utf-8", errors="ignore")
     return ast.parse(source, filename=str(resolved))
+
+
+def source_files(top: Path) -> list[Path]:
+    """Every `.py` file under `top`, in order, the way a scan of a package wants them.
+
+    `Path.rglob` does not follow a linked folder, and each folder of `extensions/` is a link
+    to a clone on a development machine, so a scan built on it finds nothing there and
+    passes. This follows them. The tests an extension carries are left out of a scan of
+    `extensions/`: they are checked by the rules for tests.
+    """
+    found: list[Path] = []
+    for here, folders, files in os.walk(top, followlinks=True):
+        at = Path(here)
+        folders[:] = sorted(
+            name for name in folders
+            if name != "__pycache__" and not name.startswith(".")
+            and not (name == "tests" and at.parent == top and top.name == "extensions"))
+        found += [at / name for name in sorted(files) if name.endswith(".py")]
+    return sorted(found)
 
 
 _MANAGER = Path(__file__).resolve().parents[2] / "manager"
