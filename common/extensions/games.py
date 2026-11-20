@@ -447,7 +447,8 @@ class ExtensionGames(Offered):
         return add_logos(makers, [(name, self._source(path)) for name, path in candidates])
 
     def put_media(self, game_id: str, kind: str, path: str | Path,
-                  table_stem: str = "", replace: bool = True, page: int = 1) -> str:
+                  table_stem: str = "", replace: bool = True, page: int = 1,
+                  unsupported: bool = False) -> str:
         """Put a file in one of an entry's media slots. Answers with what it landed as.
 
         `replace=False` fills an empty slot and raises FileExistsError where something
@@ -458,6 +459,11 @@ class ExtensionGames(Offered):
         beside the page 1 the slot shows, at whatever tier that is, so a downloaded
         `flyer.png` gains `flyer 2.png`. The highest page is one past the last; with no
         page 1 the file becomes page 1.
+
+        `unsupported` keeps a file the kind cannot play as it arrived, where its extension is
+        one the converter reads (a `.avi` for a video, a `.wav` for a sound), under the name
+        it would have had. It displaces nothing, the resolver never picks it, and with
+        `replace=False` it still refuses a file of that name already there.
         """
         self._needs(GAMES_WRITE)
         from common.games import library_folders, media_placement
@@ -470,12 +476,39 @@ class ExtensionGames(Offered):
         stem = media_placement.page_stem(game_dir, kind, table_stem or game_dir.name,
                                          table_stem, page)
         if not replace:
-            held = media_placement.displaced(game_dir, kind, stem, source.suffix, page)
+            held = ([landing] if unsupported and (landing := media_placement.landing(
+                        game_dir, kind, stem, source.suffix, page, unsupported=True)).is_file()
+                    else [] if unsupported
+                    else media_placement.displaced(game_dir, kind, stem, source.suffix, page))
             if held:
                 raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(held[0]))
-        written = media_placement.place(game_dir, kind, stem, source, page)
+        written = media_placement.place(game_dir, kind, stem, source, page,
+                                        unsupported=unsupported)
         # Recorded as the user's, because it is: somebody's own library was imported, and
         # a later media refresh must leave it alone rather than treat it as ours to
         # replace.
+        media_placement.record_origin(game_dir, written, "user", "")
+        return written.name
+
+    def put_other_media(self, game_id: str, label: str, path: str | Path,
+                        table_stem: str = "", replace: bool = False, page: int = 1) -> str:
+        """Keep a file with an entry that is none of the kinds, as `(Label) Name.ext`.
+
+        For art a source filed in a folder this library has no slot for. The file stays
+        with its table, named by the standard every media file here follows, and nothing
+        reads it as a kind. `label` is one word of letters and digits (`label_of` makes one
+        of a folder's name) and not one a kind owns; the extension must be a picture, a
+        video, a sound or a document. `page` 2 and up are `(Label 2) Name.ext`.
+
+        `replace=False` leaves a file of that name alone and raises FileExistsError. Answers
+        with what it landed as.
+        """
+        self._needs(GAMES_WRITE)
+        from common.games import library_folders, media_placement, other_media
+
+        source = self._source(path)
+        game_dir = library_folders.writable_game_folder(self.folder(game_id))
+        written = other_media.place(game_dir, label, table_stem or game_dir.name, source, page,
+                                    replace=replace)
         media_placement.record_origin(game_dir, written, "user", "")
         return written.name

@@ -246,6 +246,15 @@ def displaced(game_dir: str | Path, kind: str, stem: str, extension: str,
     return sorted(_family_at_tier(game_dir, kind, stem, number))
 
 
+def landing(game_dir: str | Path, kind: str, stem: str, extension: str, page: int = 1, *,
+            unsupported: bool = False) -> Path:
+    """Where a `place` of this extension would write, refusing what it would refuse."""
+    game_dir = Path(game_dir)
+    number = page if unsupported else _number_for(game_dir, kind, stem, page)
+    return game_dir / "medias" / target_name(kind, stem, extension, number,
+                                             unsupported=unsupported, game_dir=game_dir)
+
+
 def _holding(game_dir: Path, going: list[Path]) -> tuple[str, list[Path]]:
     """The game id to file copies under and the files among `going` that exist; nothing
     where there is no file, or the folder's `.info` holds no game id."""
@@ -303,18 +312,19 @@ def place(game_dir: str | Path, kind: str, stem: str, source: str | Path,
     whose `.info` holds no game id has nothing to file a copy under and is written as it is.
 
     `unsupported` places a file the family cannot play as it arrived and displaces nothing:
-    it sits beside whatever works, and the resolver never picks it.
+    it sits beside whatever works, and the resolver never picks it. Its page is the one asked
+    for. A file of that exact name is copied to Backups before it is written over.
     """
     game_dir = Path(game_dir)
     source = Path(source)
-    number = _number_for(game_dir, kind, stem, page)
+    number = page if unsupported else _number_for(game_dir, kind, stem, page)
     name = target_name(kind, stem, source.suffix, number, unsupported=unsupported,
                        game_dir=game_dir)
     medias = game_dir / "medias"
-    displaced = [] if unsupported else list(_family_at_tier(game_dir, kind, stem, number))
-    keep_displaced(game_dir, displaced)
-    medias.mkdir(parents=True, exist_ok=True)
     target = medias / name
+    displaced = [] if unsupported else list(_family_at_tier(game_dir, kind, stem, number))
+    keep_displaced(game_dir, displaced or ([target] if unsupported and target.is_file() else []))
+    medias.mkdir(parents=True, exist_ok=True)
 
     for sibling in displaced:
         # By spelling: where the filesystem ignores case, a Path of another case compares

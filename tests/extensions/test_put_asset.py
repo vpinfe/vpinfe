@@ -77,6 +77,139 @@ class ManufacturerLogoTests(PutAssetCase):
         self.assertEqual(list(self.logos.iterdir()), [])
 
 
+class OtherMediaTests(PutAssetCase):
+    def _file(self, name: str) -> Path:
+        path = self.source / name
+        path.write_bytes(name.encode())
+        return path
+
+    def _medias(self) -> list[str]:
+        return sorted(one.name for one in (self.game / "medias").iterdir())
+
+    def test_a_file_with_no_kind_is_kept_as_a_label_then_the_table_name(self) -> None:
+        landed = self.games.put_other_media("g1", "Other1", self._file("a.png"),
+                                            table_stem="Taxi")
+
+        self.assertEqual(landed, "(Other1) Taxi.png")
+        self.assertEqual(self._medias(), ["(Other1) Taxi.png"])
+
+    def test_a_later_one_is_a_numbered_page_and_a_video_shares_the_label(self) -> None:
+        self.games.put_other_media("g1", "Other1", self._file("a.png"), table_stem="Taxi")
+        second = self.games.put_other_media("g1", "Other1", self._file("b.png"),
+                                            table_stem="Taxi", page=2)
+        clip = self.games.put_other_media("g1", "Other1", self._file("c.mp4"),
+                                          table_stem="Taxi")
+
+        self.assertEqual((second, clip), ("(Other1 2) Taxi.png", "(Other1) Taxi.mp4"))
+
+    def test_a_file_already_there_is_left_alone_unless_it_is_replaced(self) -> None:
+        landed = self.games.put_other_media("g1", "Other1", self._file("a.png"))
+
+        with self.assertRaises(FileExistsError):
+            self.games.put_other_media("g1", "Other1", self._file("b.png"))
+        self.assertEqual((self.game / "medias" / landed).read_bytes(), b"a.png")
+        self.games.put_other_media("g1", "Other1", self._file("b.png"), replace=True)
+        self.assertEqual((self.game / "medias" / landed).read_bytes(), b"b.png")
+
+    def test_a_label_a_kind_owns_is_refused_so_the_file_never_becomes_that_kind(self) -> None:
+        for label in ("Backglass", "wheel", "GameInfo", "RuleCard", "DMD"):
+            with self.subTest(label), self.assertRaises(ValueError):
+                self.games.put_other_media("g1", label, self._file("a.png"))
+        self.assertFalse((self.game / "medias").exists())
+
+    def test_a_label_that_is_not_one_word_is_refused(self) -> None:
+        for label in ("", "Other 1", "(Other1)", "../x"):
+            with self.subTest(label), self.assertRaises(ValueError):
+                self.games.put_other_media("g1", label, self._file("a.png"))
+
+    def test_only_media_and_documents_are_kept(self) -> None:
+        with self.assertRaises(ValueError):
+            self.games.put_other_media("g1", "Other1", self._file("run.exe"))
+        with self.assertRaises(ValueError):
+            self.games.put_other_media("g1", "Other1", self._file("Thumbs.db"))
+
+    def test_a_kept_file_displaces_the_kinds_own_file(self) -> None:
+        wheel = self.games.put_media("g1", "wheel", self._file("w.png"), table_stem="Taxi")
+
+        self.games.put_other_media("g1", "Other1", self._file("a.png"), table_stem="Taxi")
+
+        self.assertEqual(self._medias(), sorted([wheel, "(Other1) Taxi.png"]))
+
+    def test_it_needs_the_write_scope(self) -> None:
+        reader = ExtensionGames("reader", ("games:read",), _Files(self.source))
+        reader.folder = lambda game_id: str(self.game)  # type: ignore[method-assign]
+
+        with self.assertRaises(ContractError):
+            reader.put_other_media("g1", "Other1", self._file("a.png"))
+
+    def test_a_file_outside_what_the_extension_declared_is_refused(self) -> None:
+        outside = self.root / "elsewhere.png"
+        outside.write_bytes(b"png")
+
+        with self.assertRaises(ContractError):
+            self.games.put_other_media("g1", "Other1", outside)
+
+
+class KeepAsArrivedTests(PutAssetCase):
+    def _file(self, name: str) -> Path:
+        path = self.source / name
+        path.write_bytes(name.encode())
+        return path
+
+    def test_a_convertible_video_is_refused_unless_it_is_kept_as_it_arrived(self) -> None:
+        with self.assertRaises(ValueError):
+            self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                                 table_stem="Taxi")
+
+        landed = self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                                      table_stem="Taxi", unsupported=True)
+
+        self.assertEqual(landed, "(Backglass) Taxi.avi")
+
+    def test_a_kept_file_displaces_nothing_and_is_not_the_one_the_slot_shows(self) -> None:
+        played = self.games.put_media("g1", "backglass_video", self._file("a.mp4"),
+                                      table_stem="Taxi")
+
+        self.games.put_media("g1", "backglass_video", self._file("b.avi"),
+                             table_stem="Taxi", unsupported=True)
+
+        self.assertEqual(sorted(one.name for one in (self.game / "medias").iterdir()),
+                         sorted([played, "(Backglass) Taxi.avi"]))
+
+    def test_without_replace_a_kept_file_of_that_name_is_left_alone(self) -> None:
+        self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                             table_stem="Taxi", unsupported=True)
+
+        with self.assertRaises(FileExistsError):
+            self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                                 table_stem="Taxi", replace=False, unsupported=True)
+
+    def test_kept_pages_carry_the_page_asked_for_even_with_no_page_one_playing(self) -> None:
+        for page in (1, 2):
+            self.games.put_media("g1", "flyer", self._file(f"p{page}.tif"), table_stem="Taxi",
+                                 page=page, unsupported=True)
+
+        self.assertEqual(sorted(one.name for one in (self.game / "medias").iterdir()),
+                         ["(GameInfo 2) Taxi.tif", "(GameInfo) Taxi.tif"])
+
+    def test_a_kept_file_written_over_one_of_the_same_name_is_backed_up_first(self) -> None:
+        from common.games import media_placement
+
+        self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                             table_stem="Taxi", unsupported=True)
+
+        with mock.patch.object(media_placement, "keep_displaced") as backup:
+            self.games.put_media("g1", "backglass_video", self._file("a.avi"),
+                                 table_stem="Taxi", unsupported=True)
+
+        backup.assert_called_once_with(self.game, [self.game / "medias" / "(Backglass) Taxi.avi"])
+
+    def test_a_file_the_converter_does_not_read_is_still_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            self.games.put_media("g1", "backglass_video", self._file("a.swf"),
+                                 table_stem="Taxi", unsupported=True)
+
+
 class UnreachableFolderTests(PutAssetCase):
     def test_a_folder_that_does_not_answer_is_refused_by_every_writer(self) -> None:
         rom = self.source / "afm_113b.zip"

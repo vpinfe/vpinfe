@@ -20,7 +20,7 @@ declared folders.
 | call | scope it needs |
 |---|---|
 | `kinds`, `existing`, `folder_name_for`, `folder`, `survey`, `companions_of`, `companions_for`, `roms_of`, `reads_of`, `saved_sets`, `asset_kinds` | `games:read` |
-| `create`, `add_table`, `put_saved_sets`, `put_asset`, `put_rom_alias`, `put_media` | `games:write` |
+| `create`, `add_table`, `put_saved_sets`, `put_asset`, `put_rom_alias`, `put_media`, `put_other_media` | `games:write` |
 | `put_manufacturer_logos` | `config:write` |
 | `reaches` | none |
 
@@ -270,12 +270,16 @@ Raises `ContractError` outside the declared folders.
 
 ### `ctx.games.put_media`
 
-`ctx.games.put_media(game_id, kind, path, table_stem="", replace=True, page=1) -> str`.
+`ctx.games.put_media(game_id, kind, path, table_stem="", replace=True, page=1, unsupported=False) -> str`.
 Required: `game_id`, `kind`, `path`.
 
 Puts a file in one of an entry's media slots and answers what it was saved as.  `replace=False`
 fills an empty slot and raises `FileExistsError` where one is held.  `page=n` adds page n of a
 flyer or instruction card beside the page 1 the slot shows, up to one past the last.
+`unsupported=True` keeps a file the kind cannot play as it arrived, where its extension is one
+the converter reads (an `.avi` for a video, a `.wav` for a sound): it takes the name the slot's
+file would have had, displaces nothing and is never the one the slot shows.  With `replace=False`
+it still raises `FileExistsError` for a file of that name.
 
 ```python
 ctx.games.put_media(game_id, "wheel", "/data/old/Taxi.png", replace=False)
@@ -283,6 +287,26 @@ ctx.games.put_media(game_id, "wheel", "/data/old/Taxi.png", replace=False)
 
 Raises `ValueError` for a kind this build does not store (a switched-off kind is still taken by name), `FileExistsError` as above,
 and `ContractError` outside the declared folders.
+
+### `ctx.games.put_other_media`
+
+`ctx.games.put_other_media(game_id, label, path, table_stem="", replace=False, page=1) -> str`.
+Required: `game_id`, `label`, `path`.
+
+Keeps a file with an entry that is none of the media kinds, named by the same standard: `(Label) Name.ext`
+in the game's media folder, and `(Label 2) Name.ext` for `page=2`.  It is for art a source filed in a
+folder this library has no slot for.  Nothing reads it as a kind, and no kind's file is replaced.
+`label` is one word of letters and digits and not one a kind owns (`Backglass`, `Wheel` and the like
+raise `ValueError`); the extension must be a picture, a video, a sound or a document.  A file of that name
+is left alone and `FileExistsError` raised, unless `replace=True`, which keeps a copy in Backups first.
+Answers what the file was saved as.
+
+```python
+ctx.games.put_other_media(game_id, "Other1", "/data/old/Taxi.png")   # (Other1) Taxi.png
+```
+
+Raises `ValueError` as above, `FileExistsError` as above, and `ContractError` outside the declared
+folders.
 
 ### `ctx.games.reaches`
 
