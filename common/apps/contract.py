@@ -204,6 +204,15 @@ class Launch(Protocol):
     def session(self, settings: Mapping[str, Any]) -> Session: ...
 
 
+@runtime_checkable
+class Prepare(Protocol):
+    """What an app has said to its own settings just before it starts, where it needs
+    anything. A failure is logged and the launch goes ahead: a table that starts with the
+    settings as they were beats one that does not start."""
+
+    def before_launch(self, settings: Mapping[str, Any]) -> None: ...
+
+
 # --- config -----------------------------------------------------------------------
 
 # Where a value is written. A person reads these as "everything this launcher plays",
@@ -625,6 +634,7 @@ class App:
     kinds: Kinds = Kinds()
     format: Format | None = None
     launch: Launch | None = None
+    prepare: Prepare | None = None
     config: Config | None = None
     capability: Capability | None = None
     capture: Capture | None = None

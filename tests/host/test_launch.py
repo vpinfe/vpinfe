@@ -20,6 +20,7 @@ from pathlib import PurePath
 from typing import Any, cast
 from unittest import mock
 
+from apps.vpx.presentation import VPXPrepare
 from common import events, mounts
 from common.games import player_records, tables
 from common.games.library_folders import Location, LocationStore
@@ -113,6 +114,7 @@ class LaunchTests(unittest.TestCase):
             "_binary_of": lambda launcher: "/opt/vpx",
             "_plan": lambda table, binary, launcher, **plan: (
                 ["/opt/vpx", "-play", "x.vpx"], "Startup done"),
+            "_prepare": lambda launcher, binary: None,
             "_log_files_of": lambda launcher, binary: (),
             "parse_launch_env_overrides": lambda raw: {},
             "delete_vpinball_log_on_start_if_configured": lambda *a, **k: None,
@@ -537,6 +539,38 @@ class RecordingTests(LaunchTests):
                                  dict.fromkeys(heard, source))
                 self.assertEqual(heard[events.TABLE_EXITED]["table_id"],
                                  heard[events.TABLE_LAUNCHING]["table_id"])
+
+
+class PrepareTests(LaunchTests):
+    """The app is told to set its own settings before a table starts, once, and never at
+    the cost of the launch."""
+
+    def _prepared(self, source=launch_state.SOURCE_API, fails=False) -> list[dict]:
+        said: list[dict] = []
+
+        def before_launch(_self, settings):
+            said.append(dict(settings))
+            if fails:
+                raise OSError("read-only")
+
+        started: list[Any] = []
+        with mock.patch.object(VPXPrepare, "before_launch", before_launch):
+            self._run(source=source, popen=_recording_popen(started),
+                      _prepare=launch._prepare)
+        self.assertEqual(len(started), 1, "the table started")
+        return said
+
+    def test_a_launch_prepares_the_apps_settings_once(self) -> None:
+        said = self._prepared()
+
+        self.assertEqual(len(said), 1)
+        self.assertTrue(said[0]["bin_path"], "with the executable the table starts with")
+
+    def test_a_recording_is_not_prepared(self) -> None:
+        self.assertEqual(self._prepared(source=launch_state.SOURCE_CAPTURE), [])
+
+    def test_a_failure_to_prepare_does_not_stop_the_table(self) -> None:
+        self.assertEqual(len(self._prepared(fails=True)), 1)
 
 
 class LaunchEnvTests(unittest.TestCase):

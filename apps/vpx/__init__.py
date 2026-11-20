@@ -16,6 +16,7 @@ from .controls import VPXControls
 from .launch import VPXLaunch
 from .pause import VPXPause
 from .plays import VPXPlays
+from .presentation import VPXPrepare
 
 # What sits beside a table and belongs to it: its settings, a script, its
 # backglass and its B2S Pro backglass, a point of view, a saved camera. Here rather
@@ -48,6 +49,7 @@ VPX = App(
     fields=FIELDS,
     kinds=Kinds(),
     launch=VPXLaunch(),
+    prepare=VPXPrepare(),
     config=VPXConfig(),
     capability=VPXCapability(),
     capture=VPXCapture(),

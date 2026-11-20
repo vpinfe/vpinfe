@@ -8,6 +8,7 @@ positioned on the correct monitor with fullscreen.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import platform
@@ -79,6 +80,35 @@ if platform.system() == "Linux":
 # and stops on a dialog when it cannot be found or unlocked.
 elif platform.system() == "Darwin":
     CHROMIUM_BASE_FLAGS.extend(["--use-mock-keychain", "--password-store=basic"])
+
+# No flag or profile preference stops Chromium asking macOS for notification permission,
+# so the services it asks are made unreachable. Nothing is written to the system.
+_SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+_MAC_NO_NOTIFICATIONS = (
+    '(version 1)(allow default)'
+    '(deny mach-lookup (global-name-prefix "com.apple.usernotifications")'
+    ' (global-name-prefix "com.apple.usernoted"))'
+)
+
+
+@functools.cache
+def notification_guard() -> list[str]:
+    """The command prefix that keeps Chromium from asking macOS for notifications.
+
+    Empty off a Mac, and on a Mac where `sandbox-exec` is missing or refuses the profile:
+    Chromium then starts as it always did, banners and all, and the log says why.
+    """
+    if platform.system() != "Darwin":
+        return []
+    prefix = [_SANDBOX_EXEC, "-p", _MAC_NO_NOTIFICATIONS]
+    try:
+        subprocess.run([*prefix, "/usr/bin/true"], check=True, timeout=10,
+                       stdin=subprocess.DEVNULL, capture_output=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Chromium will ask macOS for notification permission: "
+                       "sandbox-exec is not usable here (%s)", exc)
+        return []
+    return prefix
 
 # The windows with a high-DPI override setting, by canonical name.
 OVERRIDE_SECTIONS = {"backglass": "windows.backglass", "scoreview": "windows.scoreview"}
@@ -583,7 +613,11 @@ class ChromiumManager:
         extra_args = parsed_or_none(additional_options, "chromium.options")
         if extra_args:
             logger.debug("Adding Chromium options for '%s': %s", window_name, extra_args)
-        args = [chrome_path, *(line.text for line in option_lines(builtin, extra_args))]
+        options = [line.text for line in option_lines(builtin, extra_args)]
+        # Chromium cannot start its own sandboxes inside this one and dies at launch, so the
+        # guard goes on only while both are switched off, as the built-in options do.
+        unsandboxed = {"--no-sandbox", "--disable-gpu-sandbox"} <= set(options)
+        args = [*(notification_guard() if unsandboxed else []), chrome_path, *options]
 
         logger.info(
             "Launching '%s' on monitor %s (%sx%s at %s,%s)",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 import threading
@@ -16,6 +17,11 @@ from frontend.chromium_manager import ChromiumManager
 
 
 class ChromiumManagerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch("frontend.chromium_manager.notification_guard", return_value=[])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_windows_get_chromium_path_prefers_bundled_when_present(self) -> None:
         bundled = r"C:\vpinfe\chromium\windows\chrome-win\chrome.exe"
 
@@ -785,6 +791,75 @@ class StaleProfileSweepTests(unittest.TestCase):
             ChromiumManager()
 
         self.assertFalse(self.leftover.exists())
+
+
+class NotificationGuardTests(unittest.TestCase):
+    def setUp(self) -> None:
+        chromium_manager.notification_guard.cache_clear()
+        self.addCleanup(chromium_manager.notification_guard.cache_clear)
+
+    def _guard(self, system: str, run: Any = None) -> list[str]:
+        run = run or mock.Mock()
+        with (
+            mock.patch("frontend.chromium_manager.platform.system", return_value=system),
+            mock.patch("frontend.chromium_manager.subprocess.run", run),
+        ):
+            return chromium_manager.notification_guard()
+
+    def test_a_mac_starts_chromium_with_the_notification_services_out_of_reach(self) -> None:
+        guard = self._guard("Darwin")
+
+        self.assertEqual(guard[:2], [chromium_manager._SANDBOX_EXEC, "-p"])
+        self.assertIn("com.apple.usernotifications", guard[2])
+        self.assertIn("com.apple.usernoted", guard[2])
+
+    def test_windows_and_linux_start_chromium_as_they_did(self) -> None:
+        for system in ("Windows", "Linux"):
+            chromium_manager.notification_guard.cache_clear()
+            run = mock.Mock()
+            self.assertEqual(self._guard(system, run), [])
+            run.assert_not_called()
+
+    def test_a_mac_that_cannot_use_sandbox_exec_starts_chromium_as_it_did(self) -> None:
+        for failure in (FileNotFoundError("sandbox-exec"),
+                        subprocess.CalledProcessError(71, "sandbox-exec"),
+                        subprocess.TimeoutExpired("sandbox-exec", 10)):
+            chromium_manager.notification_guard.cache_clear()
+            with self.assertLogs("vpinfe.frontend.chromium_manager", "WARNING"):
+                self.assertEqual(self._guard("Darwin", mock.Mock(side_effect=failure)), [])
+
+    GUARD = ["/usr/bin/sandbox-exec", "-p", "profile"]
+
+    def _command_line(self, **launch: Any) -> list[str]:
+        chromium = chromium_manager.ChromiumPath("/Applications/Chromium.app/x", True)
+        monitor = types.SimpleNamespace(x=0, y=0, width=800, height=600)
+        with (
+            mock.patch("frontend.chromium_manager.get_chromium_path", return_value=chromium),
+            mock.patch("frontend.chromium_manager.os.path.exists", return_value=True),
+            mock.patch("frontend.chromium_manager.tempfile.mkdtemp",
+                       return_value="/tmp/vpinfe-profile"),
+            mock.patch("frontend.chromium_manager.notification_guard", return_value=self.GUARD),
+            mock.patch("frontend.chromium_manager.subprocess.Popen",
+                       return_value=types.SimpleNamespace()) as popen,
+        ):
+            ChromiumManager().launch_window("table", "http://127.0.0.1:8001/app/table",
+                                            monitor, 0, **launch)
+        return list(popen.call_args.args[0])
+
+    def test_the_guard_goes_in_front_of_the_browser_program(self) -> None:
+        args = self._command_line()
+
+        self.assertEqual(args[:4], [*self.GUARD, "/Applications/Chromium.app/x"])
+
+    def test_a_browser_left_to_sandbox_itself_is_started_without_the_guard(self) -> None:
+        for dropped in ("--no-sandbox", "--disable-gpu-sandbox"):
+            args = self._command_line(exclude_options=dropped)
+
+            self.assertEqual(args[0], "/Applications/Chromium.app/x")
+            self.assertNotIn(dropped, args)
+
+        args = self._command_line(include_default_options=False)
+        self.assertEqual(args[0], "/Applications/Chromium.app/x")
 
 
 if __name__ == "__main__":

@@ -277,6 +277,17 @@ def _plan(entry: apps.Entry, binary: str, launcher: launchers.Launcher, *,
     return app.launch.command(entry, settings), marker
 
 
+def _prepare(launcher: launchers.Launcher, binary: str) -> None:
+    """Lets the app set its own settings for this launch."""
+    app = apps.get(getattr(launcher, "app", "")) or apps.default_app()
+    if app.prepare is None:
+        return
+    try:
+        app.prepare.before_launch(_settings(launcher, binary))
+    except Exception:
+        logger.exception("Could not prepare %s's settings for the launch", apps.app_name(app.id))
+
+
 def _settings(launcher: launchers.Launcher, binary: str) -> dict[str, Any]:
     settings = {declared.key: launcher.value(declared.key)
                 for declared in launcher.fields()}
@@ -612,6 +623,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                                 launcher, capture=folder, record_sound=record_sound,
                                 record_view=record_view)
             if not capturing:
+                _prepare(launcher, binary)
                 before, _ = game_play_service.parse_score_from_nvram(
                     game, rom, initials="", entry=entry)
             launched = {"game": game, "ini_config": ini_config, "table_id": table_id,
