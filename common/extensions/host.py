@@ -25,6 +25,7 @@ from common.config.paths import CONFIG_DIR, OFFICIAL_EXTENSIONS_DIR, bundled, ge
 from common.devices import install_identity
 from common.online import sources
 from common.security import accepted
+from common.values import newer_version, parse_version
 
 from . import catalogs, contributions, reach
 from . import fingerprint as fingerprints
@@ -221,6 +222,12 @@ class Record:
         if self.left_list:
             return accepted.IN_FOLDER
         return self._origin or self.examine()
+
+    @property
+    def comes_with_vpinfe(self) -> bool:
+        """Whether the build ships an extension of this name, so it still comes with VPinFE
+        after an update from the list put a newer copy beside it."""
+        return (BUNDLED_DIR / self.name).is_dir()
 
     @property
     def from_list(self) -> bool:
@@ -504,6 +511,7 @@ class Record:
                 "groups": self.groups() if self.running else [],
                 "library_verbs": self.library_verbs() if self.running else [],
                 "bundled": self.bundled,
+                "comes_with_vpinfe": self.comes_with_vpinfe,
                 "from_list": self.from_list,
                 "left_list": self.left_list,
                 "files_changed": self.files_changed,
@@ -514,6 +522,23 @@ class Record:
                 "panels": self.panels() if self.running else [],
                 "needs": [dict(one) for one in self.declared_needs] if self.running else [],
                 "account": self.account_declared() if self.running else {}}
+
+
+def _newest_official_first(group: list[Record]) -> list[Record]:
+    """The copies of one name in the order they are tried. The search order stands, except
+    that the copy the build ships runs ahead of one installed from the list when it is the
+    newer, so a VPinFE update never leaves an older extension running."""
+    first = group[0]
+    if first.origin != accepted.OFFICIAL or first.manifest is None:
+        return group
+    shipped = next((one for one in group[1:] if one.bundled and one.official
+                    and one.manifest is not None), None)
+    if shipped is None or shipped.manifest is None:
+        return group
+    if not newer_version(parse_version(shipped.manifest.version),
+                         parse_version(first.manifest.version)):
+        return group
+    return [shipped, *(one for one in group if one is not shipped)]
 
 
 class Registry:
@@ -629,6 +654,7 @@ class Registry:
 
         found = []
         for group in groups.values():
+            group = _newest_official_first(group)
             first = group[0]
             found.append(self._start(first))
             behind = next((one for one in group[1:] if one.official), None)
@@ -893,12 +919,12 @@ class Registry:
             if current is not None and current.running:
                 current.files_changed = True
                 return current
-            directory = next((root / name for root in SEARCH_PATH
-                              if (root / name / MANIFEST_NAME).is_file()), None)
-            if directory is None:
+            copies = [self._prepare(root / name) for root in SEARCH_PATH
+                      if (root / name / MANIFEST_NAME).is_file()]
+            if not copies:
                 self._records.pop(name, None)
                 return None
-            fresh = self._prepare(directory)
+            fresh = _newest_official_first(copies)[0]
             if fresh.manifest is not None:
                 fresh.has_settings = bool(self._store.declared(fresh.name).get("settings"))
                 fresh.became(OFF, STARTS_AT_RESTART if fresh.enabled else SWITCHED_OFF)

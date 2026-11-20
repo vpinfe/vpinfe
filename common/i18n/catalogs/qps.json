@@ -2127,14 +2127,14 @@
   "manager.ext_page.secret_not_set": "Ñöţ šèţ",
   "manager.ext_page.secret_set": "Šèţ",
   "manager.ext_page.reach_help": "Řèþöřţèđ ƀý îţš àûţĥöř. ṼÞîñƑÈ çàñ'ţ çĥèçķ îţ.",
-  "manager.ext_page.area_internet": "Ţĥè îñţèřñèţ",
-  "manager.ext_page.area_programs": "Öţĥèř þřöĝřàɱš",
-  "manager.ext_page.area_usb": "ÛŠƁ đèṽîçèš",
-  "manager.ext_page.area_device": "Ţĥîš đèṽîçè",
-  "manager.ext_page.area_files": "Ýöûř ƒîŀèš",
-  "manager.ext_page.area_library": "Ýöûř ŀîƀřàřý",
+  "manager.ext_page.area_internet": "Ţĥè Îñţèřñèţ",
+  "manager.ext_page.area_programs": "Öţĥèř Þřöĝřàɱš",
+  "manager.ext_page.area_usb": "ÛŠƁ Đèṽîçèš",
+  "manager.ext_page.area_device": "Ţĥîš Đèṽîçè",
+  "manager.ext_page.area_files": "Ýöûř Ƒîŀèš",
+  "manager.ext_page.area_library": "Ýöûř Ŀîƀřàřý",
   "manager.ext_page.area_players": "Þŀàýèřš",
-  "manager.ext_page.area_controls": "Ýöûř çöñţřöŀš",
+  "manager.ext_page.area_controls": "Ýöûř Çöñţřöŀš",
   "manager.ext_page.area_vpinfe": "ṼÞîñƑÈ",
   "manager.ext_page.area_other": "Öţĥèř",
   "manager.ext_page.does_internet": "Šèñđš àñđ řèçèîṽèš đàţà",
@@ -2201,7 +2201,6 @@
   "manager.extensions.trust_folder": "Ƒřöɱ ýöûř èẋţèñšîöñš ƒöŀđèř",
   "manager.extensions.current": "Ûþ ţö đàţè",
   "manager.extensions.not_listed": "Ñöţ öñ ţĥè Èẋţèñšîöñ Ŀîšţ",
-  "manager.extensions.bundled_updates": "Ûþđàţèđ ŵîţĥ ṼÞîñƑÈ",
   "manager.extensions.update_to": "Ûþđàţè Ţö {version}",
   "manager.extensions.install": "Îñšţàŀŀ",
   "manager.extensions.install.help": "Àđđš îţ ƒřöɱ ţĥè ṼÞîñƑÈ Èẋţèñšîöñ Ŀîšţ. Îţ šţàřţš ţĥè ñèẋţ ţîɱè ṼÞîñƑÈ šţàřţš.",
@@ -2256,6 +2255,24 @@
   "manager.extensions.uninstall_failed": {
     "one": "{name} çöûŀđ ñöţ ƀè ûñîñšţàŀŀèđ",
     "other": "{count:n} èẋţèñšîöñš çöûŀđ ñöţ ƀè ûñîñšţàŀŀèđ"
+  },
+  "manager.extensions.use_shipped": "Ûšè ţĥè Ṽèřšîöñ Ţĥàţ Çàɱè ŵîţĥ ṼÞîñƑÈ",
+  "manager.extensions.use_shipped_question": {
+    "one": "Ûšè ţĥè ṽèřšîöñ öƒ “{name}” ţĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ?",
+    "other": "Ûšè ţĥè ṽèřšîöñš ţĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ ƒöř {count:n} èẋţèñšîöñš?"
+  },
+  "manager.extensions.use_shipped_detail": {
+    "one": "Ţĥè ûþđàţè îš řèɱöṽèđ. Îţš šèţţîñĝš šţàý àñđ ýöû çàñ ûþđàţè îţ àĝàîñ.",
+    "other": "Ţĥè ûþđàţèš àřè řèɱöṽèđ. Ţĥèîř šèţţîñĝš šţàý àñđ ýöû çàñ ûþđàţè ţĥèɱ àĝàîñ."
+  },
+  "manager.extensions.use_shipped_confirm": "Ûšè Îţ",
+  "manager.extensions.use_shipped_done": {
+    "one": "{name} ûšèš ţĥè ṽèřšîöñ ţĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ ƒřöɱ ţĥè ñèẋţ šţàřţ",
+    "other": "{count:n} èẋţèñšîöñš ûšè ŵĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ ƒřöɱ ţĥè ñèẋţ šţàřţ"
+  },
+  "manager.extensions.use_shipped_failed": {
+    "one": "{name} çöûŀđ ñöţ ĝö ƀàçķ ţö ţĥè ṽèřšîöñ ţĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ",
+    "other": "{count:n} èẋţèñšîöñš çöûŀđ ñöţ ĝö ƀàçķ ţö ŵĥàţ çàɱè ŵîţĥ ṼÞîñƑÈ"
   },
   "manager.extensions.settings": "Šèţţîñĝš",
   "manager.ext_page.not_trusted_chip": "Ñöţ Ţřûšţèđ",

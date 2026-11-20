@@ -2127,14 +2127,14 @@
   "manager.ext_page.secret_not_set": "Not set",
   "manager.ext_page.secret_set": "Set",
   "manager.ext_page.reach_help": "Reported by its author. VPinFE can't check it.",
-  "manager.ext_page.area_internet": "The internet",
-  "manager.ext_page.area_programs": "Other programs",
-  "manager.ext_page.area_usb": "USB devices",
-  "manager.ext_page.area_device": "This device",
-  "manager.ext_page.area_files": "Your files",
-  "manager.ext_page.area_library": "Your library",
+  "manager.ext_page.area_internet": "The Internet",
+  "manager.ext_page.area_programs": "Other Programs",
+  "manager.ext_page.area_usb": "USB Devices",
+  "manager.ext_page.area_device": "This Device",
+  "manager.ext_page.area_files": "Your Files",
+  "manager.ext_page.area_library": "Your Library",
   "manager.ext_page.area_players": "Players",
-  "manager.ext_page.area_controls": "Your controls",
+  "manager.ext_page.area_controls": "Your Controls",
   "manager.ext_page.area_vpinfe": "VPinFE",
   "manager.ext_page.area_other": "Other",
   "manager.ext_page.does_internet": "Sends and receives data",
@@ -2201,7 +2201,6 @@
   "manager.extensions.trust_folder": "From your extensions folder",
   "manager.extensions.current": "Up to date",
   "manager.extensions.not_listed": "Not on the Extension List",
-  "manager.extensions.bundled_updates": "Updated with VPinFE",
   "manager.extensions.update_to": "Update To {version}",
   "manager.extensions.install": "Install",
   "manager.extensions.install.help": "Adds it from the VPinFE Extension List. It starts the next time VPinFE starts.",
@@ -2256,6 +2255,24 @@
   "manager.extensions.uninstall_failed": {
     "one": "{name} could not be uninstalled",
     "other": "{count:n} extensions could not be uninstalled"
+  },
+  "manager.extensions.use_shipped": "Use the Version That Came with VPinFE",
+  "manager.extensions.use_shipped_question": {
+    "one": "Use the version of “{name}” that came with VPinFE?",
+    "other": "Use the versions that came with VPinFE for {count:n} extensions?"
+  },
+  "manager.extensions.use_shipped_detail": {
+    "one": "The update is removed. Its settings stay and you can update it again.",
+    "other": "The updates are removed. Their settings stay and you can update them again."
+  },
+  "manager.extensions.use_shipped_confirm": "Use It",
+  "manager.extensions.use_shipped_done": {
+    "one": "{name} uses the version that came with VPinFE from the next start",
+    "other": "{count:n} extensions use what came with VPinFE from the next start"
+  },
+  "manager.extensions.use_shipped_failed": {
+    "one": "{name} could not go back to the version that came with VPinFE",
+    "other": "{count:n} extensions could not go back to what came with VPinFE"
   },
   "manager.extensions.settings": "Settings",
   "manager.ext_page.not_trusted_chip": "Not Trusted",

@@ -27,6 +27,10 @@ logger = logging.getLogger("vpinfe.common.extensions.fingerprint")
 # The build's list of the extensions it ships, beside them. A source checkout has none.
 BUILD_LIST = "fingerprints.json"
 
+# The extensions a build carries, by name. The fetch step and the spec both read this: a
+# folder that sits under `extensions/` in a checkout and is not named here is not shipped.
+INCLUDED = ("library_importer",)
+
 # What Python and the operating system write into a folder on their own. Hashing them
 # would make an extension "changed" by being run or browsed.
 _IGNORED_DIRS = frozenset({"__pycache__"})
@@ -145,12 +149,17 @@ def read_build_list(root: Path | str) -> dict[str, Receipt] | None:
     return {name: made for name, one in held.items() if (made := _receipt_from(one))}
 
 
-def write_build_list(root: Path | str, target: Path | str | None = None) -> Path:
-    """Write the list for every extension under `root`, to `target` or beside them."""
+def write_build_list(root: Path | str, target: Path | str | None = None,
+                     only: Iterable[str] | None = None) -> Path:
+    """Write the list for every extension under `root`, or just those named in `only`, to
+    `target` or beside them."""
     root = Path(root)
     target = Path(target) if target else root / BUILD_LIST
+    wanted = None if only is None else frozenset(only)
     held = {}
     for directory in sorted(one for one in root.iterdir() if one.is_dir()):
+        if wanted is not None and directory.name not in wanted:
+            continue
         if not (directory / MANIFEST_NAME).is_file():
             continue
         try:

@@ -495,3 +495,80 @@ class TurningOffACopyThatAddedRoutes(Case):
         self.assertFalse(record.running)
         self.assertEqual((record.state, record.why), (host.OFF, host.STARTS_AT_RESTART))
         self.assertNotIn("tool", [one.name for one in self.registry.records() if one.running])
+
+
+class AnUpdateFromTheListBesideTheShippedCopy(Case):
+    """The newer of the two official copies runs, so a VPinFE update never leaves an older one."""
+
+    def put(self, shipped: str, listed: str) -> tuple[Path, Path]:
+        shipped_dir = _write(self.bundled, "tool", version=shipped)
+        fingerprint.write_build_list(self.bundled)
+        listed_dir = _write(self.official, "tool", version=listed)
+        fingerprint.write_receipt(
+            "tool", listed_dir, repository="https://example.test/o/r", release=listed
+        )
+        return shipped_dir, listed_dir
+
+    def test_the_list_copy_runs_when_it_is_newer(self) -> None:
+        _, listed = self.put(shipped="1.0.0", listed="1.1.0")
+
+        self.registry.load_installed()
+
+        record = self.registry.get("tool")
+        assert record is not None
+        self.assertEqual(record.directory, listed)
+        self.assertTrue(record.comes_with_vpinfe)
+        self.assertFalse(record.bundled)
+
+    def test_the_shipped_copy_runs_when_a_vpinfe_update_made_it_newer(self) -> None:
+        shipped, _ = self.put(shipped="1.2.0", listed="1.1.0")
+
+        self.registry.load_installed()
+
+        record = self.registry.get("tool")
+        assert record is not None
+        self.assertEqual(record.directory, shipped)
+        self.assertEqual(record.origin, accepted.SHIPPED)
+
+    def test_equal_versions_keep_the_list_copy(self) -> None:
+        _, listed = self.put(shipped="1.1.0", listed="1.1.0")
+
+        self.registry.load_installed()
+
+        record = self.registry.get("tool")
+        assert record is not None
+        self.assertEqual(record.directory, listed)
+
+    def test_an_install_that_just_finished_is_read_the_same_way(self) -> None:
+        shipped, listed = self.put(shipped="1.2.0", listed="1.1.0")
+
+        record = self.registry.files_replaced("tool")
+
+        assert record is not None
+        self.assertEqual(record.directory, shipped)
+        _write_version(shipped, "1.0.0")
+        fingerprint.write_build_list(self.bundled)
+
+        record = self.registry.files_replaced("tool")
+
+        assert record is not None
+        self.assertEqual(record.directory, listed)
+
+    def test_a_name_the_build_does_not_ship_does_not_come_with_it(self) -> None:
+        listed = _write(self.official, "other", version="1.0.0")
+        fingerprint.write_receipt(
+            "other", listed, repository="https://example.test/o/r", release="1.0.0"
+        )
+
+        self.registry.load_installed()
+
+        record = self.registry.get("other")
+        assert record is not None
+        self.assertFalse(record.comes_with_vpinfe)
+        self.assertFalse(record.as_dict()["comes_with_vpinfe"])
+
+
+def _write_version(directory: Path, version: str) -> None:
+    manifest = json.loads((directory / "extension.json").read_text(encoding="utf-8"))
+    manifest["version"] = version
+    (directory / "extension.json").write_text(json.dumps(manifest), encoding="utf-8")

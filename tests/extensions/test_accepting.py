@@ -229,7 +229,7 @@ class AnExtensionInAFolder(Case):
 
 class WhatVPinFEShips(Case):
     def test_runs_with_no_acceptance(self) -> None:
-        shipped = host.BUNDLED_DIR / "vpinplay"
+        shipped = host.BUNDLED_DIR / "library_importer"
 
         record = self.registry.load(shipped)
 

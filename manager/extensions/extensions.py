@@ -458,8 +458,8 @@ async def details(context: dict[str, Any]) -> None:
         if record is not None:
             reached = ext_page.reported_rows(
                 record, t("manager.ext_page.reach_help") if trust_state(entry)
-                else t("manager.extensions.reach_listed") if not record.get("bundled")
-                else "")
+                else t("manager.extensions.reach_listed")
+                if not record.get("comes_with_vpinfe") else "")
             if reached:
                 entries.append((panel.HEADING, t("manager.extensions.reach")))
                 entries += reached
@@ -473,7 +473,7 @@ def _foot(entry: dict[str, Any]) -> str:
     record = entry["record"]
     if record is None:
         return ""
-    if record.get("bundled"):
+    if record.get("comes_with_vpinfe"):
         return t("manager.extensions.shipped_foot")
     if not record.get("from_list"):
         return t("manager.extensions.folder_foot")
@@ -526,8 +526,6 @@ def _updates_value(library: Library, entry: dict[str, Any], again: Callable[[], 
         return newer
     if listed:
         return t("manager.extensions.current")
-    if record.get("bundled"):
-        return t("manager.extensions.bundled_updates")
     if entry["checked"]:
         return t("manager.extensions.not_listed")
 
@@ -542,7 +540,7 @@ def _trust_value(entry: dict[str, Any]) -> Callable[[], Any] | str:
     record = entry["record"] or {}
     kind = trust_state(entry)
     if not kind:
-        return t("manager.extensions.trust_shipped") if record.get("bundled") \
+        return t("manager.extensions.trust_shipped") if record.get("comes_with_vpinfe") \
             else t("manager.extensions.trust_listed")
     if record.get("left_list"):
         where = t("manager.extensions.trust_left")
@@ -567,8 +565,9 @@ def acts(library: Library, entries: list[dict[str, Any]],
     newer = [one for one in entries if one["record"] and (one["listed"] or {}).get("update")
              and _official(one["record"])]
     broken = [one for one in entries if status(one) == CHANGED and one["listed"]]
-    removable = [one for one in entries if one["record"]
-                 and one["record"].get("from_list") and not one["record"].get("bundled")]
+    installed = [one for one in entries if one["record"] and one["record"].get("from_list")]
+    reverting = [one for one in installed if one["record"].get("comes_with_vpinfe")]
+    removable = [one for one in installed if one not in reverting]
     install = entry_run(library, "install_extension")
     offered: list[panel.Verb] = []
     if absent:
@@ -586,6 +585,10 @@ def acts(library: Library, entries: list[dict[str, Any]],
             t("manager.extensions.reinstall"),
             lambda: _each(install, broken, "manager.extensions.reinstalled",
                           "manager.extensions.reinstall_failed", after), icon=verbs.FETCH))
+    if reverting:
+        offered.append(panel.Verb(t("manager.extensions.use_shipped"),
+                                  lambda: use_shipped(library, reverting, after),
+                                  icon=verbs.UNINSTALL, danger=True))
     if removable:
         offered.append(panel.Verb(t("word.uninstall"),
                                   lambda: uninstall(library, removable, after), danger=True))
@@ -638,6 +641,32 @@ async def uninstall(library: Library, entries: list[dict[str, Any]],
     failed.say("manager.extensions.uninstall_failed")
     if gone:
         ui.notify(t("manager.extensions.uninstalled", count=len(gone), name=gone[0]),
+                  type="positive")
+        await again()
+
+
+@on_page
+async def use_shipped(library: Library, entries: list[dict[str, Any]],
+                      again: Callable[[], Any]) -> None:
+    """Drop the update installed from the list, so the copy that came with VPinFE runs."""
+    if not await confirm.ask(
+            t("manager.extensions.use_shipped_question", count=len(entries),
+              name=shown(entries[0])),
+            detail=t("manager.extensions.use_shipped_detail", count=len(entries)),
+            confirm=t("manager.extensions.use_shipped_confirm"), icon=verbs.UNINSTALL):
+        return
+    gone: list[str] = []
+    failed = Failures()
+    for entry in entries:
+        try:
+            await run.io_bound(library.remove_extension, entry["name"])
+        except Exception as exc:  # noqa: BLE001
+            failed.add(shown(entry), why(exc))
+            continue
+        gone.append(shown(entry))
+    failed.say("manager.extensions.use_shipped_failed")
+    if gone:
+        ui.notify(t("manager.extensions.use_shipped_done", count=len(gone), name=gone[0]),
                   type="positive")
         await again()
 

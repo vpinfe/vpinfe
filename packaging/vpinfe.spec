@@ -48,7 +48,6 @@ DATA_ROOTS = [
     "common/i18n/catalogs",
     "apps/generic/i18n",
     "apps/vpx/i18n",
-    "extensions",
     "releases",
     "third_party/dof",
     "third_party/libdmdutil",
@@ -63,17 +62,21 @@ if not SLIM:
     elif IS_WINDOWS:
         DATA_ROOTS.append("chromium/windows")
 
+sys.path.insert(0, str(REPO_ROOT))
+from common.extensions import fingerprint  # noqa: E402
+
 datas = [(str(REPO_ROOT / root), root) for root in DATA_ROOTS]
+# Only the extensions the build includes, whatever else sits under extensions/.
+datas += [(str(REPO_ROOT / "extensions" / name), f"extensions/{name}")
+          for name in fingerprint.INCLUDED]
 # The running release's notes, which the What's new page reads beside the archived ones.
 datas.append((str(REPO_ROOT / "RELEASE_NOTES.md"), "."))
 
 # What the extensions we ship are made of, so a changed one is known from an untouched one
 # on the device. Beside them in the build, never in the tree.
-sys.path.insert(0, str(REPO_ROOT))
-from common.extensions import fingerprint  # noqa: E402
-
 _FINGERPRINTS = fingerprint.write_build_list(
-    REPO_ROOT / "extensions", REPO_ROOT / "build" / "extension_fingerprints" / fingerprint.BUILD_LIST
+    REPO_ROOT / "extensions", REPO_ROOT / "build" / "extension_fingerprints" / fingerprint.BUILD_LIST,
+    only=fingerprint.INCLUDED,
 )
 datas.append((str(_FINGERPRINTS), "extensions"))
 
@@ -89,8 +92,10 @@ def _extension_imports() -> list[str]:
     found = set()
     # os.walk, because rglob does not follow the links a development tree has in extensions/.
     sources = [Path(folder) / name
-               for folder, folders, files in os.walk(REPO_ROOT / "extensions", followlinks=True)
-               if "tests" not in Path(folder).relative_to(REPO_ROOT / "extensions").parts[1:]
+               for included in fingerprint.INCLUDED
+               for folder, folders, files in os.walk(REPO_ROOT / "extensions" / included,
+                                                     followlinks=True)
+               if "tests" not in Path(folder).relative_to(REPO_ROOT / "extensions" / included).parts
                for name in files if name.endswith(".py")]
     for path in sources:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):

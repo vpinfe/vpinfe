@@ -125,6 +125,11 @@ class LabelsAreTitleCase(unittest.TestCase):
     def test_the_names_down_the_import_summary_are_title_case(self) -> None:
         self.assertEqual(_off_the_rule(sorted(_SUMMARY_ROWS)), {})
 
+    def test_the_names_down_what_an_extension_can_do_are_title_case(self) -> None:
+        keys = sorted(key for key in CATALOG if key.startswith("manager.ext_page.area_"))
+        self.assertGreater(len(keys), 5, "an empty sweep passes and measures nothing")
+        self.assertEqual(_off_the_rule(keys), {})
+
     def test_a_placeholder_is_left_as_written_and_is_not_a_word_of_the_title(self) -> None:
         self.assertEqual(field_label("your {source} wheel images are"),
                          "Your {source} Wheel Images Are")

@@ -180,6 +180,6 @@ def ensure_catalog(config: ConfigStore,
                     sync(config, force=True)
                     if not VPSDB_JSON_PATH.exists():
                         raise RuntimeError(t("error.jobs.spreadsheet_not_downloaded"))
-            except Exception:
-                logger.warning("The catalog could not be downloaded", exc_info=True)
+            except Exception as error:
+                logger.warning("The catalog could not be downloaded: %s", error)
     return VPSDB_JSON_PATH.exists()

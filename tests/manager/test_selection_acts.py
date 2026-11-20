@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from common.i18n import t
 from common.runtime import lifecycle
 from manager.devices import devices
+from manager.extensions import extensions
 from manager.frontend import launchers, players, themes
 from tests.support.clicks import press
 
@@ -211,6 +212,83 @@ class TheLocalDeviceGoesLast(unittest.IsolatedAsyncioTestCase):
             await press(verb.run)
 
         self.assertEqual(order, ["there", "here"])
+
+
+
+def _extension(name: str, **record: Any) -> dict[str, Any]:
+    return {"name": name, "record": {"display_name": name, "origin": "official",
+                                     "state": "loaded", **record},
+            "listed": None, "list": "", "checked": False}
+
+
+class Extensions(unittest.TestCase):
+    def _labels(self, chosen: list[dict[str, Any]]) -> list[str]:
+        return [one.label for one in extensions.acts(Mock(), chosen, lambda: None)]
+
+    def test_one_installed_from_the_list_is_uninstalled(self) -> None:
+        chosen = [_extension("tool", from_list=True)]
+
+        self.assertEqual(self._labels(chosen), [t("word.uninstall")])
+
+    def test_an_update_over_the_one_that_came_with_vpinfe_goes_back_instead(self) -> None:
+        chosen = [_extension("tool", from_list=True, comes_with_vpinfe=True)]
+
+        self.assertEqual(self._labels(chosen), [t("manager.extensions.use_shipped")])
+
+    def test_the_one_still_as_shipped_offers_neither(self) -> None:
+        chosen = [_extension("tool", bundled=True, comes_with_vpinfe=True)]
+
+        self.assertEqual(self._labels(chosen), [])
+
+    def test_a_mixed_selection_offers_each_to_the_ones_it_applies_to(self) -> None:
+        chosen = [_extension("a", from_list=True, comes_with_vpinfe=True),
+                  _extension("b", from_list=True)]
+
+        self.assertEqual(self._labels(chosen),
+                         [t("manager.extensions.use_shipped"), t("word.uninstall")])
+
+
+class GoingBackToTheExtensionThatCameWithVPinFE(unittest.IsolatedAsyncioTestCase):
+    async def test_it_removes_the_updated_copy_and_says_the_settings_stay(self) -> None:
+        library = Mock()
+        chosen = [_extension("tool", from_list=True, comes_with_vpinfe=True)]
+        asked: list[str] = []
+
+        async def ask(question: str, **kept: Any) -> bool:
+            asked.append(kept["detail"])
+            return True
+
+        with patch.object(extensions.confirm, "ask", new=ask), \
+                patch.object(extensions.run, "io_bound", new=AsyncMock()) as removed, \
+                patch.object(extensions.ui, "notify"):
+            made = extensions.acts(library, chosen, AsyncMock())
+            assert made[0].run is not None
+            await press(made[0].run)
+
+        self.assertEqual([call.args for call in removed.await_args_list],
+                         [(library.remove_extension, "tool")])
+        self.assertEqual(asked, [t("manager.extensions.use_shipped_detail", count=1)])
+
+
+class TheUpdatesRowOfOneThatCameWithVPinFE(unittest.TestCase):
+    def _value(self, entry: dict[str, Any]) -> Any:
+        return extensions._updates_value(Mock(), entry, lambda: None, lambda: None)
+
+    def test_it_can_be_checked_like_any_other(self) -> None:
+        entry = _extension("tool", bundled=True, comes_with_vpinfe=True)
+
+        self.assertTrue(callable(self._value(entry)))
+
+    def test_it_says_it_is_up_to_date_once_the_list_has_it_with_no_update(self) -> None:
+        entry = {**_extension("tool", bundled=True, comes_with_vpinfe=True),
+                 "listed": {"name": "tool", "version": "1.0.0"}, "checked": True}
+
+        self.assertEqual(self._value(entry), t("manager.extensions.current"))
+
+    def test_the_trust_line_still_says_it_comes_with_vpinfe_after_an_update(self) -> None:
+        entry = _extension("tool", from_list=True, comes_with_vpinfe=True)
+
+        self.assertEqual(extensions._trust_value(entry), t("manager.extensions.trust_shipped"))
 
 
 if __name__ == "__main__":

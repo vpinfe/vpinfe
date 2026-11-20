@@ -4,6 +4,8 @@ nothing else in the official folder, and a removal can only reach VPinFE's own f
 Also pins (d): the kept copy of the list survives a failed check, an extension that needs a
 newer VPinFE is refused before anything is downloaded, and a receipt exists for exactly
 what was installed, since the receipt is what decides whether it still counts as official.
+An update of an extension that comes with VPinFE runs in its place and leaves the shipped
+files alone, because a signed or read-only install cannot be written to.
 """
 
 from __future__ import annotations
@@ -19,9 +21,10 @@ from pathlib import Path
 from unittest import mock
 
 from common.config import paths
-from common.extensions import contract, fingerprint, host
+from common.extensions import contract, fingerprint, host, store
 from common.online import extension_list
 from common.online.theme_registry_client import ThemeRegistryClient, ThemeRegistryError
+from tests.support.accepted import isolated
 from tests.support.identity import IDENTITY
 
 REPO = "https://github.com/example/extension-alpha"
@@ -346,6 +349,33 @@ class KeptListTests(Case):
         self.assertEqual(extension_list.updates({"alpha": "1.2.0"}, kept), {})
         self.assertEqual(extension_list.updates({}, kept), {})
         self.assertEqual(extension_list.updates({"alpha": "1.0.0"}, None), {})
+
+
+class UpdatingOneThatComesWithVPinFE(Case):
+    def test_the_update_runs_in_place_of_the_shipped_copy_and_leaves_it_untouched(self) -> None:
+        isolated(self)
+        shipped = self.root / "shipped"
+        settings = self.root / "settings"
+        for folder in (shipped, settings):
+            folder.mkdir()
+        old = extension_list.fetch(self.listed(), Client(archive=_archive(marker="shipped")),
+                                   shipped / "alpha")[0]
+        before = fingerprint.hash_files(old)
+        search = (self.root / "installed", self.official, shipped)
+        registry = host.Registry(store.ExtensionStore(settings))
+        self.addCleanup(registry.clear)
+
+        extension_list.install(self.listed(version="1.1.0"),
+                               Client(archive=_archive("alpha", "1.1.0", marker="update")))
+        with mock.patch.object(host, "SEARCH_PATH", search):
+            registry.load_installed()
+
+        record = registry.get("alpha")
+        assert record is not None
+        self.assertEqual(record.directory, self.official / "alpha")
+        assert record.manifest is not None
+        self.assertEqual(record.manifest.version, "1.1.0")
+        self.assertEqual(fingerprint.hash_files(old), before)
 
 
 if __name__ == "__main__":

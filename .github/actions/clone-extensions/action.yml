@@ -1,7 +1,8 @@
-name: Clone the included extensions
+name: Clone the official extensions
 description: >
-  Puts each extension VPinFE includes under extensions/, from its own repository, so the
-  tests and the checks that read extension code see what a development checkout has.
+  Puts each official extension under extensions/, from its own repository, so the tests and
+  the checks that read extension code see what a development checkout has. A build ships
+  only the ones named in common/extensions/fingerprint.py, not everything cloned here.
   Run after the checkout of VPinFE.
 
 runs:

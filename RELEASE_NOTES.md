@@ -53,6 +53,7 @@
 #### Removed
 - **Manager** - Move to Game for a Table INI.
 - **Manager** - Add a Setting and Commonly Set per Table. All Settings holds every setting the table can have.
+- **Core** - VPinPlay no longer comes with VPinFE. If you had it on a beta, add it again from the Extension List under System > Extensions, and your VPinPlay settings are still there. The Library Importer still comes with VPinFE and takes its updates from the same list.
 
 #### For theme and API authors
 - **Core** - Ratings are 0 to 10 in Contract 2 and the HTTP API. Contract 1 stays on whole stars, 0 to 5.

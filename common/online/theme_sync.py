@@ -48,6 +48,8 @@ def start_watch(config: ConfigStore, shutdown: threading.Event | None = None) ->
             try:
                 if due(config):
                     theme_ops.listing(refresh=True)
+            except theme_ops.SourceUnavailableError as error:
+                logger.warning("Theme sources could not be read; will try again: %s", error)
             except Exception:
                 logger.warning("Theme sources could not be read; will try again",
                                exc_info=True)

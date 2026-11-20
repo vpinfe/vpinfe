@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from common.security import accepted
@@ -107,7 +108,7 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(lines[1], "Themes can run programs on this device, and VPinFE "
                                        "can't check this one.")
 
-    OWN = {"author": "Example Author", "source": "https://github.com/example/tool",
+    OWN: dict[str, Any] = {"author": "Example Author", "source": "https://github.com/example/tool",
            "path": "/found/tool"}
 
     async def test_an_extension_says_what_it_says_it_uses(self) -> None:
@@ -119,7 +120,7 @@ class TheQuestions(unittest.IsolatedAsyncioTestCase):
         self.assertIn("isn't made or endorsed by the VPinFE team", lines[0])
         self.assertIs(kept["rows"][-2][0], panel.HEADING)
         self.assertEqual(kept["rows"][-2][1], "What It Can Do")
-        self.assertEqual(kept["rows"][-1][0], "Your library")
+        self.assertEqual(kept["rows"][-1][0], "Your Library")
         self.assertEqual(answer, "Trust and Turn On")
 
     async def test_the_answer_waits_for_the_tick_that_says_it_is_unsupported(self) -> None:

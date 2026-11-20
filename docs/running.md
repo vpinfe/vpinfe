@@ -161,7 +161,7 @@ The web server answers on every interface so you can run a cabinet from another 
 
 ## VPinPlay (experimental)
 
-VPinFE includes an experimental VPinPlay integration.  Each game is sent as it is played - its plays, time, rating and high scores - to the VPinPlay account of each player who has turned Share on.  Nothing else in the library is sent, and a game marked Private never is.
+VPinPlay is an experimental extension you add from the Extension List under **System**, **Extensions**.  Each game is sent as it is played - its plays, time, rating and high scores - to the VPinPlay account of each player who has turned Share on.  Nothing else in the library is sent, and a game marked Private never is.
 
 - Main site: [vpinplay.com](https://www.vpinplay.com)
 - Server default: `https://api.vpinplay.com:8888`, changed with **Server** in VPinPlay's settings

@@ -18,13 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from common.extensions.fingerprint import INCLUDED  # noqa: E402
 from common.online import extension_list  # noqa: E402
 from common.online.theme_registry_client import (  # noqa: E402
     ThemeRegistryClient,
     ThemeRegistryError,
 )
-
-INCLUDED = ("library_importer", "vpinplay")
 
 
 class FetchError(Exception):
