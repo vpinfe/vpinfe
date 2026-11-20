@@ -28,8 +28,6 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.compat import PY3_BASE_MODULES
-
 REPO_ROOT = Path(SPECPATH).parent
 SLIM = os.environ.get("VPINFE_SLIM") == "1"
 
@@ -64,6 +62,7 @@ if not SLIM:
 
 sys.path.insert(0, str(REPO_ROOT))
 from common.extensions import fingerprint  # noqa: E402
+from scripts import stdlib_modules  # noqa: E402
 
 datas = [(str(REPO_ROOT / root), root) for root in DATA_ROOTS]
 # Only the extensions the build includes, whatever else sits under extensions/.
@@ -85,10 +84,14 @@ datas.append((str(_FINGERPRINTS), "extensions"))
 # normally.
 hiddenimports = ["pynput.keyboard._xorg", "pynput.mouse._xorg"] if IS_LINUX else []
 
+# An extension installed later is never scanned, and neither is a library it fetches, so
+# the build carries the whole standard library for them to import.
+hiddenimports += stdlib_modules.names()
+
 
 def _extension_imports() -> list[str]:
-    """Every module a bundled extension imports. Core loads an extension from its
-    directory at runtime, so the import scan never reaches one."""
+    """Every module a bundled extension imports that is not the standard library. Core loads
+    an extension from its directory at runtime, so the import scan never reaches one."""
     found = set()
     # os.walk, because rglob does not follow the links a development tree has in extensions/.
     sources = [Path(folder) / name
@@ -103,8 +106,7 @@ def _extension_imports() -> list[str]:
                 found.update(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
                 found.add(node.module)
-    # The base library ships whole, and a module inside it cannot be named as one.
-    return sorted(name for name in found if name.split(".")[0] not in PY3_BASE_MODULES)
+    return sorted(name for name in found if name.split(".")[0] not in sys.stdlib_module_names)
 
 
 hiddenimports += _extension_imports()
