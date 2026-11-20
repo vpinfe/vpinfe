@@ -1222,6 +1222,9 @@ def _hand_pov_to_table(game_dir: Path) -> None:
                        exc_info=True)
 
 
+_TABLE_ACTIONS = ("replace_vpx", "add_table")
+
+
 def record_declared_identities(
         plan: ImportPlan, base: Path,
         declared: Mapping[str, DeclaredIdentity | None] | None) -> list[str]:
@@ -1251,7 +1254,8 @@ def record_declared_identities(
         if meta is None:
             # The .info is named for its folder, and MetaConfig wants the file.
             meta = info_files.open_record(base)
-        meta.add_asset(named.destination, identity.host or "declared",
-                       identity=identity)
+        meta.add_asset(named.destination, identity.host or "declared", identity=identity)
+        if named.action in _TABLE_ACTIONS:
+            meta.tie_table_to_declared(_basename(named.destination), identity)
         written.append(named.destination)
     return written

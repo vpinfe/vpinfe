@@ -823,6 +823,31 @@ class MetaConfig:
         self.data.setdefault(ASSETS_KEY, {})[key] = {"source": source}
         self.write_config()
 
+    def tie_table_to_declared(self, filename: str, identity: identity_claims.DeclaredIdentity,
+                              ) -> bool:
+        """Tie a table to the release its sender said it is, on the table's own entry.
+
+        A table's release is read off the entry (`source.vps_file_id`), not the assets
+        ledger, so a claim filed there never shows. A weaker claim never replaces a
+        stronger one, and an equal one does not either. True when the entry changed.
+        """
+        wanted = str(identity.vps_file_id or "").strip()
+        if not wanted:
+            return False
+        entries = self._entries_by_id()
+        entry = self._entry_for(entries, filename)
+        source = dict(entry.get("source") or {})
+        basis = str(identity.confirmed_by or "").strip().lower()
+        if source.get(ties.FILE_KEY) and not identity_claims.outranks(
+                basis, source.get(ties.BASIS_KEY, "")):
+            return False
+        from common.games.game_service import find_vps_record
+
+        ties.tie(source, wanted, basis, find_vps_record(wanted))
+        entry["source"] = source
+        self.write_config()
+        return True
+
     def asset_entries(self, keys: list[str]) -> dict[str, dict | None]:
         """The ledger entry at each key, or None where there is none. Copies, so a caller
         can hold them while the file changes."""

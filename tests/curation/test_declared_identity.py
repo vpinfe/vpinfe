@@ -275,5 +275,37 @@ class ImportRecordingTests(TempTree):
         self.assertTrue(meta.data.get("assets"))
 
 
+class TableRecordingTests(TempTree):
+    """A table's release is read off the table's own entry, so that is where a claim goes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder = write_game(self.root, "Example", info={
+            "Info": {"Name": "Example"}, "VPinFE": {}, "User": {}})
+        self.meta = MetaConfig(str(self.folder / "Example.info"))
+
+    def _source(self) -> dict:
+        meta = MetaConfig(str(self.folder / "Example.info"))
+        entries = meta.data.get("tables", {})
+        return next((one.get("source", {}) for one in entries.values()
+                     if one.get("filename") == "Example.vpx"), {})
+
+    def test_a_declared_table_is_tied_on_its_own_entry(self) -> None:
+        self.assertTrue(self.meta.tie_table_to_declared(
+            "Example.vpx", _identity(host="vpuniverse", host_item_id="h1", vps_file_id="f1",
+                                     confirmed_by=claims.DECLARED)))
+        self.assertEqual(self._source().get("vps_file_id"), "f1")
+        self.assertEqual(self._source().get("confirmed_by"), "declared")
+
+    def test_a_declaration_is_not_churned_by_an_equal_one(self) -> None:
+        self.meta.tie_table_to_declared(
+            "Example.vpx", _identity(host="vpuniverse", host_item_id="h1",
+                                     vps_file_id="first", confirmed_by=claims.DECLARED))
+        self.assertFalse(self.meta.tie_table_to_declared(
+            "Example.vpx", _identity(host="vpuniverse", host_item_id="h2",
+                                     vps_file_id="second", confirmed_by=claims.DECLARED)))
+        self.assertEqual(self._source().get("vps_file_id"), "first")
+
+
 if __name__ == "__main__":
     unittest.main()
