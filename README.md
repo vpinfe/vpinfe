@@ -35,7 +35,7 @@ https://www.youtube.com/playlist?list=PLMRebAANedgX9YDbl0gte_ZgoYU9VQF8j
 
 ## What you need
 
-Visual Pinball **10.8.0**, or a recent **10.8.1** prerelease.  Builds called 10.8.1 are nightlies, so take a current one.
+Visual Pinball **10.8.0**, or a recent **10.9** preview build.  Preview builds are nightlies, so take a current one.
 
 VPinFE starts the Visual Pinball you already have, and does not install it.  Get Visual Pinball to start a table on its own first, because a table that will not start from Visual Pinball will not start from VPinFE either.
 

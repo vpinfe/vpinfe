@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -33,14 +34,17 @@ from common.apps.contract import (
 from common.config import config_schema, path_state
 from common.games import game_repository, launchers, library_folders, tables
 from common.games.table_identity import find_table_by_id
-from common.host import bundled_libraries, command_line, launch_state
+from common.host import bundled_libraries, command_line, hidden_process, launch_state
 from common.i18n import t
 from common.launcher_path import resolve_launcher_path
 from common.runtime import jobs, shutdown
 
 logger = logging.getLogger("vpinfe.common.games.launcher_ops")
 
+_Program = subprocess.Popen[bytes] | hidden_process.HiddenProcess
 _MAKE_FILE_SECONDS = 30
+_POLL_SECONDS = 0.25
+_STOP_SECONDS = 5
 _making_file = threading.Lock()
 # launcher id -> the program that ran for its settings file and wrote none. A different
 # program under the same launcher is a new question, so it is keyed by what ran.
@@ -707,7 +711,8 @@ def _program_made_the_file(launcher: launchers.Launcher) -> bool:
         return False
     command = _settings_file_command(launcher)
     try:
-        exited = run_for_settings_file(command, apps.app_name(launcher.app))
+        exited = run_for_settings_file(command, apps.app_name(launcher.app),
+                                       lambda: _has_settings_file(launcher))
     except service_errors.ServiceError:
         return False
     if _has_settings_file(launcher):
@@ -732,10 +737,64 @@ def _can_write_preferences() -> bool:
     return os.access(root, os.W_OK | os.X_OK)
 
 
-def run_for_settings_file(command: list[str], app_name: str) -> bool:
+def _start_program(command: list[str]) -> _Program:
+    """On Windows the program runs on a desktop nobody sees: it answers `-v` with a message
+    box, which would otherwise show over whatever the person is doing."""
+    env = bundled_libraries.for_child()
+    return hidden_process.start(command, env) or subprocess.Popen(
+        command, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL)
+
+
+def _wait_for_program(process: _Program, made: Callable[[], bool]) -> bool:
+    """Wait for the program, but end it once `made` has been true on two polls running,
+    which is not a promise the file is complete, only that it has had a poll to be written.
+    False when it outlived `_MAKE_FILE_SECONDS`. Whatever ends this, the program is stopped.
+
+    Windows holds the program open on a message box for `-v`, so the file's appearance is
+    the only signal it is done."""
+    try:
+        return _poll_program(process, made)
+    except BaseException:
+        _stop(process)
+        raise
+
+
+def _poll_program(process: _Program, made: Callable[[], bool]) -> bool:
+    deadline = time.monotonic() + _MAKE_FILE_SECONDS
+    seen = False
+    while time.monotonic() < deadline:
+        try:
+            process.wait(timeout=_POLL_SECONDS)
+            return True
+        except subprocess.TimeoutExpired:
+            pass
+        if not made():
+            seen = False
+        elif seen:
+            _stop(process)
+            return True
+        else:
+            seen = True
+    _stop(process)
+    return False
+
+
+def _stop(process: _Program) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=_STOP_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def run_for_settings_file(command: list[str], app_name: str,
+                          made: Callable[[], bool] = lambda: False) -> bool:
     """Run the program once so it writes its settings file, one run at a time and never
-    while a table plays. Returns whether it exited. Whether the file is there afterwards is
-    the caller's to check: the program does not promise it."""
+    while a table plays. `made` says whether the file is there yet, which ends the run
+    early. Returns whether it exited. Whether the file is there afterwards is the
+    caller's to check: the program does not promise it."""
     if launch_state.current().launching:
         raise service_errors.BlockedError(t("error.launchers.make_file_playing"))
     if not _making_file.acquire(blocking=False):
@@ -744,19 +803,16 @@ def run_for_settings_file(command: list[str], app_name: str) -> bool:
         if not _can_write_preferences():
             raise service_errors.RefusedError(
                 t("error.launchers.no_preferences_folder", app_name=app_name))
-        exited = True
         try:
-            subprocess.run(command, env=bundled_libraries.for_child(), stdin=subprocess.DEVNULL,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=_MAKE_FILE_SECONDS, check=False)
-        except subprocess.TimeoutExpired:
-            exited = False
-            logger.warning("%s did not exit in %s s making its settings file", app_name,
-                           _MAKE_FILE_SECONDS)
+            process = _start_program(command)
         except OSError as exc:
             logger.warning("%s could not be run for its settings file: %s", app_name, exc)
             raise service_errors.RefusedError(
                 t("error.launchers.make_file_failed", app_name=app_name)) from exc
+        exited = _wait_for_program(process, made)
+        if not exited:
+            logger.warning("%s did not exit in %s s making its settings file", app_name,
+                           _MAKE_FILE_SECONDS)
     finally:
         _making_file.release()
     return exited
@@ -775,7 +831,7 @@ def make_settings_file(launcher_id: str) -> dict[str, Any]:
         raise service_errors.RefusedError(t("error.launchers.cannot_make_file", app_name=app_name))
     if _has_settings_file(found):
         raise service_errors.RefusedError(t("error.launchers.file_exists", app_name=app_name))
-    exited = run_for_settings_file(command, app_name)
+    exited = run_for_settings_file(command, app_name, lambda: _has_settings_file(found))
     if not _has_settings_file(found):
         if exited:
             _wrote_nothing[found.launcher_id] = command[0]
@@ -807,13 +863,19 @@ def restore_order(order: list[str]) -> dict[str, Any]:
 
 def assign(table_id: str, launcher_id: str) -> dict[str, Any]:
     """An empty `launcher_id` clears it, which is how a table goes back to the default.
+    Pointing at a launcher needs `table_id` to be a table's own id: the launch reads
+    mappings by that id, so any other string would be stored and never used.
 
     Cleared rather than stored blank: an absent mapping already means the default, and
     two spellings of one state is what makes a reader ask which is which.
     """
     wanted = str(launcher_id or "").strip()
     store = launchers.get_launcher_store()
-    if wanted and store.get(wanted) is None:
-        raise service_errors.NotFoundError(t("error.launchers.no_launcher", launcher_id=(wanted)))
+    if wanted:
+        if find_table_by_id(game_repository.all_games(), str(table_id or "").strip()) is None:
+            raise service_errors.NotFoundError(t("error.launchers.unknown_table", wanted=table_id))
+        if store.get(wanted) is None:
+            raise service_errors.NotFoundError(
+                t("error.launchers.no_launcher", launcher_id=(wanted)))
     store.assign(table_id, wanted)
     return {"table_id": table_id, "launcher_id": store.mapped(table_id)}

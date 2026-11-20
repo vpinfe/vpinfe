@@ -2297,7 +2297,7 @@
     "one": "The version you updated to is removed. Its settings stay.",
     "other": "The versions you updated to are removed. Their settings stay."
   },
-  "manager.extensions.use_previous_confirm": "Use It",
+  "manager.extensions.use_previous_confirm": "Go Back",
   "manager.extensions.use_previous_done": {
     "one": "{name} goes back to its previous version from the next start",
     "other": "{count:n} extensions go back to their previous versions from the next start"
@@ -4642,7 +4642,7 @@
   "manager.setup.vpx.looked.windows": "Looked in PinballX, Popper, C:\\Visual Pinball, \\vPinball on each drive, the PATH",
   "manager.setup.vpx.none": "Not installed yet",
   "manager.setup.vpx.none_get": "Where to Download It",
-  "manager.setup.vpx.none_preview": "Get the 10.8.1 Preview",
+  "manager.setup.vpx.none_preview": "Get the 10.9 Preview",
   "manager.setup.vpx.none_preview_hint": "Downloading a preview asks you to sign in to GitHub",
   "manager.setup.vpx.none_help": "Nothing plays until it is",
   "manager.setup.vpx.none_note": "The rest of this step waits for it, in Launchers › Visual Pinball X",

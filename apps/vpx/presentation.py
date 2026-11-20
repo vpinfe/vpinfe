@@ -64,7 +64,7 @@ class VPXPrepare:
         if not values:
             return
         if held is None:
-            folder = preferences_folder()
+            folder = preferences_folder(str(settings.get("bin_path") or ""))
             if folder is None:
                 return
             held = VPXConfig().create(folder.name, values, settings)

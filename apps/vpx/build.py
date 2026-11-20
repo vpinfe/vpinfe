@@ -8,24 +8,28 @@ from .setting_types import LINE, SPANS
 
 _REV = re.compile(r"[0-9]+")
 
+PLUGINS_LINE = "1081"
+LINES = tuple(dict.fromkeys((PLUGINS_LINE, "1090", LINE)))
+
 
 def rev_of(version: str | None) -> int | None:
-    """The Rev of a build in the line the settings were read from, out of the
+    """The Rev of a build in a line the settings were read from, out of the
     `[Version] VPinball` an ini records. None for a build of any other line, and for none.
     """
     said = (version or "").strip()
-    rest = said[len(LINE):]
-    if not LINE or not said.startswith(LINE) or not _REV.fullmatch(rest):
-        return None
-    return int(rest)
+    for line in LINES:
+        if line and said.startswith(line) and _REV.fullmatch(said[len(line):]):
+            return int(said[len(line):])
+    return None
 
 
 def predates_plugins(version: str | None) -> bool:
-    """Whether a `[Version] VPinball` is of a line before `LINE`, the first with plugins."""
+    """Whether a `[Version] VPinball` is of a line before `PLUGINS_LINE`, the first with
+    plugins."""
     said = (version or "").strip()
-    head = said[:len(LINE)]
-    return bool(LINE) and len(head) == len(LINE) and head.isascii() and head.isdigit() \
-        and int(head) < int(LINE)
+    head = said[:len(PLUGINS_LINE)]
+    return len(head) == len(PLUGINS_LINE) and head.isascii() and head.isdigit() \
+        and int(head) < int(PLUGINS_LINE)
 
 
 def declares(qualified: str, rev: int | None, plugin_present: bool = False) -> bool:

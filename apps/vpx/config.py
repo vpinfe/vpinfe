@@ -41,7 +41,7 @@ from common.apps.contract import (
     TableOrder,
 )
 
-from . import areas, bindings, build, displays, leftovers, plugins, screens
+from . import areas, bindings, build, displays, leftovers, plugins, program, screens
 from . import ini as vini
 from .setting_declarations import DECLARED, Declaration
 from .setting_types import CONTEXTUAL, LABELS, REGISTERED, TYPES
@@ -260,28 +260,39 @@ def preferences_file(version: str) -> Path | None:
     return base / named / SETTINGS_FILE if base and _VERSION_FOLDER.fullmatch(named) else None
 
 
-def preferences_folder() -> Path | None:
-    """The version folder Visual Pinball reads and writes: the newest one there is, or the
-    newest release's where it has never run. None where the platform names no preferences
-    folder."""
+def launcher_folder(bin_path: str = "") -> Path | None:
+    """The version folder of the Visual Pinball at `bin_path`, whether or not it exists
+    yet. None where the platform names no preferences folder or the program's version
+    cannot be read."""
+    base, _ = _machine_folders()
+    named = program.folder_version(bin_path)
+    return base / named if base is not None and named else None
+
+
+def preferences_folder(bin_path: str = "") -> Path | None:
+    """The version folder Visual Pinball reads and writes: the one of the program at
+    `bin_path`, else the newest one there is, else the newest release's. None where the
+    platform names no preferences folder."""
     base, _ = _machine_folders()
     if base is None:
         return None
-    return next(iter(_version_folders(base)), base / NEWEST_VERSION)
+    return launcher_folder(bin_path) or next(iter(_version_folders(base)),
+                                             base / NEWEST_VERSION)
 
 
 def own_file(bin_path: str = "") -> Path | None:
     """The settings file Visual Pinball uses when it is not given one, or None where
     there is none yet.
 
-    Visual Pinball looks in its own version's folder, and which version a launcher runs
-    is not known here, so the newest folder holding a file stands in for it.
+    Visual Pinball looks in the folder of its own version, which the program at `bin_path`
+    says. Where that cannot be read, the newest folder holding a file stands in for it.
     """
     base, old = _machine_folders()
-    found = [folder / SETTINGS_FILE for folder in _version_folders(base)]
-    program = Path(str(bin_path or "").strip())
-    if program.name and not any(part.lower().endswith(".app") for part in program.parts):
-        found.append(program.parent / SETTINGS_FILE)
+    own = launcher_folder(bin_path)
+    found = [folder / SETTINGS_FILE for folder in ([own] if own else _version_folders(base))]
+    exe = Path(str(bin_path or "").strip())
+    if exe.name and not any(part.lower().endswith(".app") for part in exe.parts):
+        found.append(exe.parent / SETTINGS_FILE)
     found += [folder / SETTINGS_FILE for folder in (base, old) if folder is not None]
     return next((one for one in found if one.is_file()), None)
 
@@ -296,11 +307,13 @@ def own_log() -> Path | None:
 
 
 def possible_logs(settings: Mapping[str, Any]) -> list[Path]:
-    """Every place a launcher's Visual Pinball may write its log: each preferences folder
-    it could be using, and beside the settings file it is given. Which version runs is not
-    known, so all of them are listed; a log that is never written costs nothing to watch."""
+    """Every place a launcher's Visual Pinball may write its log: the folder of its own
+    version, and beside the settings file it is given. Where the version cannot be read,
+    each preferences folder it could be using is listed; a log that is never written costs
+    nothing to watch."""
     base, old = _machine_folders()
-    folders = [*_version_folders(base)]
+    own = launcher_folder(str(settings.get("bin_path") or ""))
+    folders = [own] if own else [*_version_folders(base)]
     if base is not None and not folders:
         folders.append(base / NEWEST_VERSION)
     folders += [one for one in (base, old) if one is not None]
@@ -772,15 +785,17 @@ class VPXConfig:
 
     def create(self, version: str, values: Mapping[str, str],
                settings: Mapping[str, Any]) -> Path:
-        """Set `values` in the launcher's file, making the one a program of this version
-        looks for when it has none yet. Returns the file.
+        """Set `values` in the launcher's file, making the one its program looks for when it
+        has none yet: in the folder of the program's own version, else of `version`.
+        Returns the file.
 
         What the launcher stores is untouched. Nothing is made for a `version` that names no
         preferences folder.
         """
         held = settings_file(settings)
         if held is None:
-            held = preferences_file(version)
+            own = launcher_folder(str(settings.get("bin_path") or ""))
+            held = own / SETTINGS_FILE if own else preferences_file(version)
             if held is None:
                 raise ValueError(f"There is no preferences folder for version {version!r}.")
             settings = {**settings, "ini_path": str(held)}
@@ -811,11 +826,12 @@ class VPXConfig:
 
     def left_empty(self, settings: Mapping[str, Any]) -> dict[str, Standing]:
         """By launcher field, what an empty one stands for on this machine: the file
-        Visual Pinball uses, else where the newest version makes it, else nothing."""
+        Visual Pinball uses, else where its version makes it, else nothing."""
         found = own_file(str(settings.get("bin_path") or ""))
         if found:
             return {"ini_path": Standing(str(found), True)}
-        made = preferences_file(self.newest_version)
+        own = launcher_folder(str(settings.get("bin_path") or ""))
+        made = own / SETTINGS_FILE if own else preferences_file(self.newest_version)
         return {"ini_path": Standing(str(made) if made else "", False)}
 
     def blank_words(self) -> dict[str, str]:

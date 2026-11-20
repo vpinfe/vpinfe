@@ -43,7 +43,7 @@ CHECKED = "else_checked"
 NOT_INSTALLED = "none"
 # Where Visual Pinball's releases are published.
 RELEASES = "https://github.com/vpinball/vpinball/releases"
-# Where its newest builds are made, the 10.8.1 preview among them. Downloading from here asks
+# Where its newest builds are made, the 10.9 preview among them. Downloading from here asks
 # for a GitHub sign-in.
 PREVIEW_BUILDS = "https://github.com/vpinball/vpinball/actions/workflows/vpinball.yml"
 

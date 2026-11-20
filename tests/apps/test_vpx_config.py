@@ -7,6 +7,7 @@ of two spellings exists. They do not stack, and the shadowing that follows is wh
 
 from __future__ import annotations
 
+import plistlib
 import re
 import threading
 import time
@@ -18,7 +19,14 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from apps.vpx import areas, bindings, build, displays
-from apps.vpx.config import VPXConfig, own_file, own_log, settings_file
+from apps.vpx.config import (
+    VPXConfig,
+    own_file,
+    own_log,
+    possible_logs,
+    preferences_folder,
+    settings_file,
+)
 from apps.vpx.setting_types import LABELS, TYPES, Span
 from common import apps
 from common.apps.contract import SCOPE_ENTRY, SCOPE_FOLDER, SCOPE_LAUNCHER, Standing
@@ -1581,11 +1589,10 @@ class BuildTests(_Case):
 
     def setUp(self) -> None:
         super().setUp()
-        for patch in (mock.patch.object(build, "LINE", "1081"),
-                      mock.patch.dict(build.SPANS, {self.STALE: Span(0, 5640),
-                                                    self.NEW: Span(6254, None)}, clear=True)):
-            patch.start()
-            self.addCleanup(patch.stop)
+        patch = mock.patch.dict(build.SPANS, {self.STALE: Span(0, 5640),
+                                              self.NEW: Span(6254, None)}, clear=True)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def offered(self, version: str | None = None) -> set[str]:
         ini = (APP_INI.replace("VPinball = 10815353", f"VPinball = {version}")
@@ -1958,6 +1965,7 @@ class OwnFileTests(unittest.TestCase):
                              return_value=(self.root / "VPinballX", self.root / ".vpinball"))
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.program = str(self.root / "vpx" / "VPinballX")
 
     def _file(self, *parts: str) -> Path:
         path = self.root.joinpath(*parts)
@@ -1999,6 +2007,76 @@ class OwnFileTests(unittest.TestCase):
 
         self.assertEqual(VPXConfig().left_empty({"bin_path": ""}),
                          {"ini_path": Standing(str(made), False)})
+
+    def _launcher_runs(self, version: str):
+        return mock.patch("apps.vpx.program.folder_version", return_value=version)
+
+    def test_a_launcher_gets_the_file_of_its_own_version_not_the_newest(self) -> None:
+        older = self._file("VPinballX", "10.8", "VPinballX.ini")
+        self._file("VPinballX", "10.9", "VPinballX.ini")
+
+        with self._launcher_runs("10.8"):
+            self.assertEqual(own_file(self.program), older)
+            self.assertEqual(settings_file({"bin_path": self.program}), older)
+
+    def test_a_launcher_whose_folder_has_no_file_is_not_given_another_versions(self) -> None:
+        self._file("VPinballX", "10.8", "VPinballX.ini")
+
+        with self._launcher_runs("10.9"):
+            self.assertIsNone(own_file(self.program))
+            self.assertEqual(
+                VPXConfig().left_empty({"bin_path": self.program}),
+                {"ini_path": Standing(str(self.root / "VPinballX" / "10.9" / "VPinballX.ini"),
+                                      False)})
+
+    def test_the_folder_to_make_is_the_launchers_whatever_the_newest_release_is(self) -> None:
+        with self._launcher_runs("10.8"):
+            made = VPXConfig().create("10.9", {"Player.BGSet": "1"}, {"bin_path": self.program})
+
+        self.assertEqual(made, self.root / "VPinballX" / "10.8" / "VPinballX.ini")
+        self.assertTrue(made.is_file())
+
+    def test_a_real_app_bundle_names_its_own_folder_through_the_whole_path(self) -> None:
+        contents = self.root / "VPinballX.app" / "Contents"
+        (contents / "MacOS").mkdir(parents=True)
+        (contents / "Info.plist").write_bytes(
+            plistlib.dumps({"CFBundleShortVersionString": "10.9.0"}))
+        inside = contents / "MacOS" / "VPinballX"
+        inside.write_bytes(b"x")
+        self._file("VPinballX", "10.8", "VPinballX.ini")
+
+        with mock.patch("sys.platform", "darwin"):
+            self.assertIsNone(own_file(str(inside)))
+            self.assertEqual(
+                VPXConfig().left_empty({"bin_path": str(inside)}),
+                {"ini_path": Standing(str(self.root / "VPinballX" / "10.9" / "VPinballX.ini"),
+                                      False)})
+
+    def test_a_launcher_with_no_readable_version_falls_back_to_the_newest_folder(self) -> None:
+        self._file("VPinballX", "10.8", "VPinballX.ini")
+        newest = self._file("VPinballX", "10.9", "VPinballX.ini")
+
+        with self._launcher_runs(""):
+            self.assertEqual(own_file(self.program), newest)
+
+    def test_the_logs_to_watch_are_the_launchers_own_folders(self) -> None:
+        self._file("VPinballX", "10.8", "vpinball.log")
+        self._file("VPinballX", "10.9", "vpinball.log")
+
+        with self._launcher_runs("10.8"):
+            logs = possible_logs({"bin_path": self.program})
+
+        self.assertIn(self.root / "VPinballX" / "10.8" / "vpinball.log", logs)
+        self.assertNotIn(self.root / "VPinballX" / "10.9" / "vpinball.log", logs)
+
+    def test_the_preferences_folder_is_the_launchers_then_the_newest_there_is(self) -> None:
+        self._file("VPinballX", "10.8", "VPinballX.ini")
+        self._file("VPinballX", "10.9", "VPinballX.ini")
+
+        with self._launcher_runs("10.8"):
+            self.assertEqual(preferences_folder(self.program), self.root / "VPinballX" / "10.8")
+        with self._launcher_runs(""):
+            self.assertEqual(preferences_folder(self.program), self.root / "VPinballX" / "10.9")
 
     def test_with_no_preferences_folder_it_names_nothing(self) -> None:
         with mock.patch("apps.vpx.config.preferences_file", return_value=None):

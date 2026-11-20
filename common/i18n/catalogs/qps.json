@@ -2297,7 +2297,7 @@
     "one": "Ţĥè ṽèřšîöñ ýöû ûþđàţèđ ţö îš řèɱöṽèđ. Îţš šèţţîñĝš šţàý.",
     "other": "Ţĥè ṽèřšîöñš ýöû ûþđàţèđ ţö àřè řèɱöṽèđ. Ţĥèîř šèţţîñĝš šţàý."
   },
-  "manager.extensions.use_previous_confirm": "Ûšè Îţ",
+  "manager.extensions.use_previous_confirm": "Ĝö Ɓàçķ",
   "manager.extensions.use_previous_done": {
     "one": "{name} ĝöèš ƀàçķ ţö îţš þřèṽîöûš ṽèřšîöñ ƒřöɱ ţĥè ñèẋţ šţàřţ",
     "other": "{count:n} èẋţèñšîöñš ĝö ƀàçķ ţö ţĥèîř þřèṽîöûš ṽèřšîöñš ƒřöɱ ţĥè ñèẋţ šţàřţ"
@@ -4642,7 +4642,7 @@
   "manager.setup.vpx.looked.windows": "Ŀööķèđ îñ ÞîñƀàŀŀẊ, Þöþþèř, Ç:\\Ṽîšûàŀ Þîñƀàŀŀ, \\ṽÞîñƀàŀŀ öñ èàçĥ đřîṽè, ţĥè ÞÀŢĤ",
   "manager.setup.vpx.none": "Ñöţ îñšţàŀŀèđ ýèţ",
   "manager.setup.vpx.none_get": "Ŵĥèřè ţö Đöŵñŀöàđ Îţ",
-  "manager.setup.vpx.none_preview": "Ĝèţ ţĥè 10.8.1 Þřèṽîèŵ",
+  "manager.setup.vpx.none_preview": "Ĝèţ ţĥè 10.9 Þřèṽîèŵ",
   "manager.setup.vpx.none_preview_hint": "Đöŵñŀöàđîñĝ à þřèṽîèŵ àšķš ýöû ţö šîĝñ îñ ţö ĜîţĤûƀ",
   "manager.setup.vpx.none_help": "Ñöţĥîñĝ þŀàýš ûñţîŀ îţ îš",
   "manager.setup.vpx.none_note": "Ţĥè řèšţ öƒ ţĥîš šţèþ ŵàîţš ƒöř îţ, îñ Ŀàûñçĥèřš › Ṽîšûàŀ Þîñƀàŀŀ Ẋ",

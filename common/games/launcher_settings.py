@@ -176,7 +176,7 @@ def _fresh_file(base: launchers.Launcher, target: Path) -> None:
     if aside is not None:
         os.replace(target, aside)
     try:
-        launcher_ops.run_for_settings_file(command, app_name)
+        launcher_ops.run_for_settings_file(command, app_name, target.is_file)
         if not target.is_file():
             raise service_errors.RefusedError(t("error.launchers.no_file_made", app_name=app_name))
     except BaseException:

@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Any
@@ -40,6 +41,55 @@ def _client() -> TestClient:
     return TestClient(httpapi.create_api_app(), raise_server_exceptions=False)
 
 
+class _Process:
+    """What `Popen` hands back. One that `stays_open` never exits until it is ended, the
+    way Visual Pinball does behind its `-v` message box on Windows."""
+
+    def __init__(self, stays_open: bool) -> None:
+        self.stays_open = stays_open
+        self.ended = False
+
+    def wait(self, timeout: float | None = None) -> int:
+        if self.stays_open and not self.ended:
+            time.sleep(timeout or 0)
+            raise subprocess.TimeoutExpired("vpx", timeout or 0)
+        return 0
+
+    def terminate(self) -> None:
+        self.ended = True
+
+    def kill(self) -> None:
+        self.ended = True
+
+
+class _Program:
+    """Stands in for starting the program: it runs `effect` as the program would, or
+    fails to start. Polling is quick and the limit short, so a program that stays open is
+    waited on for a moment rather than 30 s. Entering gives the `_start_program` mock."""
+
+    def __init__(self, effect: Any = None, *, stays_open: bool = False,
+                 error: Exception | None = None) -> None:
+        self.process = _Process(stays_open)
+        self._effect, self._error = effect, error
+        self._patches = ExitStack()
+
+    def _start(self, command: list[str], **_: Any) -> _Process:
+        if self._error is not None:
+            raise self._error
+        if self._effect is not None:
+            self._effect()
+        return self.process
+
+    def __enter__(self) -> Any:
+        self._patches.enter_context(patch.object(launcher_ops, "_POLL_SECONDS", 0.01))
+        self._patches.enter_context(patch.object(launcher_ops, "_MAKE_FILE_SECONDS", 1))
+        return self._patches.enter_context(
+            patch.object(launcher_ops, "_start_program", side_effect=self._start))
+
+    def __exit__(self, *exc: Any) -> None:
+        self._patches.close()
+
+
 class LauncherApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = TemporaryDirectory()
@@ -49,6 +99,11 @@ class LauncherApiTests(unittest.TestCase):
                                return_value=self.store)
         patcher.start()
         self.addCleanup(patcher.stop)
+        library = [SimpleNamespace(meta_config={"tables": {
+            "t1": {"id": "t1", "filename": "t1.vpx"}}})]
+        games = patch("common.games.game_repository.all_games", return_value=library)
+        games.start()
+        self.addCleanup(games.stop)
         # Marked as already seeded: building the app runs the startup pass, and a
         # shipped launcher appearing under these would make every count here wrong.
         # A real install is in this state from its second start onwards.
@@ -339,6 +394,27 @@ class LauncherApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_pointing_an_id_that_is_not_a_tables_at_a_launcher_is_refused(self) -> None:
+        """The launch reads mappings by the table's own id. A game id stored here would
+        answer 200 and then play on the default launcher."""
+        self._put("one", display_name="VPX")
+
+        response = self.client.put("/launchers/mappings/a-game-id",
+                                   json={"launcher_id": "one"})
+
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(self.client.get("/launchers").json()["mappings"], {})
+
+    def test_an_id_that_is_not_a_table_s_can_still_be_cleared(self) -> None:
+        """A mapping left behind by a table that is gone has to be removable."""
+        self._put("one", display_name="VPX")
+        self.store.assign("gone", "one")
+
+        response = self.client.put("/launchers/mappings/gone", json={"launcher_id": ""})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.get("/launchers").json()["mappings"], {})
+
 
 class ConfigFilesTests(unittest.TestCase):
     """What a copy of a launcher's settings takes, and the routes that went."""
@@ -390,10 +466,10 @@ class MakeSettingsFileTests(unittest.TestCase):
             "bin_path": str(self.program), "ini_path": str(self.ini)}})
 
     def _run(self, writes: bool = True) -> Any:
-        def made(command: list[str], **_: Any) -> None:
+        def made() -> None:
             if writes:
                 self.ini.write_text("[Player]\nFXAA = 1\n")
-        return patch("common.games.launcher_ops.subprocess.run", side_effect=made)
+        return _Program(made)
 
     def _launcher(self) -> dict[str, Any]:
         return next(one for one in self.client.get("/launchers").json()["launchers"]
@@ -444,8 +520,7 @@ class MakeSettingsFileTests(unittest.TestCase):
         self.assertIs(found["can_make_settings_file"], True)
 
     def test_a_program_stopped_for_running_too_long_is_offered_again(self) -> None:
-        with patch("common.games.launcher_ops.subprocess.run",
-                   side_effect=subprocess.TimeoutExpired("vpx", 30)):
+        with _Program(stays_open=True):
             self.client.post("/launchers/l1/config/file")
 
         self.assertIs(self._launcher()["can_make_settings_file"], True)
@@ -460,8 +535,7 @@ class MakeSettingsFileTests(unittest.TestCase):
         self.assertIs(self._launcher()["can_make_settings_file"], True)
 
     def test_a_program_that_cannot_start_is_refused_and_the_reason_is_logged(self) -> None:
-        with patch("common.games.launcher_ops.subprocess.run",
-                   side_effect=PermissionError("not allowed")), \
+        with _Program(error=PermissionError("not allowed")), \
                 self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING") as logged:
             got = self.client.post("/launchers/l1/config/file")
 
@@ -513,26 +587,73 @@ class MakeSettingsFileTests(unittest.TestCase):
         run_program.assert_not_called()
         self.assertFalse(launcher_ops._making_file.locked())
 
-    def test_a_program_that_stays_open_is_stopped_and_the_file_it_wrote_is_answered(self) -> None:
-        def hangs(command: list[str], **_: Any) -> None:
-            self.ini.write_text("[Player]\nFXAA = 1\n")
-            raise subprocess.TimeoutExpired(command, 30)
+    def test_a_program_that_stays_open_is_ended_as_soon_as_its_file_is_there(self) -> None:
+        """Visual Pinball on Windows holds a message box open for `-v`, so waiting for it
+        to exit costs the whole limit."""
+        program = _Program(lambda: self.ini.write_text("[Player]\nFXAA = 1\n"),
+                           stays_open=True)
 
-        with patch("common.games.launcher_ops.subprocess.run", side_effect=hangs), \
-                self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING"):
-            got = self.client.post("/launchers/l1/config/file")
+        started = time.monotonic()
+        with program:
+            with patch.object(launcher_ops, "_MAKE_FILE_SECONDS", 30):
+                got = self.client.post("/launchers/l1/config/file")
 
         self.assertEqual(got.status_code, 200, got.text)
+        self.assertTrue(program.process.ended)
+        self.assertLess(time.monotonic() - started, 5)
 
-    def test_a_program_that_stays_open_and_wrote_nothing_is_refused(self) -> None:
-        def hangs(command: list[str], **_: Any) -> None:
-            raise subprocess.TimeoutExpired(command, 30)
+    def test_a_program_that_stays_open_and_wrote_nothing_is_stopped_at_the_limit(self) -> None:
+        program = _Program(stays_open=True)
 
-        with patch("common.games.launcher_ops.subprocess.run", side_effect=hangs), \
-                self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING"):
+        with program, self.assertLogs("vpinfe.common.games.launcher_ops", "WARNING"):
             got = self.client.post("/launchers/l1/config/file")
 
         self.assertEqual(got.status_code, 400, got.text)
+        self.assertTrue(program.process.ended)
+
+    def test_a_file_seen_once_and_gone_again_does_not_end_the_program(self) -> None:
+        """A file still being written is not a finished one: it must be there on two polls
+        running before the program is ended."""
+        process: Any = _Process(stays_open=True)
+        seen = iter([True, False, True, True])
+
+        with patch.object(launcher_ops, "_POLL_SECONDS", 0.01):
+            exited = launcher_ops._wait_for_program(process, lambda: next(seen))
+
+        self.assertTrue(exited)
+        self.assertTrue(process.ended)
+        self.assertEqual(list(seen), [], "ended on the second poll of the last two")
+
+    def test_a_program_is_ended_when_the_wait_for_its_file_fails(self) -> None:
+        """Another request could start a second copy, and on Windows a copy held open by
+        its message box never goes away."""
+        process: Any = _Process(stays_open=True)
+
+        def broken() -> bool:
+            raise RuntimeError("the file could not be looked at")
+
+        with patch.object(launcher_ops, "_POLL_SECONDS", 0.01), \
+                self.assertRaises(RuntimeError):
+            launcher_ops._wait_for_program(process, broken)
+
+        self.assertTrue(process.ended)
+
+    def test_the_program_is_started_hidden_where_that_can_be_done(self) -> None:
+        hidden = _Process(stays_open=False)
+
+        with patch("common.games.launcher_ops.hidden_process.start", return_value=hidden), \
+                patch("common.games.launcher_ops.subprocess.Popen") as popen:
+            got = launcher_ops._start_program(["vpx", "-v"])
+
+        self.assertIs(got, hidden)
+        popen.assert_not_called()
+
+    def test_the_program_is_started_plainly_where_no_hidden_start_can_be_made(self) -> None:
+        with patch("common.games.launcher_ops.hidden_process.start", return_value=None), \
+                patch("common.games.launcher_ops.subprocess.Popen") as popen:
+            got = launcher_ops._start_program(["vpx", "-v"])
+
+        self.assertIs(got, popen.return_value)
 
     def test_a_linux_data_home_that_takes_a_write_is_enough_without_a_home(self) -> None:
         with patch("common.games.launcher_ops.sys.platform", "linux"), \
@@ -641,11 +762,11 @@ class SetupMakesTheFileTests(unittest.TestCase):
                                      **body})
 
     def _run(self, writes: bool) -> Any:
-        def made(command: list[str], **_: Any) -> None:
+        def made() -> None:
             if writes:
                 self.file.parent.mkdir(parents=True)
                 self.file.write_text("; the program's own comment\n[Player]\nFXAA = 1\n")
-        return patch("common.games.launcher_ops.subprocess.run", side_effect=made)
+        return _Program(made)
 
     def test_the_programs_own_file_is_the_one_written_into(self) -> None:
         with self._run(writes=True):
@@ -665,7 +786,7 @@ class SetupMakesTheFileTests(unittest.TestCase):
         self.assertEqual(self.file.read_text(), "[Player]\nBGSet = 1\n")
 
     def test_a_program_that_cannot_run_leaves_the_bare_file(self) -> None:
-        with patch("common.games.launcher_ops.subprocess.run", side_effect=OSError("no")):
+        with _Program(error=OSError("no")):
             got = self._put(create=True)
 
         self.assertEqual(got.status_code, 200, got.text)

@@ -225,5 +225,6 @@ def restore_launcher_order(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 @router.put("/mappings/{table_id}", summary="Point a table at a launcher",
             dependencies=[requires(scopes.CONFIG_WRITE)])
 def put_mapping(table_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """An empty `launcher_id` clears it, which is how a table goes back to the default."""
+    """`table_id` is the table's own id, not its game's; any other is refused with 404. An
+    empty `launcher_id` clears it, which is how a table goes back to the default."""
     return launcher_ops.assign(table_id, str(body.get("launcher_id") or ""))

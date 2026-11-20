@@ -47,6 +47,16 @@ class WhereTheFolderIsTests(unittest.TestCase):
 
         self.assertEqual(dof_config.config_folder(), data / "10.10" / "directoutputconfig")
 
+    def test_it_is_the_folder_of_the_version_the_default_launcher_runs(self) -> None:
+        data = self.root / "Library" / "Application Support" / "VPinballX"
+        for version in ("10.8", "10.9"):
+            (data / version).mkdir(parents=True)
+        self._on("darwin")
+
+        with mock.patch("common.games.launchers.default_value", return_value="vpx"), \
+                mock.patch("apps.vpx.program.folder_version", return_value="10.8"):
+            self.assertEqual(dof_config.config_folder(), data / "10.8" / "directoutputconfig")
+
     def test_a_file_named_like_a_version_is_not_one(self) -> None:
         data = self.root / "Library" / "Application Support" / "VPinballX"
         (data / "10.8").mkdir(parents=True)

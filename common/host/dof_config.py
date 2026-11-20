@@ -9,13 +9,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from apps.vpx import config as vpx_config
+from common.games import launchers
 
 FOLDER = "directoutputconfig"
 
 
 def base_path() -> Path | None:
-    """The folder DOF is given as its base path, or None where the platform names none."""
-    return vpx_config.preferences_folder()
+    """The folder DOF is given as its base path, or None where the platform names none:
+    the preferences folder of the Visual Pinball the default launcher runs."""
+    return vpx_config.preferences_folder(launchers.default_value("bin_path"))
 
 
 def config_folder() -> Path | None:

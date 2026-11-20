@@ -8,21 +8,17 @@ from unittest import mock
 from apps.vpx import build
 from apps.vpx.setting_types import Span
 
-LINE = "1081"
-
 
 class RevTests(unittest.TestCase):
-    def setUp(self) -> None:
-        patch = mock.patch.object(build, "LINE", LINE)
-        patch.start()
-        self.addCleanup(patch.stop)
-
     def test_the_rev_is_what_follows_the_line(self) -> None:
         self.assertEqual(build.rev_of("10815985"), 5985)
 
-    def test_a_build_of_another_line_has_no_rev_to_compare(self) -> None:
+    def test_a_10_9_build_has_the_rev_it_would_have_had_on_the_earlier_line(self) -> None:
+        self.assertEqual(build.rev_of("10906400"), 6400)
+
+    def test_a_build_of_a_line_before_both_has_no_rev_to_compare(self) -> None:
         self.assertIsNone(build.rev_of("10800000"))
-        self.assertIsNone(build.rev_of("1090123"))
+        self.assertIsNone(build.rev_of("1080123"))
 
     def test_nothing_or_nonsense_has_none(self) -> None:
         for said in (None, "", "   ", "1081", "1081x", "10.8.1", "1081\u00b2", "1081\u0665"):
@@ -78,7 +74,7 @@ class PredatesPluginsTests(unittest.TestCase):
                 self.assertTrue(build.predates_plugins(said))
 
     def test_the_line_itself_and_later_ones_do_not(self) -> None:
-        for said in ("10815353", "10900000"):
+        for said in ("10815353", "10900000", "10906400"):
             with self.subTest(said=said):
                 self.assertFalse(build.predates_plugins(said))
 
