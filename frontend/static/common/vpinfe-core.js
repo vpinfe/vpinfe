@@ -111,6 +111,14 @@ const CAPABILITIES = {
     config: ["launch_dim.enabled"],
     describe: "Core dims each window while a game is launching.",
   },
+  core_launch_quiet: {
+    // On by default, for the reason core_launch_dim is: a window at opacity 0 still runs
+    // everything in it, and the table needs the GPU and the CPU.
+    default: true,
+    config: ["launch_quiet.enabled"],
+    describe: "Core pauses each window's playing video, sound and CSS animations while a "
+            + "game runs, and starts only those again afterwards.",
+  },
   core_media_window: {
     // On by default. A media kind is named after the display it captures, so a window
     // that is a display has exactly one obvious thing to show, and every theme wrote the
@@ -1940,6 +1948,7 @@ class VPinFECore {
     this.#syncSelectionFromMessage(message);
     this.#applyLaunchDim(message.type);
     this.#applyLaunchIndicator(message.type);
+    this.#applyLaunchQuiet(message.type);
     if (VPinFECore.SELECTION_MESSAGES.has(message.type)) this.#renderWindowMedia();
     await this.#handleCoreAudioEvent(message);
     await this.#runEventHandlers(message);
@@ -2382,6 +2391,61 @@ class VPinFECore {
     } else if (type === "TableRunning" || type === "TableLaunchComplete") {
       this._launchIndicator?.remove();
       this._launchIndicator = null;
+    }
+  }
+
+  /**
+   * Stop what is playing in this window while a game runs, whoever started it.
+   *
+   * Only what was playing is remembered, so a video the theme had paused stays paused.
+   * Core's own audio is left to `#handleCoreAudioEvent`, which fades it out and starts
+   * it again itself. Transitions are not paused - the dim is one - and neither is the
+   * spinner core draws, which has to keep turning until the table is running.
+   */
+  #applyLaunchQuiet(type) {
+    if (type === "TableLaunching") {
+      if (!this.enabled("core_launch_quiet") || this._quiet) return;
+      const held = { media: new Set(), animations: new Set() };
+      this._quiet = held;
+      const hold = (media) => {
+        if (media === this._audio || media.paused || media.ended) return;
+        media.pause();
+        held.media.add(media);
+      };
+      for (const media of document.querySelectorAll("video, audio")) hold(media);
+      // Something that starts playing mid-game, a video drawn for a data change, is
+      // held the moment it is playing. `playing`, not `play`: pausing inside `play`
+      // rejects the promise the theme is awaiting from its own play() call.
+      this._quietOnPlay = (event) => {
+        if (event.target && event.target !== this._audio) {
+          event.target.pause();
+          held.media.add(event.target);
+        }
+      };
+      document.addEventListener("playing", this._quietOnPlay, true);
+      const animations = typeof document.getAnimations === "function"
+        ? document.getAnimations() : [];
+      for (const animation of animations) {
+        if (animation.playState !== "running") continue;
+        if (typeof CSSTransition !== "undefined" && animation instanceof CSSTransition) continue;
+        if (animation.effect?.target?.closest?.(".vpinfe-launch-indicator")) continue;
+        animation.pause();
+        held.animations.add(animation);
+      }
+    } else if (type === "TableLaunchComplete") {
+      const held = this._quiet;
+      if (!held) return;
+      this._quiet = null;
+      document.removeEventListener("playing", this._quietOnPlay, true);
+      for (const media of held.media) {
+        if (media.isConnected === false) continue;
+        const started = media.play();
+        if (started && typeof started.catch === "function") started.catch(() => {});
+      }
+      // A cancelled animation reads "idle", and play() would start it over.
+      for (const animation of held.animations) {
+        if (animation.playState === "paused") animation.play();
+      }
     }
   }
 

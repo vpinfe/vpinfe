@@ -165,6 +165,58 @@ class CoreDefaultsDriveTests(unittest.TestCase):
         self.assertEqual(
             self._indicator({"launch_indicator": {"enabled": False}}, "TableLaunching"), 0)
 
+    # -- the page goes quiet while a table runs --------------------------------
+
+    SETUP_QUIET = """
+        (async () => {
+          const bytes = new Uint8Array(44 + 8000).fill(128);
+          const view = new DataView(bytes.buffer);
+          const text = (at, word) => [...word].forEach((c, i) => bytes[at + i] = c.charCodeAt(0));
+          text(0, 'RIFF'); view.setUint32(4, 36 + 8000, true); text(8, 'WAVEfmt ');
+          view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+          view.setUint32(24, 8000, true); view.setUint32(28, 8000, true);
+          view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+          text(36, 'data'); view.setUint32(40, 8000, true);
+          const sound = document.createElement('audio');
+          sound.id = 'quiet-sound'; sound.loop = true; sound.muted = true;
+          sound.src = URL.createObjectURL(new Blob([bytes], {type: 'audio/wav'}));
+          document.documentElement.appendChild(sound);
+          const style = document.createElement('style');
+          style.textContent = '@keyframes quiet-spin { to { margin-left: 40px } }'
+            + ' #quiet-mover { animation: quiet-spin 1s linear infinite }';
+          document.head.appendChild(style);
+          const mover = document.createElement('div');
+          mover.id = 'quiet-mover';
+          document.documentElement.appendChild(mover);
+          await sound.play();
+          return 'ready';
+        })()
+    """
+
+    STATE = ("JSON.stringify({sound: document.getElementById('quiet-sound').paused,"
+             " mover: document.getElementById('quiet-mover').getAnimations()"
+             ".map(a => a.playState)})")
+
+    def test_a_running_table_pauses_what_the_page_plays_and_the_end_resumes_it(self) -> None:
+        async def run(instance: LiveInstance):
+            async with BrowserSession(chromium_path() or "") as browser:
+                await browser.navigate(instance.theme_url("playfield"))
+                await browser.wait_for("document.body.dataset.ready === 'true'", timeout=90.0)
+                # A gesture, or the page is not allowed to start a sound.
+                await browser.send("Runtime.evaluate", {
+                    "expression": self.SETUP_QUIET, "awaitPromise": True,
+                    "returnByValue": True, "userGesture": True})
+                seen = [json.loads(await browser.evaluate(self.STATE))]
+                for event in ("TableLaunching", "TableLaunchComplete"):
+                    await browser.evaluate(f"vpin.handleEvent({{type: {json.dumps(event)}}})")
+                    seen.append(json.loads(await browser.evaluate(self.STATE)))
+                return seen
+
+        playing, running, after = asyncio.run(run(self.instance))
+        self.assertEqual(playing, {"sound": False, "mover": ["running"]})
+        self.assertEqual(running, {"sound": True, "mover": ["paused"]})
+        self.assertEqual(after, {"sound": False, "mover": ["running"]})
+
 
 if __name__ == "__main__":
     unittest.main()

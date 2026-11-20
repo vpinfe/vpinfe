@@ -173,6 +173,7 @@ it itself.
 | `core_launch_indicator` | `launch_indicator.enabled` | off | on | Draws a spinner in every window while a game launches. | You draw your own, see [Loading Overlay During Game Launch](#loading-overlay-during-game-launch). |
 | `core_attract` | `attract.enabled` | off | on | Moves the selection on its own once nobody has pressed anything. | You run your own idle timer, see [Attract Mode](#attract-mode). |
 | `core_launch_dim` | `launch_dim.enabled` | on | on | Dims each window while a game launches. | Your windows stay as they are. |
+| `core_launch_quiet` | `launch_quiet.enabled` | on | on | Pauses each window's playing video, sound and CSS animations while a game runs. | They keep running behind the game, see [Quiet While a Game Runs](#quiet-while-a-game-runs). |
 | `core_media_window` | `media_window.enabled` | on | on | Shows each display window the media named for it. | A window with no element for it shows nothing of its own. |
 | `core_waiting` | `waiting.enabled` | on | on | Covers each window with what an empty library is waiting for. | You read `vpin.libraryWaiting` and draw it. |
 | `core_hold_ring` | `hold_ring.enabled` | on | on | Draws a ring while a key with a hold is kept down. | You draw your own from `vpin.enabled("core_hold_ring")`. |
@@ -1020,6 +1021,26 @@ async function receiveEvent(message) {
 ```
 
 If the controller launches the game from local input, remember that `vpin.sendMessageToAllWindows(...)` excludes the sender. Call `showTableLoadingOverlay()` directly in the local `joyselect` path before `await vpin.launchTable(...)`, or send the event with `vpin.sendMessageToAllWindowsIncSelf(...)`.
+
+### Quiet While a Game Runs
+
+A window faded to nothing is still running, and the table needs the GPU and the CPU. On
+`TableLaunching` core pauses every `video` and `audio` element on the page that is playing,
+whoever started it, and every CSS animation (transitions, the dim and core's own spinner are
+left running). On `TableLaunchComplete` it starts again only what it paused, so a video your
+theme had paused stays paused.
+
+- A video or sound that starts playing during the game is paused as it starts.
+- A sound made with `new Audio()` that is never added to the page cannot be found. Stop it
+  yourself on `TableLaunching`.
+- Your own drawing loop is yours to stop: a `requestAnimationFrame` or `setInterval` loop
+  keeps running, so stop it on `TableLaunching` and start it on `TableLaunchComplete`. Leave
+  core's gamepad loop alone, it carries the in-game buttons.
+- A CSS spinner in your own loading overlay is paused if the overlay was already on the page
+  when `TableLaunching` arrived, which freezes it in front of the player. Use an image, or
+  switch its animation on in your `TableLaunching` handler, which runs after core's.
+- Set `launch_quiet.enabled` to `false` in `config.json` to opt out, and pause what you want
+  to pause yourself.
 
 ### Attract Mode
 
