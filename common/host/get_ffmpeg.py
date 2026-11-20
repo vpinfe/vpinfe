@@ -6,7 +6,6 @@ import hashlib
 import logging
 import platform
 import shutil
-import tempfile
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -44,8 +43,8 @@ class Build:
 WINDOWS_X64 = Build(
     "9.0.2",
     "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/"
-    "ffmpeg-9.0.2-essentials_build.7z",
-    "4705843ccaaf54257c16ad90f3e952ece33c17df964ecf7bfdbb0f49c7171077", 35430500,
+    "ffmpeg-9.0.2-essentials_build.zip",
+    "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba", 114768076,
     "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe", "gyan.dev")
 MACOS_ARM64 = Build(
     "9.0.2",
@@ -97,17 +96,9 @@ def _sha256(path: Path) -> str:
 
 
 def _unpack(archive: Path, member: str, dest: Path) -> None:
-    if archive.suffix == ".zip":
-        with zipfile.ZipFile(archive) as held, held.open(member) as source, \
-                dest.open("wb") as out:
-            shutil.copyfileobj(source, out)
-        return
-    import py7zr
-
-    with tempfile.TemporaryDirectory(dir=FOLDER) as work:
-        with py7zr.SevenZipFile(archive) as held:
-            held.extract(path=work, targets=[member])
-        shutil.move(str(Path(work) / member), dest)
+    with zipfile.ZipFile(archive) as held, held.open(member) as source, \
+            dest.open("wb") as out:
+        shutil.copyfileobj(source, out)
 
 
 Fetch = Callable[..., None]

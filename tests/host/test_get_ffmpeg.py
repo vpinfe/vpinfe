@@ -38,15 +38,6 @@ def _zip(member: str, data: bytes = PROGRAM) -> bytes:
     return held.getvalue()
 
 
-def _seven_zip(member: str, data: bytes = PROGRAM) -> bytes:
-    import py7zr
-
-    held = io.BytesIO()
-    with py7zr.SevenZipFile(held, "w") as archive:
-        archive.writestr(data, member)
-    return held.getvalue()
-
-
 def _pinned(archive: bytes, suffix: str, member: str) -> get_ffmpeg.Build:
     return get_ffmpeg.Build("9.0.2", f"https://example.test/ffmpeg{suffix}",
                             hashlib.sha256(archive).hexdigest(), len(archive), member,
@@ -71,6 +62,7 @@ class PinTests(unittest.TestCase):
                 self.assertGreater(pin.size, 0)
                 self.assertIn(Path(pin.member).name, ("ffmpeg", "ffmpeg.exe"))
                 self.assertIn(pin.version, pin.url)
+                self.assertTrue(pin.url.endswith(".zip"))
 
 
 class GetTests(unittest.TestCase):
@@ -111,11 +103,11 @@ class GetTests(unittest.TestCase):
 
         self.assertTrue(got.stat().st_mode & stat.S_IXUSR)
 
-    def test_windows_build_comes_out_of_its_7z_by_its_path_inside(self) -> None:
-        member = "ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe"
-        archive = _seven_zip(member)
+    def test_windows_build_comes_out_of_its_zip_by_its_path_inside(self) -> None:
+        member = get_ffmpeg.WINDOWS_X64.member
+        archive = _zip(member)
 
-        got = self._get(archive, _pinned(archive, ".7z", member))
+        got = self._get(archive, _pinned(archive, ".zip", member))
 
         self.assertEqual((got.name, got.read_bytes()), ("ffmpeg.exe", PROGRAM))
         self.assertEqual(sorted(os.listdir(self.folder)), ["ffmpeg.exe"])

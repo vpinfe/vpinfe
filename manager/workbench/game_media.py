@@ -503,7 +503,7 @@ def _slot(context: dict[str, Any], kind: str, entry: dict[str, Any],
         await draw()
 
     # A file the view does not own is not its to remove: it says where it comes from and
-    # the slot offers Add, which makes one of its own.
+    # the slot offers Replace for the game's file and Add for one of this table's own.
     borrowed = present and file_acts.removal(
         context["tables"], context["game"], table_id, detail.get("tiers"), entry,
         detail.get("after_remove")) is None
@@ -564,15 +564,24 @@ def _slot(context: dict[str, Any], kind: str, entry: dict[str, Any],
         with ui.row().classes("items-center gap-2 w-full manager-slot-actions") \
                 .style("flex-wrap:wrap"):
             if not in_strip:
-                ui.button(t("manager.files.replace") if present and not borrowed
-                          else t("manager.files.add"),
-                          icon=verbs.ADD_ART,
-                          on_click=lambda: mediasource.open_sources(
-                              context, kind, slot_label, draw,
-                              str(detail.get("path") or entry.get("path") or ""),
-                              backglass_files=mediasource.backglass_files(detail),
-                              page=page)) \
-                    .props("flat dense no-caps size=sm").classes("manager-action")
+                def pick(placed: str | None = None) -> None:
+                    mediasource.open_sources(
+                        context, kind, slot_label, draw,
+                        str(detail.get("path") or entry.get("path") or ""),
+                        backglass_files=mediasource.backglass_files(detail),
+                        page=page, placed=placed)
+
+                # Both buttons need the picker's Applies to choice, which a later page of a
+                # kind does not honor: it always writes for this table.
+                if borrowed and table_id and page == 1:
+                    offered = [("manager.files.replace", ""), ("manager.files.add", table_id)]
+                else:
+                    offered = [("manager.files.replace" if present and not borrowed
+                                else "manager.files.add", None)]
+                for word, placed in offered:
+                    ui.button(t(word), icon=verbs.ADD_ART,
+                              on_click=lambda placed=placed: pick(placed)) \
+                        .props("flat dense no-caps size=sm").classes("manager-action")
             if present and in_place and kind in PAGED_KINDS and not many and not borrowed:
                 mediapages.add_button(context, kind, entry, draw)
             able = mediasource.records(library, kind) if page == 1 else None

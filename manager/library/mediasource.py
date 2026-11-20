@@ -768,7 +768,8 @@ class _Slot(_OnlineTab, _OneFile):
     def __init__(self, context: dict[str, Any], kind: str, label: str,
                  done: Callable, target: _Target, current: str = "", *,
                  records: bool = False, first: str = "",
-                 backglass_files: Sequence[dict[str, Any]] = (), page: int = 1) -> None:
+                 backglass_files: Sequence[dict[str, Any]] = (), page: int = 1,
+                 placed: str | None = None) -> None:
         super().__init__(context["library"], label, done, target.accept,
                          _on_host(context, current))
         self.target = target
@@ -786,6 +787,7 @@ class _Slot(_OnlineTab, _OneFile):
         self.context = context
         self.game_id = context["game_id"]
         self.table_id = context["lens"]
+        self.placed = placed
         # Where a file could land, and which of those is chosen.
         self.placements: list[dict[str, Any]] = []
         self.placed_at: dict[str, Any] | None = None
@@ -848,8 +850,9 @@ class _Slot(_OnlineTab, _OneFile):
         self.placements = list(body.get("placements") or [])
         # The lens preselects rather than decides. Looking at one build is a good guess
         # that art is for that build, and a guess is all it should be.
+        looking_at = self.table_id if self.placed is None else self.placed
         wanted = next((item for item in self.placements
-                       if item.get("table") == (self.table_id or "")), None)
+                       if item.get("table") == (looking_at or "")), None)
         self.placed_at = wanted or (self.placements[0] if self.placements else None)
 
     @property
@@ -2134,7 +2137,7 @@ def backglass_files(detail: dict[str, Any]) -> list[dict[str, Any]]:
 def open_sources(context: dict[str, Any], kind: str, label: str,
                  done: Callable, current: str = "", *, recording_it: bool = False,
                  backglass_files: Sequence[dict[str, Any]] = (),
-                 place: str = "", page: int = 1) -> ui.dialog:
+                 place: str = "", page: int = 1, placed: str | None = None) -> ui.dialog:
     """Open the ways to fill this slot. Returns as soon as the dialog is up.
 
     `current` is what fills it now, as a path in the game's folder. `recording_it` opens
@@ -2142,14 +2145,16 @@ def open_sources(context: dict[str, Any], kind: str, label: str,
     draw, from `backglass_files`, which add a tab and, on an empty slot, are where the
     dialog opens. `place` is the position in a walk, which makes the way out Skip and Stop.
     `page` is the page of a paged kind the file becomes; `label` then names the page, not
-    the kind.
+    the kind. `placed` opens the Applies to choice on that table's id, "" for the whole game,
+    where the lens's own table would otherwise be chosen.
     """
     library = context["library"]
     first = "record" if recording_it else \
         "backglass" if backglass_files and not current and page == 1 else ""
     sources = _Slot(context, kind, label, done, _media(library, kind), current,
                     records=records(library, kind) is not None and page == 1, first=first,
-                    backglass_files=backglass_files if page == 1 else (), page=page)
+                    backglass_files=backglass_files if page == 1 else (), page=page,
+                    placed=placed)
     sources.walk_place = place
     return sources.open()
 
