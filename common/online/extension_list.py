@@ -25,8 +25,10 @@ from common import atomic_write, timestamps
 from common.config import paths
 from common.extensions import fingerprint, host
 from common.extensions.contract import MANIFEST_NAME, NAME_PATTERN, ManifestError, read_manifest
+from common.failures import why
 from common.i18n import t
-from common.online import theme_dates, theme_refs
+from common.online import extension_dependencies, theme_dates, theme_refs
+from common.online.archive_caps import ARCHIVE_LIMIT, FILE_LIMIT, UNPACKED_LIMIT
 from common.online.theme_registry_client import ThemeRegistryClient, ThemeRegistryError
 from common.values import newer_version, parse_version
 from common.vpinfe_version import get_version
@@ -39,11 +41,6 @@ _WORKERS = 8
 # A work folder this old belongs to an install that died before it could clean up.
 STALE_WORK_S = 3600
 WORK_PREFIXES = (".install-", ".remove-")
-# What an archive may be: as sent, unpacked and in files. An extension is code and a picture
-# or two, so these are far above any real one.
-ARCHIVE_LIMIT = 50 * 1024 * 1024
-UNPACKED_LIMIT = 200 * 1024 * 1024
-FILE_LIMIT = 5000
 
 
 class ExtensionListError(Exception):
@@ -258,6 +255,7 @@ def install(listed: Listed, client: ThemeRegistryClient | None = None) -> Path:
     keep_work = False
     try:
         unpacked, version = unpack(data, work / "new", listed.name)
+        provide_dependencies(unpacked)
         swap(unpacked, target, work / "old")
         try:
             fingerprint.write_receipt(listed.name, target, repository=listed.repository,
@@ -310,6 +308,15 @@ def unpack(data: BytesIO, into: Path, name: str) -> tuple[Path, str]:
         if one.is_dir() and (one.name == "tests" or one.name.startswith(".")):
             shutil.rmtree(one)
     return root, manifest.version
+
+
+def provide_dependencies(folder: Path) -> None:
+    """Fetch the dependencies the extension unpacked in `folder` lists, before it replaces anything.
+    Raises ExtensionListError, so a failed fetch stops the install or update like any other."""
+    try:
+        extension_dependencies.provide(folder)
+    except extension_dependencies.DependencyError as exc:
+        raise ExtensionListError(why(exc)) from exc
 
 
 def swap(new: Path, target: Path, aside: Path) -> None:

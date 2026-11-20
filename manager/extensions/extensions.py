@@ -474,6 +474,10 @@ async def details(context: dict[str, Any]) -> None:
         if trust_state(entry) and (record or {}).get("path"):
             entries.append((t("manager.ext_page.folder_path"),
                             panel.path_value(str(record["path"]))))
+        pins = [str(one) for one in (record or {}).get("dependencies") or []]
+        if pins:
+            entries.append((panel.HEADING, t("manager.ext_page.dependencies")))
+            entries += ext_page.dependency_rows(pins)
         if record is not None:
             reached = ext_page.reported_rows(
                 record, t("manager.ext_page.reach_help") if trust_state(entry)
@@ -782,19 +786,22 @@ async def update_one(library: Library, entry: dict[str, Any],
     release, record = _release(entry), entry["record"] or {}
     news = str(release.get("page") or "")
     added = ext_page.reach_entries([str(one) for one in release.get("new_access") or []])
+    held = [str(one) for one in record.get("dependencies") or []]
+    new = [str(one) for one in release.get("dependencies") or [] if str(one) not in held]
     if not await accept.update(
             shown(entry), str(release.get("version") or ""),
             was=str(release.get("installed") or record.get("version") or ""),
             author=author_of(entry), address=str(release.get("address") or ""),
             news=news, news_label=t("manager.extensions.on_site",
                                     site=_site(str(release.get("host") or ""))),
-            moved_to=str(release.get("moved_to") or ""), added=added):
+            moved_to=str(release.get("moved_to") or ""), added=added,
+            dependencies=ext_page.dependency_rows(new, held)):
         return
     working = ui.notification(t("manager.extensions.working", name=shown(entry)),
                               spinner=True, timeout=None)
     try:
-        await run.io_bound(library.update_extension_release, entry["name"], bool(added),
-                           str(release.get("version") or ""))
+        await run.io_bound(library.update_extension_release, entry["name"],
+                           bool(added or new), str(release.get("version") or ""))
     except Exception as exc:  # noqa: BLE001
         ui.notify(t("manager.extensions.update_failed", count=1, name=shown(entry)),
                   caption=why(exc), type="negative")
@@ -848,7 +855,8 @@ async def update_all(library: Library, again: Callable[[], Any]) -> None:
     await again()
 
 
-UPDATE_ALL, REINSTALL, UNINSTALL = "update_all", "reinstall", "uninstall"
+UPDATE_ALL, REINSTALL, UNINSTALL, GET_DEPENDENCIES = (
+    "update_all", "reinstall", "uninstall", "get_dependencies")
 
 
 @on_page
@@ -856,6 +864,14 @@ async def run_fix(library: Library, action: str, name: str, again: Callable[[], 
     """A Needs You row's button: the same act as the page's, on the extension it names."""
     if action == UPDATE_ALL:
         await update_all(library, again)
+        return
+    if action == GET_DEPENDENCIES:
+        if await ext_page.get_dependencies(name):
+            ui.notify(t("manager.ext_page.dependencies_got"), type="positive")
+        else:
+            ui.notify(t("manager.ext_page.dependencies_failed"),
+                      caption=ext_page.could_not_get(name), type="negative")
+        await again()
         return
     try:
         entries, _listing = await load(library)

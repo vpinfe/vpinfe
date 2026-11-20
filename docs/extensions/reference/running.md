@@ -60,6 +60,7 @@ has the traceback.
 | The manifest is missing, unreadable, names a bad name, an unknown capability or feature or a platform that is not a name, or says no platform | Not loaded. State *failed* | The extension's page, with the reason in words (for instance "Its folder has no extension.json") |
 | The manifest's `name` is not the folder's | Not loaded | "Its manifest calls it X, so its folder has to be called that too" |
 | `requires_platform` is not offered | Not loaded | "Built for extension platform 2, and this build offers 1" |
+| `dependencies` is not a list of exact `name==version` pins, names a package VPinFE already includes, lists one twice, or lists more than 40 | Not loaded. State *failed* | The reason in words, for instance "Its manifest lists requests, which VPinFE already includes" |
 | The manifest names a platform this device is not, or a feature this install lacks | Not started, listed as *off* | "It does not run on Windows", or the missing features, with a button to open this device's settings |
 | `scopes` names a scope that does not exist | Taken out at startup | "Asks for scopes that do not exist: ..." |
 | The package will not import, `register` is missing, or `register` raises | *failed*. What it had offered by then is taken back | "The log says why it did not start". The exception is in the log |
@@ -112,6 +113,12 @@ functions are called (a list's `rows`, a status, a dialog's first step, the sett
 nothing is sent or saved.  The manifest's `platforms` do not stop it: an extension for one
 distribution is checked on any device, and a `platforms` line says whether this one would run
 it.
+
+It also reads the extension's source.  An import that is not the standard library, the
+contract, `fastapi`, `requests` or a dependency the manifest lists is a `fails` line with the file
+and line, and so is a module of VPinFE's own other than the contract.  Where the manifest lists
+dependencies the first is a `warns` line, since the name a package is imported as is often not
+the name it is listed as.  A compiled file (`.so`, `.pyd`, `.dylib`) in the folder fails.
 
 ```
 === extensions/vpinplay

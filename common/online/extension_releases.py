@@ -72,6 +72,7 @@ class Latest:
     scopes: tuple[str, ...] = ()
     capabilities: tuple[str, ...] = ()
     play: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
     checked: str = ""
     installed: str = ""
 
@@ -146,7 +147,8 @@ def check(name: str, source: str, installed_version: str,
         source=manifest.source, moved_to=_moved_to(source, page, manifest.source),
         needs=extension_list.needs_newer(raw.get(extension_list.MIN_VERSION_KEY)),
         scopes=manifest.scopes, capabilities=manifest.capabilities, play=manifest.play,
-        checked=timestamps.utc_now_iso(), installed=installed_version)
+        dependencies=manifest.dependencies, checked=timestamps.utc_now_iso(),
+        installed=installed_version)
 
 
 def host_of(address: str) -> str:
@@ -264,9 +266,11 @@ def update(name: str, target: Path, found: Latest, *, source: str,
     try:
         unpacked, version = extension_list.unpack(data, work / "new", name)
         arrived = _read(unpacked)
-        if (arrived.version, arrived.scopes, arrived.capabilities, arrived.play) != (
-                found.version, found.scopes, found.capabilities, found.play):
+        if (arrived.version, arrived.scopes, arrived.capabilities, arrived.play,
+                arrived.dependencies) != (found.version, found.scopes, found.capabilities,
+                                       found.play, found.dependencies):
             raise ExtensionListError(t("error.extensions.changed_since_checked", name=name))
+        extension_list.provide_dependencies(unpacked)
         extension_list.swap(unpacked, target, work / "old")
         kept = False
         try:
@@ -322,6 +326,7 @@ def go_back(name: str, target: Path, *, installed_version: str,
     keep_work = False
     try:
         shutil.copytree(held_at / _FOLDER, work / "new")
+        extension_list.provide_dependencies(work / "new")
         extension_list.swap(work / "new", target, work / "old")
         try:
             back = _read(target)

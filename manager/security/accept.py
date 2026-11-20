@@ -71,14 +71,16 @@ async def themes(found: Sequence[tuple[str, str]]) -> bool:
 async def extension(name: str, version: str, *, author: str, source: str, path: str,
                     reach: Sequence[tuple[Any, ...]] = (), replaces: str = "",
                     changed: int = 0, claims_team: bool = False,
-                    added: Sequence[tuple[Any, ...]] = (), was: str = "") -> bool:
+                    added: Sequence[tuple[Any, ...]] = (), was: str = "",
+                    dependencies: Sequence[tuple[Any, ...]] = ()) -> bool:
     """Whether to turn this unofficial extension on, asked every time it goes from off to on.
 
     `reach` is the rows saying what it can do, as the extension's panel draws them. `replaces`
     names the included extension whose name it uses, `changed` is how many of the files of
     one installed from the Extension List differ since, and `claims_team` is an extension
     that names the VPinFE team as its author or source. `added` is the rows for what a newer
-    version asks for beyond what was trusted, and `was` the version that was.
+    version asks for beyond what was trusted, and `was` the version that was. `dependencies` is
+    a row for each dependency it fetches, which are code that runs with VPinFE.
     """
     lines = [t("manager.trust.ext_body", name=name)]
     if replaces:
@@ -105,6 +107,10 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
     if added:
         rows.append((panel.HEADING, t("manager.trust.new_reach")))
         rows += added
+    if dependencies:
+        rows.append((panel.HEADING, t("manager.trust.dependencies")))
+        rows += dependencies
+        rows.append(panel.note(t("manager.trust.dependencies_from")))
     return await _ask(t("manager.trust.ext_title"), lines, t("manager.trust.ext_button"),
                       rows=rows, closing=t("manager.trust.ext_reported"),
                       warning=t("manager.trust.ext_unsupported"),
@@ -113,19 +119,25 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
 
 async def update(name: str, version: str, *, was: str, author: str, address: str,
                  news: str = "", news_label: str = "", moved_to: str = "",
-                 added: Sequence[tuple[Any, ...]] = ()) -> bool:
+                 added: Sequence[tuple[Any, ...]] = (),
+                 dependencies: Sequence[tuple[Any, ...]] = ()) -> bool:
     """Whether to update an unofficial extension to `version`, from its author's repository.
 
-    `added` is the rows for what this version asks for beyond what `was` was trusted with.
-    With none, the answer is a plain Update; with some, it needs the tick as well.
+    `added` is the rows for what this version asks for beyond what `was` was trusted with,
+    and `dependencies` a row for each dependency it adds or changes. With neither, the answer is a
+    plain Update; with either, it needs the tick as well.
     `moved_to` is the address the repository now answers from, when it is not `address`.
     """
     lines = [t("manager.trust.update_body", name=name, version=version),
              t("manager.trust.update_unchecked", was=was)]
     if moved_to:
         lines.append(t("manager.trust.update_moved", address=ext_mark.source_shown(moved_to)))
+    more = bool(added or dependencies)
     if added:
         lines += [t("manager.trust.update_more", was=was), t("manager.trust.ext_reported")]
+    elif dependencies:
+        lines.append(t("manager.trust.update_dependencies", count=len(dependencies), was=was,
+                       version=version))
     rows: list[tuple[Any, ...]] = [
         (t("manager.ext_page.author"), author),
         (t("manager.ext_page.version_label"), version),
@@ -139,9 +151,13 @@ async def update(name: str, version: str, *, was: str, author: str, address: str
     if added:
         rows.append((panel.HEADING, t("manager.trust.new_reach")))
         rows += added
+    if dependencies:
+        rows.append((panel.HEADING, t("manager.trust.new_dependencies")))
+        rows += dependencies
+        rows.append(panel.note(t("manager.trust.dependencies_from")))
     return await _ask(
         t("manager.trust.update_title", name=name), lines,
-        t("manager.trust.update_trust_button" if added else "manager.trust.update_button"),
+        t("manager.trust.update_trust_button" if more else "manager.trust.update_button"),
         rows=rows, closing=t("manager.trust.update_runs", was=was),
-        warning=t("manager.trust.ext_unsupported") if added else "",
-        understood=t("manager.trust.ext_understand") if added else "")
+        warning=t("manager.trust.ext_unsupported") if more else "",
+        understood=t("manager.trust.ext_understand") if more else "")

@@ -160,7 +160,7 @@ def tag_source(said: dict[str, Any]) -> str:
 def extension_list_held(listed: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
     """What the kept extension list and the installed extensions say needs doing: the
     updates the list offers, the extensions whose files changed since they were installed,
-    and the ones the list dropped."""
+    the ones the list dropped, and the ones turned on that wait for a library to be fetched."""
     by_name = {str(one.get("name") or ""): one for one in listed.get("entries") or ()}
     updates = [{"name": name, "display_name": str((by_name.get(name) or {})
                                                   .get("display_name") or name)}
@@ -176,7 +176,11 @@ def extension_list_held(listed: dict[str, Any], records: list[dict[str, Any]]) -
                     and not (one.get("trust") or {}).get("accepted")],
         "left": [{"name": str(one["name"]),
                   "display_name": str(one.get("display_name") or one["name"])}
-                 for one in records if one.get("left_list")]}
+                 for one in records if one.get("left_list")],
+        "lacking": [{"name": str(one["name"]),
+                     "display_name": str(one.get("display_name") or one["name"])}
+                    for one in records if one.get("reason_key") == host.LACKS_DEPENDENCIES
+                    and (one.get("trust") or {}).get("accepted")]}
 
 
 def read_state(said: dict[str, Any]) -> str:

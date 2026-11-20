@@ -27,7 +27,7 @@ from common.online import sources
 from common.security import accepted
 from common.values import newer_version, parse_version
 
-from . import catalogs, contributions, reach
+from . import catalogs, contributions, dependencies, reach
 from . import fingerprint as fingerprints
 from .context import ExtensionApps, ExtensionContext, check_play, check_references
 from .contract import (
@@ -73,6 +73,13 @@ SWITCHED_OFF = "extension.reason.switched_off"
 STARTS_AT_RESTART = "extension.reason.pending_restart"
 WRONG_PLATFORM = "extension.reason.wrong_platform"
 LACKS_FEATURES = "extension.reason.lacks_features"
+# Dependencies its manifest lists that this device has not fetched, or that another running
+# extension holds at a different version. Fetching is done where a person is present.
+LACKS_DEPENDENCIES = "extension.reason.lacks_dependencies"
+DEPENDENCY_CLASH = "extension.reason.dependency_clash"
+# A process keeps the first copy of a dependency it imports, so one that a stopped extension
+# used stays in force until VPinFE restarts.
+DEPENDENCY_HELD = "extension.reason.dependency_held"
 # Not shipped with VPinFE and not accepted by the Owner, or accepted before it declared
 # something it declares now. Never imported while this is the reason.
 NOT_ACCEPTED = "extension.reason.not_accepted"
@@ -335,11 +342,13 @@ class Record:
 
     def uses(self) -> list[str]:
         """What it says it uses: the core scopes and capabilities it declares, and
-        `play:<surface>` for each surface a Remote can open."""
+        `play:<surface>` for each surface a Remote can open and `dependency:<name>==<version>`
+        for each dependency it fetches."""
         if self.manifest is None:
             return []
         return [*self.manifest.scopes, *self.manifest.capabilities,
-                *(f"play:{one}" for one in self.manifest.play)]
+                *(f"play:{one}" for one in self.manifest.play),
+                *(f"dependency:{one}" for one in self.manifest.dependencies)]
 
     def is_accepted(self) -> bool:
         """Whether it may run: shipped, or accepted from here with all it declares."""
@@ -347,7 +356,7 @@ class Record:
             return False
         return accepted.extension_accepted(self.name, self.origin, self.manifest.scopes,
                                            self.manifest.capabilities, self.folder,
-                                           self.manifest.play)
+                                           self.manifest.play, self.manifest.dependencies)
 
     def trust(self) -> dict[str, Any]:
         """Where it came from, whether the Owner has accepted it, and what it declares
@@ -377,6 +386,7 @@ class Record:
                 self.manifest.capabilities,
                 self.folder,
                 self.manifest.play,
+                self.manifest.dependencies,
             ),
             "accepted_before": accepted.accepted_before(self.name, self.origin, self.folder),
             "accepted_version": accepted.accepted_version(self.name, self.origin, self.folder),
@@ -553,6 +563,7 @@ class Registry:
         # Unofficial extensions imported in this process. Switching one off withdraws what
         # it declared, and its code stays in memory until the next start.
         self._imported_unofficial: set[str] = set()
+        self._dependency_holders: dict[str, tuple[str, dependencies.Dependency]] = {}
 
     # -- reading -------------------------------------------------------------
 
@@ -705,7 +716,7 @@ class Registry:
         why, values = (
             (SWITCHED_OFF, {})
             if not record.enabled
-            else _cannot_run(manifest, any_platform=any_platform)
+            else self._cannot_start(record, any_platform=any_platform)
         )
         if why:
             record.became(OFF, why, **values)
@@ -715,6 +726,44 @@ class Registry:
 
         self._register(record, gated=not unaccepted)
         return self._remember(record)
+
+    def _cannot_start(self, record: Record, *, any_platform: bool = False
+                      ) -> tuple[str, dict[str, str | tuple[str, ...]]]:
+        """Why this extension cannot start now, or `""`: what `_cannot_run` says of the device,
+        then its dependencies, once it is trusted: what asks to be trusted comes first.
+        `--check-extension` (`any_platform`) loads it whatever they are, to report what its
+        imports do."""
+        manifest = record.manifest
+        assert manifest is not None
+        why, values = _cannot_run(manifest, any_platform=any_platform)
+        if why or any_platform or not manifest.dependencies or not record.is_accepted():
+            return why, values
+        wanted = dependencies.of(manifest.dependencies)
+        running = {one.name: dependencies.of(one.manifest.dependencies)
+                   for one in self._records.values()
+                   if one.running and one.manifest is not None and one.name != record.name}
+        clash = dependencies.conflict(wanted, running)
+        if clash is not None:
+            other = self._records[clash[0]]
+            return DEPENDENCY_CLASH, {"extension": other.display_name, "dependency": clash[1].name,
+                                   "version": clash[1].version}
+        held = dependencies.conflict(wanted, self._held_dependencies())
+        if held is not None:
+            holder = self._records.get(held[0])
+            return DEPENDENCY_HELD, {"extension": holder.display_name if holder else held[0],
+                                  "dependency": held[1].name, "version": held[1].version}
+        absent = dependencies.missing(wanted)
+        if absent:
+            return LACKS_DEPENDENCIES, {"count": str(len(absent)),
+                                     "dependencies": tuple(str(one) for one in absent)}
+        return "", {}
+
+    def _held_dependencies(self) -> dict[str, list[dependencies.Dependency]]:
+        """The dependencies each extension put on the import path in this process."""
+        held: dict[str, list[dependencies.Dependency]] = {}
+        for who, one in self._dependency_holders.values():
+            held.setdefault(who, []).append(one)
+        return held
 
     def _register(self, record: Record, *, gated: bool = True) -> None:
         """Import the package, call `register(ctx)` and take what it declared. Leaves
@@ -734,6 +783,11 @@ class Registry:
         if not record.official:
             self._imported_unofficial.add(record.name)
         try:
+            dependencies.put_on_path(found for found in (
+                dependencies.folder_of(one) for one in dependencies.of(manifest.dependencies))
+                if found is not None)
+            for one in dependencies.of(manifest.dependencies):
+                self._dependency_holders.setdefault(one.name, (record.name, one))
             module = _import(manifest.name, record.directory)
             register = getattr(module, "register", None)
             if not callable(register):
@@ -829,7 +883,7 @@ class Registry:
             if record.origin == accepted.REPLACES:
                 return self._fall_back(record)
         elif record.state == OFF:
-            why, values = _cannot_run(record.manifest)
+            why, values = self._cannot_start(record)
             if why:
                 record.became(OFF, why, **values)
             else:
@@ -896,17 +950,33 @@ class Registry:
                                       version=target.manifest.version,
                                       scopes=target.manifest.scopes,
                                       capabilities=target.manifest.capabilities,
-                                      play=target.manifest.play)
+                                      play=target.manifest.play,
+                                      dependencies=target.manifest.dependencies)
             if target is not record:
                 target.became(OFF, STARTS_AT_RESTART)
             elif record.state == OFF and record.why == NOT_ACCEPTED:
                 why, values = ((SWITCHED_OFF, {}) if not record.enabled
-                               else _cannot_run(record.manifest or target.manifest))
+                               else self._cannot_start(record))
                 if why:
                     record.became(OFF, why, **values)
                 else:
                     self._start_again(record)
             logger.info("Extension %s accepted", target.name)
+            return record
+
+    def dependencies_arrived(self, name: str) -> Record | None:
+        """The dependencies of `name` were fetched. One that was held back for lacking them starts
+        now. None when there is no such extension."""
+        with self._lock:
+            record = self._records.get(str(name or "").strip())
+            if record is None or record.manifest is None:
+                return record
+            if record.state == OFF and record.why == LACKS_DEPENDENCIES:
+                why, values = self._cannot_start(record)
+                if why:
+                    record.became(OFF, why, **values)
+                else:
+                    self._start_again(record)
             return record
 
     def files_replaced(self, name: str) -> Record | None:
@@ -968,6 +1038,7 @@ class Registry:
                     core_events.unsubscribe(event, handler)
             self._records.clear()
             self._imported_unofficial.clear()
+            self._dependency_holders.clear()
 
     def _remember(self, record: Record) -> Record:
         with self._lock:

@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from common import i18n
+from common.failures import why
 
-from . import pictures, serving
+from . import contract, imports, pictures, serving
 from .host import LOADED, Record, Registry, platform_refusal
 from .store import ExtensionStore
 
@@ -36,6 +37,7 @@ def check(folder: Path | str) -> tuple[list[str], bool]:
             try:
                 if record.state != LOADED:
                     lines.append(f"fails      {_why(record)}")
+                    lines.extend(_boundary(Path(folder).resolve(), _listed(Path(folder))))
                     return lines, False
                 return lines, _report(record, lines)
             finally:
@@ -137,13 +139,61 @@ def _report(record: Record, lines: list[str]) -> bool:
         _read(lines, problems, record, f"dialog {key}",
               lambda key=key: _read_dialog(record, key))
 
-    for key, why in _missing(record, ui):
-        problems.append(f"missing    {key} - {why}")
+    for key, reason in _missing(record, ui):
+        problems.append(f"missing    {key} - {reason}")
+    boundary = _boundary(record.directory, manifest.dependencies)
+    problems.extend(one for one in boundary if one.startswith("fails"))
     lines.extend(problems)
+    lines.extend(one for one in boundary if one.startswith("warns"))
     if not _has_readme(record.directory):
         lines.append("warns      no README.md in the folder - Help on its page opens it unless "
                      "`home` points elsewhere")
     return not problems
+
+
+def _boundary(directory: Path, dependencies: tuple[str, ...] = ()) -> list[str]:
+    """What the extension's source imports that it may not, and any compiled file it carries,
+    one line for each module and each file.
+
+    With dependencies listed, an import no listed name matches is a `warns` line, not a failure:
+    a dependency's import name is often not its name on PyPI (`paho` for `paho-mqtt`), and the
+    wheel that says which is not fetched here."""
+    problems: list[str] = []
+    names = [line.split("==")[0] for line in dependencies]
+    try:
+        refused = imports.folder_refusals(directory, names)
+    except SyntaxError as exc:
+        return [f"fails      {exc.filename}: {exc.msg} (line {exc.lineno})"]
+    except (ValueError, OSError, RecursionError) as exc:
+        return [f"fails      a source file could not be read: {why(exc)}"]
+    first_seen: dict[str, imports.Refusal] = {}
+    for one in refused:
+        first_seen.setdefault(one.module, one)
+    for module, one in first_seen.items():
+        if one.kind == imports.FIRST_PARTY_IMPORT:
+            problems.append(f"fails      imports {module} ({one.file}, line {one.line}): an "
+                            f"extension reaches VPinFE through its context, or through "
+                            f"{imports.CONTRACT}")
+        else:
+            say = "warns " if names else "fails "
+            problems.append(f"{say}     imports {module} ({one.file}, line {one.line}): not the "
+                            "standard library, the contract, "
+                            + ", ".join(imports.DEPENDENCIES_OF_THE_CONTRACT)
+                            + " or a dependency the manifest lists"
+                            + (", unless a dependency it lists provides it" if names else ""))
+    for path in imports.compiled_files(directory):
+        shown = "/".join(path.relative_to(directory).parts)
+        problems.append(f"fails      compiled file {shown}: compiled code comes only as a "
+                        "dependency the manifest lists")
+    return problems
+
+
+def _listed(folder: Path) -> tuple[str, ...]:
+    """The dependencies the folder's manifest lists, or none when it will not read."""
+    try:
+        return contract.read_manifest(folder.resolve()).dependencies
+    except (contract.ManifestError, OSError, ValueError):
+        return ()
 
 
 def _has_readme(directory: Path) -> bool:

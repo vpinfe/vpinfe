@@ -65,7 +65,8 @@ An extension is listed when it meets all of these:
 3. **It uses only the documented extension interface and declares what it can do.** That is
    `common.extensions.contract` and the manifest's `scopes` and `capabilities`.
 4. **It works on every system VPinFE runs on, or says which it does not.** The manifest's
-   `platforms` is how it says so.
+   `platforms` is how it says so. Every dependency it lists has a download for each system it
+   claims, or it leaves that system out.
 5. **Its license lets us keep it working if its maintainer leaves.**
 
 These are written down so that a "no" is about the rule and not the person.

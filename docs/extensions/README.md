@@ -27,8 +27,10 @@ everything an extension can do today.
   | `~/.config/vpinfe/extensions` | `~/Library/Application Support/vpinfe/extensions` | `%LOCALAPPDATA%\vpinfe\vpinfe\extensions` |
 
   With `--configdir DIR` it is `DIR/extensions`.
-- **Python**, which is the one VPinFE runs on. An extension imports from it and nothing
-  else of VPinFE: `common.extensions.contract` is the whole of what it may import.
+- **Python**, which is the one VPinFE runs on. An extension imports the standard library,
+  `common.extensions.contract` (the whole of VPinFE it may import), `fastapi` and `requests`,
+  and any dependency its manifest lists under [`dependencies`](reference/manifest.md#dependencies),
+  which VPinFE fetches for it.
 - **The practice site**, for the recipes that talk to a service. It is a few lines of
   Python playing a score-sharing service called Example Scores:
 

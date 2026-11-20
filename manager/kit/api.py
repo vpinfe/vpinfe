@@ -25,6 +25,9 @@ from manager.kit import acting
 logger = logging.getLogger("vpinfe.manager.kit.api")
 
 _TIMEOUT = 15
+# Installing, updating or turning on an extension downloads the dependencies it lists, one wheel
+# after another, before the request answers.
+_FETCH_TIMEOUT = 300
 # Reads that cover the whole library. The first one scans it, and on a network share that
 # has gone idle the scan outlasts _TIMEOUT. Reads of one thing keep _TIMEOUT.
 _LIBRARY_TIMEOUT = 120
@@ -340,11 +343,16 @@ class ApiClient:
         return self._post("/extensions/list/check", {})
 
     def update_extensions(self) -> dict:
-        return self._post("/extensions/list/update", {})
+        return self._post("/extensions/list/update", {}, _FETCH_TIMEOUT)
 
     def install_extension(self, name: str) -> dict:
         """Install, update or reinstall from the list. The list as it stands after."""
-        return self._post(f"/extensions/{quote(name, safe='')}/install", {})
+        return self._post(f"/extensions/{quote(name, safe='')}/install", {}, _FETCH_TIMEOUT)
+
+    def get_extension_dependencies(self, name: str) -> dict:
+        """Fetch the dependencies the extension lists that this device lacks, and start it when
+        they were what held it back."""
+        return self._post(f"/extensions/{quote(name, safe='')}/dependencies", {}, _FETCH_TIMEOUT)
 
     def remove_extension(self, name: str) -> None:
         self._delete(f"/extensions/{quote(name, safe='')}")
@@ -358,7 +366,7 @@ class ApiClient:
         """Update from the release the last check found. `trust` accepts new access, and
         `version` is the release that was shown."""
         return self._post(f"/extensions/{quote(name, safe='')}/release/update",
-                          {"trust": bool(trust), "version": version})
+                          {"trust": bool(trust), "version": version}, _FETCH_TIMEOUT)
 
     def use_previous_extension(self, name: str) -> dict:
         """Put back the version an update replaced."""

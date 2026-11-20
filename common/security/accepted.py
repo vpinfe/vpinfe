@@ -177,13 +177,13 @@ def forget_theme(key: str) -> None:
 
 def extension_accepted(name: str, origin: str, scopes: Collection[str],
                        capabilities: Collection[str], folder: str | None = None,
-                       play: Collection[str] = ()) -> bool:
+                       play: Collection[str] = (), dependencies: Collection[str] = ()) -> bool:
     """Whether this extension may run: shipped with VPinFE, or accepted from where it is
     now with at least the access it declares now. `folder` is the folder it is in, and
     an acceptance given for another folder does not cover it; None leaves the folder out."""
     if is_official(origin):
         return True
-    return (not new_access(name, origin, scopes, capabilities, folder, play)
+    return (not new_access(name, origin, scopes, capabilities, folder, play, dependencies)
             and _kept(name, origin, folder) is not None)
 
 
@@ -207,20 +207,23 @@ def accepted_version(name: str, origin: str, folder: str | None = None) -> str:
 
 def new_access(name: str, origin: str, scopes: Collection[str],
                capabilities: Collection[str], folder: str | None = None,
-               play: Collection[str] = ()) -> list[str]:
+               play: Collection[str] = (), dependencies: Collection[str] = ()) -> list[str]:
     """What the extension declares that its acceptance did not cover: all of it when it
-    was never accepted. A surface a Remote can open is `play:<surface>`, and one more than
-    the acceptance listed is new, so an update cannot add one unasked."""
+    was never accepted. A surface a Remote can open is `play:<surface>`, and a dependency is
+    `dependency:<name>==<version>`; one more than the acceptance listed is new, so an update
+    cannot add either unasked."""
     found = _kept(name, origin, folder) or {}
     covered = {*(found.get("scopes") or ()), *(found.get("capabilities") or ()),
-               *(f"play:{one}" for one in found.get("play") or ())}
-    return [one for one in (*scopes, *capabilities, *(f"play:{one}" for one in play))
+               *(f"play:{one}" for one in found.get("play") or ()),
+               *(f"dependency:{one}" for one in found.get("dependencies") or ())}
+    return [one for one in (*scopes, *capabilities, *(f"play:{one}" for one in play),
+                            *(f"dependency:{one}" for one in dependencies))
             if one not in covered]
 
 
 def accept_extension(name: str, origin: str, *, folder: str, version: str,
                      scopes: Collection[str], capabilities: Collection[str],
-                     play: Collection[str] = ()) -> None:
+                     play: Collection[str] = (), dependencies: Collection[str] = ()) -> None:
     """Accept this extension as it declares itself now. Replaces what an earlier
     acceptance covered, so the list holds what the Owner last saw."""
     with _lock:
@@ -228,5 +231,5 @@ def accept_extension(name: str, origin: str, *, folder: str, version: str,
         held[_EXTENSIONS][name] = {"origin": origin, "folder": folder, "version": version,
                                    "scopes": sorted(scopes),
                                    "capabilities": sorted(capabilities),
-                                   "play": sorted(play)}
+                                   "play": sorted(play), "dependencies": sorted(dependencies)}
         _write(held)

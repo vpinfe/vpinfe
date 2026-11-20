@@ -31,6 +31,7 @@ HANDED_ON = {
     "apps/vpx/controllers.py": {
         "_run": "the controllers page's status line; an app may not import common.failures"},
     "common/extensions/check.py": {
+        "_boundary": "the report `--check-extension` prints for a developer",
         "_read": "the report `--check-extension` prints for a developer"},
     "common/extensions/context.py": {
         "contribute": "an extension's author, as the extension registers",

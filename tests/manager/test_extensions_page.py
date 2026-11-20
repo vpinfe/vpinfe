@@ -255,7 +255,7 @@ class TrustOnSwitchTests(unittest.IsolatedAsyncioTestCase):
     async def press(self, answer: bool) -> tuple[mock.Mock, mock.Mock]:
         switch = self.enterContext(mock.patch.object(ext_page.panel, "switch"))
         io = self.enterContext(mock.patch.object(
-            ext_page.offload, "io", new=mock.AsyncMock(return_value=None)))
+            ext_page.offload, "io", new=mock.AsyncMock(return_value={})))
         self.enterContext(mock.patch.object(
             ext_page.accept, "extension", new=mock.AsyncMock(return_value=answer)))
         client = self.enterContext(mock.patch.object(ext_page, "ApiClient")).return_value

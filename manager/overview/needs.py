@@ -47,8 +47,8 @@ ASKED = "asked:"
 # A fix VPinFE can do itself, the first entry of the row's menu.
 GET_MEDIA, UPDATE, UPGRADE = "get_media", "update", "upgrade"
 TURN_ON_LOGGING = "turn_on_logging"
-UPDATE_EXTENSIONS, REINSTALL_EXTENSION, UNINSTALL_EXTENSION = (
-    "update_extensions", "reinstall_extension", "uninstall_extension")
+UPDATE_EXTENSIONS, REINSTALL_EXTENSION, UNINSTALL_EXTENSION, GET_DEPENDENCIES = (
+    "update_extensions", "reinstall_extension", "uninstall_extension", "get_dependencies")
 
 # The row for Visual Pinball's log being off, which is also the key it is set aside under.
 LOGGING = "logging_off"
@@ -295,7 +295,7 @@ def unaccepted_rows(waiting: Mapping[str, Any]) -> list[Need]:
 
 def extension_list_rows(held: Mapping[str, Any]) -> list[Need]:
     """The updates the extension list offers, an extension whose files changed since it was
-    installed, and one the list no longer carries."""
+    installed, one waiting for dependencies, and one the list no longer carries."""
     out = []
     if updates := list(held.get("updates") or ()):
         names = ", ".join(str(one["display_name"]) for one in updates)
@@ -314,6 +314,14 @@ def extension_list_rows(held: Mapping[str, Any]) -> list[Need]:
                         Opens("extensions", keys={"extension": name}),
                         fix=Fix(REINSTALL_EXTENSION, t("manager.extensions.reinstall"),
                                 t("manager.extensions.reinstall.help"), name)))
+    for one in held.get("lacking") or ():
+        name = str(one["name"])
+        out.append(Need(f"{EXTLIST}dependencies:{name}",
+                        t("manager.needs.extension_dependencies", name=one["display_name"]),
+                        t("manager.needs.extension_dependencies.tip"), WARM, verbs.FETCH,
+                        Opens("extensions", keys={"extension": name}),
+                        fix=Fix(GET_DEPENDENCIES, t("manager.ext_page.get_dependencies"),
+                                t("manager.ext_page.get_dependencies_hint"), name)))
     for one in held.get("left") or ():
         name = str(one["name"])
         out.append(Need(f"{EXTLIST}left:{name}",

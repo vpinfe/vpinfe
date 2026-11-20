@@ -84,7 +84,7 @@ from common.host.dof_service import start_dof_service_if_enabled, stop_dof_servi
 from common.host.libdmdutil_service import (
     stop_libdmdutil_service,
 )
-from common.online import theme_seed, theme_upgrade  # noqa: F401
+from common.online import extension_dependencies, theme_seed, theme_upgrade  # noqa: F401
 from common.online.pinmame_score_parser_updater import ensure_latest_roms_json
 from common.online.theme_registry_client import ThemeRegistryError
 from common.online.themes import ThemeRegistry
@@ -188,6 +188,7 @@ nicegui_app.add_middleware(SocketOriginGuard)
 
 # Load what this install has installed, before the API is built: the API mounts the
 # routers extensions registered, so one loading afterwards would answer nothing.
+extension_dependencies.sweep_unused()
 extensions.load_installed()
 
 # Mount the HTTP API. Has to happen before any ui.run(), including the early

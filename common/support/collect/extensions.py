@@ -60,6 +60,8 @@ def _extensions(found: list[host.Record]) -> list[str]:
         reason = _reason(record)
         lines.append(f"{detail} ({reason})" if reason else detail)
         lines.append(f"  - {_provenance(record)}")
+        if record.manifest and record.manifest.dependencies:
+            lines.append(f"  - Dependencies {', '.join(record.manifest.dependencies)}")
     return lines
 
 

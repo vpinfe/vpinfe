@@ -48,7 +48,8 @@ def owner_accepts(test: unittest.TestCase) -> Path:
             accepted.accept_extension(
                 record.name, record.origin, folder=record.folder,
                 version=record.manifest.version, scopes=record.manifest.scopes,
-                capabilities=record.manifest.capabilities, play=record.manifest.play)
+                capabilities=record.manifest.capabilities, play=record.manifest.play,
+                dependencies=record.manifest.dependencies)
         real(self, record, gated=gated)
 
     patcher = mock.patch.object(host.Registry, "_register", accepting)

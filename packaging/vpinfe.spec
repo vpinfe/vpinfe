@@ -84,7 +84,7 @@ datas.append((str(_FINGERPRINTS), "extensions"))
 # normally.
 hiddenimports = ["pynput.keyboard._xorg", "pynput.mouse._xorg"] if IS_LINUX else []
 
-# An extension installed later is never scanned, and neither is a library it fetches, so
+# An extension installed later is never scanned, and neither is a dependency it fetches, so
 # the build carries the whole standard library for them to import.
 hiddenimports += stdlib_modules.names()
 

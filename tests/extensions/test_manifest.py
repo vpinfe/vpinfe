@@ -82,7 +82,47 @@ class ParseTests(unittest.TestCase):
 
         self.assertEqual(_said(caught.exception),
                          t("extension.reason.platform_mismatch", abi="99",
-                           offered=str(contract.PLATFORM_ABI)))
+                           offered=", ".join(str(one) for one in sorted(contract.SUPPORTED_ABI))))
+
+    def test_the_platform_before_dependencies_is_still_offered(self) -> None:
+        self.assertEqual((), contract.parse(_without("requires_platform",
+                                                     requires_platform=1)).dependencies)
+
+    def test_dependencies_are_listed_exactly_and_their_names_normalized(self) -> None:
+        got = contract.parse({**GOOD, "dependencies": ["Paho_MQTT==2.1.0", "zeta.lib==1.0"]})
+
+        self.assertEqual(("paho-mqtt==2.1.0", "zeta-lib==1.0"), got.dependencies)
+        self.assertEqual(["paho-mqtt==2.1.0", "zeta-lib==1.0"], got.as_dict()["dependencies"])
+
+    def test_a_dependency_that_is_not_an_exact_pin_is_refused(self) -> None:
+        for line in ("paho-mqtt", "paho-mqtt>=2", "paho-mqtt==2.*", "paho-mqtt==", "==2.1.0",
+                     "paho-mqtt==2.1.0 ; python_version>'3'", "git+https://x/y.git@v1",
+                     "paho-mqtt @ https://x/y.whl", "paho mqtt==2.1.0"):
+            with self.subTest(line=line), self.assertRaises(contract.ManifestError) as caught:
+                contract.parse({**GOOD, "dependencies": [line]})
+
+            self.assertEqual("extension.reason.manifest_dependencies_pin", caught.exception.key)
+
+    def test_a_dependency_vpinfe_already_includes_is_refused_however_it_is_spelled(self) -> None:
+        for line in ("requests==2.34.2", "FastAPI==0.1", "typing_extensions==4.0"):
+            with self.subTest(line=line), self.assertRaises(contract.ManifestError) as caught:
+                contract.parse({**GOOD, "dependencies": [line]})
+
+            self.assertEqual("extension.reason.manifest_dependencies_shipped", caught.exception.key)
+
+    def test_a_dependency_listed_twice_is_refused_even_at_two_versions(self) -> None:
+        with self.assertRaises(contract.ManifestError) as caught:
+            contract.parse({**GOOD, "dependencies": ["paho-mqtt==2.1.0", "Paho.MQTT==2.0.0"]})
+
+        self.assertEqual("extension.reason.manifest_dependencies_twice", caught.exception.key)
+        self.assertEqual({"name": "paho-mqtt"}, caught.exception.values)
+
+    def test_there_is_a_most_to_list(self) -> None:
+        many = [f"lib{n}==1.0" for n in range(41)]
+        with self.assertRaises(contract.ManifestError) as caught:
+            contract.parse({**GOOD, "dependencies": many})
+
+        self.assertEqual("extension.reason.manifest_dependencies_many", caught.exception.key)
 
     def test_a_capability_nobody_has_heard_of_is_refused(self) -> None:
         """The list is the consent surface, so an unknown entry is not a thing a user

@@ -133,6 +133,8 @@ EXTENSION_RECEIPTS_PATH = CONFIG_DIR / "extension_receipts.json"
 # copy its last update from there replaced.
 EXTENSION_RELEASES_PATH = CACHE_DIR / "extension_releases.json"
 EXTENSION_PREVIOUS_DIR = CONFIG_DIR / "extension_previous"
+# The dependencies extensions list in their manifests, fetched as wheels and unpacked here.
+DEPENDENCIES_DIR = CONFIG_DIR / "dependencies"
 SESSIONS_PATH = CONFIG_DIR / "sessions.json"
 TOKENS_PATH = CONFIG_DIR / "tokens.json"
 CONNECTIONS_PATH = CONFIG_DIR / "connections.json"

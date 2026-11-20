@@ -1,5 +1,5 @@
 """The number on the Extensions entry in the menu: updates the list offers, extensions
-whose files changed, and extensions the list dropped.
+whose files changed, extensions the list dropped, and extensions waiting for dependencies.
 
 Counted from the same read as Overview's rows, so the two agree, and shown whether or not
 Overview is on. Asked when the page opens and again after anything on the Extensions page
@@ -36,7 +36,8 @@ def mark_of(found: dict[str, Any]) -> rail_marks.Mark | None:
     count = 0
     for kind, key in (("updates", "manager.page.extension_updates"),
                       ("changed", "manager.page.extension_changed"),
-                      ("left", "manager.page.extension_left")):
+                      ("left", "manager.page.extension_left"),
+                      ("lacking", "manager.page.extension_lacking")):
         items = found.get(kind) or []
         if items:
             count += len(items)

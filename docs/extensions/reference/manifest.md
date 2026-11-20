@@ -135,6 +135,7 @@ table is ignored.
 | `requires_features` | no | none | Install features it needs: `library`, `frontend`, `devices`, `overview` |
 | `platforms` | no | every one | `linux`, `windows`, `macos`, or a Linux distribution's `ID` from `/etc/os-release`, such as `vpinos`.  It runs where any of them matches.  Empty means every one |
 | `events` | no | none | Event names it publishes, without its namespace |
+| `dependencies` | no | none | Packages it needs from pypi.org, each as `name==version`. See [Dependencies](#dependencies) |
 
 Everything in it is a declaration a person can be shown before installing.  That is why an
 unknown capability or feature is refused rather than ignored: a name nobody has heard of is
@@ -175,6 +176,40 @@ VPinFE never checks on its own, and it does not count these in Needs You or in U
   in the extension's menu in the list puts it back.  Both take effect at the next start.
 - **A folder kept with Git is left alone.**  Its row says "Updated with Git" and VPinFE never
   writes to it.
+
+### Dependencies
+
+An extension's code may import the standard library, the contract (`common.extensions.contract`),
+`fastapi` and `requests`, and the dependencies it lists under `dependencies`.  `fastapi` is what
+`ctx.add_router` takes, and `requests` is what the contract's HTTP calls raise.  Nothing else of
+VPinFE's is promised: everything else VPinFE ships is its own and can change in any release.
+
+```json
+"requires_platform": 1,
+"dependencies": ["paho-mqtt==2.1.0"]
+```
+
+- **Exact versions.**  `name==version` and nothing else: no ranges, no addresses, no markers.
+  The name is read the way pypi.org compares it, so `Paho_MQTT` and `paho-mqtt` are
+  one package, and it is stored in that form.
+- **The whole list.**  VPinFE has no resolver.  List what each one needs too; `uv pip compile`
+  or `pip freeze` makes the list.
+- **Not what VPinFE ships.**  A package VPinFE already carries, `fastapi` and `requests` among
+  them, is refused: a process holds one copy.
+- **At most 40**, each listed once.
+- **Wheels only, from pypi.org.**  Compiled code reaches a device only as a
+  dependency VPinFE downloads itself.  An extension's own folder holds no `.so`, `.pyd` or `.dylib`
+  file, and `--check-extension` fails one that does.
+
+`--check-extension` reports an import that is none of these.  Where the manifest lists dependencies
+it is a `warns` line, because the name a package is imported as is often not the name it is
+listed as (`paho` for `paho-mqtt`).
+
+**What the person sees.**  The Trust dialog lists the dependencies under **Dependencies**, and an
+update names the ones it adds or changes under **New Dependencies**; agreeing downloads them from
+pypi.org.  An extension copied in by hand, or whose download failed, waits in Needs You with
+**Get Its Dependencies**, which downloads them and starts it.  The extension's page lists each
+dependency with its version.
 
 ### Help for the person using it
 

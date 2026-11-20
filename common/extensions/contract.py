@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from common.devices import install_identity
 from common.values import parse_version
 
+from . import dependencies
 from .reach import (  # noqa: F401 - PLAY, PROTECTED are the contract's
     LIBRARY,
     PLAY,
@@ -201,6 +202,8 @@ class Manifest:
     home: str = ""
     # A path inside its own folder to an image drawn in the header of its page.
     picture: str = ""
+    # Dependencies it needs from PyPI, every one as `name==version`, the name normalized.
+    dependencies: tuple[str, ...] = ()
 
     @property
     def repository(self) -> str:
@@ -232,6 +235,7 @@ class Manifest:
             "home": self.home,
             "source": self.source,
             "picture": self.picture,
+            "dependencies": list(self.dependencies),
         }
 
 
@@ -266,6 +270,29 @@ def _picture_path(raw: Any) -> str:
             or any(part in ("", ".", "..") for part in parts)):
         raise ManifestError("extension.reason.manifest_bad_picture")
     return value
+
+
+def _dependencies(raw: Any) -> tuple[str, ...]:
+    """The manifest's dependencies as `name==version`, sorted, or a ManifestError naming the
+    line at fault."""
+    lines = _strings(raw, "dependencies")
+    if not lines:
+        return ()
+    if len(lines) > dependencies.MOST:
+        raise ManifestError("extension.reason.manifest_dependencies_many",
+                            most=str(dependencies.MOST))
+    found: dict[str, dependencies.Dependency] = {}
+    for line in lines:
+        try:
+            one = dependencies.parse_line(line)
+        except dependencies.BadLineError:
+            raise ManifestError("extension.reason.manifest_dependencies_pin", line=line) from None
+        if one.name in dependencies.SHIPPED:
+            raise ManifestError("extension.reason.manifest_dependencies_shipped", name=one.name)
+        if one.name in found:
+            raise ManifestError("extension.reason.manifest_dependencies_twice", name=one.name)
+        found[one.name] = one
+    return tuple(str(found[name]) for name in sorted(found))
 
 
 def parse(raw: Any) -> Manifest:
@@ -347,6 +374,7 @@ def parse(raw: Any) -> Manifest:
         home=home,
         source=source,
         picture=_picture_path(raw.get("picture")),
+        dependencies=_dependencies(raw.get("dependencies")),
         scopes=_strings(raw.get("scopes"), "scopes"),
         capabilities=capabilities,
         requires_features=features,

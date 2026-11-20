@@ -128,6 +128,10 @@ def accept(name: str) -> Record | None:
     return registry().accept(name)
 
 
+def dependencies_arrived(name: str) -> Record | None:
+    return registry().dependencies_arrived(name)
+
+
 def files_replaced(name: str) -> Record | None:
     return registry().files_replaced(name)
 

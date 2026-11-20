@@ -103,6 +103,19 @@ a port of its own, and the Manager links to it.  See
   because those did not come from somebody pressing something.  See
   [asking the operating system to change something](cookbook.md#20-asking-the-operating-system-to-change-something).
 
+## Dependencies
+
+A dependency is a package from pypi.org.  It runs inside VPinFE with everything the
+extension was trusted to do.  See [Dependencies](reference/manifest.md#dependencies).
+
+- **Reach for the standard library first.**  Each dependency is something a person is asked to
+  trust, and VPinFE downloads it onto their device.
+- **List what you import, and what it imports.**  Exact versions, the whole set, nothing VPinFE
+  already ships.
+- **Prefer a pure-Python dependency.**  A compiled one is built for one system and one Python, so
+  it may be missing for a device and the extension then waits with a reason.
+- **Test it with nothing else installed.**  A device holds only what the manifest lists.
+
 ## Before you ship
 
 - [ ] Every sentence is a key in `i18n/en.json`, and `./vpinfe --check-extension` reports no
@@ -127,3 +140,5 @@ a port of its own, and the Manager links to it.  See
 - [ ] Nothing asks to run as root, and a change to the device goes through `ctx.os`.
 - [ ] `display_name`, `version` and `requires_platform` are set, and `platforms` is there if it
   runs on one system.
+- [ ] Every package it imports is listed with an exact version, and `--check-extension` reports
+  no import it cannot place.

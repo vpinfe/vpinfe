@@ -11,10 +11,11 @@ way to a client, and the tests hold it to that.
 
 from __future__ import annotations
 
-import io
+import base64
+import struct
+import zlib
 
 from fastapi import APIRouter, HTTPException, Response
-from PIL import Image
 
 # The core event it listens to. A name, not an import: the event vocabulary is part of
 # the platform ABI the manifest names, and an extension holds no reference into core.
@@ -24,8 +25,50 @@ GAME_SELECTED = "game.selected"
 CARD = "sample_card"
 CARD_VERSION = 1
 
-# What a player's `picture` value names, and so what its service answers with.
-PICTURES = {"red": (200, 30, 30), "blue": (30, 30, 200)}
+# What a player's `picture` value names, and so what its service answers with: a PNG, and
+# a JPEG when the value ends in `-jpg`. An extension may not import an imaging library it
+# does not list, so the PNG is written out here and the JPEGs are held as they are.
+COLORS = {"red": (200, 30, 30), "blue": (30, 30, 200)}
+JPEGS = {
+    "red": base64.b64decode(
+        "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4n"
+        "ICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIy"
+        "MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAUACgDASIAAhEBAxEB/8QAHwAAAQUBAQEB"
+        "AQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKB"
+        "kaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1"
+        "dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl"
+        "5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcF"
+        "BAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5"
+        "OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0"
+        "tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDkKKKK8U/T"
+        "AooooAKKKKACiiigAooooAKKKKAP/9k="
+    ),
+    "blue": base64.b64decode(
+        "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4n"
+        "ICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIy"
+        "MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAUACgDASIAAhEBAxEB/8QAHwAAAQUBAQEB"
+        "AQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKB"
+        "kaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1"
+        "dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl"
+        "5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcF"
+        "BAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5"
+        "OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0"
+        "tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzCiiiv0w4"
+        "wooooAKKKKACiiigAooooAKKKKAP/9k="
+    ),
+}
+
+
+def _png(color: tuple[int, int, int], width: int = 40, height: int = 20) -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    row = b"\x00" + bytes(color) * width
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(row * height))
+            + chunk(b"IEND", b""))
 
 
 def register(ctx) -> None:
@@ -58,15 +101,12 @@ def register(ctx) -> None:
             raise HTTPException(403, detail="The service refused")
         if named == "text":
             return Response(b"not an image", media_type="text/plain")
-        color = PICTURES.get(named.removesuffix("-jpg"))
-        if color is None:
+        kind = named.removesuffix("-jpg")
+        if kind not in COLORS:
             raise HTTPException(404, detail="No picture yet")
-        out = io.BytesIO()
         if named.endswith("-jpg"):
-            Image.new("RGB", (40, 20), color).save(out, format="JPEG")
-            return Response(out.getvalue(), media_type="image/jpg")
-        Image.new("RGB", (40, 20), color).save(out, format="PNG")
-        return Response(out.getvalue(), media_type="image/png")
+            return Response(JPEGS[kind], media_type="image/jpg")
+        return Response(_png(COLORS[kind]), media_type="image/png")
 
     def read_account(player_id: str) -> dict:
         held = ctx.players.account(player_id)
@@ -78,7 +118,7 @@ def register(ctx) -> None:
                 "status": "Ready" if held.get("handle") else "No handle",
                 "acts": [{"key": "ping", "label": "Ping"}],
                 "card": bool(held.get("handle") and held.get("token")),
-                "picture": held.get("picture") in PICTURES}
+                "picture": held.get("picture") in COLORS}
 
     def write_account(player_id: str, values: dict) -> None:
         ctx.players.set_account(player_id, {**ctx.players.account(player_id), **values})

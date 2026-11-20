@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 from nicegui import run, ui
 
-from common.extensions import host
+from common.extensions import dependencies, host
 from common.failures import why
 from common.i18n import t
 from common.security import accepted
@@ -66,10 +66,15 @@ def enabled_row(extension: dict, refill: Callable[[], None]) -> tuple[Any, ...]:
             refill()
             return
         try:
-            await offload.io(ApiClient().set_extension_enabled, name, bool(event.value))
+            found = await offload.io(ApiClient().set_extension_enabled, name,
+                                     bool(event.value))
         except Exception as exc:  # noqa: BLE001
             ui.notify(t("said.on_failed" if event.value else "said.off_failed"),
                       caption=why(exc), type="negative")
+            refill()
+            return
+        if event.value and found.get("reason_key") == host.LACKS_DEPENDENCIES:
+            await get_dependencies(name)
         refill()
 
     return (t("manager.ext_page.enabled"),
@@ -185,8 +190,9 @@ def reported_rows(extension: dict, help_line: str) -> list[tuple[Any, ...]]:
 
 def reach_entries(words: list[str]) -> list[tuple[Any, ...]]:
     """The rows for a list of scopes, capabilities and `play:` surfaces, in sentences that
-    run onto further lines where the panel is narrow."""
-    used, remote = _remote_names(words)
+    run onto further lines where the panel is narrow. A `dependency:` word is not one of them:
+    `dependency_rows` draws those."""
+    used, remote = _remote_names([one for one in words if not one.startswith(DEPENDENCY_PREFIX)])
     entries: list[tuple[Any, ...]] = [
         (t(area), panel.wrapped(_sentence(does))) for area, does in _by_area(used)]
     if remote:
@@ -237,6 +243,12 @@ def findings(extension: dict, open_this_device: Callable[[], None],
     if waiting.get("reason_key") == host.STARTS_AT_RESTART:
         return [finding(t("manager.ext_page.replacement_trusted"),
                          t(host.STARTS_AT_RESTART))]
+    if (extension.get("state") == host.OFF
+            and extension.get("reason_key") == host.LACKS_DEPENDENCIES):
+        return [_lacks_dependencies(extension, refill)]
+    if extension.get("state") == host.OFF and extension.get("reason_key") in (
+            host.DEPENDENCY_CLASH, host.DEPENDENCY_HELD):
+        return [finding(t("manager.ext_page.dependency_waiting"), said)]
     if cannot_run(extension):
         fix = panel.action(t("manager.ext_page.open_device"), open_this_device,
                            icon=verbs.GO, hint=t("manager.ext_page.open_hint")) \
@@ -245,6 +257,50 @@ def findings(extension: dict, open_this_device: Callable[[], None],
     if state in STATE_WORDS:
         return [finding(t(STATE_WORDS[str(state)]), said)]
     return []
+
+
+# What the last try at getting an extension's dependencies said, by extension, until one works.
+_COULD_NOT_GET: dict[str, str] = {}
+
+
+def _lacks_dependencies(extension: dict, refill: Callable[[], None]) -> Callable[[], None]:
+    """It is trusted and switched on, and waits for dependencies this device does not have."""
+    name = str(extension.get("name") or "")
+    failed = _COULD_NOT_GET.get(name, "")
+
+    @on_page
+    async def get() -> None:
+        await get_dependencies(name)
+        refill()
+
+    fix = panel.action(
+        t("manager.page.try_again" if failed else "manager.ext_page.get_dependencies"),
+        get, icon=verbs.GO, hint=t("manager.ext_page.get_dependencies_hint"))
+    if failed:
+        return finding(t("manager.ext_page.dependencies_failed"), failed, fix)
+    return finding(t("manager.ext_page.dependencies_needed"), str(extension.get("reason") or ""),
+                   fix)
+
+
+def could_not_get(name: str) -> str:
+    """Why the last fetch of `name`'s dependencies failed, or nothing."""
+    return _COULD_NOT_GET.get(name, "")
+
+
+async def get_dependencies(name: str) -> bool:
+    """Fetch the dependencies of the extension `name`, which starts it when they were all it
+    lacked. False when they could not be got; the reason stays for the page to show."""
+    working = ui.notification(t("manager.ext_page.getting_dependencies"), spinner=True,
+                              timeout=None)
+    try:
+        await offload.io(ApiClient().get_extension_dependencies, name)
+    except Exception as exc:  # noqa: BLE001
+        _COULD_NOT_GET[name] = why(exc)
+        return False
+    finally:
+        working.dismiss()
+    _COULD_NOT_GET.pop(name, None)
+    return True
 
 
 def _unaccepted(extension: dict, copy: dict, refill: Callable[[], None]
@@ -295,17 +351,21 @@ async def trust_and_turn_on(extension: dict, copy: dict) -> bool:
         claims_team=bool(trust.get("claims_team")),
         added=reach_entries([str(one) for one in trust.get("new_access") or []])
         if before else [],
-        was=str(trust.get("accepted_version") or "") if before else "")
+        was=str(trust.get("accepted_version") or "") if before else "",
+        dependencies=dependency_rows(dependency_pins(
+            [str(one) for one in trust.get("uses") or copy.get("uses") or []])))
     if not yes:
         return False
     try:
         client = ApiClient()
         await offload.io(client.accept_extension, name)
-        if copy is extension:
-            await offload.io(client.set_extension_enabled, name, True)
+        started = (await offload.io(client.set_extension_enabled, name, True)
+                   if copy is extension else {})
     except Exception as exc:  # noqa: BLE001
         ui.notify(t("manager.ext_page.trust_failed"), caption=why(exc), type="negative")
         return False
+    if started.get("reason_key") == host.LACKS_DEPENDENCIES:
+        await get_dependencies(name)
     return True
 
 
@@ -549,6 +609,24 @@ SAYS = {
 }
 
 PLAY_PREFIX = "play:"
+DEPENDENCY_PREFIX = "dependency:"
+
+
+def dependency_pins(words: list[str]) -> list[str]:
+    """The `name==version` of each `dependency:` word in a list of what an extension uses."""
+    return [one[len(DEPENDENCY_PREFIX):] for one in words if one.startswith(DEPENDENCY_PREFIX)]
+
+
+def dependency_rows(pins: list[str], was: list[str] | None = None) -> list[tuple[Any, ...]]:
+    """A row for each dependency: its name and its version. `was` is the pins an update
+    replaces, so a version that changed says what it was."""
+    before = {one.name: one.version for one in dependencies.of(was or [])}
+    rows: list[tuple[Any, ...]] = []
+    for one in dependencies.of(pins):
+        old = before.get(one.name)
+        rows.append((one.name, t("manager.trust.dependency_was", version=one.version, was=old)
+                     if old and old != one.version else one.version))
+    return rows
 
 
 def _remote_name(surface: str) -> str:

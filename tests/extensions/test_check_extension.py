@@ -108,7 +108,15 @@ def build(root: Path, body: str | None = None, *, name: str = NAME,
 
 
 class CheckCase(unittest.TestCase):
+    # The extensions built here reach this module through a `tests` import so the test can
+    # steer them, which the import rule refuses; only a case that tests the rule keeps it.
+    checks_the_boundary = False
+
     def setUp(self) -> None:
+        if not self.checks_the_boundary:
+            patcher = unittest.mock.patch.object(check, "_boundary", return_value=[])
+            patcher.start()
+            self.addCleanup(patcher.stop)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
@@ -231,6 +239,98 @@ class ANeed(CheckCase):
         self.assertFalse(passed)
         self.assertTrue(any(one.startswith(f"missing    ext.{NAME}.need.down.label")
                             for one in lines), lines)
+
+
+class WhatTheExtensionImports(CheckCase):
+    """Protects: (b) the import rule an author is told about is the one the check applies."""
+
+    checks_the_boundary = True
+
+    def source(self, body: str, **more: str) -> Path:
+        directory = build(self.root, body=body)
+        for name, text in more.items():
+            (directory / name).write_text(text, encoding="utf-8")
+        return directory
+
+    def test_what_the_contract_allows_passes(self) -> None:
+        lines, passed = self.checked(self.source(
+            "import json\nfrom fastapi import APIRouter\nimport requests\n"
+            "from common.extensions.contract import words\n\n\ndef register(ctx): pass\n"))
+
+        self.assertFalse([one for one in lines if " imports " in one], lines)
+
+    def test_a_dependency_nobody_listed_fails_with_the_file_and_line(self) -> None:
+        lines, passed = self.checked(self.source(
+            "import json\nimport paho\n\n\ndef register(ctx): pass\n"))
+
+        self.assertFalse(passed)
+        said = self.line(lines, "fails      imports paho")
+        self.assertIn("__init__.py, line 2", said)
+        self.assertIn("a dependency the manifest lists", said)
+
+    def test_a_listed_dependency_covers_an_import_of_its_name(self) -> None:
+        directory = build(self.root, body="import paho_mqtt\n\n\ndef register(ctx): pass\n",
+                          dependencies=["paho-mqtt==2.1.0"])
+
+        lines, passed = self.checked(directory)
+
+        self.assertFalse([one for one in lines if " imports " in one], lines)
+
+    def test_an_import_no_listed_name_matches_warns_where_dependencies_are_listed(self) -> None:
+        """`paho` is what `paho-mqtt` is imported as, and the check does not fetch the wheel
+        that says so, so it cannot call this a failure."""
+        directory = build(self.root, body="import paho\n\n\ndef register(ctx): pass\n",
+                          dependencies=["paho-mqtt==2.1.0"])
+
+        lines, _ = self.checked(directory)
+
+        self.assertFalse([one for one in lines if one.startswith("fails      imports")], lines)
+        self.assertIn("unless a dependency it lists provides it",
+                      self.line(lines, "warns      imports paho"))
+
+    def test_a_module_of_ours_fails_and_says_to_use_the_context(self) -> None:
+        lines, passed = self.checked(self.source(
+            "from game_service import x\nfrom common.config import paths\n\n\n"
+            "def register(ctx): pass\n"))
+
+        self.assertFalse(passed)
+        said = self.line(lines, "fails      imports common.config")
+        self.assertIn("through its context", said)
+
+    def test_each_module_is_said_once_whatever_the_number_of_imports(self) -> None:
+        lines, _ = self.checked(self.source(
+            "import paho\n\n\ndef register(ctx):\n    import paho.mqtt\n",
+            **{"more.py": "import paho\n"}))
+
+        said = [one for one in lines if one.startswith("fails      imports paho ")]
+        self.assertEqual(1, len(said))
+
+    def test_the_extensions_own_tests_are_not_read(self) -> None:
+        directory = self.source("def register(ctx): pass\n")
+        (directory / "tests").mkdir()
+        (directory / "tests" / "test_it.py").write_text("import pytest\n", encoding="utf-8")
+
+        lines, _ = self.checked(directory)
+
+        self.assertFalse([one for one in lines if "pytest" in one])
+
+    def test_a_compiled_file_fails_with_its_path(self) -> None:
+        directory = self.source("def register(ctx): pass\n")
+        (directory / "lib").mkdir()
+        (directory / "lib" / "fast.so").write_bytes(b"\x7fELF")
+
+        lines, passed = self.checked(directory)
+
+        self.assertFalse(passed)
+        self.assertIn("compiled file lib/fast.so", self.line(lines, "fails      compiled file"))
+
+    def test_a_file_that_is_not_python_fails_with_its_name(self) -> None:
+        directory = self.source("def register(ctx): pass\n", **{"broken.py": "def (:\n"})
+
+        lines, passed = self.checked(directory)
+
+        self.assertFalse(passed)
+        self.assertTrue([one for one in lines if "broken.py" in one], lines)
 
 
 class AGoodExtension(CheckCase):

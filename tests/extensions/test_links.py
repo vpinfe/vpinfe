@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -216,7 +217,8 @@ class WhatTheHostAnswers(LinkedCase):
 class WhatTheCheckSays(LinkedCase):
     def checked(self, *links: dict[str, Any], words: dict | None = None) -> tuple[list[str], bool]:
         DECLARE.extend(links)
-        return check.check(_installed(self.root / "checked", self.capabilities, words))
+        with unittest.mock.patch.object(check, "_boundary", return_value=[]):
+            return check.check(_installed(self.root / "checked", self.capabilities, words))
 
     def test_it_says_each_link_with_where_it_sits_and_what_it_answers(self) -> None:
         lines, passed = self.checked({"key": "panel", "url": UI, "area": "library"})

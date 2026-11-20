@@ -89,6 +89,20 @@ def install_extension(name: str) -> dict:
         raise ApiError("extension_install_failed", why(exc), status_code=502) from exc
 
 
+@router.post("/{name}/dependencies", summary="Fetch the dependencies an extension lists that this "
+                                          "device lacks",
+             dependencies=[requires(scopes.PROTECTED)])
+def get_extension_dependencies(name: str) -> dict:
+    """Fetches what the extension's manifest lists from pypi.org and starts it
+    when that was all that held it back. Nothing is changed on a failure."""
+    try:
+        return extension_ops.get_dependencies(name)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_dependencies_failed", why(exc), status_code=502) from exc
+
+
 @router.post("/{name}/release/check", summary="Ask the repository of an extension added by hand "
                                               "for its latest release",
              dependencies=[requires(scopes.CONFIG_WRITE)])

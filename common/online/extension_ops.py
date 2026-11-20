@@ -11,11 +11,12 @@ from typing import Any
 import requests
 
 from common import extensions, service_errors
+from common.extensions import dependencies
 from common.extensions.contract import REPOSITORY, Manifest, read_manifest
 from common.extensions.host import Record
 from common.failures import why
 from common.i18n import t
-from common.online import extension_list, extension_releases
+from common.online import extension_dependencies, extension_list, extension_releases
 from common.online.theme_registry_client import ThemeRegistryError
 from common.security import accepted
 
@@ -128,6 +129,23 @@ def remove(name: str) -> dict[str, Any]:
     return state()
 
 
+def get_dependencies(name: str) -> dict[str, Any]:
+    """Fetch the dependencies `name` lists that this device lacks, and start it if that was what
+    held it back. It runs now when it needs nothing else to restart."""
+    with _lock:
+        record = extensions.registry().get(name)
+        if record is None or record.manifest is None:
+            raise service_errors.NotFoundError(t("error.extensions.not_found", name=name))
+        if not record.is_accepted():
+            raise service_errors.BlockedError(t("error.extensions.dependency_not_trusted"))
+        try:
+            extension_dependencies.fetch(dependencies.of(record.manifest.dependencies))
+        except extension_dependencies.DependencyError as exc:
+            raise InstallFailedError(why(exc)) from exc
+        extensions.dependencies_arrived(name)
+    return state()
+
+
 def _replaced(name: str) -> None:
     """Tell the host the files changed. The install or removal is done by now, so a failure
     here is logged and never reported as the install failing."""
@@ -185,7 +203,7 @@ def _new_access(record: Record, found: extension_releases.Latest) -> list[str]:
     if not accepted.accepted_before(record.name, record.origin, record.folder):
         return []
     return accepted.new_access(record.name, record.origin, found.scopes, found.capabilities,
-                               record.folder, found.play)
+                               record.folder, found.play, found.dependencies)
 
 
 def _releases() -> dict[str, dict[str, Any]]:
@@ -202,7 +220,8 @@ def _row(record: Record, manifest: Manifest, found: extension_releases.Latest | 
          ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "state": UNCHECKED, "address": manifest.source, "host": "", "version": "", "tag": "",
-        "page": "", "moved_to": "", "needs": "", "new_access": [], "checked": "",
+        "page": "", "moved_to": "", "needs": "", "new_access": [], "dependencies": [],
+        "checked": "",
         "installed": manifest.version,
         "previous": ""}
     if (record.directory / ".git").exists():
@@ -218,6 +237,7 @@ def _row(record: Record, manifest: Manifest, found: extension_releases.Latest | 
                    checked=found.checked)
         if newer:
             row["new_access"] = _new_access(record, found)
+            row["dependencies"] = list(found.dependencies)
     return row
 
 
@@ -308,4 +328,4 @@ def use_previous(name: str) -> dict[str, Any]:
 def _accept(name: str, origin: str, folder: str, manifest: Manifest) -> None:
     accepted.accept_extension(name, origin, folder=folder, version=manifest.version,
                               scopes=manifest.scopes, capabilities=manifest.capabilities,
-                              play=manifest.play)
+                              play=manifest.play, dependencies=manifest.dependencies)

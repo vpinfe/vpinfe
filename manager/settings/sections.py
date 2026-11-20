@@ -651,7 +651,8 @@ def _metadata_action(library: Library, state: dict[str, Any],
 
 EXTENSION_FIXES = {needs.UPDATE_EXTENSIONS: extensions_page.UPDATE_ALL,
                    needs.REINSTALL_EXTENSION: extensions_page.REINSTALL,
-                   needs.UNINSTALL_EXTENSION: extensions_page.UNINSTALL}
+                   needs.UNINSTALL_EXTENSION: extensions_page.UNINSTALL,
+                   needs.GET_DEPENDENCIES: extensions_page.GET_DEPENDENCIES}
 
 
 @on_page
