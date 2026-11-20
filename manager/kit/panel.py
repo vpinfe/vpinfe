@@ -145,6 +145,14 @@ class Pick:
     drop: str = ""
 
 
+@dataclass(frozen=True)
+class Toggle:
+    """A third element on an entry that can be hidden later: its cells are drawn inside a
+    wrapper that takes no box, and `on_wrapper` is handed the wrapper to show or hide."""
+
+    on_wrapper: Callable[[Any], None]
+
+
 def facts(target: Any, entries: Sequence[tuple[Any, ...]]) -> None:
     """The facts of one section, as (label, value) pairs.
 
@@ -160,6 +168,12 @@ def facts(target: Any, entries: Sequence[tuple[Any, ...]]) -> None:
         for entry in entries:
             label, value = entry[0], entry[1]
             pick = entry[2] if len(entry) > 2 else None
+            if isinstance(pick, Toggle):
+                wrapper = target.element("div").classes("manager-fact-group")
+                with wrapper:
+                    _fact_row(target, label, value)
+                pick.on_wrapper(wrapper)
+                continue
             if pick is not None:
                 with _pickable(target, pick):
                     _fact_row(target, label, value)
@@ -804,7 +818,8 @@ def bar_end() -> Any:
     return ui.row().classes("items-center gap-2 no-wrap min-w-0 manager-bar-end")
 
 
-def add_action(choices: Any, *, empty: bool, heading: str = "") -> Any:
+def add_action(choices: Any, *, empty: bool, heading: str = "",
+               after: Sequence[Verb] = ()) -> Any:
     """The verb that fills a page, from one choice or several.
 
     Several collapse into one `+` with a menu rather than a row of identical glyphs:
@@ -813,9 +828,12 @@ def add_action(choices: Any, *, empty: bool, heading: str = "") -> Any:
 
     An icon once there are rows and the full words while there are none: the bar is
     scarce width on a page you already know, and a glyph is a guess on one you do not.
+
+    `after` is what extensions add: the `+` is then always a menu, core's choices first and
+    each extension's block under its name, as in a verb menu.
     """
     items = list(choices.items()) if isinstance(choices, dict) else list(choices)
-    if len(items) == 1:
+    if len(items) == 1 and not after:
         label, act = items[0]
         if empty:
             return ui.button(label, icon="add", on_click=act) \
@@ -824,13 +842,18 @@ def add_action(choices: Any, *, empty: bool, heading: str = "") -> Any:
             .props("flat dense round size=sm").classes("shrink-0 manager-action") \
             .tooltip(label)
 
-    button = ui.button(icon="add").props("flat dense round size=sm") \
-        .classes("shrink-0 manager-action").tooltip(heading or t("word.add"))
+    if empty and after:
+        button = ui.button(items[0][0], icon="add").props("flat dense no-caps size=sm") \
+            .classes("shrink-0 manager-action")
+    else:
+        button = ui.button(icon="add").props("flat dense round size=sm") \
+            .classes("shrink-0 manager-action").tooltip(heading or t("word.add"))
     with button, ui.menu():
         if heading:
             ui.item_label(heading).props("header").classes("manager-menu-header")
         for label, act in items:
             ui.menu_item(label, act).classes("manager-menu-item")
+        verb_entries(after)
     return button
 
 

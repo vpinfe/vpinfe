@@ -28,7 +28,7 @@ KEPT: dict[tuple[str, str], str] = {
     ("manager/backups/backups.py", "restore"): _ONCE,
     ("manager/backups/backups_move.py", "_report"): _POLLING,
     ("manager/devices/send_to_device.py", "send"): _POLLING,
-    ("manager/extensions/ext_lists.py", "open_over"): _WALK,
+    ("manager/extensions/ext_lists.py", "_walk"): _WALK,
     ("manager/frontend/players.py", "_gone"): _ONCE,
     ("manager/frontend/themes.py", "_install"):
         "the toast in the loop is each theme's success; its failures are collected",

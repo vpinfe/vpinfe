@@ -8,7 +8,7 @@ each alphabetical.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from functools import partial
 from typing import Any
 from urllib.parse import quote
@@ -54,11 +54,13 @@ async def press(extension: dict[str, Any], verb: dict[str, Any],
 
 
 def offered(state: dict[str, Any], subject: str, targets: list[dict[str, str]],
-            again: Again, *, public: list[dict[str, str]] | None = None) -> list[panel.Verb]:
+            again: Again, *, public: list[dict[str, str]] | None = None,
+            games: Mapping[str, dict[str, Any]] | None = None) -> list[panel.Verb]:
     """The entries the running extensions have for `subject` (`game` or `table`) over
     `targets`, each `{"game_id", "table_id"}`, a block for each extension. `public` is the
     part of `targets` that is not a Private game: an entry that does not work on Private
-    games is pressed on those alone, and not offered where none are left."""
+    games is pressed on those alone, and not offered where none are left. `games` is the
+    game rows by id, which an action's entry reads its Private flag and its `who` from."""
     if not targets:
         return []
     out: list[panel.Verb] = []
@@ -74,4 +76,55 @@ def offered(state: dict[str, Any], subject: str, targets: list[dict[str, str]],
                 str(verb["label"]), run=partial(press, extension, verb, chosen, again),
                 danger=bool(verb["danger"]), one=bool(verb["one"]), tip=str(verb["tip"]),
                 block=name, block_mark=ext_mark.drawer(extension)))
+        for action in extension.get("actions") or []:
+            if subject not in (action.get("menu") or []):
+                continue
+            known = games or {}
+            chosen = [one for one in targets if action.get("private_ok")
+                      or (one["game_id"] in known and not known[one["game_id"]].get("private"))]
+            if not chosen:
+                continue
+            out.append(panel.Verb(
+                t("manager.ext_page.action_opens", name=str(action["label"])),
+                run=partial(_open_for, extension, str(action["key"]),
+                            [_who(one, known) for one in chosen], again),
+                block=name, block_mark=ext_mark.drawer(extension)))
     return out
+
+
+def _who(target: dict[str, str], games: Mapping[str, dict[str, Any]]) -> dict[str, str]:
+    """The game a dialog is opened for, as an extension is handed it: four strings."""
+    game = games.get(target["game_id"]) or {}
+    return {"game_id": target["game_id"], "vps_id": str(game.get("vps_id") or ""),
+            "name": str(game.get("name") or ""), "table_id": target.get("table_id", "")}
+
+
+@on_page
+async def _open_for(extension: dict[str, Any], key: str, whos: list[dict[str, str]],
+                    again: Again) -> None:
+    if await ext_lists.open_for(extension, key, whos):
+        await again()
+
+
+def added(state: dict[str, Any], view: str) -> list[panel.Verb]:
+    """What the running extensions add to the + of `view`, a block for each extension. The
+    page is read again after one runs."""
+    async def again() -> None:
+        state["redraw"]()
+
+    out: list[panel.Verb] = []
+    for extension in _in_order(state.get("extensions") or []):
+        name = str(extension.get("display_name") or extension.get("name") or "")
+        for action in extension.get("actions") or []:
+            if view in (action.get("add") or []):
+                out.append(panel.Verb(
+                    t("manager.ext_page.action_opens", name=str(action["label"])),
+                    run=partial(_open_added, extension, str(action["key"]), again),
+                    block=name, block_mark=ext_mark.drawer(extension)))
+    return out
+
+
+@on_page
+async def _open_added(extension: dict[str, Any], key: str, again: Again) -> None:
+    if await ext_lists.open_over(extension, key, []):
+        await again()

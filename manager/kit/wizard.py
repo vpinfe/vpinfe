@@ -298,12 +298,34 @@ def _controls(fields: list[dict], values: dict[str, Any], *,
         return drawn
 
     held: dict[str, tuple[str, Any]] = {}
-    entries: list[tuple[Any, Any]] = []
+    entries: list[tuple[Any, ...]] = []
     asked = sum(1 for field in fields if field.get("key"))
+    # A field with `shown` is drawn for only some values of another field. While it is
+    # hidden its control leaves `held`, so `_sync` neither reads it nor sends what it holds.
+    hideable: dict[str, tuple[str, set[str]]] = {}
+    wrappers: dict[str, list[Any]] = {}
+    parked: dict[str, tuple[str, Any]] = {}
+
+    def is_shown(key: str) -> bool:
+        follows, only = hideable[key]
+        return str(values.get(follows) or "") in only
+
+    def reconcile() -> None:
+        for key in hideable:
+            shown = is_shown(key)
+            for wrapper in wrappers.get(key, ()):
+                wrapper.set_visibility(shown)
+            if shown and key in parked:
+                held[key] = parked.pop(key)
+            elif not shown and key in held:
+                parked[key] = held.pop(key)
+                values[key] = ""
+
     for field in fields:
         key = str(field.get("key") or "")
         if not key:
             continue
+        first_entry = len(entries)
         values.setdefault(key, field.get("value"))
         kind = str(field.get("type") or "string")
         label = str(field.get("label") or key)
@@ -430,7 +452,19 @@ def _controls(fields: list[dict], values: dict[str, Any], *,
                 str(values.get(key) or ""), typed(key), on_control=caught)))
         if field.get("help"):
             entries.append((panel.ASIDE, _aside(field["help"], values, followers)))
+        rule = field.get("shown")
+        if isinstance(rule, dict) and rule.get("follows"):
+            follows = str(rule["follows"])
+            hideable[key] = (follows, {str(one) for one in rule.get("for") or []})
+            if reconcile not in followers.setdefault(follows, []):
+                followers[follows].append(reconcile)
+            def collect(wrapper: Any, key: str = key) -> None:
+                wrappers.setdefault(key, []).append(wrapper)
+
+            for at in range(first_entry, len(entries)):
+                entries[at] = (*entries[at][:2], panel.Toggle(collect))
     panel.facts(ui, entries)
+    reconcile()
     return held
 
 

@@ -186,7 +186,8 @@ def game_acts(library: Any, games: list[dict[str, Any]], state: dict[str, Any],
         offered.append(deleter)
     offered += ext_verbs.offered(
         state, "game", [{"game_id": one} for one in ids], lambda: refresh(ids),
-        public=[{"game_id": str(one["id"])} for one in games if not one.get("private")])
+        public=[{"game_id": str(one["id"])} for one in games if not one.get("private")],
+        games={str(one["id"]): one for one in games})
     return offered
 
 
@@ -595,7 +596,7 @@ def table_acts(library: Any, targets: list[Target], after: After, state: dict[st
                                   danger=True, one=True))
     offered += ext_verbs.offered(
         state, "table", [{"game_id": item.game_id, "table_id": item.id} for item in targets],
-        lambda: after(games_of(targets), False))
+        lambda: after(games_of(targets), False), games=games_by_id)
     return offered
 
 

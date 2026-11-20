@@ -478,7 +478,8 @@ class OpeningADialogOverRows(unittest.IsolatedAsyncioTestCase):
     async def open(self, answers: list[Any], ids: list[str], *, each: bool = False,
                    action: str = "note", who: dict[str, str] | None = None) -> tuple[bool, Mock]:
         opened = Mock(side_effect=[_done(one) for one in answers])
-        with patch.object(ext_lists.ext_action, "open_action", opened):
+        with patch.object(ext_lists.ext_action, "open_action", opened), \
+                patch.object(ext_lists, "_walk", cast(Any, ext_lists._walk).__wrapped__):
             ran = await cast(Any, ext_lists.open_over).__wrapped__(
                 NOTED, action, ids, each=each, who=who)
         return ran, opened
@@ -535,7 +536,8 @@ class OpeningADialogOverRows(unittest.IsolatedAsyncioTestCase):
         notify = Mock()
         opened = Mock(side_effect=[_done(True), ApiError("it went"), _done(True)])
         with patch.object(ext_lists.ext_action, "open_action", opened), \
-                patch.object(ext_lists.ui, "notify", notify):
+                patch.object(ext_lists.ui, "notify", notify), \
+                patch.object(ext_lists, "_walk", cast(Any, ext_lists._walk).__wrapped__):
             ran = await cast(Any, ext_lists.open_over).__wrapped__(NOTED, "note", ["a", "b", "c"],
                                                         each=True)
 

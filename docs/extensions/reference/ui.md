@@ -319,8 +319,8 @@ It raises nothing beyond the `ui:mount` check.
 ## `ctx.ui.action`
 
 `ctx.ui.action(key, dialog, *, label="", description="", icon="", section="",
-tier=LIBRARY)`.  Required: `key`, `dialog`.  It raises `ContractError` for a `tier` the
-manifest does not list.
+add=(), menu=(), private_ok=False, tier=LIBRARY)`.  Required: `key`, `dialog`.  It raises
+`ContractError` for a `tier` the manifest does not list.
 
 Offer a dialog that core shows.  `dialog` is an object with `ask(step)` and, as far as the
 action needs them, `check`, `act`, `run` and `progress`.  See
@@ -346,6 +346,30 @@ section instead.  A list can open the same dialog from a button above it, from a
 an act.  It raises `ContractError` for a key that is empty or already used, or a `dialog`
 without a callable `ask`, and after `register` returns for a `section` the extension never
 declares.
+
+`add` and `menu` offer the action in more places than its own line.  Each takes one name or
+several.
+
+- `add=` names the pages whose **+** offers it: `games`, `tables`, `media`, `assets`.  A **+**
+  that an extension adds to becomes a menu: VPinFE's own entry first, then a block for each
+  extension under its name, bundled ones first.  The dialog opens with nothing chosen, and the
+  page is read again once it has run.
+- `menu=` names `game`, `table` or both.  The entry is in the menu on a line, on a selection
+  and on the panel's header, in the extension's block after its verbs.  It opens the dialog once
+  for each game or table chosen, with **Skip** and **Stop** where there are several, and hands
+  it that game as [`who`](actions.md#for-a-game) (`table_id` is filled from a table's menu).
+  It needs `games:read`, as a verb does.
+- A Private game is left out, and the entry is not offered when none is left, unless the action
+  says `private_ok=True`.  `private_ok` without `menu` is refused.
+
+The action's own line says where else it is offered, under its description: *Also in Games,
+under +, and in a game's menu*.  An unknown page or subject, `private_ok` without `menu`, and
+`menu` without `games:read` raise `ContractError`.
+
+```python
+ctx.ui.action("import", Import(), add=("games", "tables"))
+ctx.ui.action("scores", Scores(), menu="game")
+```
 
 ## `ctx.ui.link`
 

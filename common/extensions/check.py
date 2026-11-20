@@ -112,7 +112,11 @@ def _report(record: Record, lines: list[str]) -> bool:
         dialog = ui.action_objects[declared["key"]]
         methods = [one for one in ("ask", "check", "act", "run", "progress")
                    if callable(getattr(dialog, one, None))]
-        lines.append(f"dialog     {declared['key']}: {' '.join(methods)}")
+        lines.append(f"dialog     {declared['key']}: {' '.join(methods)}"
+                     + (f", in the + of {' '.join(declared['add'])}" if declared["add"] else "")
+                     + (f", in the menu of a {' and a '.join(declared['menu'])}"
+                        if declared["menu"] else "")
+                     + (", works on Private games" if declared["private_ok"] else ""))
     if ui.account_functions is not None:
         lines.append("account    a player can hold one")
     for router, scope in record.routers:

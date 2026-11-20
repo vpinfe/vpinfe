@@ -110,6 +110,36 @@ class Declaring(unittest.TestCase):
         self.assertEqual(ui.declared_library_verbs, [])
 
 
+class DeclaringWhereAnActionIsOffered(unittest.TestCase):
+    def ui(self, scopes: tuple[str, ...] = ("games:read",)) -> ExtensionUI:
+        return ExtensionUI(NAME, True, scopes)
+
+    class Dialog:
+        def ask(self, step: str) -> dict:
+            return {}
+
+    def test_an_action_records_the_pages_and_subjects_it_is_offered_in(self) -> None:
+        ui = self.ui()
+
+        ui.action("share", self.Dialog(), add=("games", "tables"), menu="game", private_ok=True)
+
+        record = ui.actions[0]
+        self.assertEqual((record["add"], record["menu"], record["private_ok"]),
+                         (["games", "tables"], ["game"], True))
+
+    def test_a_place_that_is_not_one_is_refused(self) -> None:
+        with self.assertRaises(contract.ContractError):
+            self.ui().action("share", self.Dialog(), add="nowhere")
+        with self.assertRaises(contract.ContractError):
+            self.ui().action("share", self.Dialog(), menu="row")
+
+    def test_a_menu_entry_needs_to_read_games_and_private_ok_needs_a_menu(self) -> None:
+        with self.assertRaises(contract.ContractError):
+            self.ui(()).action("share", self.Dialog(), menu="game")
+        with self.assertRaises(contract.ContractError):
+            self.ui().action("share", self.Dialog(), add="games", private_ok=True)
+
+
 class Served(unittest.TestCase):
     def setUp(self) -> None:
         owner_accepts(self)

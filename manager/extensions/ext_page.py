@@ -91,12 +91,13 @@ def settings_entries(extension: dict, settings: dict[str, Any],
 
 def line_only(extension: dict) -> set[str]:
     """The actions that mean something only over a line of the extension's own list: a
-    list verb opens one over the rows chosen, and no list's + opens it with nothing."""
+    list verb opens one over the rows chosen, and no + opens it with nothing."""
     lists = extension.get("lists") or []
     over_rows = {str(verb["action"]) for one in lists for verb in one.get("verbs") or []
                  if verb.get("action") and (verb.get("one") or verb.get("each"))}
     from_add = {str(key) for one in lists for key in one.get("add") or []}
-    return over_rows - from_add
+    from_page = {str(one["key"]) for one in extension.get("actions") or [] if one.get("add")}
+    return over_rows - from_add - from_page
 
 
 def unplaced(extension: dict) -> list[dict]:
@@ -467,6 +468,32 @@ def _path_control(client: Any, field: dict, value: str,
                        placeholder=str(field.get("placeholder") or ""))
 
 
+PAGES = {"games": "manager.section.games", "tables": "manager.section.tables",
+         "media": "manager.section.media", "assets": "manager.section.assets"}
+MENUS = {("game",): "manager.ext_page.also_menu_game",
+         ("table",): "manager.ext_page.also_menu_table",
+         ("game", "table"): "manager.ext_page.also_menu_both"}
+
+
+def also_in(action: dict) -> str:
+    """Where else the action is offered, from its `add` and `menu`: empty for one that is
+    only on its own line."""
+    pages = [t(PAGES[one]) for one in PAGES if one in (action.get("add") or [])]
+    menu = MENUS.get(tuple(one for one in ("game", "table") if one in (action.get("menu") or [])))
+    plus = t("manager.ext_page.also_plus", pages=_and(pages)) if pages else ""
+    menus = t(menu) if menu else ""
+    if plus and menus:
+        return t("manager.ext_page.also_in", where=t("manager.ext_page.also_both",
+                                                      plus=plus, menu=menus))
+    return t("manager.ext_page.also_in", where=plus or menus) if plus or menus else ""
+
+
+def _and(names: list[str]) -> str:
+    if len(names) < 2:
+        return "".join(names)
+    return t("manager.ext_page.also_and", head=", ".join(names[:-1]), last=names[-1])
+
+
 def action_lines(offered: list[dict], name: str, refill: Callable[[], None]) -> None:
     """One line for each action: its picture, its name, what it does. The whole line opens
     the dialog, and the panel is drawn again once it has run, since it may have changed
@@ -489,6 +516,8 @@ def action_lines(offered: list[dict], name: str, refill: Callable[[], None]) -> 
                         .classes("manager-act-name")
                     if action.get("description"):
                         ui.label(str(action["description"])).classes("manager-act-does")
+                    if also := also_in(action):
+                        ui.label(also).classes("manager-act-also")
 
 
 # The rows of What It Can Do, outside VPinFE first, so what could matter most is read first.

@@ -4047,6 +4047,8 @@ a.manager-tag:hover { background: var(--wash-hover); }
    list's grid or the column it was drawn into as if it were not there. */
 .manager-region { display: contents; }
 
+/* A fact row that can be hidden keeps its cells in the list's grid, like a pickable one. */
+.manager-fact-group { display: contents; }
 /* A pickable fact row keeps its two cells in the list's grid, and the picked one is lit
    the way a lit binding is - the label in the accent. A row whose value is a summary
    lights the summary as a whole on hover instead, and the label stays as it is. */
@@ -4140,6 +4142,7 @@ a.manager-slot-file, a.manager-slot-file:visited { color: var(--accent); }
 .manager-act-icon { font-size: var(--icon-act); color: var(--accent); flex: none; margin-top: 1px; }
 .manager-act-name { font-size: var(--fs-body); color: var(--ink); }
 .manager-act-does { font-size: var(--fs-caption); color: var(--ink-3); }
+.manager-act-also { font-size: var(--fs-caption); color: var(--ink-3); margin-top: 2px; }
 
 /* Room to judge the art when there is width to spare: at 240px a backglass in a
    half-window panel is a thumbnail beside a lot of nothing, and judging art is what

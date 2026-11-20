@@ -105,6 +105,46 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(seen, [{"token": "abc", "name": ""}])
 
 
+_SHOWN = {"step": "source", "fields": [
+    {"key": "source", "type": "select", "label": "From", "value": "a",
+     "choices": [["a", "Alpha"], ["b", "Beta"]]},
+    {"key": "folder", "type": "string", "label": "Folder",
+     "shown": {"follows": "source", "for": ["b"]},
+     "help": "Where it lives"}]}
+
+
+class ShownTests(unittest.TestCase):
+    """Protects: (b) a dialog field's `shown` rule is part of what an extension can declare."""
+
+    def _group(self, dialog: ui.dialog) -> ui.element:
+        return next(one for one in dialog.descendants() if "manager-fact-group" in one.classes)
+
+    def test_a_field_is_drawn_only_for_the_values_it_names_and_sends_nothing_else(self) -> None:
+        seen: list[dict[str, Any]] = []
+
+        async def run() -> tuple[bool, bool, bool]:
+            task, dialog = await _opened(_walked(_SHOWN, seen))
+            group = self._group(dialog)
+            first = group.visible
+            box = next(one for one in group.descendants() if isinstance(one, ui.input))
+            select = next(one for one in dialog.descendants() if isinstance(one, ui.select))
+            select.set_value("b")
+            await _settled()
+            second = group.visible
+            box.set_value("/some/folder")
+            select.set_value("a")
+            await _settled()
+            third = group.visible
+            said(_forward(dialog), "click")
+            await _settled()
+            await _finished(task)
+            return first, second, third
+
+        first, second, third = _ran(run)
+        self.assertEqual((first, second, third), (False, True, False))
+        self.assertEqual(seen[0]["folder"], "")
+
+
 class DrawersTests(unittest.TestCase):
     def test_a_type_that_registers_its_drawer_has_one(self) -> None:
         """`FIELD_TYPES` names the type and `FIELD_DRAWERS` is what draws it."""

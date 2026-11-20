@@ -330,6 +330,9 @@ class GroupFunctions:
 # The panels a group can be put on: a game's, and one table's.
 GROUP_SUBJECTS = ("game", "table")
 
+# The pages whose + an action can be offered in.
+ADD_PAGES = ("games", "tables", "media", "assets")
+
 # How much a kind of need costs to leave alone, as Overview draws it; warm unless said.
 NEED_TONES = ("danger", "warm", "accent", "muted")
 DEFAULT_NEED_TONE = "warm"
@@ -436,7 +439,8 @@ class ExtensionUI:
 
     def action(self, key: str, dialog: Any, *, label: str = "",
                description: str = "", icon: str = "", section: str = "",
-               tier: str = reach.LIBRARY) -> None:
+               add: str | Iterable[str] = (), menu: str | Iterable[str] = (),
+               private_ok: bool = False, tier: str = reach.LIBRARY) -> None:
         """A verb somebody can press, in the vocabulary the rest of the app uses.
 
         `dialog` has `ask(step)`, answering the dialog for that step, and any of
@@ -447,6 +451,13 @@ class ExtensionUI:
         given), its name, and `description`. With no `section` it is in the Actions entry
         of the extension's panel; with one, the key of a section declared with `section()`,
         it is a line at the top of that section only.
+
+        `add` names the pages whose + also offers it (`ADD_PAGES`): it opens with nothing
+        chosen, and the page is read again after a run. `menu` names `game`, `table` or
+        both: it is in the menu on a game or a table, and opens once for each one chosen,
+        with Skip and Stop, handed `who` as `ask` is for a game. A Private game is left out,
+        and the entry is not offered when none is left, unless `private_ok`. `menu` needs
+        `games:read`, as a verb does.
 
         `tier` is who may press it: `act` and `run` need it, and `PROTECTED` asks for the
         Confirm first. Looking at the dialog needs Library, or Play where `tier` is.
@@ -462,6 +473,14 @@ class ExtensionUI:
                                 "object that has no ask(step)")
         held = self._tier(tier, f"the action {wanted!r}", f"action:{wanted}")
         glyph = self._rail_icon(f"the action {wanted!r}", icon)
+        pages = self._places(wanted, "add", add, ADD_PAGES)
+        subjects = self._places(wanted, "menu", menu, GROUP_SUBJECTS)
+        if subjects and not self._reads_games:
+            raise ContractError(f"{self._name} offers the action {wanted!r} in a menu, which "
+                                f"needs {GAMES_READ}, and its manifest does not declare it")
+        if private_ok and not subjects:
+            raise ContractError(f"{self._name} says the action {wanted!r} works on Private "
+                                "games, and offers it in no menu")
         self.action_objects[wanted] = dialog
         self.actions.append({
             "key": wanted,
@@ -469,9 +488,24 @@ class ExtensionUI:
             "description": str(description or "").strip(),
             "icon": glyph,
             "section": str(section or "").strip(),
+            "add": pages,
+            "menu": subjects,
+            "private_ok": bool(private_ok),
             "base": f"/actions/{wanted}",
             "tier": held,
         })
+
+    def _places(self, key: str, what: str, named: str | Iterable[str],
+                known: Sequence[str]) -> list[str]:
+        """The places an action is offered, each one of `known`, once, in the order named."""
+        asked = [named] if isinstance(named, str) else list(named)
+        places = list(dict.fromkeys(str(one or "").strip() for one in asked))
+        unknown = [one for one in places if one not in known]
+        if unknown:
+            raise ContractError(f"{self._name} offers the action {key!r} in {what}= "
+                                f"{', '.join(map(repr, unknown))}, which is not one of "
+                                f"{', '.join(known)}")
+        return places
 
     def account(self, *, read: Callable[[str], dict],
                 write: Callable[[str, dict], Any] | None = None,

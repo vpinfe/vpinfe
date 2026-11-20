@@ -453,20 +453,34 @@ async def open_over(extension: dict[str, Any], key: str, ids: Sequence[str], *,
     """Open the dialog `key` over the rows `ids`: one dialog for all of them, or with
     `each` one per row in turn, with Skip and Stop. `who` is the game it is opened for,
     for a dialog that is not opened over a row of a list. True once any of them ran."""
+    batches = [list(ids)] if not each else [[one] for one in ids]
+    return await _walk(extension, key, [(batch, who) for batch in batches], each)
+
+
+async def open_for(extension: dict[str, Any], key: str,
+                   games: Sequence[Mapping[str, str]]) -> bool:
+    """Open the dialog `key` once for each of `games`, each the `who` it is handed, with Skip
+    and Stop where there are several. True once any of them ran."""
+    return await _walk(extension, key, [([], one) for one in games], len(games) > 1)
+
+
+@on_page
+async def _walk(extension: dict[str, Any], key: str,
+                steps: Sequence[tuple[list[str], Mapping[str, str] | None]],
+                walking: bool) -> bool:
     name, action = str(extension.get("name") or ""), declared_action(extension, key)
     if not action:
         ui.notify(t("said.action_failed"), type="negative")
         return False
-    batches = [list(ids)] if not each else [[one] for one in ids]
     ran = False
-    for index, batch in enumerate(batches, 1):
-        place = t("manager.walk.position", index=index, total=len(batches)) \
-            if each and len(batches) > 1 else ""
+    for index, (rows, who) in enumerate(steps, 1):
+        place = t("manager.walk.position", index=index, total=len(steps)) \
+            if walking and len(steps) > 1 else ""
         try:
             answer = await (
-                ext_action.open_action(name, action, rows=batch, who=who, place=place,
+                ext_action.open_action(name, action, rows=rows, who=who, place=place,
                                        walking=True)
-                if each else ext_action.open_action(name, action, rows=batch, who=who))
+                if walking else ext_action.open_action(name, action, rows=rows, who=who))
         except Exception as exc:  # noqa: BLE001 - the reason belongs on screen
             ui.notify(t("said.action_failed"), caption=why(exc), type="negative")
             answer = False

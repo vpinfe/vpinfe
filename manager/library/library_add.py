@@ -17,6 +17,7 @@ from nicegui import ui
 from common import apps
 from common.failures import why
 from common.i18n import t
+from manager.extensions import ext_verbs
 from manager.kit import offload, panel
 from manager.kit.on_page import on_page
 from manager.library import import_dialog, mediasource, uploads
@@ -31,7 +32,7 @@ NAMES = {"games": "manager.add.games", "tables": "manager.add.tables",
 def add_action(library: Any, state: dict[str, Any], view: str, *, empty: bool) -> Any:
     """The Add of `view`'s bar: its icon, or on an empty page the full button."""
     return panel.add_action([(t(NAMES[view]), partial(open_dialog, library, state, view))],
-                            empty=empty)
+                            empty=empty, after=ext_verbs.added(state, view))
 
 
 def open_dialog(library: Any, state: dict[str, Any], view: str) -> None:

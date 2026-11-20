@@ -3,7 +3,9 @@ bundled first, then the rest by name, in the three menus that draw the one list.
 
 from __future__ import annotations
 
+import asyncio
 import unittest
+import unittest.mock
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -73,6 +75,51 @@ class Offered(unittest.TestCase):
     def test_nothing_chosen_or_nothing_running_offers_nothing(self) -> None:
         self.assertEqual(ext_verbs.offered(STATE, "game", [], _nothing), [])
         self.assertEqual(ext_verbs.offered({}, "game", [{"game_id": "afm"}], _nothing), [])
+
+
+def _acting(**declared: Any) -> dict[str, Any]:
+    return {"name": "acts", "display_name": "Acts", "bundled": False, "library_verbs": [],
+            "actions": [{"key": "share", "label": "Share", "add": [], "menu": [],
+                         "private_ok": False, **declared}]}
+
+
+GAMES = {"afm": {"id": "afm", "name": "AFM", "vps_id": "v1", "private": False},
+         "hid": {"id": "hid", "name": "Hidden", "vps_id": "", "private": True}}
+
+
+class Actions(unittest.TestCase):
+    def test_an_action_in_a_menu_opens_once_for_each_public_game_with_who(self) -> None:
+        state = {"extensions": [_acting(menu=["game", "table"])]}
+        targets = [{"game_id": "afm", "table_id": "t1"}, {"game_id": "hid", "table_id": "t2"}]
+        opened: list[Any] = []
+
+        async def open_for(_extension: Any, key: str, whos: list[dict[str, str]]) -> bool:
+            opened.append((key, whos))
+            return False
+
+        with unittest.mock.patch.object(ext_verbs.ext_lists, "open_for", open_for):
+            (entry,) = ext_verbs.offered(state, "table", targets, _nothing, games=GAMES)
+            self.assertEqual((entry.block, entry.label), ("Acts", "Share…"))
+            asyncio.run(entry.run.func(*entry.run.args))  # type: ignore[union-attr]
+
+        self.assertEqual(opened, [("share", [{"game_id": "afm", "vps_id": "v1", "name": "AFM",
+                                              "table_id": "t1"}])])
+
+    def test_a_private_game_is_offered_to_an_action_that_says_so_and_to_none_otherwise(
+            self) -> None:
+        hidden = [{"game_id": "hid"}]
+
+        self.assertEqual(ext_verbs.offered({"extensions": [_acting(menu=["game"])]}, "game",
+                                           hidden, _nothing, games=GAMES), [])
+        self.assertEqual(len(ext_verbs.offered(
+            {"extensions": [_acting(menu=["game"], private_ok=True)]}, "game", hidden,
+            _nothing, games=GAMES)), 1)
+
+    def test_the_plus_of_a_page_gets_the_actions_that_name_it(self) -> None:
+        state = {"extensions": [_acting(add=["games"]), _acting(add=["media"])]}
+
+        self.assertEqual([one.label for one in ext_verbs.added(state, "games")], ["Share…"])
+        self.assertEqual(ext_verbs.added(state, "assets"), [])
 
 
 class InTheMenus(unittest.TestCase):

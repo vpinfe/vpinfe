@@ -1,6 +1,6 @@
 # Actions and dialogs
 
-`ctx.ui.action(key, dialog, *, label, description, icon, section)`.  An extension does not draw.  It declares
+`ctx.ui.action(key, dialog, *, label, description, icon, section, add, menu, private_ok)`.  An extension does not draw.  It declares
 an **action** and core shows it as a line in the extension's panel (see [`ctx.ui.action`](ui.md#ctxuiaction)), so every action looks like the Manager and keeps working if
 that extension later runs out of process.
 
@@ -120,7 +120,8 @@ The ids ride in the address of the dialog's first read, so one dialog covers abo
 ## For a game
 
 A dialog may be opened for a game rather than over rows, one the library may not hold yet.
-The game reaches it as `who`, a dict of four strings: `game_id` (empty for a game not in the
+An action with `menu=` is opened this way from a game's or a table's menu, once for each game
+chosen.  The game reaches it as `who`, a dict of four strings: `game_id` (empty for a game not in the
 library), `vps_id`, `name` and `table_id`.  `table_id` is the table a file is being saved for
 where the person chose one, and is empty otherwise.
 
@@ -138,7 +139,10 @@ the client sent, as you treat the ids in `rows`: look the game up in your own da
 
 One vocabulary: a dialog's steps, the settings page and an account's panel use the same types
 in the same controls.  A field is `{key, type, label, value, help}` plus what the type takes.
-`help` takes the forms described above.  A settings field's `label`, `help` and choices come
+`help` takes the forms described above.  A dialog's field may add `shown`, `{follows, for}`:
+the field is drawn only while the field named `follows` holds one of the values in `for`.  While
+it is hidden its answer is sent empty, so a source that does not use a field never receives
+what was typed there before.  A settings field's `label`, `help` and choices come
 from the catalog (`settings.<key>.label`), so you declare a settings field with `{key, type,
 default, choices}` and nothing to say.
 

@@ -1473,6 +1473,9 @@ Show Version is dimmed on a selection of several tables, and says so.
 - Give `label` to `verb` when you do not want a catalog entry for it.  It is used as written,
   in every language.
 - Declare an entry for each subject with the same key.  A key is unique within a subject.
+- To open a dialog from the menu instead of acting at once, give `ctx.ui.action` `menu="game"`
+  (or `"table"`, or both).  The dialog opens once for each game chosen, with Skip and Stop, and
+  is handed that game as `who`.  A Private game is left out unless it also says `private_ok=True`.
 
 **Watch out:** the function runs once for everything chosen, not once per game, so do not
 assume `who` has one entry unless you passed `one=True`.  And an entry needs `games:read`;
@@ -2256,6 +2259,7 @@ The plan lists each thing it found with where it will go, and `blocked` is what 
 
 **Variations:**
 
+- Give the action `add=("games", "tables")` to offer it in the **+** of the Games and Tables pages as well.  The dialog opens with no rows and no game, and the page is read again once it has run.  The **+** becomes a menu with VPinFE's own entry first and a block under the extension's name after it.
 - Name a game with `game_id=` and `add_table=True` to add the table to a game already in the library instead of making a new one.  The manifest then needs `games:read` as well.
 - Without `add_table`, a table for a game that has one takes the place of its default table and keeps its entry.  Pass `replace_table=` with a table id to replace another, and `carry=[...]`, the kinds of file named for the old table (`backglass`, `ini`, `pov`...) that follow it to the new one; each plan item that replaces a table says what is carried in `swap`.  The old files go to Backups.
 - Name a table of the game with `table_id=` and the media and the files named for a table (`backglass`, `ini`, `script`, `pov`, `scv`, `nix`) are named for that table.  `scope=` (`"game"` or `"table"`) overrides what media is named for, where left out a game with one table is named for the game, and `page=` is the page a paged media kind is written as, from 1.

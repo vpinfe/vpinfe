@@ -132,6 +132,8 @@ class DropSheetDrive(unittest.TestCase):
             await browser.evaluate(
                 "[...document.querySelectorAll('.manager-grid-bar .q-btn')]"
                 ".find(b => b.innerText.trim() === 'add').click()")
+            await browser.wait_for("!!document.querySelector('.q-menu .q-item')")
+            await browser.evaluate("document.querySelector('.q-menu .q-item').click()")
             await browser.wait_for(f"!!document.querySelector('{SOURCES} .manager-split .q-btn')")
             await browser.evaluate(f"document.querySelector('{SOURCES} .manager-split .q-btn')"
                                    ".click()")
