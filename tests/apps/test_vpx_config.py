@@ -767,6 +767,17 @@ class ByProgramTests(_Case):
 
                 self.assertIs(self.config.program(self.settings).dmd_in_file, expected)
 
+    def test_the_log_switch_is_where_the_build_reads_it(self) -> None:
+        cases = (("10802051", "Editor.EnableLog", False), ("10815353", "Editor.EnableLog", True),
+                 ("10815985", "Global.EnableLog", True), ("", "Global.EnableLog", True))
+        for version, switch, default_on in cases:
+            with self.subTest(version=version):
+                self.app_ini.write_text(f"[Version]\nVPinball = {version}\n")
+
+                found = self.config.program(self.settings)
+
+                self.assertEqual((found.log_switch, found.log_default_on), (switch, default_on))
+
     def test_the_plugins_folder_wins_over_a_rev_the_upgrade_left_behind(self) -> None:
         self.program(6100, "B2S", "Nixie", "PUP")
 

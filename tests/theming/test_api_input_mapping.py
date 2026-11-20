@@ -93,6 +93,7 @@ class TestApiInputMapping(unittest.TestCase):
         self.assertEqual(mapping["keytutorial"], "t")
 
     @patch("common.host.launch.subprocess.Popen")
+    @patch("common.host.launch._log_files_of", return_value=())
     @patch("common.host.launch._plan",
            return_value=(["/tmp/fake-launcher", "-play", "/tmp/table.vpx"],
                          "Startup done"))
@@ -105,6 +106,7 @@ class TestApiInputMapping(unittest.TestCase):
         mock_launcher_for,
         _mock_binary,
         _mock_plan,
+        _mock_log_files,
         mock_popen,
     ) -> None:
         """The wheel launches through the shared service; the windows hear about it

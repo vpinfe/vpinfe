@@ -41,6 +41,10 @@ ASKED = "asked:"
 
 # A fix VPinFE can do itself, the first entry of the row's menu.
 GET_MEDIA, UPDATE, UPGRADE = "get_media", "update", "upgrade"
+TURN_ON_LOGGING = "turn_on_logging"
+
+# The row for Visual Pinball's log being off, which is also the key it is set aside under.
+LOGGING = "logging_off"
 
 _UNIT_GAMES = "manager.games.games"
 _UNIT_TABLES = "manager.games.tables"
@@ -314,6 +318,20 @@ def leftovers_row(held: Any) -> Need | None:
                 tuple(sorted(ids)), _UNIT_SETTINGS)
 
 
+def logging_row(held: Any) -> Need | None:
+    """Visual Pinball's log is off in these launchers, which leaves Take Picture unable to
+    tell when the table has paused. Dismissed against the launchers, so a second one that
+    turns it off brings the row back. A click lands on the first of them."""
+    ids = tuple(sorted(str(one["launcher_id"]) for one in held))
+    if not ids:
+        return None
+    return Need(LOGGING, t("manager.needs.logging"), t("manager.needs.logging.tip"),
+                WARM, verbs.HAD_ERRORS, Opens("launchers", keys={"launcher": ids[0]}),
+                fix=Fix(TURN_ON_LOGGING, t("manager.needs.logging.turn_on"),
+                        t("manager.needs.logging.turn_on.tip")),
+                token=ids)
+
+
 def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
     """Every row that has something to say, in cost order: cannot be played, then
     missing, then ready for you, then tidy-up. A check the library has turned off does
@@ -352,6 +370,8 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
 
     if left := leftovers_row(watched.get("leftovers") or ()):
         rows.append(left)
+
+    rows.append(logging_row(watched.get("logging_off") or ()))
 
     metadata = library.metadata_state()
     if unreadable := _folders_of(metadata, "unreadable"):
@@ -452,15 +472,16 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
 ORDER = ("rom_missing", "wont_play", "launchers", "unreadable", "unmatched", "no_tables",
          "unsupported", "no_playfield",
          "no_backglass", "no_media", "fill_errors", "leftovers", "update", "recordings",
-         "untied", "older_format", "no_year")
+         LOGGING, "untied", "older_format", "no_year")
 
 # The rows about this install rather than the library. Their stop is this install's alone;
 # a library row's is the library's, as the Checks page already keeps it.
-DEVICE_ROWS = ("launchers", "fill_errors", "leftovers", "update", "recordings")
+DEVICE_ROWS = ("launchers", "fill_errors", "leftovers", "update", "recordings", LOGGING)
 
 # What a row's read cannot say while that read failed, by row.
 _READ_BY = {"update": "update", "recordings": "recordings", "fill_errors": "fill",
-            "leftovers": "leftovers", WONT_PLAY: "media", UNSUPPORTED: "media"}
+            "leftovers": "leftovers", LOGGING: "logging", WONT_PLAY: "media",
+            UNSUPPORTED: "media"}
 
 _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "unreadable": verbs.CANNOT_PLAY, "unmatched": verbs.NO_MATCH,
@@ -469,7 +490,8 @@ _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "no_media": verbs.NO_MEDIA, "fill_errors": verbs.HAD_ERRORS,
           "leftovers": verbs.MOVE, "update": verbs.UPDATE, "recordings": verbs.REVIEW,
           "older_format": verbs.OLDER_FORMAT, "untied": verbs.NO_MATCH,
-          "no_year": verbs.NO_YEAR, WONT_PLAY: verbs.CANNOT_PLAY, UNSUPPORTED: verbs.NO_MEDIA}
+          "no_year": verbs.NO_YEAR, WONT_PLAY: verbs.CANNOT_PLAY, UNSUPPORTED: verbs.NO_MEDIA,
+          LOGGING: verbs.HAD_ERRORS}
 
 
 def is_device(key: str) -> bool:
@@ -522,6 +544,7 @@ def name_of(key: str) -> str:
             "older_format": t("manager.needs.older_format"),
             "untied": t("manager.needs.untied"),
             "recordings": t("manager.needs.recordings"),
+            LOGGING: t("manager.needs.logging.name"),
             WONT_PLAY: t("manager.needs.wont_play"),
             UNSUPPORTED: t("manager.needs.unsupported")}[key]
 
@@ -546,6 +569,7 @@ def comes_back(key: str, need: Need | None = None) -> str:
             "leftovers": t("manager.needs.back.leftovers"),
             "update": t("manager.needs.back.update"),
             "recordings": t("manager.needs.back.recordings"),
+            LOGGING: t("manager.needs.back.logging"),
             "older_format": t("manager.needs.back.older_format"),
             "untied": t("manager.needs.back.untied"),
             "no_year": t("manager.needs.back.no_year"),

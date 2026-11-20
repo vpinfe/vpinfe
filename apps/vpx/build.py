@@ -44,6 +44,25 @@ def declares(qualified: str, rev: int | None, plugin_present: bool = False) -> b
     return rev >= span.since or plugin_present
 
 
+EDITOR_LOG = "Editor.EnableLog"
+GLOBAL_LOG = "Global.EnableLog"
+
+
+def log_switch(version: str | None) -> str:
+    """The setting that turns the build's log on. A build of an earlier line, and one of
+    this line from before Rev 5640, keeps it under Editor; every later build, and one whose
+    `[Version] VPinball` is not known, under Global."""
+    if predates_plugins(version):
+        return EDITOR_LOG
+    return GLOBAL_LOG if declares(GLOBAL_LOG, rev_of(version)) else EDITOR_LOG
+
+
+def logs_unless_told_not_to(version: str | None) -> bool:
+    """Whether the build logs while the ini leaves its switch out. False for 10.8.0 and
+    earlier; True for every later build and for one whose `[Version] VPinball` is unknown."""
+    return not predates_plugins(version)
+
+
 # The Rev from which a plugin's Enable, left out of the ini, is on rather than off.
 _ENABLED_BY_DEFAULT_FROM = 6274
 # Plugins whose Enable the build, rather than the plugin, decides when the ini is silent.

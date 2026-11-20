@@ -103,6 +103,39 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(session.kind, SESSION_CHILD_WITH_READINESS)
         self.assertEqual(session.readiness_marker, "Startup done")
 
+    def _logs(self, base: Path, settings: dict[str, str]) -> tuple[str, ...]:
+        with mock.patch("apps.vpx.config._machine_folders", return_value=(base, None)):
+            return VPXLaunch().session(settings).log_files
+
+    def test_it_names_every_version_folder_and_the_one_beside_the_settings_file(self) -> None:
+        with TemporaryDirectory() as root:
+            base = Path(root) / "VPinballX"
+            (base / "10.7").mkdir(parents=True)
+            (base / "10.8").mkdir()
+            named = self._logs(base, {"ini_path": str(Path(root) / "cfg" / "VPinballX.ini")})
+
+        expected = [str(base / "10.8" / "vpinball.log"), str(base / "10.7" / "vpinball.log"),
+                    str(base / "vpinball.log"), str(Path(root) / "cfg" / "vpinball.log")]
+        self.assertEqual([one for one in named if one in expected], expected)
+
+    def test_a_blank_settings_file_still_names_the_log_beside_the_programs_own(self) -> None:
+        with TemporaryDirectory() as root:
+            program = Path(root) / "vpx" / "VPinballX64.exe"
+            program.parent.mkdir()
+            (program.parent / "VPinballX.ini").write_text("", encoding="utf-8")
+            logs = self._logs(Path(root) / "VPinballX", {"bin_path": str(program)})
+
+        self.assertIn(str(program.parent / "vpinball.log"), logs)
+
+    def test_a_log_named_twice_is_named_once(self) -> None:
+        with TemporaryDirectory() as root:
+            base = Path(root) / "VPinballX"
+            (base / "10.8").mkdir(parents=True)
+            logs = self._logs(base, {"ini_path": str(base / "10.8" / "VPinballX.ini")})
+
+        self.assertEqual(len(logs), len(set(logs)))
+        self.assertEqual(logs.count(str(base / "10.8" / "vpinball.log")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

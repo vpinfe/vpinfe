@@ -913,8 +913,10 @@ the table uses. It is empty once the table has a file.
 where the app does not say: `plugins`, the ids of the plugins it loads (empty for a program
 that is known to have none, `null` where they cannot be read), and `defaults`, by key what a setting holds
 while the file leaves it blank, for the settings whose default is the build's, and `build`,
-the number the app counts builds by (`null` where unknown), and `dmd_in_file`, true where the
-build keeps the DMD's place in each backglass file rather than in the settings.
+the number the app counts builds by (`null` where unknown), `dmd_in_file`, true where the
+build keeps the DMD's place in each backglass file rather than in the settings, `log_switch`,
+the setting that turns the program's log on (empty where the app does not say), and
+`log_default_on`, whether the program logs while the file leaves that setting out.
 
 A table whose `.vpx` is named after its folder has one file for both scopes, so what it
 sets reaches the game's other tables that have no file of their own. `shared_with_game` is

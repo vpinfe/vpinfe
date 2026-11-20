@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import tempfile
+import time
 import types
 import unittest
 from collections.abc import Callable
@@ -111,6 +112,7 @@ class LaunchTests(unittest.TestCase):
             "_binary_of": lambda launcher: "/opt/vpx",
             "_plan": lambda table, binary, launcher, **plan: (
                 ["/opt/vpx", "-play", "x.vpx"], "Startup done"),
+            "_log_files_of": lambda launcher, binary: (),
             "parse_launch_env_overrides": lambda raw: {},
             "delete_vpinball_log_on_start_if_configured": lambda *a, **k: None,
         }
@@ -227,6 +229,41 @@ class PauseTests(LaunchTests):
             "Startup done\n", "Pausing Game\n", "Unpausing Game\n", "Pausing Game\n"]))
 
         self.assertEqual(seen, [False, True, False, True, False])
+
+    def test_an_app_that_names_log_files_is_heard_from_them_and_not_from_its_output(self) -> None:
+        """Lines written to its log after the launch count; ones before it and its output do not."""
+        seen = []
+        launched = []
+        early = []
+        events.subscribe(events.PLAY_STATE_CHANGED,
+                         lambda state, **_: seen.append(state["paused"]))
+        events.subscribe(events.TABLE_LAUNCHED, lambda **_: launched.append(True))
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        log = pathlib.Path(folder.name) / "vpinball.log"
+        log.write_text("Startup done\nPausing Game\n", encoding="utf-8")
+
+        def lines():
+            yield "Startup done\n"
+            time.sleep(0.6)
+            early.extend(launched)
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write("INFO [1] [VPApp::InitInstance@326] Startup done\n")
+                handle.write("INFO [1] [Player::SetPlayState@1] Pausing Game\n")
+            deadline = time.time() + 5
+            while seen[-1:] != [True] and time.time() < deadline:
+                time.sleep(0.05)
+
+        def popen(cmd, **kwargs):
+            fake = _FakePopen()
+            fake.stdout = lines()
+            return fake
+
+        self._run(popen=popen, _log_files_of=lambda launcher, binary: (str(log),))
+
+        self.assertEqual(early, [])
+        self.assertEqual(launched, [True])
+        self.assertEqual(seen, [False, True, False])
 
     def test_a_recording_has_no_pause(self) -> None:
         seen = []

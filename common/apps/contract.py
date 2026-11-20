@@ -189,6 +189,9 @@ class Session:
     kind: str = SESSION_CHILD
     # For `child_with_readiness`: what the app writes once it is actually up.
     readiness_marker: str = ""
+    # Files the app writes its lines to. When any are named they are the only source of
+    # the app's lines: its output is drained and not matched.
+    log_files: tuple[str, ...] = ()
 
 
 @runtime_checkable
@@ -323,12 +326,17 @@ class Program:
     while the file leaves it blank, for the settings whose default is the build's. `build`
     is the number its app counts builds by, None where unknown. `dmd_in_file` says the
     build keeps the DMD's place in each backglass file rather than in the settings.
+    `log_switch` is the setting that turns the program's log on, "" where the app does not
+    say, and `log_default_on` says whether the program logs while the file leaves that
+    setting out.
     """
 
     plugins: frozenset[str] | None = None
     defaults: Mapping[str, str] = field(default_factory=dict)
     build: int | None = None
     dmd_in_file: bool = False
+    log_switch: str = ""
+    log_default_on: bool = True
 
 
 MOVE, PLACE, NAME, TURN_ON = "move", "place", "name", "turn_on"

@@ -13,7 +13,7 @@ from common.extensions import host
 from common.i18n import t
 from common.runtime.jobs import DONE, FAILED
 from common.settings import feature_checks
-from manager.kit import need_keys
+from manager.kit import data, need_keys
 from manager.kit.data import Library
 from manager.library import games
 from manager.overview import needs
@@ -1185,6 +1185,108 @@ class WhatAnUpgradeLeftBehind(unittest.TestCase):
 
         self.assertEqual([{"launcher_id": "a", "name": "A", "items": [item("A.b")]}],
                          library._read_leftovers())
+
+
+class VisualPinballLoggingOff(unittest.TestCase):
+    def read(self, launchers, values):
+        library = Library.__new__(Library)
+        library._client = SimpleNamespace(
+            launchers=lambda: {"launchers": launchers},
+            launcher_config=lambda one: {"values": values[one]})
+        return library._watch_logging()
+
+    def test_only_an_enabled_visual_pinball_launcher_that_writes_zero_is_counted(self):
+        launchers = [{"launcher_id": "a", "app": "vpx", "display_name": "A",
+                      "has_config": True, "enabled": True},
+                     {"launcher_id": "b", "app": "vpx", "has_config": True, "enabled": True},
+                     {"launcher_id": "c", "app": "vpx", "has_config": True, "enabled": True},
+                     {"launcher_id": "d", "app": "vpx", "has_config": True, "enabled": False},
+                     {"launcher_id": "e", "app": "other", "has_config": True, "enabled": True}]
+        off, on = {"Global.EnableLog": {"value": "0"}}, {"Global.EnableLog": {"value": "1"}}
+
+        found, unread = self.read(launchers, {"a": off, "b": on, "c": {}, "d": off, "e": off})
+
+        self.assertEqual({"logging_off": [{"launcher_id": "a", "name": "A"}]}, found)
+        self.assertEqual([], unread)
+
+    def test_a_program_is_read_at_the_switch_it_says_its_log_is_under(self):
+        editor = {"log_switch": "Editor.EnableLog", "log_default_on": False}
+        for program, key in ((editor, "Editor.EnableLog"), ({}, "Global.EnableLog"),
+                             (None, "Global.EnableLog")):
+            with self.subTest(program=program):
+                off = {"program": program, "values": {key: {"value": "0"}}}
+                on = {"program": program, "values": {key: {"value": "1"}}}
+                self.assertEqual(data.log_switch_of(off), key)
+                self.assertTrue(data.log_is_off(off))
+                self.assertFalse(data.log_is_off(on))
+
+    def test_a_switch_left_out_is_off_only_for_a_program_that_logs_only_when_told_to(self):
+        for default_on, expected in ((False, True), (True, False)):
+            with self.subTest(default_on=default_on):
+                program = {"log_switch": "Editor.EnableLog", "log_default_on": default_on}
+                self.assertEqual(data.log_is_off({"program": program, "values": {}}), expected)
+        self.assertFalse(data.log_is_off({"values": {}}))
+
+    def test_a_switch_the_program_does_not_read_is_not_its_log(self):
+        wrong = {"program": {"log_switch": "Editor.EnableLog", "log_default_on": False},
+                 "values": {"Global.EnableLog": {"value": "1"}}}
+
+        self.assertTrue(data.log_is_off(wrong))
+
+    def test_a_launcher_that_cannot_be_read_hides_no_other_and_is_reported_unread(self):
+        library = Library.__new__(Library)
+
+        def config(one):
+            if one == "a":
+                raise OSError("down")
+            return {"values": {"Global.EnableLog": {"value": "0"}}}
+
+        launchers = [{"launcher_id": one, "app": "vpx", "has_config": True, "enabled": True}
+                     for one in ("a", "b")]
+        library._client = SimpleNamespace(launchers=lambda: {"launchers": launchers},
+                                          launcher_config=config)
+
+        found, unread = library._watch_logging()
+
+        self.assertEqual([{"launcher_id": "b", "name": ""}], found["logging_off"])
+        self.assertEqual(["logging"], unread)
+
+    def test_a_launcher_list_that_cannot_be_read_keeps_a_row_set_aside_earlier(self):
+        library = Library.__new__(Library)
+
+        def refused():
+            raise OSError("down")
+
+        library._client = SimpleNamespace(launchers=refused)
+        found, unread = library._watch_logging()
+
+        self.assertEqual(({}, ["logging"]), (found, unread))
+        kept = needs.arrange([], {needs.LOGGING: ["a"]}, set(), unread=unread).record
+        self.assertEqual({needs.LOGGING: ["a"]}, kept)
+        self.assertEqual({}, needs.arrange([], {needs.LOGGING: ["a"]}, set()).record)
+
+    def test_it_is_a_device_row_that_can_be_set_aside_and_names_the_launchers(self):
+        row = needs.logging_row([{"launcher_id": "b"}, {"launcher_id": "a"}])
+
+        self.assertIsNone(needs.logging_row([]))
+        self.assertTrue(needs.is_device(needs.LOGGING))
+        self.assertTrue(needs.can_set_aside(needs.LOGGING))
+        self.assertEqual(("a", "b"), row.token)
+        self.assertEqual(needs.TURN_ON_LOGGING, row.fix.key)
+        self.assertEqual({"launcher": "a"}, dict(row.opens.keys))
+
+    def test_a_second_launcher_turning_it_off_brings_a_dismissed_row_back(self):
+        one = needs.logging_row([{"launcher_id": "a"}])
+        both = needs.logging_row([{"launcher_id": "a"}, {"launcher_id": "b"}])
+
+        self.assertEqual([], needs.arrange([one], {needs.LOGGING: ["a"]}, set()).rows)
+        self.assertEqual([needs.LOGGING],
+                         keys(needs.arrange([both], {needs.LOGGING: ["a"]}, set()).rows))
+
+    def test_collect_draws_it_from_the_watched_read(self):
+        lib = FakeLibrary(watched={"logging_off": [{"launcher_id": "vpx"}]})
+
+        self.assertEqual([needs.LOGGING], keys(needs.collect(lib, {})))
 
 
 if __name__ == "__main__":

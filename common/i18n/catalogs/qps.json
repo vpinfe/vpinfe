@@ -3838,6 +3838,13 @@
   "manager.needs.launchers.tip": "Ñö ŀàûñçĥèř öñ ţĥîš đèṽîçè çàñ þŀàý Ṽîšûàŀ Þîñƀàŀŀ ţàƀŀèš",
   "manager.needs.leftovers": "Šèţţîñĝš Ŀèƒţ Ɓèĥîñđ",
   "manager.needs.leftovers.tip": "Àñ ûþĝřàđè ŀèƒţ šèţţîñĝš îţš þřöĝřàɱ ñö ŀöñĝèř řèàđš",
+  "manager.needs.logging": "Ṽîšûàŀ Þîñƀàŀŀ Ŀöĝĝîñĝ Îš Öƒƒ",
+  "manager.needs.logging.tip": "Ţàķè Þîçţûřè çàññöţ ţèŀŀ ŵĥèñ ţĥè ţàƀŀè ĥàš þàûšèđ",
+  "manager.needs.logging.name": "Ṽîšûàŀ Þîñƀàŀŀ Ŀöĝĝîñĝ",
+  "manager.needs.logging.turn_on": "Ţûřñ Öñ Ŀöĝĝîñĝ",
+  "manager.needs.logging.turn_on.tip": "Ṽîšûàŀ Þîñƀàŀŀ ŵřîţèš îţš ŀöĝ àĝàîñ, ŵĥîçĥ Ţàķè Þîçţûřè řèàđš",
+  "manager.needs.logging.on": "Ṽîšûàŀ Þîñƀàŀŀ ŀöĝĝîñĝ îš öñ",
+  "manager.needs.logging.failed": "Çöûŀđ ñöţ ţûřñ öñ ŀöĝĝîñĝ",
   "manager.needs.settings_count": {
     "one": "{count:n} šèţţîñĝ",
     "other": "{count:n} šèţţîñĝš"
@@ -3906,6 +3913,7 @@
   "manager.needs.back.rom_missing": "Řèţûřñš ŵĥèñ àñöţĥèř ţàƀŀè îš ɱîššîñĝ îţš ŘÖḾ",
   "manager.needs.back.launchers": "Řèţûřñš îƒ îţ ƀřèàķš àĝàîñ",
   "manager.needs.back.leftovers": "Řèţûřñš ŵĥèñ àñ ûþĝřàđè ŀèàṽèš ɱöřè ƀèĥîñđ",
+  "manager.needs.back.logging": "Řèţûřñš îƒ ŀöĝĝîñĝ îš ţûřñèđ öƒƒ àĝàîñ",
   "manager.needs.back.unreadable": "Řèţûřñš ŵĥèñ àñöţĥèř ƒöŀđèř çàññöţ ƀè řèàđ",
   "manager.needs.back.unmatched": "Řèţûřñš ŵĥèñ àñöţĥèř ĝàɱè îš ûñɱàţçĥèđ",
   "manager.needs.back.no_playfield": "Řèţûřñš ŵĥèñ àñöţĥèř ĝàɱè ĥàš ñö þŀàýƒîèŀđ",

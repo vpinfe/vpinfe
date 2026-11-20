@@ -817,7 +817,7 @@ Events are sent between windows via `receiveEvent()`. These are the built-in eve
 |------------|------------|-------------|
 | `TableIndexUpdate` | `index`, `previous`, `direction`, `reason`, `source`, `moving`, `scrubbing`, `group`, `groupKind`, `list`, `kind` | The selection moved. Sent by the controller to every window, on every path, and to one window alone when it asks with `SelectionRequest`. Also sent to the other windows, with `reason` `"restore"`, when a data change the backend raised takes the controller's game out of its list and the wheel lands on another. |
 | `TableLaunching` | — | A game is about to launch. Frontend keyboard/gamepad routing is suspended until `TableLaunchComplete`; use this to fade out, stop audio, etc. |
-| `TableRunning` | — | The launched game has finished loading and is now running. Sent when the table process outputs "Startup done". |
+| `TableRunning` | — | The launched game has finished loading and is now running. Sent when the table writes "Startup done" to its log. |
 | `TableLaunchComplete` | — | The launched game has exited and frontend input routing is restored. Use this to fade back in, resume audio. |
 | `PlayersChanged` | `state` | The roster changed - a player added, removed, or who is up. `state` is the same shape `vpin.players` holds, and core updates that property from it before your handler runs, so reading `vpin.players` again is enough; nothing needs to come from the message itself. |
 

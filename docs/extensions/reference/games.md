@@ -357,6 +357,8 @@ A few of them need a word more:
   setting holds while the program's file leaves it blank, for the settings whose default is the
   build's.  `build` is the number the app counts builds by, `None` where unknown.  `dmd_in_file`
   is true where the build keeps the DMD's place in each backglass file and not in the settings.
+  `log_switch` is the setting that turns the program's log on, empty where the app does not say,
+  and `log_default_on` is whether the program logs while the file leaves it out.
   A table with no launcher raises, as `write_table_settings` does.
 - `write_table_settings` writes values as one table's own settings, never the launcher's, and
   leaves out a value the launcher already has, so a table whose values all match gets no file.

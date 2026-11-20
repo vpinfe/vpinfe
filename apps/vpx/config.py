@@ -295,6 +295,20 @@ def own_log() -> Path | None:
                  if (one / displays.LOG_FILE).is_file()), None)
 
 
+def possible_logs(settings: Mapping[str, Any]) -> list[Path]:
+    """Every place a launcher's Visual Pinball may write its log: each preferences folder
+    it could be using, and beside the settings file it is given. Which version runs is not
+    known, so all of them are listed; a log that is never written costs nothing to watch."""
+    base, old = _machine_folders()
+    folders = [*_version_folders(base)]
+    if base is not None and not folders:
+        folders.append(base / NEWEST_VERSION)
+    folders += [one for one in (base, old) if one is not None]
+    if (settings_at := settings_file(settings)) is not None:
+        folders.append(settings_at.parent)
+    return [one / displays.LOG_FILE for one in folders]
+
+
 def _version_folders(base: Path | None) -> list[Path]:
     """Visual Pinball's per-version preferences folders, the newest first."""
     if base is None:
@@ -610,14 +624,17 @@ class VPXConfig:
 
     def program(self, settings: Mapping[str, Any]) -> Program:
         """The plugins the installed program loads, the Enable each of the two renderers
-        holds while the ini leaves it out, and the Rev of its build."""
+        holds while the ini leaves it out, the Rev of its build, and where it keeps its
+        log switch."""
         bin_path = str(settings.get("bin_path") or "")
         said = read_file(settings_file(settings)).value(BUILD_KEY)
         present = plugins.present(bin_path, predates_plugins=build.predates_plugins(said))
         rev = build.settled_rev(build.rev_of(said), present)
         return Program(present, _defaults(rev, present, bin_path), rev,
                        dmd_in_file=rev is not None
-                       and not build.declares("Plugin.B2S.BackglassDMDX", rev))
+                       and not build.declares("Plugin.B2S.BackglassDMDX", rev),
+                       log_switch=build.log_switch(said),
+                       log_default_on=build.logs_unless_told_not_to(said))
 
     def left_behind(self, settings: Mapping[str, Any]) -> tuple[Leftover, ...]:
         """What the launcher's settings file holds that the program installed now no

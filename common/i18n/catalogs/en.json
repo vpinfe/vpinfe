@@ -3838,6 +3838,13 @@
   "manager.needs.launchers.tip": "No launcher on this device can play Visual Pinball tables",
   "manager.needs.leftovers": "Settings Left Behind",
   "manager.needs.leftovers.tip": "An upgrade left settings its program no longer reads",
+  "manager.needs.logging": "Visual Pinball Logging Is Off",
+  "manager.needs.logging.tip": "Take Picture cannot tell when the table has paused",
+  "manager.needs.logging.name": "Visual Pinball Logging",
+  "manager.needs.logging.turn_on": "Turn On Logging",
+  "manager.needs.logging.turn_on.tip": "Visual Pinball writes its log again, which Take Picture reads",
+  "manager.needs.logging.on": "Visual Pinball logging is on",
+  "manager.needs.logging.failed": "Could not turn on logging",
   "manager.needs.settings_count": {
     "one": "{count:n} setting",
     "other": "{count:n} settings"
@@ -3906,6 +3913,7 @@
   "manager.needs.back.rom_missing": "Returns when another table is missing its ROM",
   "manager.needs.back.launchers": "Returns if it breaks again",
   "manager.needs.back.leftovers": "Returns when an upgrade leaves more behind",
+  "manager.needs.back.logging": "Returns if logging is turned off again",
   "manager.needs.back.unreadable": "Returns when another folder cannot be read",
   "manager.needs.back.unmatched": "Returns when another game is unmatched",
   "manager.needs.back.no_playfield": "Returns when another game has no playfield",

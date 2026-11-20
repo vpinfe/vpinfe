@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -14,9 +14,7 @@ from common.apps.contract import (
     arguments,
 )
 
-from .config import own_file
-
-logger = logging.getLogger("vpinfe.apps.vpx.launch")
+from .config import own_file, possible_logs
 
 # VPX writes this once the table is actually up. Before it, the process exists but the
 # player is looking at nothing.
@@ -56,4 +54,13 @@ class VPXLaunch:
 
     def session(self, settings: Mapping[str, Any]) -> Session:
         return Session(kind=SESSION_CHILD_WITH_READINESS,
-                       readiness_marker=STARTUP_MARKER)
+                       readiness_marker=STARTUP_MARKER,
+                       log_files=_log_files(settings))
+
+
+def _log_files(settings: Mapping[str, Any]) -> tuple[str, ...]:
+    """The logs VPX may be writing for this launcher. Two names for one file count once:
+    each line is delivered once per file followed."""
+    unique = {os.path.normcase(os.path.realpath(one)): str(one)
+              for one in possible_logs(settings)}
+    return tuple(unique.values())

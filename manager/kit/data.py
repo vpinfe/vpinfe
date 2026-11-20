@@ -42,6 +42,28 @@ WATCHED_JOBS = 100
 # What `_watch_media` keeps of a media row: enough to judge it and to name it.
 _WATCHED_FILE = ("game_id", "path", "kind", "via", "present", "video_codec")
 
+# The app a launcher runs.
+VPX_APP = "vpx"
+
+
+# The log switch of a program that does not say where it keeps its own.
+LOG_SETTING = "Global.EnableLog"
+
+
+def log_switch_of(config: dict[str, Any]) -> str:
+    """The setting that turns on the log Take Picture reads, as the program a launcher's
+    config answer describes says."""
+    return str((config.get("program") or {}).get("log_switch") or LOG_SETTING)
+
+
+def log_is_off(config: dict[str, Any]) -> bool:
+    """Whether a launcher's config answer says the program writes no log: the switch is 0,
+    or is left out of a program that logs only when told to."""
+    held = (config.get("values") or {}).get(log_switch_of(config)) or {}
+    said = str(held.get("value") or "").strip()
+    default_on = (config.get("program") or {}).get("log_default_on", True)
+    return said == "0" or (said == "" and not default_on)
+
 # The cell holds the *word*, never the mark. What a cell is worth filtering and sorting
 # on is the state; how it is drawn is the column's business. Holding the drawn mark makes
 # the text filter match `<span class="manager-mark manager-mark--full">`, so typing "full"
@@ -1419,8 +1441,8 @@ class Library:
         for found, unread in together(
                 self._watch_update, self._watch_recordings, self._watch_fill,
                 self._watch_extension_needs, self._watch_unaccepted,
-                self._watch_home, self._watch_leftovers, self._watch_asks,
-                self._watch_media):
+                self._watch_home, self._watch_leftovers, self._watch_logging,
+                self._watch_asks, self._watch_media):
             out.update(found)
             out["unread"] += unread
         return out
@@ -1490,6 +1512,34 @@ class Library:
         except Exception:  # noqa: BLE001 - what an upgrade left is not Overview's to fail on
             logger.debug("manager: could not read what an upgrade left behind", exc_info=True)
             return {}, ["leftovers"]
+
+    def _watch_logging(self) -> tuple[dict[str, Any], list[str]]:
+        """The Visual Pinball launchers whose log is off. A launcher whose settings cannot
+        be read is not counted and the read is reported unread, so a row set aside earlier
+        is kept: not knowing is not a setting."""
+        try:
+            asked = [one for one in self._client.launchers().get("launchers") or ()
+                     if one.get("app") == VPX_APP and one.get("has_config")
+                     and one.get("enabled")]
+        except Exception:  # noqa: BLE001 - a setting that cannot be read is not Overview's to fail on
+            logger.debug("manager: could not list the launchers to check logging", exc_info=True)
+            return {}, ["logging"]
+
+        def read(one: dict[str, Any]) -> dict[str, Any] | None:
+            try:
+                return self._client.launcher_config(str(one["launcher_id"]))
+            except Exception:  # noqa: BLE001 - one launcher's file must not hide the others
+                logger.debug("manager: could not read whether %s logs", one.get("launcher_id"),
+                             exc_info=True)
+                return None
+
+        answers = together(*(partial(read, one) for one in asked))
+        return {"logging_off": [
+            {"launcher_id": str(one["launcher_id"]),
+             "name": str(one.get("display_name") or "")}
+            for one, answer in zip(asked, answers, strict=True)
+            if answer is not None
+            and log_is_off(answer)]}, ["logging"] if None in answers else []
 
     def _watch_media(self) -> tuple[dict[str, Any], list[str]]:
         """The files that could be refused, as the media lens reads them, and the devices

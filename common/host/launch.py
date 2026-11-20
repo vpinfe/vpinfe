@@ -17,6 +17,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -56,6 +57,7 @@ from common.host import (
     commands,
     key_simulator,
     launch_state,
+    line_follower,
     table_commands,
 )
 from common.host.vpx_log import delete_vpinball_log_on_start_if_configured
@@ -68,6 +70,10 @@ logger = logging.getLogger("vpinfe.common.host.launch")
 
 # Where a capture launch's app writes what the table is launched with, while it runs.
 CAPTURE_LAUNCH_DIR = CAPTURE_DIR / "launch"
+
+# A table that exits sooner than this was quit while loading, which says nothing about
+# whether its log files are being read.
+_QUIET_LOG_SECONDS = 10
 
 
 class LaunchUnavailableError(Exception):
@@ -296,6 +302,41 @@ def _pause_of(launcher: launchers.Launcher, binary: str,
         return key_simulator.press_code(code)
 
     return pause, press
+
+
+def _log_files_of(launcher: launchers.Launcher, binary: str) -> tuple[str, ...]:
+    """The files the app writes its lines to, which are then read in place of its output."""
+    app = apps.get(getattr(launcher, "app", "")) or apps.default_app()
+    if app.launch is None:
+        return ()
+    return app.launch.session(_settings(launcher, binary)).log_files
+
+
+class _Heard:
+    """What the app's lines mean, whichever of its output or log files they come from."""
+
+    def __init__(self, marker: str, pause: apps.Pause | None,
+                 on_running: Callable[[], None]) -> None:
+        self._marker = marker
+        self._pause = pause
+        self._on_running = on_running
+        self._lock = threading.Lock()
+        self.running = not marker
+
+    def __call__(self, line: str) -> None:
+        pause = self._pause
+        with self._lock:
+            starting = not self.running and self._marker in line
+            if starting:
+                self.running = True
+        if starting:
+            self._on_running()
+        elif pause is not None and pause.resumed_marker \
+                and pause.resumed_marker in line:
+            launch_state.set_paused(False)
+        elif pause is not None and pause.paused_marker \
+                and pause.paused_marker in line:
+            launch_state.set_paused(True)
 
 
 def _controls_of(launcher: launchers.Launcher, binary: str,
@@ -550,6 +591,11 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                         "up": [player.as_payload() for player in up],
                         "private": is_private(game)}
             logger.info("Launching: %s", command_line.readable(cmd))
+            # Made before the program starts, so the end of each file it names is the end
+            # before anything this launch writes.
+            logs = _log_files_of(launcher, binary)
+            following = line_follower.Follower(logs, lambda line: heard(line)) \
+                if logs else None
             process = popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -572,25 +618,33 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
             # An app that cannot say when it is up is up as soon as it is spawned.
             # Waiting for a marker that will never come would leave the table launched
             # and nothing ever told about it.
-            running = not marker
-            if running:
+            def announce() -> None:
                 events.emit(events.TABLE_LAUNCHED, **launched)
+                logger.info("table running")
 
-            # Draining stdout is not optional: the pipe fills and the child blocks on a
-            # write if nobody reads it.
-            for line in process.stdout or ():
-                if not running and marker in line:
-                    running = True
-                    events.emit(events.TABLE_LAUNCHED, **launched)
-                    logger.info("table running")
-                elif pause is not None and pause.resumed_marker \
-                        and pause.resumed_marker in line:
-                    launch_state.set_paused(False)
-                elif pause is not None and pause.paused_marker \
-                        and pause.paused_marker in line:
-                    launch_state.set_paused(True)
+            heard = _Heard(marker, pause, announce)
+            if heard.running:
+                events.emit(events.TABLE_LAUNCHED, **launched)
+            if following is not None:
+                logger.info("Reading the app's lines from %s",
+                            ", ".join(str(one) for one in following.paths))
+                following.start()
 
-            process.wait()
+            try:
+                # Draining stdout is not optional: the pipe fills and the child blocks on
+                # a write if nobody reads it.
+                for line in process.stdout or ():
+                    if following is None:
+                        heard(line)
+                process.wait()
+            finally:
+                if following is not None:
+                    following.stop()
+                    logger.info("Read %d lines from the app's log files", following.lines)
+                    if not heard.running and time.time() - started_at > _QUIET_LOG_SECONDS:
+                        logger.warning("No line in the app's log files said the table was "
+                                       "running (looked for %r) in %d seconds", marker,
+                                       time.time() - started_at)
             around.values["exit_code"] = str(process.returncode)
         finally:
             # Before the play data below, so the peripherals come back promptly rather

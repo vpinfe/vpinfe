@@ -536,6 +536,8 @@ def overview(library: Library, registry: list[dict], discovery: dict,
                                            lambda: placed(ids))
         if need.fix.key == needs.UPGRADE:
             return _metadata_action(library, state, drawn_again)("upgrade")
+        if need.fix.key == needs.TURN_ON_LOGGING:
+            return _turn_on_logging(library, need.token, drawn_again)
         from manager.devices import devices
 
         return devices.confirm_update(library, _local_name(registry, discovery),
@@ -630,6 +632,28 @@ def _metadata_action(library: Library, state: dict[str, Any],
         then()
 
     return start
+
+
+@on_page
+async def _turn_on_logging(library: Library, launcher_ids: tuple[str, ...],
+                           then: Callable[[], None]) -> None:
+    """Writes Enable Log on in each launcher the row names. Only this menu entry does: the
+    row reports the setting and never changes it."""
+    from manager.kit import data
+    from manager.kit.api import ApiClient
+
+    client = ApiClient()
+    try:
+        for launcher_id in launcher_ids:
+            asked = await offload.io(client.launcher_config, launcher_id)
+            await offload.io(client.write_launcher_config, launcher_id,
+                             {data.log_switch_of(asked): "1"})
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+        ui.notify(t("manager.needs.logging.failed"), caption=why(exc), type="negative")
+        return
+    library.forget_watched()
+    ui.notify(t("manager.needs.logging.on"), type="positive")
+    then()
 
 
 async def _ended(client: Any, job_id: str) -> dict[str, Any] | None:

@@ -160,6 +160,7 @@ class ARecordingIsNotAPlayTests(TempTree):
                 launch,
                 _launcher_for=lambda table_id, entry: (launcher, ""),
                 _binary_of=lambda found: "/opt/vpx",
+                _log_files_of=lambda found, binary: (),
                 _plan=lambda *args, **kwargs: (["/opt/vpx", "-play", "Example.vpx"],
                                                "Startup done")):
             launch.launch_game(self.game, self.ini, source=source,

@@ -301,7 +301,8 @@ def _program(launcher: launchers.Launcher) -> dict[str, Any] | None:
     one = asking(_launcher_settings(launcher))
     return {"plugins": None if one.plugins is None else sorted(one.plugins),
             "defaults": dict(one.defaults), "build": one.build,
-            "dmd_in_file": one.dmd_in_file}
+            "dmd_in_file": one.dmd_in_file, "log_switch": one.log_switch,
+            "log_default_on": one.log_default_on}
 
 
 def program_of(launcher_id: str) -> dict[str, Any] | None:
