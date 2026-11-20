@@ -349,6 +349,21 @@ class ApiClient:
     def remove_extension(self, name: str) -> None:
         self._delete(f"/extensions/{quote(name, safe='')}")
 
+    def check_extension_release(self, name: str) -> dict:
+        """The author's repository asked for a newer release. The extension as it stands."""
+        return self._post(f"/extensions/{quote(name, safe='')}/release/check", {})
+
+    def update_extension_release(self, name: str, trust: bool = False,
+                                 version: str = "") -> dict:
+        """Update from the release the last check found. `trust` accepts new access, and
+        `version` is the release that was shown."""
+        return self._post(f"/extensions/{quote(name, safe='')}/release/update",
+                          {"trust": bool(trust), "version": version})
+
+    def use_previous_extension(self, name: str) -> dict:
+        """Put back the version an update replaced."""
+        return self._post(f"/extensions/{quote(name, safe='')}/release/previous", {})
+
     def set_extension_enabled(self, name: str, on: bool) -> dict:
         """The extension as it stands after the switch."""
         return self._put(f"/extensions/{quote(name, safe='')}/enabled",

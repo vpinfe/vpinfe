@@ -2496,6 +2496,11 @@ class ExtensionSwitch(ApiModel):
     enabled: bool
 
 
+class ExtensionRelease(ApiModel):
+    trust: bool = False
+    version: str = ""
+
+
 class ExtensionValues(ApiModel):
     """The values a settings or account form sends back, by field key."""
 

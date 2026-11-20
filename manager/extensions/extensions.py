@@ -33,11 +33,16 @@ from manager.kit import (
 from manager.kit.data import Library
 from manager.kit.failed_together import Failures
 from manager.kit.on_page import on_page
+from manager.security import accept
 from manager.settings import settings
 
 logger = logging.getLogger("vpinfe.manager.extensions.extensions")
 
 SCOPE = "manager.extensions.columns"
+
+RELEASE_NEWER, RELEASE_CURRENT, RELEASE_NONE, RELEASE_UNSUPPORTED = (
+    "newer", "current", "none", "unsupported")
+RELEASE_UNREACHABLE, RELEASE_GIT, RELEASE_UNCHECKED = "unreachable", "git", "unchecked"
 
 ON, UPDATE, OFF, FAILED, CHANGED, NOT_TRUSTED, NOT_INSTALLED = (
     "on", "update", "off", "failed", "changed", "not_trusted", "not_installed")
@@ -107,11 +112,14 @@ VIEWS: dict[str, list[str] | views.Preset] = {
 def entries_of(records: list[dict[str, Any]], listing: dict[str, Any]) -> list[dict[str, Any]]:
     """Every installed extension and every listed one, once, with what each says."""
     listed = {str(one["name"]): one for one in listing.get("entries") or []}
+    releases = listing.get("releases") or {}
     where, checked = str(listing.get("list") or ""), bool(listing.get("checked"))
     found = [{"name": str(one["name"]), "record": one, "listed": listed.get(str(one["name"])),
-              "list": where, "checked": checked} for one in records]
+              "release": releases.get(str(one["name"])), "list": where, "checked": checked}
+             for one in records]
     held = {one["name"] for one in found}
-    found += [{"name": name, "record": None, "listed": one, "list": where, "checked": checked}
+    found += [{"name": name, "record": None, "listed": one, "release": None, "list": where,
+               "checked": checked}
               for name, one in listed.items() if name not in held]
     return sorted(found, key=lambda one: shown(one).lower())
 
@@ -156,7 +164,8 @@ def status(entry: dict[str, Any]) -> str:
         return NOT_INSTALLED
     if not _official(record) and not (record.get("trust") or {}).get("accepted"):
         return CHANGED if record.get("origin") == accepted.CHANGED else NOT_TRUSTED
-    if listed.get("update"):
+    if listed.get("update") or (_release(entry).get("state") == RELEASE_NEWER
+                                and not _official(record)):
         return UPDATE
     state = record.get("state")
     if state == host.LOADED:
@@ -177,9 +186,16 @@ def stopped(entry: dict[str, Any]) -> bool:
     return status(entry) in (CHANGED, NOT_TRUSTED)
 
 
+def _release(entry: dict[str, Any]) -> dict[str, Any]:
+    """What the author's repository said about an extension added by hand, or nothing."""
+    return entry.get("release") or {}
+
+
 def version_of(entry: dict[str, Any]) -> str:
+    """The version on disk where an update has been taken, which runs from the next start."""
     record, listed = entry["record"] or {}, entry["listed"] or {}
-    return str(record.get("version") or listed.get("version") or "")
+    return str(_release(entry).get("installed") or record.get("version")
+               or listed.get("version") or "")
 
 
 def repository_of(entry: dict[str, Any]) -> str:
@@ -437,6 +453,9 @@ async def details(context: dict[str, Any]) -> None:
             entries.append(ext_page.enabled_row(record, refill))
         entries.append((t("manager.extensions.updates"),
                         _updates_value(library, entry, again, check)))
+        if record is not None and _runs_later(entry):
+            entries.append(panel.note(t("manager.extensions.runs_later",
+                                        version=version_of(entry))))
         entries.append((t("manager.extensions.trust"), _trust_value(entry)))
         if version_of(entry):
             entries.append((t("word.version"), version_of(entry)))
@@ -502,9 +521,72 @@ def has_actions(context: dict[str, Any]) -> bool:
     return bool(ext_page.unplaced(context["extension"]["record"] or {}))
 
 
+def _runs_later(entry: dict[str, Any]) -> bool:
+    """An update has put a different version on disk than the one running now."""
+    installed = str(_release(entry).get("installed") or "")
+    return bool(installed) and installed != str((entry["record"] or {}).get("version") or "")
+
+
+def _said(text: str, tip: str) -> Callable[[], None]:
+    def draw() -> None:
+        ui.label(text).classes("manager-fact-value truncate min-w-0").tooltip(tip)
+
+    return draw
+
+
+def _site(address: str) -> str:
+    return "GitHub" if address == "github.com" else address
+
+
+def _release_value(library: Library, entry: dict[str, Any], again: Callable[[], Any],
+                   ) -> Callable[[], Any] | str:
+    """The Updates row of an extension added by hand: what its author's repository says."""
+    release = _release(entry)
+    state, where = str(release.get("state") or ""), str(release.get("host") or "")
+    ask = panel.action(
+        t("manager.extensions.check_updates"),
+        lambda: check_one(library, entry, again), icon=verbs.REFRESH, inline=True,
+        hint=t("manager.extensions.check_asks",
+               repo=ext_mark.source_shown(str(release.get("address") or ""))))
+    if state == RELEASE_GIT:
+        return _said(t("manager.extensions.git_updated"), t("manager.extensions.git_tip"))
+    if state == RELEASE_CURRENT:
+        return t("manager.extensions.current")
+    if state == RELEASE_NONE:
+        return _said(t("manager.extensions.no_releases"), t("manager.extensions.no_releases_tip"))
+    if state == RELEASE_UNSUPPORTED:
+        return _said(t("manager.extensions.host_unsupported", host=where),
+                     t("manager.extensions.no_updates_tip"))
+    if state == RELEASE_UNREACHABLE:
+        def unreachable() -> None:
+            with ui.row().classes("items-center gap-2 no-wrap"):
+                _said(t("manager.extensions.unreachable", host=where),
+                      t("manager.extensions.unreachable_tip"))()
+                ask()
+        return unreachable
+    if state == RELEASE_NEWER:
+        def newer() -> None:
+            with ui.row().classes("items-center gap-2 no-wrap"):
+                panel.state(t("manager.extensions.update_available"), "warn")()
+                panel.action(t("manager.extensions.update_to", version=release.get("version")),
+                             lambda: update_one(library, entry, again), icon=verbs.UPDATE,
+                             inline=True, hint=panel.NO_HINT)()
+                if release.get("page"):
+                    panel.link_out(t("manager.extensions.whats_new"), to=str(release["page"]),
+                                   hint=str(release["page"]), rel="noopener noreferrer")()
+        return newer
+
+    def unchecked() -> None:
+        with ui.row().classes("items-center gap-2 no-wrap"):
+            ask()
+    return unchecked
+
+
 def _updates_value(library: Library, entry: dict[str, Any], again: Callable[[], Any],
                    check: Callable[[], Any]) -> Callable[[], Any] | str:
     record, listed = entry["record"], entry["listed"] or {}
+    if record is not None and _release(entry):
+        return _release_value(library, entry, again)
     if record is None:
         def install() -> None:
             panel.action(t("manager.extensions.install"),
@@ -569,6 +651,7 @@ def acts(library: Library, entries: list[dict[str, Any]],
     reverting = [one for one in installed if one["record"].get("comes_with_vpinfe")]
     removable = [one for one in installed if one not in reverting]
     install = entry_run(library, "install_extension")
+    replaced = [one for one in entries if _release(one).get("previous")]
     offered: list[panel.Verb] = []
     if absent:
         offered.append(panel.Verb(
@@ -588,6 +671,10 @@ def acts(library: Library, entries: list[dict[str, Any]],
     if reverting:
         offered.append(panel.Verb(t("manager.extensions.use_shipped"),
                                   lambda: use_shipped(library, reverting, after),
+                                  icon=verbs.UNINSTALL, danger=True))
+    if replaced:
+        offered.append(panel.Verb(t("manager.extensions.use_previous"),
+                                  lambda: use_previous(library, replaced, after),
                                   icon=verbs.UNINSTALL, danger=True))
     if removable:
         offered.append(panel.Verb(t("word.uninstall"),
@@ -669,6 +756,81 @@ async def use_shipped(library: Library, entries: list[dict[str, Any]],
         ui.notify(t("manager.extensions.use_shipped_done", count=len(gone), name=gone[0]),
                   type="positive")
         await again()
+
+
+@on_page
+async def check_one(library: Library, entry: dict[str, Any], again: Callable[[], Any]) -> None:
+    """Ask the repository of one extension added by hand for its latest release. An answer of
+    none is still drawn from what was stored, so the row says what the check found."""
+    working = ui.notification(t("manager.extensions.working", name=shown(entry)),
+                              spinner=True, timeout=None)
+    try:
+        await run.io_bound(library.check_extension_release, entry["name"])
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(t("manager.extensions.release_check_failed", name=shown(entry)),
+                  caption=why(exc), type="negative")
+    finally:
+        working.dismiss()
+    await again()
+
+
+@on_page
+async def update_one(library: Library, entry: dict[str, Any],
+                     again: Callable[[], Any]) -> None:
+    """Update an extension added by hand to the release its last check found, after the
+    notice that says where it comes from and, when it asks for more, what is new."""
+    release, record = _release(entry), entry["record"] or {}
+    news = str(release.get("page") or "")
+    added = ext_page.reach_entries([str(one) for one in release.get("new_access") or []])
+    if not await accept.update(
+            shown(entry), str(release.get("version") or ""),
+            was=str(release.get("installed") or record.get("version") or ""),
+            author=author_of(entry), address=str(release.get("address") or ""),
+            news=news, news_label=t("manager.extensions.on_site",
+                                    site=_site(str(release.get("host") or ""))),
+            moved_to=str(release.get("moved_to") or ""), added=added):
+        return
+    working = ui.notification(t("manager.extensions.working", name=shown(entry)),
+                              spinner=True, timeout=None)
+    try:
+        await run.io_bound(library.update_extension_release, entry["name"], bool(added),
+                           str(release.get("version") or ""))
+    except Exception as exc:  # noqa: BLE001
+        ui.notify(t("manager.extensions.update_failed", count=1, name=shown(entry)),
+                  caption=why(exc), type="negative")
+        await again()
+        return
+    finally:
+        working.dismiss()
+    ui.notify(t("manager.extensions.release_updated", name=shown(entry),
+                version=str(release.get("version") or "")), type="positive")
+    await again()
+
+
+@on_page
+async def use_previous(library: Library, entries: list[dict[str, Any]],
+                       again: Callable[[], Any]) -> None:
+    """Put back the version an update from the author's repository replaced."""
+    if not await confirm.ask(
+            t("manager.extensions.use_previous_question", count=len(entries),
+              name=shown(entries[0])),
+            detail=t("manager.extensions.use_previous_detail", count=len(entries)),
+            confirm=t("manager.extensions.use_previous_confirm"), icon=verbs.UNINSTALL):
+        return
+    gone: list[str] = []
+    failed = Failures()
+    for entry in entries:
+        try:
+            await run.io_bound(library.use_previous_extension, entry["name"])
+        except Exception as exc:  # noqa: BLE001
+            failed.add(shown(entry), why(exc))
+            continue
+        gone.append(shown(entry))
+    failed.say("manager.extensions.use_previous_failed")
+    if gone:
+        ui.notify(t("manager.extensions.use_previous_done", count=len(gone), name=gone[0]),
+                  type="positive")
+    await again()
 
 
 @on_page

@@ -781,6 +781,16 @@ class Library:
     def remove_extension(self, name: str) -> None:
         self._client.remove_extension(name)
 
+    def check_extension_release(self, name: str) -> dict:
+        return self._client.check_extension_release(name)
+
+    def update_extension_release(self, name: str, trust: bool = False,
+                                 version: str = "") -> dict:
+        return self._client.update_extension_release(name, trust, version)
+
+    def use_previous_extension(self, name: str) -> dict:
+        return self._client.use_previous_extension(name)
+
     def set_extension_enabled(self, name: str, on: bool) -> dict:
         return self._client.set_extension_enabled(name, on)
 

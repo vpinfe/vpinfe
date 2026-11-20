@@ -18,7 +18,7 @@ from manager.extensions import ext_mark
 from manager.kit import dialog as frame
 from manager.kit import panel, verbs
 
-__all__ = ["extension", "theme", "themes"]
+__all__ = ["extension", "theme", "themes", "update"]
 
 
 async def _ask(title: str, lines: Sequence[str], answer: str, *,
@@ -109,3 +109,39 @@ async def extension(name: str, version: str, *, author: str, source: str, path: 
                       rows=rows, closing=t("manager.trust.ext_reported"),
                       warning=t("manager.trust.ext_unsupported"),
                       understood=t("manager.trust.ext_understand"))
+
+
+async def update(name: str, version: str, *, was: str, author: str, address: str,
+                 news: str = "", news_label: str = "", moved_to: str = "",
+                 added: Sequence[tuple[Any, ...]] = ()) -> bool:
+    """Whether to update an unofficial extension to `version`, from its author's repository.
+
+    `added` is the rows for what this version asks for beyond what `was` was trusted with.
+    With none, the answer is a plain Update; with some, it needs the tick as well.
+    `moved_to` is the address the repository now answers from, when it is not `address`.
+    """
+    lines = [t("manager.trust.update_body", name=name, version=version),
+             t("manager.trust.update_unchecked", was=was)]
+    if moved_to:
+        lines.append(t("manager.trust.update_moved", address=ext_mark.source_shown(moved_to)))
+    if added:
+        lines += [t("manager.trust.update_more", was=was), t("manager.trust.ext_reported")]
+    rows: list[tuple[Any, ...]] = [
+        (t("manager.ext_page.author"), author),
+        (t("manager.ext_page.version_label"), version),
+        (t("manager.ext_page.source"),
+         panel.link_out(ext_mark.source_shown(moved_to or address), to=moved_to or address,
+                        hint=moved_to or address, rel="noopener noreferrer"))]
+    if news:
+        rows.append((t("manager.extensions.whats_new"),
+                     panel.link_out(news_label or news, to=news, hint=news,
+                                    rel="noopener noreferrer")))
+    if added:
+        rows.append((panel.HEADING, t("manager.trust.new_reach")))
+        rows += added
+    return await _ask(
+        t("manager.trust.update_title", name=name), lines,
+        t("manager.trust.update_trust_button" if added else "manager.trust.update_button"),
+        rows=rows, closing=t("manager.trust.update_runs", was=was),
+        warning=t("manager.trust.ext_unsupported") if added else "",
+        understood=t("manager.trust.ext_understand") if added else "")

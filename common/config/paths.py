@@ -129,6 +129,10 @@ ACCEPTED_PATH = CONFIG_DIR / "accepted.json"
 # `extensions` folder people put their own in, and the receipts that say what it installed.
 OFFICIAL_EXTENSIONS_DIR = CONFIG_DIR / "official_extensions"
 EXTENSION_RECEIPTS_PATH = CONFIG_DIR / "extension_receipts.json"
+# What the last check of each extension the person added found in its own repository, and the
+# copy its last update from there replaced.
+EXTENSION_RELEASES_PATH = CACHE_DIR / "extension_releases.json"
+EXTENSION_PREVIOUS_DIR = CONFIG_DIR / "extension_previous"
 SESSIONS_PATH = CONFIG_DIR / "sessions.json"
 TOKENS_PATH = CONFIG_DIR / "tokens.json"
 CONNECTIONS_PATH = CONFIG_DIR / "connections.json"

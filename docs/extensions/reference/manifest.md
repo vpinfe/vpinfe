@@ -154,6 +154,28 @@ If the manifest names a platform this device is not, or a feature this install d
 have, the extension is not started.  It is still listed, with the reason, and on Linux the
 reason names the distribution: "It does not run on Ubuntu".
 
+### Publishing an update
+
+A person who added the extension by copying its folder in can update it from its page: **Check for
+Updates** asks the repository `source` names for its latest release, and **Update To** takes it.
+VPinFE never checks on its own, and it does not count these in Needs You or in Update All.
+
+- **Publish a release and raise `version`.**  VPinFE reads the latest published release of the
+  repository, takes its `extension.json` at that release's tag, and offers the update when that
+  manifest's `version` is higher than the one on disk.  The files come from the archive of the
+  same tag.  Pre-releases and drafts are ignored.
+- **GitHub and Forgejo sites such as Codeberg.**  Any other host shows "No updates from {host}".
+- **`source` is where updates come from.**  Changing it moves the extension: the person is
+  told the repository has moved before the update is taken.  Keep `name` the same, since a
+  release with another name is refused.
+- **Asking for more asks again.**  An update whose manifest declares more `scopes`,
+  `capabilities` or `play` surfaces than the person last trusted stops at a notice that names
+  only what is new, and the update is not taken until they agree.
+- **Going back.**  VPinFE keeps the version an update replaced, and **Use the Previous Version**
+  in the extension's menu in the list puts it back.  Both take effect at the next start.
+- **A folder kept with Git is left alone.**  Its row says "Updated with Git" and VPinFE never
+  writes to it.
+
 ### Help for the person using it
 
 One click from the extension's page should reach something that tells a person how to use it.

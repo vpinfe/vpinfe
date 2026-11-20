@@ -57,11 +57,12 @@ def get_extension_list() -> dict:
     return extension_ops.state()
 
 
-@router.post("/list/check", summary="Fetch the VPinFE Extension List again",
+@router.post("/list/check", summary="Fetch the VPinFE Extension List again, and ask the "
+                                   "repository of each extension added by hand",
              dependencies=[requires(scopes.CONFIG_WRITE)])
 def check_extension_list() -> dict:
     try:
-        return extension_ops.check()
+        return extension_ops.check_all()
     except extension_ops.UnavailableError as exc:
         raise ApiError("extension_list_unreachable", why(exc), status_code=503) from exc
 
@@ -82,6 +83,47 @@ def install_extension(name: str) -> dict:
     are. The extension runs from the next start."""
     try:
         return extension_ops.install(name)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_install_failed", why(exc), status_code=502) from exc
+
+
+@router.post("/{name}/release/check", summary="Ask the repository of an extension added by hand "
+                                              "for its latest release",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def check_extension_release(name: str) -> dict:
+    try:
+        return extension_ops.check_release(name)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.UnavailableError as exc:
+        raise ApiError("extension_release_unreachable", why(exc), status_code=503) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_release_unreadable", why(exc), status_code=502) from exc
+
+
+@router.post("/{name}/release/update", summary="Update an extension added by hand to the "
+                                               "release its last check found",
+             dependencies=[requires(scopes.PROTECTED)])
+def update_extension_release(name: str, body: models.ExtensionRelease) -> dict:
+    """`trust` accepts what the release asks for beyond what was accepted; without it a
+    release that asks for more is refused. `version`, when sent, must be the release the last
+    check holds, so an update never takes one the person was not shown. The extension runs the
+    new version from the next start, and the copy it replaces is kept."""
+    try:
+        return extension_ops.update_release(name, trust=body.trust, version=body.version)
+    except service_errors.NotFoundError as exc:
+        raise NotFoundError(why(exc)) from exc
+    except extension_ops.InstallFailedError as exc:
+        raise ApiError("extension_install_failed", why(exc), status_code=502) from exc
+
+
+@router.post("/{name}/release/previous", summary="Put back the copy the last update replaced",
+             dependencies=[requires(scopes.PROTECTED)])
+def use_previous_extension_release(name: str) -> dict:
+    try:
+        return extension_ops.use_previous(name)
     except service_errors.NotFoundError as exc:
         raise NotFoundError(why(exc)) from exc
     except extension_ops.InstallFailedError as exc:

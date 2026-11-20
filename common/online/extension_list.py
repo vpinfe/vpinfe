@@ -253,18 +253,18 @@ def install(listed: Listed, client: ThemeRegistryClient | None = None) -> Path:
     data = client.download_zip(archive_url(listed), limit=ARCHIVE_LIMIT)
     target = host.OFFICIAL_DIR / listed.name
     host.OFFICIAL_DIR.mkdir(parents=True, exist_ok=True)
-    _sweep_work()
+    sweep_work()
     work = Path(tempfile.mkdtemp(prefix=WORK_PREFIXES[0], dir=host.OFFICIAL_DIR.parent))
     keep_work = False
     try:
-        unpacked, version = unpack(data, work / "new", listed)
-        _swap(unpacked, target, work / "old")
+        unpacked, version = unpack(data, work / "new", listed.name)
+        swap(unpacked, target, work / "old")
         try:
             fingerprint.write_receipt(listed.name, target, repository=listed.repository,
                                       release=version)
         except BaseException:
             try:
-                _swap_back(target, work / "old")
+                swap_back(target, work / "old")
             except OSError:
                 keep_work = True
                 logger.error("Could not put back the previous %s; it is kept in %s",
@@ -280,28 +280,31 @@ def install(listed: Listed, client: ThemeRegistryClient | None = None) -> Path:
 def fetch(listed: Listed, client: ThemeRegistryClient, into: Path) -> tuple[Path, str]:
     """What the list names, unpacked and checked under `into`: the folder that holds its
     manifest, and its version. Installs nothing and keeps no receipt."""
-    return unpack(client.download_zip(archive_url(listed), limit=ARCHIVE_LIMIT), into, listed)
+    return unpack(client.download_zip(archive_url(listed), limit=ARCHIVE_LIMIT), into,
+                  listed.name)
 
 
-def unpack(data: BytesIO, into: Path, listed: Listed) -> tuple[Path, str]:
+def unpack(data: BytesIO, into: Path, name: str) -> tuple[Path, str]:
+    """An archive of the extension `name` unpacked under `into` and checked: the folder that
+    holds its manifest, and its version."""
     into.mkdir(parents=True)
     try:
         with zipfile.ZipFile(data) as archive:
             members = archive.infolist()
             if (len(members) > FILE_LIMIT
                     or sum(one.file_size for one in members) > UNPACKED_LIMIT):
-                raise ExtensionListError(t("error.extensions.too_big", name=listed.name))
+                raise ExtensionListError(t("error.extensions.too_big", name=name))
             archive.extractall(into)
     except zipfile.BadZipFile as exc:
-        raise ExtensionListError(t("error.extensions.bad_archive", name=listed.name)) from exc
+        raise ExtensionListError(t("error.extensions.bad_archive", name=name)) from exc
     top = [one for one in into.iterdir() if one.is_dir()]
     root = top[0] if len(top) == 1 and not (into / MANIFEST_NAME).is_file() else into
     try:
         manifest = read_manifest(root)
     except ManifestError as exc:
         raise ExtensionListError(t(exc.key, **exc.values)) from exc
-    if manifest.name != listed.name:
-        raise ExtensionListError(t("error.extensions.names_another", name=listed.name,
+    if manifest.name != name:
+        raise ExtensionListError(t("error.extensions.names_another", name=name,
                                    other=manifest.name))
     for one in root.iterdir():
         if one.is_dir() and (one.name == "tests" or one.name.startswith(".")):
@@ -309,7 +312,7 @@ def unpack(data: BytesIO, into: Path, listed: Listed) -> tuple[Path, str]:
     return root, manifest.version
 
 
-def _swap(new: Path, target: Path, aside: Path) -> None:
+def swap(new: Path, target: Path, aside: Path) -> None:
     held_back = False
     if os.path.lexists(target):
         os.replace(target, aside)
@@ -322,15 +325,15 @@ def _swap(new: Path, target: Path, aside: Path) -> None:
         raise
 
 
-def _swap_back(target: Path, aside: Path) -> None:
-    """Undo `_swap` once the new copy is in place: the old one returns, or nothing is left
+def swap_back(target: Path, aside: Path) -> None:
+    """Undo `swap` once the new copy is in place: the old one returns, or nothing is left
     where there was nothing before."""
     shutil.rmtree(target, ignore_errors=True)
     if os.path.lexists(aside):
         os.replace(aside, target)
 
 
-def _sweep_work() -> None:
+def sweep_work() -> None:
     """Remove the work folders an install or a removal that died left in the config folder.
     A recent one may belong to a run in progress, so it stays."""
     now = time.time()
@@ -354,7 +357,7 @@ def uninstall(name: str) -> bool:
     target = host.OFFICIAL_DIR / name
     if not NAME_PATTERN.match(name) or not target.is_dir():
         return False
-    _sweep_work()
+    sweep_work()
     work = Path(tempfile.mkdtemp(prefix=WORK_PREFIXES[1], dir=host.OFFICIAL_DIR.parent))
     try:
         os.replace(target, work / name)
