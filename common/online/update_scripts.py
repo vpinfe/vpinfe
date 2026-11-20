@@ -1,5 +1,5 @@
-"""The updater's three scripts: a POSIX shell script, a PowerShell script, and the
-batch file that starts the second one.
+"""The updater's four scripts: a POSIX shell script, a macOS one, a PowerShell script, and
+the batch file that starts the last.
 
 Here rather than beside the code that runs them because the text in this module is not
 Python. A shell line and a batch line cannot be wrapped the way an argument list can -
@@ -125,6 +125,127 @@ if mv "$NEW_ROOT" "$INSTALL_ROOT"; then
 else
     echo "[Updater] Swap failed, restoring backup"
     rm -rf "$INSTALL_ROOT"
+    mv "$BACKUP_ROOT" "$INSTALL_ROOT"
+    exit 1
+fi
+"""
+
+
+def _build_macos_update_script(prepared: dict, current_pid: int, log_path: Path) -> str:
+    """Swaps the running .app for the one inside the release's disk image.
+
+    The new app is copied in beside the old one and only then renamed into place, so the
+    swap is two renames on one volume and the old app is put back if either fails.
+    """
+    zip_path = shlex.quote(prepared["zip_path"])
+    stage_dir = shlex.quote(prepared["stage_dir"])
+    install_root = shlex.quote(prepared["install_root"])
+    log_file = shlex.quote(str(log_path))
+    last_log = shlex.quote(prepared["last_update_log"])
+    updates_root = shlex.quote(str(UPDATES_DIR))
+    return f"""#!/bin/sh
+set -eu
+
+PID={current_pid}
+ZIP_PATH={zip_path}
+STAGE_DIR={stage_dir}
+INSTALL_ROOT={install_root}
+LOG_PATH={log_file}
+LAST_LOG={last_log}
+UPDATES_ROOT={updates_root}
+KEEP_VERSION_DIR="$(dirname "$STAGE_DIR")"
+EXTRACT_ROOT="$STAGE_DIR/extracted"
+MOUNT_POINT="$STAGE_DIR/volume"
+APP_NAME="$(basename "$INSTALL_ROOT")"
+PARENT_DIR="$(dirname "$INSTALL_ROOT")"
+NEW_ROOT="$PARENT_DIR/.$APP_NAME.new"
+BACKUP_ROOT="$PARENT_DIR/.$APP_NAME.bak"
+
+mkdir -p "$(dirname "$LOG_PATH")"
+: >"$LOG_PATH"
+exec >>"$LOG_PATH" 2>&1
+echo "[Updater] Stage log: $LOG_PATH"
+echo "[Updater] Stage log: $LOG_PATH" >>"$LAST_LOG"
+echo "[Updater] Install root: $INSTALL_ROOT" >>"$LAST_LOG"
+
+mounted=0
+applied=0
+detach() {{
+    if [ "$mounted" -eq 1 ]; then
+        hdiutil detach "$MOUNT_POINT" -quiet -force || true
+        mounted=0
+    fi
+}}
+finish() {{
+    detach
+    rmdir "$MOUNT_POINT" 2>/dev/null || true
+    if [ "$applied" -eq 0 ] && [ -d "$INSTALL_ROOT" ]; then
+        echo "[Updater] Update not applied; reopening the installed app"
+        open "$INSTALL_ROOT" || true
+    fi
+}}
+trap finish EXIT
+
+echo "[Updater] Waiting for pid $PID to exit"
+WAIT_SECONDS=0
+while kill -0 "$PID" 2>/dev/null; do
+    sleep 1
+    WAIT_SECONDS=$((WAIT_SECONDS + 1))
+    if [ "$WAIT_SECONDS" -eq 15 ]; then
+        echo "[Updater] Process $PID still running after 15s; sending SIGTERM"
+        kill -TERM "$PID" 2>/dev/null || true
+    fi
+    if [ "$WAIT_SECONDS" -eq 20 ]; then
+        echo "[Updater] Process $PID still running after 20s; sending SIGKILL"
+        kill -KILL "$PID" 2>/dev/null || true
+    fi
+done
+echo "[Updater] Source process exited"
+
+rm -rf "$EXTRACT_ROOT" "$NEW_ROOT"
+mkdir -p "$EXTRACT_ROOT" "$MOUNT_POINT"
+echo "[Updater] Extracting $ZIP_PATH"
+unzip -q "$ZIP_PATH" -d "$EXTRACT_ROOT"
+DMG_PATH="$EXTRACT_ROOT/VPinFE.dmg"
+if [ ! -f "$DMG_PATH" ]; then
+    echo "[Updater] Extracted update missing VPinFE.dmg"
+    exit 1
+fi
+
+echo "[Updater] Opening $DMG_PATH"
+hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_POINT" -nobrowse -readonly -noverify -quiet
+mounted=1
+SOURCE_APP="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' | head -n 1)"
+if [ -z "$SOURCE_APP" ]; then
+    echo "[Updater] The disk image holds no app"
+    exit 1
+fi
+ditto "$SOURCE_APP" "$NEW_ROOT"
+detach
+echo "[Updater] Copied the new app to $NEW_ROOT"
+
+if ! codesign --verify --deep "$NEW_ROOT"; then
+    echo "[Updater] The new app failed its signature check; leaving the installed app alone"
+    rm -rf "$NEW_ROOT"
+    exit 1
+fi
+
+rm -rf "$BACKUP_ROOT"
+mv "$INSTALL_ROOT" "$BACKUP_ROOT"
+echo "[Updater] Moved current install to backup: $BACKUP_ROOT"
+if mv "$NEW_ROOT" "$INSTALL_ROOT"; then
+    applied=1
+    echo "[Updater] Installed new version into $INSTALL_ROOT"
+    open "$INSTALL_ROOT"
+    echo "[Updater] Relaunch requested"
+    echo "[Updater] Pruning old staged updates"
+    find "$UPDATES_ROOT" -mindepth 1 -maxdepth 1 ! -path "$KEEP_VERSION_DIR" -exec rm -rf {{}} +
+    rm -rf "$BACKUP_ROOT"
+    rm -rf "$EXTRACT_ROOT"
+    echo "[Updater] Update applied successfully"
+else
+    echo "[Updater] Swap failed, restoring backup"
+    rm -rf "$NEW_ROOT"
     mv "$BACKUP_ROOT" "$INSTALL_ROOT"
     exit 1
 fi

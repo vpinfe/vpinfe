@@ -2356,6 +2356,8 @@
   "manager.devices.update_self": "a08177402bcb",
   "manager.devices.update_staged": "73169d52ac81",
   "manager.devices.why_not.architecture": "5ee96871f255",
+  "manager.devices.why_not.mac_folder": "f034376a581f",
+  "manager.devices.why_not.mac_not_installed": "a9c04593cee1",
   "manager.devices.why_not.non_release": "1754f0a70376",
   "manager.devices.why_not.platform": "fdd506d79289",
   "manager.devices.why_not.release_incomplete": "e774f474a348",

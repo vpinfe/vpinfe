@@ -2043,6 +2043,8 @@
   "manager.devices.why_not.architecture": "No release is published for this device's processor type.",
   "manager.devices.why_not.release_incomplete": "The latest release is incomplete, so there is nothing to update to yet.",
   "manager.devices.why_not.platform": "Updating from here is not supported on this operating system.",
+  "manager.devices.why_not.mac_not_installed": "Drag VPinFE to Applications and open it from there to update.",
+  "manager.devices.why_not.mac_folder": "VPinFE cannot replace itself here. Move it to Applications to update.",
   "manager.devices.access": "Access",
   "manager.devices.needs_pairing": "Not paired",
   "manager.devices.needs_pairing_hint": "No access to that device yet. Pair with the code on its screen.",

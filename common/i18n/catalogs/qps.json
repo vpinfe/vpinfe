@@ -2043,6 +2043,8 @@
   "manager.devices.why_not.architecture": "Ñö řèŀèàšè îš þûƀŀîšĥèđ ƒöř ţĥîš đèṽîçè'š þřöçèššöř ţýþè.",
   "manager.devices.why_not.release_incomplete": "Ţĥè ŀàţèšţ řèŀèàšè îš îñçöɱþŀèţè, šö ţĥèřè îš ñöţĥîñĝ ţö ûþđàţè ţö ýèţ.",
   "manager.devices.why_not.platform": "Ûþđàţîñĝ ƒřöɱ ĥèřè îš ñöţ šûþþöřţèđ öñ ţĥîš öþèřàţîñĝ šýšţèɱ.",
+  "manager.devices.why_not.mac_not_installed": "Đřàĝ ṼÞîñƑÈ ţö Àþþŀîçàţîöñš àñđ öþèñ îţ ƒřöɱ ţĥèřè ţö ûþđàţè.",
+  "manager.devices.why_not.mac_folder": "ṼÞîñƑÈ çàññöţ řèþŀàçè îţšèŀƒ ĥèřè. Ḿöṽè îţ ţö Àþþŀîçàţîöñš ţö ûþđàţè.",
   "manager.devices.access": "Àççèšš",
   "manager.devices.needs_pairing": "Ñöţ þàîřèđ",
   "manager.devices.needs_pairing_hint": "Ñö àççèšš ţö ţĥàţ đèṽîçè ýèţ. Þàîř ŵîţĥ ţĥè çöđè öñ îţš šçřèèñ.",

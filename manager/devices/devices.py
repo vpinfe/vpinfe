@@ -66,7 +66,8 @@ WHY_NOT = {
     "no_matching_asset": "manager.devices.why_not.architecture",
     "asset_missing_file_name": "manager.devices.why_not.release_incomplete",
     "asset_not_attached_to_release": "manager.devices.why_not.release_incomplete",
-    "macos_not_supported_yet": "manager.devices.why_not.platform",
+    "macos_not_installed": "manager.devices.why_not.mac_not_installed",
+    "macos_folder_not_writable": "manager.devices.why_not.mac_folder",
     "unsupported_platform": "manager.devices.why_not.platform"
 }
 

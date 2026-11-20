@@ -29,6 +29,7 @@ from common.config.paths import (
 )
 from common.i18n import t
 from common.online.update_scripts import (
+    _build_macos_update_script,
     _build_posix_update_script,
     _build_windows_bootstrap_script,
     _build_windows_update_script,
@@ -220,6 +221,28 @@ def _bundled_chromium_exists() -> bool:
     return False
 
 
+def _app_bundle(exe_path: Path) -> Path | None:
+    """The .app this executable runs from, or None when it is not inside one."""
+    for parent in exe_path.parents:
+        if parent.suffix == ".app":
+            return parent
+    return None
+
+
+def _mac_blocker(bundle: Path | None) -> str | None:
+    """Why this .app cannot be swapped for the new one, or None when it can.
+
+    A copy macOS runs from a randomized read-only mount (Gatekeeper's translocation of an
+    app that was never moved) is not the installed app: a swap there would be lost. A
+    disk image mounts read-only, so the folder check catches it.
+    """
+    if bundle is None or "AppTranslocation" in bundle.parts:
+        return "macos_not_installed"
+    if not os.access(bundle.parent, os.W_OK):
+        return "macos_folder_not_writable"
+    return None
+
+
 def get_install_context() -> dict:
     version = get_version()
     system = platform.system()
@@ -266,8 +289,14 @@ def get_install_context() -> dict:
         if machine not in {"arm64", "aarch64"}:
             context["reason"] = "unsupported_architecture"
             return context
-        context["reason"] = "macos_not_supported_yet"
-        return context
+        bundle = _app_bundle(exe_path)
+        blocked = _mac_blocker(bundle)
+        if bundle is None or blocked:
+            context["reason"] = blocked or "macos_not_installed"
+            return context
+        triplet = "macos-arm64"
+        install_root = bundle
+        launch_target = bundle
     else:
         context["reason"] = "unsupported_platform"
         return context
@@ -625,8 +654,9 @@ def launch_prepared_update(prepared: dict) -> None:
         return
 
     script_path = stage_dir / "apply_update.sh"
-    script_path.write_text(
-        _build_posix_update_script(prepared, current_pid, log_path), encoding="utf-8")
+    build_script = (_build_macos_update_script if platform.system() == "Darwin"
+                    else _build_posix_update_script)
+    script_path.write_text(build_script(prepared, current_pid, log_path), encoding="utf-8")
     script_path.chmod(0o755)
     _append_log_line(
         Path(prepared["last_update_log"]), f"[Updater] Shell script written to {script_path}")
