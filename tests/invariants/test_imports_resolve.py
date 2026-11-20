@@ -33,6 +33,7 @@ PLATFORM_ONLY = {
     "AppKit",     # PyObjC, macOS window geometry
     "Quartz",     # PyObjC, macOS key codes
     "objc",
+    "Xlib",       # python-xlib, which pynput brings on Linux: X11 window hand-over
     "win32api", "win32con", "win32gui", "winreg",
 }
 

@@ -55,6 +55,7 @@ from common.host import (
     bundled_libraries,
     command_line,
     commands,
+    front,
     key_simulator,
     launch_state,
     line_follower,
@@ -322,21 +323,48 @@ class _Heard:
         self._on_running = on_running
         self._lock = threading.Lock()
         self.running = not marker
+        self.said_so = False
+        self.watcher: front.Watch | None = None
+
+    def mark_running(self) -> bool:
+        """The table is up, whatever said so first: a line, or its window. True for the
+        one call that said it."""
+        with self._lock:
+            if self.running:
+                return False
+            self.running = True
+        self._on_running()
+        return True
 
     def __call__(self, line: str) -> None:
         pause = self._pause
-        with self._lock:
-            starting = not self.running and self._marker in line
-            if starting:
-                self.running = True
-        if starting:
-            self._on_running()
-        elif pause is not None and pause.resumed_marker \
+        watcher = self.watcher
+        if self._marker and self._marker in line:
+            self.said_so = True
+            if watcher is not None:
+                watcher.note_startup_done()
+            if self.mark_running():
+                return
+        if pause is not None and pause.resumed_marker \
                 and pause.resumed_marker in line:
             launch_state.set_paused(False)
+            if watcher is not None:
+                watcher.note_resume_line()
         elif pause is not None and pause.paused_marker \
                 and pause.paused_marker in line:
             launch_state.set_paused(True)
+            if watcher is not None:
+                watcher.note_pause_line()
+
+
+def _playfield_titles(launcher: launchers.Launcher) -> tuple[str, ...]:
+    """The titles the app gives its playfield window, which is the one that has to hold
+    the keyboard. None where the app does not say, and any window of its own then does."""
+    app = apps.get(getattr(launcher, "app", "")) or apps.default_app()
+    if app.capture is None:
+        return ()
+    return tuple(title for title, role in app.capture.titles().items()
+                 if role == "playfield")
 
 
 def _controls_of(launcher: launchers.Launcher, binary: str,
@@ -625,6 +653,17 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
             heard = _Heard(marker, pause, announce)
             if heard.running:
                 events.emit(events.TABLE_LAUNCHED, **launched)
+            watch = None
+            if not capturing:
+                try:
+                    watch = front.watch_launch(
+                        process.pid, ini_config=ini_config,
+                        titles=_playfield_titles(launcher),
+                        on_window=heard.mark_running, pause_asked=launch_state.pause_asked,
+                        paused=lambda: launch_state.current().paused)
+                except Exception:
+                    logger.exception("Table focus could not start; the table runs without it")
+            heard.watcher = watch
             if following is not None:
                 logger.info("Reading the app's lines from %s",
                             ", ".join(str(one) for one in following.paths))
@@ -638,10 +677,12 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
                         heard(line)
                 process.wait()
             finally:
+                if watch is not None:
+                    front.finish(watch)
                 if following is not None:
                     following.stop()
                     logger.info("Read %d lines from the app's log files", following.lines)
-                    if not heard.running and time.time() - started_at > _QUIET_LOG_SECONDS:
+                    if not heard.said_so and time.time() - started_at > _QUIET_LOG_SECONDS:
                         logger.warning("No line in the app's log files said the table was "
                                        "running (looked for %r) in %d seconds", marker,
                                        time.time() - started_at)

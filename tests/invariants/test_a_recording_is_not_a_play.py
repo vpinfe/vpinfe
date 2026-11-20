@@ -190,6 +190,7 @@ class _Program:
     def __init__(self) -> None:
         self.stdout = ["Startup done\n"]
         self.returncode = 0
+        self.pid = 4242
 
     def wait(self) -> int:
         return self.returncode

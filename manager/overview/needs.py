@@ -53,6 +53,10 @@ UPDATE_EXTENSIONS, REINSTALL_EXTENSION, UNINSTALL_EXTENSION = (
 # The row for Visual Pinball's log being off, which is also the key it is set aside under.
 LOGGING = "logging_off"
 
+# The row for GNOME not letting VPinFE bring the table forward, which is also the key it is
+# set aside under.
+TABLE_FOCUS = "table_focus"
+
 _UNIT_GAMES = "manager.games.games"
 _UNIT_TABLES = "manager.games.tables"
 _UNIT_FOLDERS = "manager.needs.folders"
@@ -369,6 +373,18 @@ def logging_row(held: Any) -> Need | None:
                 token=ids)
 
 
+def table_focus_row(held: str) -> Need | None:
+    """GNOME is not letting VPinFE bring the table forward. The row only points at the
+    line under Experimental Table Focus, which is where it is put right. Dismissed against
+    the state GNOME is in, so a different reason brings the row back."""
+    if not held:
+        return None
+    return Need(TABLE_FOCUS, t("manager.needs.table_focus"), t("manager.needs.table_focus.tip"),
+                WARM, verbs.HAD_ERRORS,
+                Opens("settings", keys={"settings_page": "frontend.behavior"}),
+                token=(held,))
+
+
 def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
     """Every row that has something to say, in cost order: cannot be played, then
     missing, then ready for you, then tidy-up. A check the library has turned off does
@@ -409,6 +425,7 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
         rows.append(left)
 
     rows.append(logging_row(watched.get("logging_off") or ()))
+    rows.append(table_focus_row(str(watched.get("table_focus") or "")))
 
     metadata = library.metadata_state()
     if unreadable := _folders_of(metadata, "unreadable"):
@@ -510,16 +527,17 @@ def collect(library: Any, state: Mapping[str, Any]) -> list[Need]:
 ORDER = ("rom_missing", "wont_play", "launchers", "unreadable", "unmatched", "no_tables",
          "unsupported", "no_playfield",
          "no_backglass", "no_media", "fill_errors", "leftovers", "update", "recordings",
-         LOGGING, "untied", "older_format", "no_year")
+         LOGGING, TABLE_FOCUS, "untied", "older_format", "no_year")
 
 # The rows about this install rather than the library. Their stop is this install's alone;
 # a library row's is the library's, as the Checks page already keeps it.
-DEVICE_ROWS = ("launchers", "fill_errors", "leftovers", "update", "recordings", LOGGING)
+DEVICE_ROWS = ("launchers", "fill_errors", "leftovers", "update", "recordings", LOGGING,
+               TABLE_FOCUS)
 
 # What a row's read cannot say while that read failed, by row.
 _READ_BY = {"update": "update", "recordings": "recordings", "fill_errors": "fill",
-            "leftovers": "leftovers", LOGGING: "logging", WONT_PLAY: "media",
-            UNSUPPORTED: "media"}
+            "leftovers": "leftovers", LOGGING: "logging", TABLE_FOCUS: "table_focus",
+            WONT_PLAY: "media", UNSUPPORTED: "media"}
 
 _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "unreadable": verbs.CANNOT_PLAY, "unmatched": verbs.NO_MATCH,
@@ -529,7 +547,7 @@ _ICONS = {"rom_missing": verbs.CANNOT_PLAY, "launchers": verbs.CANNOT_PLAY,
           "leftovers": verbs.MOVE, "update": verbs.UPDATE, "recordings": verbs.REVIEW,
           "older_format": verbs.OLDER_FORMAT, "untied": verbs.NO_MATCH,
           "no_year": verbs.NO_YEAR, WONT_PLAY: verbs.CANNOT_PLAY, UNSUPPORTED: verbs.NO_MEDIA,
-          LOGGING: verbs.HAD_ERRORS}
+          LOGGING: verbs.HAD_ERRORS, TABLE_FOCUS: verbs.HAD_ERRORS}
 
 
 def is_device(key: str) -> bool:
@@ -583,6 +601,7 @@ def name_of(key: str) -> str:
             "untied": t("manager.needs.untied"),
             "recordings": t("manager.needs.recordings"),
             LOGGING: t("manager.needs.logging.name"),
+            TABLE_FOCUS: t("manager.needs.table_focus.name"),
             WONT_PLAY: t("manager.needs.wont_play"),
             UNSUPPORTED: t("manager.needs.unsupported")}[key]
 
@@ -608,6 +627,7 @@ def comes_back(key: str, need: Need | None = None) -> str:
             "update": t("manager.needs.back.update"),
             "recordings": t("manager.needs.back.recordings"),
             LOGGING: t("manager.needs.back.logging"),
+            TABLE_FOCUS: t("manager.needs.back.table_focus"),
             "older_format": t("manager.needs.back.older_format"),
             "untied": t("manager.needs.back.untied"),
             "no_year": t("manager.needs.back.no_year"),

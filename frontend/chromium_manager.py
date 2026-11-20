@@ -760,48 +760,23 @@ class ChromiumManager:
         """Windows: top-level HWNDs belonging to our Chromium browser processes.
 
         Chromium's browser process owns the visible kiosk window, so matching on
-        the PIDs we spawned is enough. Invisible helper windows (message pumps,
-        IME) share those PIDs, hence the visible + unowned filter.
-
-        Windows only, and it says so: both callers already check, and everything below
-        this line is ctypes calling Win32 directly.
+        the PIDs we spawned is enough; the backend leaves out the invisible helper
+        windows (message pumps, IME) that share those PIDs.
         """
         if sys.platform != "win32":
             return []
-        import ctypes
-        from ctypes import wintypes
+        from common.host import front
 
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        # Win32's own names, kept verbatim so a reader can look them up.
-        WNDENUMPROC = ctypes.WINFUNCTYPE(  # noqa: N806
-            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-        user32.IsWindowVisible.argtypes = [wintypes.HWND]
-        user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
-
-        GW_OWNER = 4  # noqa: N806
+        backend = front.backend_for_this_system()
+        if backend is None:
+            return []
         pids = {
             proc.pid: window_name
             for window_name, proc, _, _ in self._processes
             if proc.poll() is None
         }
-        found = []
-
-        def _on_window(hwnd: int, _lparam: int) -> bool:
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            if user32.GetWindow(hwnd, GW_OWNER):
-                return True
-            pid = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            window_name = pids.get(pid.value)
-            if window_name:
-                found.append((window_name, hwnd))
-            return True
-
-        user32.EnumWindows(WNDENUMPROC(_on_window), 0)
-        return found
+        return [(pids[window.pid], int(window.handle))
+                for window in backend.windows() if window.pid in pids]
 
     def minimize_all_windows(self) -> int:
         """Windows: minimize our kiosk windows so VPX comes up as the foreground app.

@@ -232,7 +232,7 @@ class AReadThatFailedIsSaid(unittest.TestCase):
                                  extensions=lambda: [], extension_list=lambda: {},
                                  launchers=lambda: {"launchers": []},
                                  all_media=lambda: [], devices=lambda: [],
-                                 library_policy=lambda: {})
+                                 library_policy=lambda: {}, config_values=lambda: {})
         library = Library.__new__(Library)
         library._client = client
 
@@ -947,7 +947,8 @@ class WhatExtensionsAskFor(unittest.TestCase):
             extension_needs=lambda: {"needs": [RAISED], "away": ["old"], "failed": ["old"]},
             unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [],
             extension_list=lambda: {}, launchers=lambda: {"launchers": []},
-            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
+            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
+            config_values=lambda: {})
         library = Library.__new__(Library)
         library._client = client
 
@@ -1028,7 +1029,8 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
             jobs=lambda limit: [], extension_needs=lambda: {},
             unaccepted_themes=lambda: {"themes": [self.THEME]}, extensions=lambda: [],
             extension_list=lambda: {}, launchers=lambda: {"launchers": []},
-            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
+            all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
+            config_values=lambda: {})
         for name, value in replaced.items():
             setattr(client, name, value)
         library = Library.__new__(Library)
@@ -1083,7 +1085,8 @@ class WhatProgramsAsk(unittest.TestCase):
                 jobs=lambda limit: [], extension_needs=lambda: {},
                 unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [], asks=asks,
                 extension_list=lambda: {}, launchers=lambda: {"launchers": []},
-                all_media=lambda: [], devices=lambda: [], library_policy=lambda: {})
+                all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
+                config_values=lambda: {})
             read = Library.__new__(Library)
             read._client = client
             return read

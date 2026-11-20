@@ -26,6 +26,9 @@
 # The DMG window the Mac signing layer hands over with the .app.
 !packaging/dmg-layout.json
 
+# The GNOME Shell add-on's description, copied into a person's folder with its script.
+!common/host/static/gnome-shell/*/metadata.json
+
 # The theme payload the JavaScript tests read. Committed on purpose: it is the only
 # thing tying tests/js/ to what Python actually builds.
 !tests/fixtures/theme_payload.json

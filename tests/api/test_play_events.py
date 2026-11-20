@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import configparser
 import re
+import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from common import events
+from common.config.config_store import ConfigStore
 from common.host import launch_state
 from frontend import play_events
 from frontend.device_channel import DeviceChannel
@@ -59,6 +61,20 @@ class PlayEventTests(unittest.TestCase):
 
             events.emit(events.TABLE_EXITED)
             browser.restore_all_windows.assert_called_once_with()
+
+    def test_with_table_focus_on_the_windows_stay_where_they_are(self) -> None:
+        """The hand-over gives the keyboard to the table, so the windows need not move."""
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        ini = ConfigStore(Path(folder.name) / "vpinfe.json")
+        ini.config.set("behavior", "experimental_table_focus", "true")
+        browser = mock.Mock()
+        with mock.patch.object(play_events, "save_last_launched"), \
+                mock.patch.object(play_events.sys, "platform", "win32"):
+            play_events.register(self.bridge, browser, ini)
+            events.emit(events.TABLE_LAUNCHING, game=None, ini_config=ini)
+
+        browser.minimize_all_windows.assert_not_called()
 
     def test_the_windows_come_back_even_when_the_launch_failed(self) -> None:
         """table.exited is announced on every path out, so a cabinet with no keyboard is

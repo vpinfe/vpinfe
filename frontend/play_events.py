@@ -20,7 +20,7 @@ from common import events
 from common.config.config_access import cfg_bool
 from common.config.config_store import ConfigStore
 from common.games.game import GameRecord
-from common.host import launch_state
+from common.host import front, launch_state
 from common.players import player_pictures
 from frontend.last_game import save_last_launched
 
@@ -87,10 +87,12 @@ def on_launching(*, game: GameRecord | None = None, table_id: str = "",
             and source != launch_state.SOURCE_CAPTURE):
         save_last_launched(_ini_config, game, table_id)
     _broadcast({"type": "TableLaunching"})
-    if sys.platform == "win32" and _browser is not None:
+    if (sys.platform == "win32" and _browser is not None
+            and not front.enabled(_ini_config)):
         # VPX pauses whenever its player window loses focus, and Windows will not let a
         # process hand the foreground to one it spawned - so a table came up paused until
-        # the user alt-tabbed. Out of the way, and VPX takes the foreground itself.
+        # the user alt-tabbed. Out of the way, and VPX takes the foreground itself. With
+        # Experimental Table Focus on, the hand-over does this instead.
         try:
             _browser.minimize_all_windows()
         except Exception:

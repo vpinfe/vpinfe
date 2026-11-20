@@ -190,6 +190,7 @@ Runtime state written by VPinFE, not shown as a setting.
 | `attract_order` | choice (random, in_order) | `random` | Random shows every game once before any repeats |
 | `attract_on_return` | choice (restore, stay) | `restore` | When a Button Is Pressed |
 | `attract_audio` | bool | `false` | Play Game Sound |
+| `experimental_table_focus` | bool | `false` | Experimental Table Focus |
 
 ### `themes`
 

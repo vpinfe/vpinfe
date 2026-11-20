@@ -10,6 +10,7 @@
     "attract_order": "random",
     "attract_step_time": "8",
     "confirm": "false",
+    "experimental_table_focus": "false",
     "hide_quit_button": "false",
     "mute_audio": "false",
     "paging_group": "sort",

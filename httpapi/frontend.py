@@ -6,13 +6,17 @@ A request is answered 202: the windows apply it, and the change arrives as the n
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Response
 
 from common import events
-from common.host import frontend_browser, frontend_state
+from common.failures import why
+from common.host import front_gnome, frontend_browser, frontend_state
 
 from . import models, scopes
 from .auth import requires
+from .errors import ConflictError
 from .events import declare_snapshot, frontend_event
 
 router = APIRouter(prefix="/frontend", tags=["frontend"])
@@ -32,6 +36,21 @@ def get_frontend_state() -> models.FrontendState:
             dependencies=[requires(scopes.PLAY_READ)])
 def get_frontend_browser() -> models.FrontendBrowser:
     return models.FrontendBrowser.model_validate(frontend_browser.with_library())
+
+
+@router.get("/focus", summary="Whether the system lets the install bring the table forward",
+            dependencies=[requires(scopes.PLAY_READ)])
+def get_frontend_focus() -> models.FrontendFocus:
+    return models.FrontendFocus(state=front_gnome.status(os.environ))
+
+
+@router.post("/focus/allow", summary="Allow the install to bring the table forward on GNOME",
+             dependencies=[requires(scopes.CONFIG_WRITE)])
+def allow_frontend_focus() -> models.FrontendFocus:
+    try:
+        return models.FrontendFocus(state=front_gnome.allow(os.environ))
+    except OSError as exc:
+        raise ConflictError(why(exc)) from exc
 
 
 @router.put("/collection", summary="Show a collection on the frontend", status_code=202,

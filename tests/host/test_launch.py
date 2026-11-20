@@ -32,6 +32,7 @@ class _FakePopen:
     def __init__(self, lines=(), returncode=0):
         self.stdout = list(lines)
         self.waited = False
+        self.pid = 4242
         # What the program exited with. A real Popen always has one, and a command set
         # to run after the table is told it.
         self.returncode = returncode
@@ -136,6 +137,52 @@ class LifecycleTests(LaunchTests):
         self._run(popen=lambda cmd, **k: _FakePopen(["Startup done\n"]))
 
         self.assertEqual(seen, ["table.launching", "table.launched", "table.exited"])
+
+    def test_the_window_appearing_says_the_table_is_running_once(self) -> None:
+        """Said by whichever comes first, the window or the line, and not again."""
+        seen = []
+        events.subscribe(events.TABLE_LAUNCHED, lambda **_: seen.append("launched"))
+
+        def watching(pid, *, on_window, **_kw):
+            on_window()
+            return mock.Mock()
+
+        with mock.patch.object(launch.front, "watch_launch", side_effect=watching), \
+                mock.patch.object(launch.front, "finish"):
+            self._run(popen=lambda cmd, **k: _FakePopen(["Startup done\n"]))
+
+        self.assertEqual(seen, ["launched"])
+
+    def test_a_table_with_no_marker_is_still_said_once_when_its_window_appears(self) -> None:
+        seen = []
+        events.subscribe(events.TABLE_LAUNCHED, lambda **_: seen.append("launched"))
+
+        def watching(pid, *, on_window, **_kw):
+            on_window()
+            return mock.Mock()
+
+        with mock.patch.object(launch.front, "watch_launch", side_effect=watching), \
+                mock.patch.object(launch.front, "finish"):
+            self._run(popen=lambda cmd, **k: _FakePopen(),
+                      _plan=lambda *a, **k: (["/opt/vpx"], ""))
+
+        self.assertEqual(seen, ["launched"])
+
+    def test_the_watch_is_given_the_tables_process_and_ends_with_it(self) -> None:
+        watch = mock.Mock()
+        with mock.patch.object(launch.front, "watch_launch", return_value=watch) as made, \
+                mock.patch.object(launch.front, "finish") as finished:
+            self._run(popen=lambda cmd, **k: _FakePopen(["Startup done\n"]))
+
+        self.assertEqual(made.call_args.args, (4242,))
+        finished.assert_called_once_with(watch)
+
+    def test_a_recording_is_not_watched(self) -> None:
+        with mock.patch.object(launch.front, "watch_launch") as made:
+            self._run(source=launch_state.SOURCE_CAPTURE,
+                      popen=lambda cmd, **k: _FakePopen(["Startup done\n"]))
+
+        made.assert_not_called()
 
     def test_a_persons_own_commands_run_outside_everything_else(self) -> None:
         """"Before the table" has to mean before all of it, hooks included. Anywhere

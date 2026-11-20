@@ -12,6 +12,7 @@ from typing import Any
 from common.config.labels import field_label
 from common.extensions import host
 from common.games import library_policy, ties
+from common.host import front, front_gnome
 from common.i18n import t
 from common.media import folder_browse
 from common.media.media_specs import MEDIA_SPECS, media_family
@@ -1104,6 +1105,13 @@ class Library:
         """Never cached: the frontend reports again each time it opens."""
         return self._client.frontend_browser()
 
+    def frontend_focus(self) -> str:
+        """Never cached: GNOME loads the add-on at a sign-in, which this page cannot see."""
+        return self._client.frontend_focus()
+
+    def allow_frontend_focus(self) -> str:
+        return self._client.allow_frontend_focus()
+
     def capture_report(self) -> dict:
         """Never cached: it is worked out when asked, and a Tool set a moment ago changes
         it."""
@@ -1481,7 +1489,8 @@ class Library:
                 self._watch_update, self._watch_recordings, self._watch_fill,
                 self._watch_extension_needs, self._watch_unaccepted,
                 self._watch_extension_list, self._watch_home, self._watch_leftovers,
-                self._watch_logging, self._watch_asks, self._watch_media):
+                self._watch_logging, self._watch_table_focus, self._watch_asks,
+                self._watch_media):
             out.update(found)
             out["unread"] += unread
         return out
@@ -1591,6 +1600,21 @@ class Library:
             for one, answer in zip(asked, answers, strict=True)
             if answer is not None
             and log_is_off(answer)]}, ["logging"] if None in answers else []
+
+    def _watch_table_focus(self) -> tuple[dict[str, Any], list[str]]:
+        """Where GNOME is not yet letting VPinFE bring the table forward, with the switch on.
+        A read that fails is reported unread, so a row set aside earlier is kept."""
+        try:
+            behavior = self._client.config_values().get("behavior") or {}
+            if str(behavior.get(front.KEY)).lower() != "true":
+                return {"table_focus": ""}, []
+            state = self._client.frontend_focus()
+        except Exception:  # noqa: BLE001 - a desktop that cannot be asked is not Overview's to fail on
+            logger.debug("manager: could not read whether GNOME lets the table come forward",
+                         exc_info=True)
+            return {}, ["table_focus"]
+        held = state if state not in (front_gnome.NOT_HERE, front_gnome.WORKING) else ""
+        return {"table_focus": held}, []
 
     def _watch_media(self) -> tuple[dict[str, Any], list[str]]:
         """The files that could be refused, as the media lens reads them, and the devices

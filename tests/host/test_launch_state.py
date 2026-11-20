@@ -310,6 +310,23 @@ class PauseTests(unittest.TestCase):
         _attach(FakeProcess())
         self.assertFalse(launch_state.toggle_pause())
 
+    def test_a_press_on_a_running_table_is_a_pause_the_person_asked_for(self) -> None:
+        launch_state.set_launching("A", source=launch_state.SOURCE_FRONTEND)
+        _attach(FakeProcess(), lambda: True)
+
+        launch_state.toggle_pause()
+
+        self.assertTrue(launch_state.pause_asked())
+
+    def test_a_press_on_a_paused_table_is_not_one(self) -> None:
+        launch_state.set_launching("A", source=launch_state.SOURCE_FRONTEND)
+        launch_state.set_paused(True)
+        _attach(FakeProcess(), lambda: True)
+
+        launch_state.toggle_pause()
+
+        self.assertFalse(launch_state.pause_asked())
+
 
 if __name__ == "__main__":
     unittest.main()

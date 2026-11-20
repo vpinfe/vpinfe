@@ -2196,6 +2196,20 @@ class ApiClient:
         self._answered(response)
         return response.json()
 
+    def frontend_focus(self) -> str:
+        """Whether the system lets the install bring the table forward: `FrontendFocus.state`,
+        empty from an install too old to say."""
+        _refuse_the_event_loop("/frontend/focus")
+        response = self._session.get(f"{self._base}/frontend/focus", timeout=_TIMEOUT)
+        if response.status_code == 404:
+            return ""
+        self._answered(response)
+        return str(response.json().get("state") or "")
+
+    def allow_frontend_focus(self) -> str:
+        """Put GNOME's add-on in place and switch it on; the state it leaves."""
+        return str(self._post("/frontend/focus/allow", {}).get("state") or "")
+
     def show_on_frontend(self, collection: str) -> None:
         """Ask the frontend to show a collection, "" being the whole library. The change
         arrives as the next `frontend.state_changed`, not as this call's answer."""

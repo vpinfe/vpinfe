@@ -1,0 +1,6 @@
+{
+  "uuid": "table-focus@vpinfe.local",
+  "name": "VPinFE Table Focus",
+  "description": "Lets VPinFE list the windows on screen and bring one forward.",
+  "shell-version": ["50"]
+}

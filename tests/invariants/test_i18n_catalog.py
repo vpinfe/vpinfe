@@ -250,6 +250,13 @@ SAID_TO_THE_LOG = {
                                                    "_games", "_files"}),
     "httpapi/actions.py": frozenset({"perform_action"}),
     "httpapi/events.py": frozenset({"_frame"}),
+    "common/host/front.py": frozenset({"_program_of", "_pick", "_describe",
+                                         "_no_backend_text"}),
+    "common/host/front_windows.py": frozenset({"hand_over"}),
+    "common/host/front_macos.py": frozenset({"hand_over", "_open"}),
+    "common/host/front_linux.py": frozenset({"why_not", "hand_over"}),
+    "common/host/front_kde.py": frozenset({"run", "_snapshot"}),
+    "common/host/front_gnome.py": frozenset({"why_not", "hand_over", "_list"}),
 }
 
 # Names a person reads the same in every language: products, the systems they run on, and

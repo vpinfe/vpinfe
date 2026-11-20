@@ -72,6 +72,8 @@ _pause: Callable[[], bool] | None = None
 # whose app declares none and for a recording.
 _controls: RunningControls | None = None
 _paused_changed = threading.Condition()
+# The person pressed pause through VPinFE, and the table has not yet resumed.
+_pause_asked = False
 
 
 def current() -> LaunchState:
@@ -123,8 +125,9 @@ def set_launching(game_name: str | None, *, source: str,
 
 def clear() -> LaunchState:
     """Record that nothing is launching. Safe to call when nothing was."""
-    global _process, _pause, _controls, _state
+    global _process, _pause, _controls, _state, _pause_asked
     with _lock:
+        _pause_asked = False
         _process = None
         _pause = None
         _controls = None
@@ -153,6 +156,8 @@ def set_paused(paused: bool) -> LaunchState:
         now = _state
     if not now.launching:
         return now
+    if not paused:
+        _forget_pause_asked()
     changed = _replace(replace(now, paused=paused))
     with _paused_changed:
         _paused_changed.notify_all()
@@ -169,9 +174,29 @@ def wait_paused(paused: bool, timeout: float) -> bool:
 def toggle_pause() -> bool:
     """Press the running table's own pause key. False where none runs, it has no pause,
     or the key could not be pressed."""
+    global _pause_asked
     with _lock:
         pause = _pause
-    return bool(pause()) if pause is not None else False
+        was_paused = _state.paused
+    pressed = bool(pause()) if pause is not None else False
+    if pressed:
+        with _lock:
+            _pause_asked = not was_paused
+    return pressed
+
+
+def pause_asked() -> bool:
+    """Whether the person paused the running table through VPinFE and it has not resumed:
+    a press on a running table sets it, a press on a paused one or the table saying it
+    resumed clears it. A table that paused because it lost the keyboard is not this."""
+    with _lock:
+        return _pause_asked
+
+
+def _forget_pause_asked() -> None:
+    global _pause_asked
+    with _lock:
+        _pause_asked = False
 
 
 def stop(timeout: float = 5.0) -> bool:

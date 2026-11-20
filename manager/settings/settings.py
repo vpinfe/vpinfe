@@ -36,6 +36,8 @@ from common.games.asset_registry import ALWAYS_KEPT, ASSET_SPECS
 from common.host import (
     addresses,
     display_service,
+    front,
+    front_gnome,
     frontend_browser,
     key_reader,
     key_simulator,
@@ -1089,7 +1091,8 @@ async def _browser_playback(library: Library, read: dict[str, Any]) -> list[tupl
 # section -> what to draw at the end of its first group of settings.
 UNDER_FIRST_GROUP: dict[str, Callable] = {"chromium": _browser_playback}
 
-async def _network_address(values: dict[str, Any]) -> dict[str, list[tuple[Any, Any]]]:
+async def _network_address(values: dict[str, Any],
+                           **_: Any) -> dict[str, list[tuple[Any, Any]]]:
     """Where another device opens this one, under the Port setting. Nothing where this
     device answers only itself, and nothing where it has no address to give."""
     bind = str((values.get("network") or {}).get("http_bind")
@@ -1106,10 +1109,62 @@ async def _network_address(values: dict[str, Any]) -> dict[str, list[tuple[Any, 
                                        address=address))]} if address else {}
 
 
-# section -> the rows to draw under a setting of it, from the values the page was given.
-# Only where this install's own client serves the page: the address is this device's.
-UNDER_SETTINGS: dict[str, Callable[[dict[str, Any]], Awaitable[dict[str, list]]]] = {
-    "network": _network_address}
+def _table_focus_line(library: Library, refill: Callable[[], None], state: str) -> None:
+    """GNOME is not letting VPinFE bring the table forward, and the act that fixes it where
+    VPinFE can do it. After the act GNOME needs a sign-in, which the line asks for and the
+    install cannot do: signing out would close the frontend."""
+    @on_page
+    async def allow() -> None:
+        try:
+            await offload.io(library.allow_frontend_focus)
+        except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+            ui.notify(t("manager.settings.table_focus.failed"), caption=why(exc),
+                      type="negative")
+            return
+        refill()
+
+    with ui.element("div").classes("manager-attention w-full mb-2"):
+        ui.icon("error_outline").classes("manager-attention-icon")
+        with ui.column().classes("gap-0 min-w-0 grow"):
+            with ui.label(t("manager.settings.table_focus.line")) \
+                    .classes("manager-attention-line"), ui.tooltip():
+                ui.label(t("manager.settings.table_focus.tip"))
+                ui.label(t("manager.settings.table_focus.apart"))
+            reason = {front_gnome.SIGN_IN: "manager.settings.table_focus.sign_in",
+                      front_gnome.UNSUPPORTED: "manager.settings.table_focus.unsupported",
+                      front_gnome.BROKEN: "manager.settings.table_focus.broken"}.get(state)
+            if reason:
+                ui.label(t(reason)).classes("manager-member-table")
+        if state == front_gnome.MISSING:
+            panel.action(t("manager.settings.table_focus.allow"), allow,
+                         icon=verbs.ACTIVATE, hint=panel.NO_HINT)()
+        elif state == front_gnome.OFF:
+            panel.action(t("manager.settings.table_focus.turn_on"), allow,
+                         icon=verbs.ACTIVATE, hint=panel.NO_HINT)()
+
+
+async def _table_focus_notice(values: dict[str, Any], library: Library | None = None,
+                              refill: Callable[[], None] | None = None,
+                              **_: Any) -> dict[str, list[tuple[Any, Any]]]:
+    """Under Experimental Table Focus: only while it is on and GNOME, which will not let
+    an app list or raise windows, is not yet letting VPinFE do it."""
+    if library is None or refill is None \
+            or str((values.get("behavior") or {}).get(front.KEY)).lower() != "true":
+        return {}
+    try:
+        state = await offload.io(library.frontend_focus)
+    except Exception:  # noqa: BLE001 - a line that cannot be drawn is left out, not a failed page
+        return {}
+    if state in (front_gnome.NOT_HERE, front_gnome.WORKING):
+        return {}
+    return {front.KEY: [(panel.FULL, lambda: _table_focus_line(library, refill, state))]}
+
+
+# section -> the rows to draw under a setting of it, from the values the page was given and
+# this install's own client. Only where this install's own client serves the page: the
+# address and the desktop are this device's.
+UNDER_SETTINGS: dict[str, Callable[..., Awaitable[dict[str, list]]]] = {
+    "network": _network_address, "behavior": _table_focus_notice}
 
 # section -> what is wrong with a whole page, drawn with its name, from what the page was
 # offered, with any act that puts it right; None where nothing is.
@@ -1933,6 +1988,8 @@ def section_rows(source: Any, section: str, options: list[dict], values: dict,
             save = backups_move.asked_first(source, save, refill)
         if section == dof.SECTION and option["key"] in dof.READ_BELOW:
             save = _redrawn_after(save, refill)
+        if section == front.SECTION and option["key"] == front.KEY:
+            save = _redrawn_after(save, refill)
         if option["key"] in (after or {}):
             save = _then(save, (after or {})[option["key"]])
         chipped = waiting if option.get("applies") in (
@@ -2056,7 +2113,8 @@ async def build_device_page(source: Any, context: dict[str, Any], schema: list[d
         preview = chrome_options.Preview(values) \
             if name == chrome_options.SECTION and source is context.get("library") else None
         beneath = UNDER_SETTINGS.get(name)
-        placed = {**(await beneath(values) if beneath is not None
+        placed = {**(await beneath(values, library=source, refill=refill)
+                     if beneath is not None
                      and source is context.get("library") else {}),
                   **(below or {}).get(name, {})}
         rows = section_rows(source, name, block["options"], values,

@@ -186,6 +186,20 @@ def _sway_views(node: Any) -> Iterator[dict[str, Any]]:
         yield from _sway_views(child)
 
 
+def sway_pid_views(tree: Any) -> list[tuple[str, int, str]]:
+    """Every view as (id, process id, title); a view whose program is not known is left out."""
+    return [(str(one["id"]), int(one["pid"]), str(one.get("name") or ""))
+            for one in _sway_views(tree) if "id" in one and one.get("pid")]
+
+
+def hyprland_pid_views(clients: Any) -> list[tuple[str, int, str]]:
+    """Every mapped client as (address, process id, title)."""
+    return [(str(one["address"]), int(one["pid"]), str(one.get("title") or ""))
+            for one in clients if isinstance(one, dict) and one.get("address")
+            and one.get("pid") and one.get("mapped") is not False and not one.get("hidden")
+            ] if isinstance(clients, list) else []
+
+
 def sway_view(tree: Any, pid: int) -> str | None:
     """The id of the view program `pid` has open, once sway has one."""
     return next((str(one["id"]) for one in _sway_views(tree)
@@ -331,6 +345,12 @@ class WlrAdapter:
             return sway_view(self._sway(_GET_TREE), pid)
         found = hyprland_view(self._hyprland(b"j/clients"), pid)
         return str(found["address"]) if found and found.get("address") else None
+
+    def pid_views(self) -> list[tuple[str, int, str]]:
+        """Every window as (handle, process id, title). Raises as `view_of` does."""
+        if self.env.get("SWAYSOCK"):
+            return sway_pid_views(self._sway(_GET_TREE))
+        return hyprland_pid_views(self._hyprland(b"j/clients"))
 
     def focused_view(self) -> str | None:
         """The handle of the window that has focus. Raises as `view_of` does."""

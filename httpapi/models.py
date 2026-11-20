@@ -621,6 +621,16 @@ class FrontendBrowser(ApiModel):
     library: str = ""
 
 
+class FrontendFocus(ApiModel):
+    """Whether this system lets the install bring the table forward on its own. `state` is
+    empty where the question does not arise, `working` where the system lets it, and on
+    GNOME under Wayland, which only lets its own add-ons do it, `missing`, `sign_in` (in
+    place, and loaded at the next sign-in), `off`, `unsupported` (a GNOME release the
+    install does not know) or `broken`."""
+
+    state: str
+
+
 class ShowCollectionRequest(ApiModel):
     name: str = ""
 
