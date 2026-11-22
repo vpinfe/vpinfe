@@ -4547,12 +4547,18 @@ class VPinFECore {
     }
 
     const item = this.tableData[index];
+    // Contract 2 entries carry the link on the game, contract 1 rows in Info.
+    const game = (item && typeof item === "object") ? item.game : null;
     const meta = (item && typeof item === "object") ? item.meta : null;
     const info = (meta && typeof meta === "object" && meta.Info && typeof meta.Info === "object")
       ? meta.Info
       : null;
-    const tutorialUrl = info ? info.PinballPrimerTut : "";
-    return (typeof tutorialUrl === "string") ? tutorialUrl.trim() : "";
+    const candidates = [game && typeof game === "object" ? game.tutorial : "",
+                        info ? info.PinballPrimerTut : ""];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return "";
   }
 
   buildTutorialProxyUrl(tutorialUrl) {

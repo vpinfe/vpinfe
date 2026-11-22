@@ -101,6 +101,7 @@ anything to them.
 | `Authors` | `array` | VPX table author names. |
 | `Theme` | `string` | Game theme or category. |
 | `Rom` | `string` | ROM name. |
+| `PinballPrimerTut` | `string` | Address of the table's Pinball Primer tutorial, when it has one. Only present when set; the tutorial overlay reads it. |
 
 ### meta.User
 

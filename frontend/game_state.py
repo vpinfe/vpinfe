@@ -91,7 +91,7 @@ def _legacy_row(game: Game, logo_cache: dict[str, str | None]) -> dict:
     # into the shared meta_config would put a dropped section back on disk at the next
     # rebuild.
     meta = dict(normalize_meta(game.meta_config))
-    info = section(meta, "Info")
+    info = dict(section(meta, "Info"))
     held_user = meta.get("User")
     if isinstance(held_user, dict) and "Rating" in held_user:
         meta["User"] = {**held_user, "Rating": whole_stars(held_user["Rating"])}
@@ -107,6 +107,11 @@ def _legacy_row(game: Game, logo_cache: dict[str, str | None]) -> dict:
         info[said] = answered
         meta["Info"] = info
         used_alttitle = used_alttitle or field == "title"
+
+    primer =contract_1_tutorial(meta)
+    if primer:
+        info["PinballPrimerTut"] = primer
+        meta["Info"] = info
 
     # Reorder a leading "The " on the canonical Info.Title so the theme displays and
     # sorts by the second word. A user-set alttitle is left exactly as entered.

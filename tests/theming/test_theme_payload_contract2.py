@@ -61,6 +61,58 @@ class ContractOneTests(unittest.TestCase):
         self.assertEqual(len(payload), 1)
 
 
+class TheTutorialLinkTests(unittest.TestCase):
+    """Protects: (b) the Pinball Primer link reaches a theme, which a migrated 2.x file
+    stores as a guide and no longer in Info."""
+
+    PRIMER = "https://pinballprimer.github.io/medieval_madness.html"
+
+    def _game_with(self, *guides: dict):
+        game = _game()
+        game.meta_config["guides"] = list(guides)
+        return game
+
+    def _guide(self, url: str) -> dict:
+        return {"kind": "tutorial", "origin": "vps", "title": "", "authors": [],
+                "url": url, "youtube_id": ""}
+
+    def test_contract_1_serves_the_primer_guide_where_2_x_kept_the_link(self) -> None:
+        payload = json.loads(games_json(
+            entries_for([self._game_with(self._guide(self.PRIMER))]), contract=1))
+
+        self.assertEqual(payload[0]["meta"]["Info"]["PinballPrimerTut"], self.PRIMER)
+
+    def test_contract_1_has_no_link_when_the_guides_hold_no_primer(self) -> None:
+        payload = json.loads(games_json(
+            entries_for([self._game_with(self._guide("https://tiltforums.com/t/1"))]),
+            contract=1))
+
+        self.assertNotIn("PinballPrimerTut", payload[0]["meta"]["Info"])
+
+    def test_building_a_row_leaves_what_is_held_alone(self) -> None:
+        game = self._game_with(self._guide(self.PRIMER))
+
+        games_json(entries_for([game]), contract=1)
+
+        self.assertNotIn("PinballPrimerTut", game.meta_config["Info"])
+        self.assertEqual(game.meta_config["Info"]["Title"], "Medieval Madness")
+
+    def test_a_hidden_primer_guide_is_not_served_after_it_was(self) -> None:
+        game = self._game_with(self._guide(self.PRIMER))
+        games_json(entries_for([game]), contract=1)
+        game.meta_config["guides"][0]["hidden"] = True
+
+        (row,) = json.loads(games_json(entries_for([game]), contract=1))
+
+        self.assertNotIn("PinballPrimerTut", row["meta"]["Info"])
+
+    def test_contract_2_serves_it_on_the_game(self) -> None:
+        payload = json.loads(games_json(
+            entries_for([self._game_with(self._guide(self.PRIMER))])))
+
+        self.assertEqual(payload["entries"][0]["game"]["tutorial"], self.PRIMER)
+
+
 class TheRatingScaleTests(unittest.TestCase):
     """Protects: (b) a theme reads a rating on the scale its contract was written for."""
 
