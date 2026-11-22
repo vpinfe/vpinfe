@@ -232,6 +232,23 @@ def label(scope: str, action: str) -> str:
         else f"{action} the {scope}"
 
 
+# The pairs that take the page or the screen away, and the sentence a person is shown
+# first. A notice carrying one has no way down, so only these may have one: every other
+# pair leaves the surface standing and the notice would stay on it.
+_ANNOUNCED = {
+    (VPINFE, RESTART): "manager.notice.restarting",
+    (VPINFE, STOP): "manager.notice.quitting",
+    (SYSTEM, RESTART): "manager.notice.rebooting",
+    (SYSTEM, STOP): "manager.notice.powering_off",
+}
+
+
+def announcement(scope: str, action: str) -> str:
+    """What is happening, said as a statement, or "" for a pair that is not announced."""
+    key = _ANNOUNCED.get((scope, action))
+    return t(key) if key else ""
+
+
 def _key(scope: str, action: str) -> str:
     return f"action.{scope}.{action}"
 

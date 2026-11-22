@@ -67,14 +67,18 @@ def _announce(request: lifecycle.Request) -> None:
 
 
 def _notice(*, scope: str, action: str, surface: str, address: str,
-            description: str, **_payload: Any) -> None:
+            **_payload: Any) -> None:
     """Tell the windows what is happening, unless they are the ones who asked.
 
     The rule is a notice on every listening surface that did not start it. The window
     that did already has the answer on screen, so telling it again would talk over its
     own confirmation.
+
+    Only what takes the windows away is announced. The notice is never taken down, so
+    one sent for anything that leaves them up would stay on every screen.
     """
-    if _bridge is None:
+    description = lifecycle.announcement(scope, action)
+    if _bridge is None or not description:
         return
     message = {"type": "LifecycleActing", "scope": scope, "action": action,
                "description": description, "origin": surface}

@@ -11,31 +11,15 @@ import logging
 from nicegui import Client, ui
 
 from common import events
-from common.i18n import t
 from common.runtime import lifecycle
 
 logger = logging.getLogger("vpinfe.manager.app_control")
 
 
-def _said(scope: str, action: str) -> str:
-    """What is about to happen, for the actions that take the page away. The windows' own
-    actions say nothing here: the tab that asked shows the result."""
-    pair = (scope, action)
-    if pair == (lifecycle.VPINFE, lifecycle.RESTART):
-        return t("manager.notice.restarting")
-    if pair == (lifecycle.VPINFE, lifecycle.STOP):
-        return t("manager.notice.quitting")
-    if pair == (lifecycle.SYSTEM, lifecycle.RESTART):
-        return t("manager.notice.rebooting")
-    if pair == (lifecycle.SYSTEM, lifecycle.STOP):
-        return t("manager.notice.powering_off")
-    return ""
-
-
 def _notice(*, scope: str, action: str, **_payload: object) -> None:
     """Tell every open tab. A tab with no live socket is skipped: NiceGUI would queue the
     notification for a reload that may never come."""
-    description = _said(scope, action)
+    description = lifecycle.announcement(scope, action)
     if not description:
         return
     for client in list(Client.instances.values()):
