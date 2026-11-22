@@ -441,7 +441,7 @@ class NoticeTests(unittest.TestCase):
         self.assertEqual(len(bridge.sent), 1)
         message, excluded = bridge.sent[0]
         self.assertEqual(message["type"], "LifecycleActing")
-        self.assertEqual(message["description"], "Power off")
+        self.assertEqual(message["description"], "This device is powering off")
         self.assertEqual(message["origin"], lifecycle.SURFACE_MANAGER)
         self.assertIsNone(excluded, "no window asked, so no window is left out")
 
@@ -476,6 +476,33 @@ class NoticeTests(unittest.TestCase):
 
         self.assertEqual(len(bridge.sent), 1)
         self.assertIsNone(bridge.sent[0][1])
+
+    def test_only_what_takes_the_windows_away_is_announced(self) -> None:
+        """The notice has no way down, so one sent for an action that leaves the windows
+        up would sit on every screen."""
+        said = {
+            (lifecycle.VPINFE, lifecycle.RESTART): "VPinFE is restarting",
+            (lifecycle.VPINFE, lifecycle.STOP): "VPinFE is quitting",
+            (lifecycle.SYSTEM, lifecycle.RESTART): "This device is rebooting",
+            (lifecycle.SYSTEM, lifecycle.STOP): "This device is powering off",
+        }
+        silent = [(lifecycle.TABLE, lifecycle.STOP)] + [
+            (lifecycle.FRONTEND, action)
+            for action in (lifecycle.START, lifecycle.STOP, lifecycle.RESTART)]
+        for pair, sentence in said.items():
+            with self.subTest(pair=pair):
+                bridge = _Bridge()
+                self._install(bridge)
+                lifecycle_host._notice(scope=pair[0], action=pair[1],
+                                       surface=lifecycle.SURFACE_MANAGER, address="")
+                self.assertEqual([m["description"] for m, _ in bridge.sent], [sentence])
+        for pair in silent:
+            with self.subTest(pair=pair):
+                bridge = _Bridge()
+                self._install(bridge)
+                lifecycle_host._notice(scope=pair[0], action=pair[1],
+                                       surface=lifecycle.SURFACE_MANAGER, address="")
+                self.assertEqual(bridge.sent, [])
 
     def test_installing_twice_does_not_say_it_twice(self) -> None:
         bridge = _Bridge()

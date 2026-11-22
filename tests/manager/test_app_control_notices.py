@@ -16,7 +16,7 @@ def _told(scope: str, action: str) -> list[tuple[str, str]]:
     tab.has_socket_connection = True
     with patch.object(app_control.Client, "instances", {"a": tab}), \
             patch.object(app_control.ui, "notify") as toast:
-        app_control._notice(scope=scope, action=action, description="unused")
+        app_control._notice(scope=scope, action=action)
     return [(call.args[0], call.kwargs["type"]) for call in toast.call_args_list]
 
 
@@ -42,7 +42,6 @@ class TheHeadsUpTests(unittest.TestCase):
         tab.has_socket_connection = False
         with patch.object(app_control.Client, "instances", {"a": tab}), \
                 patch.object(app_control.ui, "notify") as toast:
-            app_control._notice(scope=lifecycle.VPINFE, action=lifecycle.RESTART,
-                                description="unused")
+            app_control._notice(scope=lifecycle.VPINFE, action=lifecycle.RESTART)
 
         toast.assert_not_called()
