@@ -76,6 +76,23 @@ describe("an overlay opens and closes the same way whichever it is", () => {
     assert.equal(browser.document.getElementById("menu-frame"), first);
   });
 
+  test("the tutorial link is read from a contract 2 entry and from a contract 1 row", () => {
+    const { vpin } = newCore();
+    const link = "https://pinballprimer.github.io/example.html";
+    vpin.tableData = [
+      { game: { tutorial: ` ${link} ` } },
+      { meta: { Info: { PinballPrimerTut: link } } },
+      { game: { tutorial: "" }, meta: { Info: {} } },
+    ];
+
+    vpin._currentTableIndex = 0;
+    assert.equal(vpin.getCurrentTutorialUrl(), link);
+    vpin._currentTableIndex = 1;
+    assert.equal(vpin.getCurrentTutorialUrl(), link);
+    vpin._currentTableIndex = 2;
+    assert.equal(vpin.getCurrentTutorialUrl(), "");
+  });
+
   test("a tutorial with no URL leaves what is open alone", async () => {
     const { vpin } = newCore();
     vpin.getCurrentTutorialUrl = () => "";
