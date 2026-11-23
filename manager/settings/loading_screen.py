@@ -299,7 +299,7 @@ class _Pair:
         start = self.starting_fallback(chosen)
         if main and self.can_be_missing(chosen):
             changes[self.fallback_key] = start
-        if not await self.owner.write(changes):
+        if not await self.owner.write({SECTION: changes}):
             self._put(self.parts.main if main else self.parts.fall,
                       self.main if main else self.fallback)
             return
