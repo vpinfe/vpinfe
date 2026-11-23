@@ -50,7 +50,10 @@ jobs:
       DMDUTIL_REPO: vpinfe/libdmdutil-python
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        # Both Linux jobs are pinned to Ubuntu 24.04. PyInstaller bundles the build
+        # machine's system libraries, so the glibc on the runner is the glibc a user
+        # needs. ubuntu-latest moved to a newer release and took the x64 build with it.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
@@ -191,6 +194,13 @@ jobs:
       # What ships is packaging/vpinfe.spec, not flags here. See its docstring.
       - name: Build app with PyInstaller
         run: pyinstaller packaging/vpinfe.spec
+        shell: bash
+
+      # 2.38 is what libdof-python and libdmdutil-python build against. A bundled library
+      # that needs more would stop the DOF library loading on an older Linux.
+      - name: Check the glibc the Linux build needs
+        if: runner.os == 'Linux'
+        run: python3 scripts/max_glibc.py dist/vpinfe --limit 2.38
         shell: bash
 
       - name: Bundle Chromium into the .app (macOS)
