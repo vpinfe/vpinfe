@@ -234,6 +234,24 @@ class AssignmentTests(unittest.TestCase):
         self.assertEqual(len(self.store.launchers()), 2)
         self.assertEqual(len(set(self.store.mappings().values())), 1)
 
+    def test_a_later_pass_reuses_the_launcher_an_earlier_one_made(self) -> None:
+        """A table added after the first pass names the same program: it joins that
+        launcher instead of making `VPinballX 2`."""
+        self._run([_Game("a", {"alt_launcher": "/opt/x/VPinballX"})])
+        self._run([_Game("b", {"alt_launcher": "/opt/x/VPinballX"})])
+
+        held = self.store.launchers()
+        self.assertEqual([one.display_name for one in held],
+                         [launcher_migration.SHIPPED_NAME, "VPinballX"])
+        self.assertEqual(self.store.mappings(),
+                         {"t-a": held[1].launcher_id, "t-b": held[1].launcher_id})
+
+    def test_a_table_naming_the_shipped_program_joins_the_shipped_launcher(self) -> None:
+        self._run([_Game("a", {"alt_launcher": "/usr/bin/vpx"})])
+
+        self.assertEqual(len(self.store.launchers()), 1)
+        self.assertEqual(self.store.mappings(), {"t-a": "shipped"})
+
     def test_an_alt_launcher_keeps_the_rest_of_the_install_setup(self) -> None:
         """It only ever replaced the program. A bare launcher would drop the environment
         and the overrides the install was already launching with."""

@@ -158,8 +158,9 @@ def migrate_assignments(store: launchers.LauncherStore,
     were two partial ways of saying the same thing: this table launches differently. A
     launcher id says it once.
 
-    Distinct binaries are de-duplicated by path, so a library where forty tables name one
-    alternative build gets one launcher rather than forty. A profile already became a
+    Distinct binaries are de-duplicated by path, against the launchers already held as
+    well as within one pass, so a library where forty tables name one alternative build
+    gets one launcher rather than forty, and a later pass reuses it. A profile already became a
     launcher when the install was seeded, so a table naming one is matched to it rather
     than making a second.
 
@@ -179,7 +180,8 @@ def migrate_assignments(store: launchers.LauncherStore,
     held = store.launchers()
     mappings = dict(store.mappings())
     shipped = held[0] if held else None
-    by_path: dict[str, str] = {}
+    by_path = {path: one.launcher_id for one in held
+               if (path := str(one.settings.get("bin_path") or "").strip())}
     counts = {"launchers": 0, "tables": 0, "games": 0}
 
     for game in games or []:
