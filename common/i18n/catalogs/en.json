@@ -5010,7 +5010,12 @@
     "one": "{name} could not be updated",
     "other": "{count:n} launchers could not be updated"
   },
-  "manager.screens.apart": "{launcher} has {parts} somewhere else",
+  "manager.screens.apart_group": "Visual Pinball is using other screens",
+  "manager.screens.apart_parts": {
+    "one": "{parts} is not where VPinFE has it",
+    "other": "{parts} are not where VPinFE has them"
+  },
+  "manager.screens.apart_in": "Launchers:",
   "manager.screens.match_waits": "Match waits for {parts} until Visual Pinball has run once",
   "manager.vpx_displays.unnamed": "Left where it was: Visual Pinball has no name for the screen of {parts} yet",
   "manager.vpx_displays.unsized": "Left where it was: the playfield needs a screen before {parts} can go in it",

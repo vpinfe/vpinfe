@@ -1415,7 +1415,9 @@ A launcher that keeps its own screens draws the same picture over its own storag
 **In the playfield** joins a part's menu where the program can draw a window inside the
 playfield's. Where the launcher's screens are not VPinFE's, the part's name takes the
 *differs* color and a line under the picture says **Different from VPinFE** beside **Match
-VPinFE**. A change to VPinFE's screens moves the launcher's only where it still matched. A
+VPinFE**. VPinFE's own Displays page says **Visual Pinball is using other screens** once for
+each way the launchers differ, naming the parts and the launchers, with one **Match VPinFE**
+for the group. A change to VPinFE's screens moves the launcher's only where it still matched. A
 topper is compared only where VPinFE has a screen for one; with none, the launcher's is as
 the person set it.
 

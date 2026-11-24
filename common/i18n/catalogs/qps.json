@@ -5010,7 +5010,12 @@
     "one": "{name} çöûŀđ ñöţ ƀè ûþđàţèđ",
     "other": "{count:n} ŀàûñçĥèřš çöûŀđ ñöţ ƀè ûþđàţèđ"
   },
-  "manager.screens.apart": "{launcher} ĥàš {parts} šöɱèŵĥèřè èŀšè",
+  "manager.screens.apart_group": "Ṽîšûàŀ Þîñƀàŀŀ îš ûšîñĝ öţĥèř šçřèèñš",
+  "manager.screens.apart_parts": {
+    "one": "{parts} îš ñöţ ŵĥèřè ṼÞîñƑÈ ĥàš îţ",
+    "other": "{parts} àřè ñöţ ŵĥèřè ṼÞîñƑÈ ĥàš ţĥèɱ"
+  },
+  "manager.screens.apart_in": "Ŀàûñçĥèřš:",
   "manager.screens.match_waits": "Ḿàţçĥ ŵàîţš ƒöř {parts} ûñţîŀ Ṽîšûàŀ Þîñƀàŀŀ ĥàš řûñ öñçè",
   "manager.vpx_displays.unnamed": "Ŀèƒţ ŵĥèřè îţ ŵàš: Ṽîšûàŀ Þîñƀàŀŀ ĥàš ñö ñàɱè ƒöř ţĥè šçřèèñ öƒ {parts} ýèţ",
   "manager.vpx_displays.unsized": "Ŀèƒţ ŵĥèřè îţ ŵàš: ţĥè þŀàýƒîèŀđ ñèèđš à šçřèèñ ƀèƒöřè {parts} çàñ ĝö îñ îţ",
