@@ -1,0 +1,8 @@
+{
+  "name": "player_handle",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/player_handle",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

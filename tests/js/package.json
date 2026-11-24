@@ -1,0 +1,13 @@
+{
+  "name": "vpinfe-frontend-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Test harness for frontend/static/common/vpinfe-core.js. Dev-only: nothing here is bundled or served. Lives beside the tests so the repo root does not read as a JavaScript project - node resolves \"type\": \"module\" from the nearest package.json walking up from a test file, which is this one.",
+  "scripts": {
+    "test": "node --test \"**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,6 @@
+# Build dependencies. Not needed to run VPinFE, never imported - they turn a checkout
+# into the frozen artifact the release workflow publishes.
+#
+#   pip install -r requirements.txt -r requirements-build.txt
+
+pyinstaller==6.22.2

@@ -1,0 +1,38 @@
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.actor == 'dependabot[bot]'
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+
+    steps:
+      # The gate is the changed files, not the Dependabot group name: a group is only
+      # as good as Dependabot's production/development classification, while the file
+      # list is a fact about the diff. Runtime pins are left for a human - a green
+      # check says nothing about how a dependency renders in a browser, which is
+      # where nicegui 3.7.0-3.8.0 emptied the manager's media panel.
+      - name: Merge only if requirements-dev.txt is the whole change
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: |
+          changed=$(gh pr diff "$PR" --name-only)
+          echo "Changed files:"
+          echo "$changed" | sed 's/^/  /'
+          if [ "$changed" = "requirements-dev.txt" ]; then
+            gh pr merge --auto --merge "$PR"
+            echo "Auto-merge enabled; it lands when required checks pass."
+          else
+            echo "Not a dev-only update - leaving this one for review."
+          fi

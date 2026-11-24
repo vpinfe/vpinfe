@@ -1,0 +1,9 @@
+{
+  "name": "plugged_in",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/plugged_in",
+  "requires_platform": 1,
+  "scopes": ["hardware:read"],
+  "capabilities": ["ui:mount"]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Next Player Note",
+  "description": "A note for whoever plays next, which a Remote can read and change.",
+  "panel.title": "Next Player Note",
+  "section.note.title": "Note",
+  "section.note.field": "Note",
+  "section.note.cleared": "Cleared",
+  "action.clear.label": "Clear Note",
+  "action.clear.description": "Empty the note for the next player",
+  "action.clear.confirm": "Clear"
+}

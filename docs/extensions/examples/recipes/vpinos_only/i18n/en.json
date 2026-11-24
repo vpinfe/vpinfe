@@ -1,0 +1,6 @@
+{
+  "name": "VPinOS Only",
+  "description": "Settings for something only a VPinOS cabinet has.",
+  "settings.boot.label": "Start In",
+  "settings.boot.help": "What the cabinet comes up in after it is switched on"
+}

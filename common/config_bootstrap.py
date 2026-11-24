@@ -1,7 +1,9 @@
+"""Reading `--configdir` before anything is imported. See below for why it is alone."""
+
 from __future__ import annotations
 
 import os
-from typing import MutableMapping, Sequence
+from collections.abc import MutableMapping, Sequence
 
 
 def apply_configdir_override(
@@ -10,7 +12,7 @@ def apply_configdir_override(
 ) -> str | None:
     """Map a --configdir CLI flag onto the VPINFE_CONFIG_DIR environment variable.
 
-    common.paths resolves CONFIG_DIR at import time, so the config location has
+    common.config.paths resolves CONFIG_DIR at import time, so the config location has
     to be in the environment before anything under common/ is imported. argparse
     runs too late for that, so main.py peeks at argv and calls this first.
 

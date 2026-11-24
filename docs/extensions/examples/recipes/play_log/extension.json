@@ -1,0 +1,9 @@
+{
+  "name": "play_log",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/play_log",
+  "requires_platform": 1,
+  "scopes": ["games:read"],
+  "capabilities": ["config:own"]
+}

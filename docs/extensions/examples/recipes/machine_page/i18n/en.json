@@ -1,0 +1,16 @@
+{
+  "name": "Machine Page",
+  "description": "A panel for the machine itself: a fact, a choice and an action.",
+  "panel.title": "Machine",
+  "section.state.title": "State",
+  "section.state.checked": "Last Checked",
+  "section.state.checked.now": "Just now",
+  "section.state.checked.said": "Checked",
+  "section.boot.title": "Start Up",
+  "section.boot.mode": "Starts Into",
+  "section.boot.play": "Play",
+  "section.boot.desk": "Desktop",
+  "action.check.label": "Check Now",
+  "action.check.description": "Look at the machine again",
+  "action.check.confirm": "Check"
+}

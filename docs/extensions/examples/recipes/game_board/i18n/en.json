@@ -1,0 +1,7 @@
+{
+  "name": "Game Board",
+  "description": "Lists the games people voted for, each drawn as the Games list draws it.",
+  "list.picks.title": "Game Picks",
+  "list.picks.column.vps_id.header": "Game",
+  "list.picks.column.votes.header": "Votes"
+}

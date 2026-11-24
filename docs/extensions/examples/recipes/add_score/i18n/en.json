@@ -1,0 +1,17 @@
+{
+  "name": "Add Score",
+  "description": "Lists the scores on Example Scores and adds one from a button above the list.",
+  "settings.site.label": "Site",
+  "settings.key.label": "Key",
+  "error.refused": "The site did not accept the key",
+  "action.post.label": "Add a Score",
+  "dialog.post.title": "The Score",
+  "dialog.player": "Player",
+  "dialog.table": "Table",
+  "dialog.points": "Score",
+  "dialog.posted": "Posted a score for {table}",
+  "list.scores.title": "Add Score",
+  "list.scores.column.player.header": "Player",
+  "list.scores.column.table.header": "Table",
+  "list.scores.column.score.header": "Score"
+}

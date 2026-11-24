@@ -1,0 +1,9 @@
+{
+  "name": "game_verbs",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/game_verbs",
+  "requires_platform": 1,
+  "scopes": ["games:read"],
+  "capabilities": ["ui:mount", "config:own"]
+}

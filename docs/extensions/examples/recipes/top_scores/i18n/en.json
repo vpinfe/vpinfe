@@ -1,0 +1,11 @@
+{
+  "name": "Top Scores",
+  "description": "Lists the best scores on Example Scores.",
+  "settings.site.label": "Site",
+  "settings.key.label": "Key",
+  "error.refused": "The site did not accept the key",
+  "list.top.title": "Top Scores",
+  "list.top.column.player.header": "Player",
+  "list.top.column.table.header": "Table",
+  "list.top.column.score.header": "Score"
+}

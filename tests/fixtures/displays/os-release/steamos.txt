@@ -1,0 +1,7 @@
+NAME="SteamOS"
+PRETTY_NAME="SteamOS Holo"
+VERSION_ID="3.6.0"
+BUILD_ID=20250101.1
+ID=steamos
+ID_LIKE=arch
+HOME_URL="https://www.steampowered.com/"

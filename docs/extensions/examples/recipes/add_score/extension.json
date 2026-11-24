@@ -1,0 +1,8 @@
+{
+  "name": "add_score",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/add_score",
+  "requires_platform": 1,
+  "capabilities": ["config:own", "net:outbound", "ui:mount"]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "example_scores",
+  "display_name": "Example Scores",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/example_scores",
+  "requires_platform": 1,
+  "scopes": [
+    "games:read"
+  ],
+  "capabilities": [
+    "config:own",
+    "ui:mount",
+    "net:outbound"
+  ]
+}

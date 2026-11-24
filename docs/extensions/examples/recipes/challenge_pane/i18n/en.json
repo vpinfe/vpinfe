@@ -1,0 +1,22 @@
+{
+  "name": "Challenge Pane",
+  "description": "Opens a pane beside the weekly challenges, with facts and fields you can change.",
+  "list.board.title": "Challenge Pane",
+  "list.board.column.name.header": "Challenge",
+  "pane.under": "Week {week}",
+  "pane.about": "About",
+  "pane.status": "Status",
+  "pane.status.open": "Open",
+  "pane.status.closed": "Closed",
+  "pane.tags": "Tags",
+  "pane.rules": "Rules",
+  "pane.rules.open": "Open the Rules",
+  "pane.mine": "Yours",
+  "pane.note": "Note",
+  "pane.remind": "Remind Me",
+  "pane.remind.help": "Before the week closes",
+  "pane.level": "Priority",
+  "pane.level.normal": "Normal",
+  "pane.level.high": "High",
+  "pane.goal": "Plays to Try"
+}

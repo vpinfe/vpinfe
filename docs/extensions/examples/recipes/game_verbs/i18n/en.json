@@ -1,0 +1,12 @@
+{
+  "name": "Game Verbs",
+  "description": "Adds Flag and Unflag to the Games menu and Show Version to the Tables menu.",
+  "verb.game.flag.label": "Flag",
+  "verb.game.flag.tip": "Keep these games in the extension's list of flagged games",
+  "verb.game.unflag.label": "Unflag",
+  "verb.game.unflag.confirm": "Unflag these games?",
+  "verb.table.version.label": "Show Version",
+  "message.flagged": "{count} flagged",
+  "message.unflagged": "{count} unflagged",
+  "message.version": "This table is version {version}"
+}

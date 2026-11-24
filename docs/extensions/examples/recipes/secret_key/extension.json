@@ -1,0 +1,8 @@
+{
+  "name": "secret_key",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/secret_key",
+  "requires_platform": 1,
+  "capabilities": ["config:own", "ui:mount"]
+}

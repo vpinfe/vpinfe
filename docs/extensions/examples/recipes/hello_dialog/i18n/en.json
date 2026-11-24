@@ -1,0 +1,7 @@
+{
+  "name": "Hello Dialog",
+  "description": "The smallest dialog: one question and a line to say when it is done.",
+  "action.hello.label": "Say Hello",
+  "dialog.who": "Who is it for?",
+  "dialog.done": "Hello, {who}"
+}

@@ -1,0 +1,51 @@
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["third-party", "chromium", "web"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Config must resolve before anything under common/ is imported, so these import late.
+"main.py" = ["E402"]
+# Seeds roms.json and the config paths before importing what it tests.
+"tests/games/test_score_parser.py" = ["E402"]
+# Three scripts in string literals - sh, PowerShell, batch. A continuation is part of
+# each of those grammars, so a wrapped line is a different script. The file holds no
+# Python but the f-string wrappers, so the lifted rule cannot hide one.
+"common/online/update_scripts.py" = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's DI is calls in argument defaults, which B008 is right to flag anywhere else.
+extend-immutable-calls = [
+    "fastapi.Body", "fastapi.Depends", "fastapi.File", "fastapi.Form",
+    "fastapi.Header", "fastapi.Path", "fastapi.Query",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "common", "manager", "extensions", "frontend", "httpapi"]
+
+[tool.mypy]
+python_version = "3.14"
+# Named here, not on the command line, so CI, the hook and a local run agree.
+files = ["apps", "common", "manager", "extensions", "frontend", "httpapi", "tests"]
+# apps/ and extensions/ are namespace packages with no root __init__.py. Without these two,
+# mypy aborts on a duplicate module name and checks nothing while exiting clean.
+explicit_package_bases = true
+mypy_path = "."
+# NiceGUI, DOF and the third_party drops ship no stubs.
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Every function in these is annotated, and stays that way. It started as the wire
+# contract - an unannotated handler is one whose payload nothing checks - and now covers
+# what the wire is built out of: the domain code under common/ and the theme surface.
+module = ["apps.*", "common.*", "manager.*", "extensions.*", "frontend.*", "httpapi.*"]
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The tests an extension carries are held to what tests/ is: checked, not required to be
+# annotated.
+module = ["extensions.*.tests.*"]
+disallow_untyped_defs = false

@@ -1,0 +1,8 @@
+{
+  "name": "game_board",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/game_board",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

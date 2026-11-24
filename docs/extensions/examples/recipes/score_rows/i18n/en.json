@@ -1,0 +1,20 @@
+{
+  "name": "Score Rows",
+  "description": "Lists the scores on Example Scores and acts on the ones you pick.",
+  "settings.site.label": "Site",
+  "settings.key.label": "Key",
+  "error.refused": "The site did not accept the key",
+  "message.flagged": {"one": "Flagged the score", "other": "Flagged {count} scores"},
+  "list.scores.title": "Score Rows",
+  "list.scores.column.player.header": "Player",
+  "list.scores.column.table.header": "Table",
+  "list.scores.column.score.header": "Score",
+  "list.scores.verb.open.label": "Open on the Site",
+  "list.scores.verb.flag.label": "Flag",
+  "list.scores.verb.flag.needs": "Already flagged",
+  "list.scores.verb.remove.label": "Remove",
+  "list.scores.verb.remove.confirm": {
+    "one": "Remove this score from the site?",
+    "other": "Remove these {count} scores from the site?"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "game_notes",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/game_notes",
+  "requires_platform": 1,
+  "scopes": ["games:read"],
+  "capabilities": ["ui:mount", "config:own"]
+}

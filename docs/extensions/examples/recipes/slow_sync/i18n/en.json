@@ -1,0 +1,8 @@
+{
+  "name": "Slow Sync",
+  "description": "A job that takes ten seconds, reports how far it has got and can be stopped.",
+  "action.sync.label": "Start the Sync",
+  "dialog.steps": "Steps",
+  "dialog.start": "Start",
+  "job.step": "Step {done} of {total}"
+}

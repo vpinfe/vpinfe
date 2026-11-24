@@ -1,0 +1,207 @@
+{
+  "backups": {
+    "folder": ""
+  },
+  "behavior": {
+    "attract_audio": "false",
+    "attract_enabled": "true",
+    "attract_idle": "60",
+    "attract_on_return": "restore",
+    "attract_order": "random",
+    "attract_step_time": "8",
+    "confirm": "false",
+    "hide_quit_button": "false",
+    "launch_audio": "table",
+    "launch_audio_fallback": "silence",
+    "launch_audio_file": "",
+    "loading_image_file": "",
+    "loading_screen": "table_video",
+    "loading_screen_ends": "stop",
+    "loading_screen_fallback": "table_image",
+    "loading_video_file": "",
+    "mute_audio": "false",
+    "paging_group": "sort",
+    "paging_size": "10",
+    "restore_last_table": "true",
+    "splashscreen": "false",
+    "startup_collection": ""
+  },
+  "capture": {
+    "encode_command": "",
+    "fps": "30",
+    "length": "20",
+    "picture_at": "5",
+    "playfield_orientation": "bottom_right",
+    "quality": "standard",
+    "record_command": "",
+    "size": "1920",
+    "sound": "false",
+    "sound_source": "",
+    "video_codec": "auto",
+    "wait": "15"
+  },
+  "chromium": {
+    "defaults": "true",
+    "options": "",
+    "options_exclude": "",
+    "path": ""
+  },
+  "commands": {
+    "on_vpinfe_exit": "",
+    "on_vpinfe_start": "",
+    "timeout": "15"
+  },
+  "manager": {
+    "appearance": "synthwave",
+    "thumbnail": "wheel",
+    "thumbnail_frame": "true",
+    "thumbnail_height": "small",
+    "thumbnail_shape": "auto",
+    "thumb_cache_max_mb": "500",
+    "dates": "language",
+    "relative_dates": "true",
+    "times": "24h",
+    "units": "region",
+    "open_links": "new",
+    "hidden_overview": "",
+    "discovery_shelf_order": "",
+    "hidden_discovery_shelves": ""
+  },
+  "device": {
+    "features": "library,frontend,devices,overview",
+    "language": "auto",
+    "name": "",
+    "setup_pending": "false",
+    "update_channel": "stable"
+  },
+  "dof": {
+    "config_tool_api_key": "",
+    "download_config": "weekly",
+    "enabled": "false"
+  },
+  "extensions": {
+    "switched_off": ""
+  },
+  "general": {
+    "game_root_dir": ""
+  },
+  "input": {
+    "back": "key:Escape,key:KeyB,pad:standard/button:1",
+    "collection_menu": "key:KeyC,pad:standard/button:8",
+    "exit": "key:Escape@hold:1500,key:KeyQ,pad:standard/button:1@hold:1500",
+    "menu": "key:KeyM,pad:standard/button:9",
+    "next": "key:ArrowRight,key:ShiftRight,pad:standard/button:15,pad:standard/button:7",
+    "page_next": "key:PageDown,key:ArrowDown,pad:standard/button:13,pad:standard/button:5",
+    "page_previous": "key:PageUp,key:ArrowUp,pad:standard/button:12,pad:standard/button:4",
+    "previous": "key:ArrowLeft,key:ShiftLeft,pad:standard/button:14,pad:standard/button:6",
+    "select": "key:Enter,pad:standard/button:0",
+    "take_picture": "",
+    "tutorial": "key:KeyT"
+  },
+  "library": {
+    "flyer_name": "visual_pinball",
+    "hidden_asset_kinds": "",
+    "hidden_checks": "",
+    "hidden_media_kinds": "",
+    "hidden_sources": "",
+    "instruction_card_name": "visual_pinball"
+  },
+  "logger": {
+    "level": "debug",
+    "terminal": "true"
+  },
+  "media": {
+    "manufacturer_logos_dir": "",
+    "playfield_resolution": "4k",
+    "playfield_variant": "table",
+    "playfield_video_resolution": "1k",
+    "preferred_picture": "auto",
+    "preferred_sound": "auto",
+    "keep_originals": "auto",
+    "wheelset": ""
+  },
+  "network": {
+    "http_bind": "0.0.0.0",
+    "http_port": "8001",
+    "library_url": "",
+    "verify_shared_library": "false",
+    "ws_port": "8002"
+  },
+  "presentation": {
+    "backglass_media_priority": "video",
+    "cab_mode": "false",
+    "play_numbers": "game",
+    "playfield_media_priority": "video",
+    "playfield_media_rotation": "auto",
+    "real_dmd_media_priority": "color",
+    "scoreview_media_priority": "video"
+  },
+  "real_dmd": {
+    "enabled": "false",
+    "pin2dmd_enabled": "false",
+    "pixelcade_serial_port": "",
+    "zedmd_serial_port": "",
+    "zedmd_wifi_address": ""
+  },
+  "table_commands": {
+    "on_exit": "",
+    "on_start": "",
+    "start_required": "false"
+  },
+  "themes": {
+    "active": "Revolution",
+    "registries": "https://raw.githubusercontent.com/vpinfe/themes/main/themes.json",
+    "repositories": "",
+    "refresh": "daily"
+  },
+  "tools": {
+    "rar_path": "",
+    "ffmpeg_path": "",
+    "grim_path": "",
+    "wf_recorder_path": "",
+    "gstreamer_path": "",
+    "wtype_path": "",
+    "nvidia_smi_path": "",
+    "nvtop_path": "",
+    "ydotool_path": ""
+  },
+  "updates": {
+    "ask_where_new_games_go": "true",
+    "download_spreadsheet": "daily",
+    "get_media_for_new_games": "true",
+    "match_new_games": "true",
+    "new_games_location": "",
+    "refresh_minutes": "0",
+    "show_updates": "true",
+    "update_downloaded_media": "true",
+    "update_game_details": "false"
+  },
+  "vpinplay": {
+    "api_endpoint": "https://api.vpinplay.com:8888",
+    "initials": "",
+    "machine_id": "",
+    "sync_on_exit": "false",
+    "user_id": ""
+  },
+  "vpxmobile": {
+    "chunk_size": "1048576",
+    "config_mask": "mobile",
+    "send_masked_config": "false"
+  },
+  "windows.backglass": {
+    "override": "",
+    "screen_id": ""
+  },
+  "windows.playfield": {
+    "orientation": "landscape",
+    "rotation": "0",
+    "screen_id": "0"
+  },
+  "windows.scoreview": {
+    "override": "",
+    "screen_id": ""
+  },
+  "windows.topper": {
+    "screen_id": ""
+  }
+}

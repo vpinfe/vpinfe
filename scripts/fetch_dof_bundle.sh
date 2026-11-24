@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOF_REPO="${DOF_REPO:-superhac/libdof-python}"
+DOF_REPO="${DOF_REPO:-vpinfe/libdof-python}"
 DOF_VERSION="${DOF_VERSION:-latest}"
 
 if [[ "${1:-}" != "" ]]; then
@@ -22,6 +22,6 @@ python3 scripts/fetch_dof_bundle.py \
   --repo "${DOF_REPO}" \
   --version "${DOF_VERSION}" \
   --triplet "${DOF_TRIPLET}" \
-  --outdir "third-party/dof"
+  --outdir "third_party/dof"
 
-echo "Installed DOF bundle for ${DOF_TRIPLET} at third-party/dof"
+echo "Installed DOF bundle for ${DOF_TRIPLET} at third_party/dof"

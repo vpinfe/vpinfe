@@ -1,0 +1,15 @@
+{
+  "name": "Example Scores",
+  "description": "Lists, flags, removes and posts the scores on Example Scores.",
+  "log.started": "Example Scores started",
+  "settings.site.label": "Site",
+  "settings.site.help": "Where the scores are read from.  Blank uses {default}",
+  "settings.key.label": "Key",
+  "settings.key.help": "The practice site's key is practice-key",
+  "error.address": "The address must start with http:// or https://",
+  "error.refused": "The site did not accept the key",
+  "list.scores.title": "Example Scores",
+  "list.scores.column.player.header": "Player",
+  "list.scores.column.table.header": "Table",
+  "list.scores.column.score.header": "Score"
+}

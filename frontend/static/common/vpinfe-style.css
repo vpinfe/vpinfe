@@ -1,0 +1,631 @@
+#overlay-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  /* background-color: rgba(0, 0, 0, 0.6); */
+  display: none; /* ✅ hide by default */
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* Every overlay frame, whichever it is. The chrome was written out once per frame id and
+   was identical in all three; only the size differs, so only the size is stated below. */
+.vpinfe-overlay-frame {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+#menu-frame {
+  width: min(88vw, calc(88vh * 1.5), 1800px);
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+#collection-menu-frame {
+  width: min(82vw, calc(88vh * 1.5), 1400px);
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+#tutorial-frame {
+  width: 94vw;
+  height: 94vh;
+}
+
+#overlay-root {
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#overlay-root.active {
+  display: flex;
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Core layout - opt in with `layout.enabled` in a theme's config.json.
+
+   Four themes each worked this out by hand and no two agreed, so the same ini gave
+   different geometry depending on which theme was installed. These rules are the one
+   answer; core sets the attributes and custom properties they read.
+
+   Nothing here applies unless a theme marks an element, so linking this file stays
+   free for the themes that do their own.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --vpinfe-upright-rotation: 0deg;
+  --vpinfe-playfield-media-rotation: 0deg;
+}
+
+/* The whole UI, turned to face the player. Only needed when the OS is not already
+   rotating the playfield screen. */
+[data-vpinfe-upright="90"] .vpinfe-upright,
+[data-vpinfe-upright="180"] .vpinfe-upright,
+[data-vpinfe-upright="270"] .vpinfe-upright {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) rotate(var(--vpinfe-upright-rotation));
+}
+
+/* A quarter turn swaps the axes, so the surface is the viewport's other way round. */
+[data-vpinfe-upright="90"] .vpinfe-upright,
+[data-vpinfe-upright="270"] .vpinfe-upright {
+  width: 100vh;
+  height: 100vw;
+}
+
+[data-vpinfe-upright="180"] .vpinfe-upright {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Playfield art, turned to fill the surface. Sized from the viewport and never from
+   the element: getBoundingClientRect() reports the box *after* this transform, so
+   feeding it back shrinks the image a little more on every pass. */
+.vpinfe-playfield-media {
+  transform-origin: center center;
+  transform: translate(-50%, -50%) rotate(var(--vpinfe-playfield-media-rotation));
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+/* Turned art is the box it fills laid on its side, so the quarter turn lands it back on
+   the box. That box is the viewport, or the viewport on its side inside .vpinfe-upright
+   when a quarter turn of the page is in play. */
+.vpinfe-playfield-media[data-vpinfe-turned="true"] {
+  width: 100vh;
+  height: 100vw;
+}
+
+[data-vpinfe-upright="90"] .vpinfe-playfield-media[data-vpinfe-turned="true"],
+[data-vpinfe-upright="270"] .vpinfe-playfield-media[data-vpinfe-turned="true"] {
+  width: 100vw;
+  height: 100vh;
+}
+
+.vpinfe-playfield-media:not([data-vpinfe-turned="true"]) {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+   Launching - every window steps aside while VPX takes the screens.
+
+   Set on the document by core, not by a theme: the controller is the only window
+   a theme's script runs in, so a theme doing this for itself dims one screen and
+   leaves the others lit. Opacity only, because it composites.
+   --------------------------------------------------------------------------- */
+
+body {
+  transition: opacity 300ms ease;
+}
+
+html[data-vpinfe-launching][data-vpinfe-loading-screen] {
+  background: #000;
+}
+
+html[data-vpinfe-launching] body {
+  opacity: 0;
+}
+
+/* A window that cannot find the controller's game in its own list shows nothing, so it
+   never shows another game than the playfield. Set by core, whatever the theme draws. */
+html[data-vpinfe-held] body {
+  visibility: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   Waiting for the library's folders (core_waiting). The words are the attribute
+   core sets, so this draws on any theme without a line of its own.
+   --------------------------------------------------------------------------- */
+
+html[data-vpinfe-waiting]::after {
+  content: attr(data-vpinfe-waiting);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5vmin;
+  white-space: pre-line;
+  text-align: center;
+  background: #000;
+  color: #fff;
+  font: 600 5vmin/1.5 system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   Confirm before quitting, restarting or powering off.
+
+   Core draws it rather than the theme, so turning the setting on works on a theme
+   written before it existed. A theme that wants its own passes confirmed and never
+   reaches this. Deliberately plain - it sits over whatever the theme is showing.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;      /* over any overlay, including a theme's own */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.vpinfe-confirm-card {
+  padding: 2.5rem 3rem;
+  border-radius: 0.75rem;
+  background: #1b1b1f;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  text-align: center;
+  font-family: sans-serif;
+  color: #fff;
+  max-width: 80vw;
+}
+
+.vpinfe-confirm-question {
+  margin: 0;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+.vpinfe-confirm-hint {
+  margin: 1rem 0 0;
+  font-size: clamp(0.85rem, 1.6vw, 1.1rem);
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------------------
+   The notice a window gets when somebody else started something.
+
+   Deliberately not the confirm dialog: this window has no say, so it does not dim
+   the screen or take the input. It sits out of the way and says what is happening.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  z-index: 2147483646;      /* under a confirm, over everything else */
+  padding: 0.9rem 1.5rem;
+  border-radius: 0.5rem;
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-family: sans-serif;
+  color: #fff;
+  max-width: 80vw;
+}
+
+.vpinfe-notice-text {
+  margin: 0;
+  font-size: clamp(0.9rem, 2vw, 1.35rem);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------------------
+   While this device records a run, one line at the top of the controller window.
+
+   Core's, on every theme, and read from across a room: large, and nothing to answer.
+   The surface is turned like .vpinfe-upright, from an attribute core sets on the line
+   itself, so it faces the player whether or not the theme opted into core's layout.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-recording {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  padding-top: 4vmin;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2147483645;      /* under the notice and the confirm, over any overlay */
+}
+
+.vpinfe-recording[data-upright="90"],
+.vpinfe-recording[data-upright="270"] {
+  width: 100vh;
+  height: 100vw;
+}
+
+.vpinfe-recording[hidden] {
+  display: none;
+}
+
+.vpinfe-recording-text {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.5em 1.1em;
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-family: sans-serif;
+  font-size: clamp(1.1rem, 3.2vmin, 2.4rem);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.vpinfe-recording-text::before {
+  content: "";
+  flex: none;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: #e53935;
+  animation: vpinfe-recording-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes vpinfe-recording-pulse {
+  50% { opacity: 0.3; }
+}
+
+/* ---------------------------------------------------------------------------
+   While input events are going to a Manager, one line at the bottom of the controller window.
+
+   Built like the recording line above and turned the same way, with a bar that fills while
+   a button is kept down to take them back. The dot flashes on each press that is sent.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-capture {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  padding-bottom: 4vmin;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2147483645;
+}
+
+.vpinfe-capture[data-upright="90"],
+.vpinfe-capture[data-upright="270"] {
+  width: 100vh;
+  height: 100vw;
+}
+
+.vpinfe-capture[hidden] {
+  display: none;
+}
+
+.vpinfe-capture-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.6em 1.3em 0.7em;
+  border-radius: 1.4em;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-family: sans-serif;
+  color: #fff;
+  max-width: 90%;
+}
+
+.vpinfe-capture-text,
+.vpinfe-capture-hint {
+  margin: 0;
+  text-align: center;
+}
+
+.vpinfe-capture-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  font-size: clamp(1.1rem, 3.2vmin, 2.4rem);
+}
+
+.vpinfe-capture-text::before {
+  content: "";
+  flex: none;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: #43a047;
+}
+
+.vpinfe-capture-pressed::before {
+  animation: vpinfe-capture-flash 0.35s ease-out;
+}
+
+.vpinfe-capture-hint {
+  font-size: clamp(0.9rem, 2.4vmin, 1.8rem);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.vpinfe-capture-bar {
+  width: 100%;
+  height: 0.4em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.vpinfe-capture-bar[hidden] {
+  display: none;
+}
+
+.vpinfe-capture-bar > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+@keyframes vpinfe-capture-flash {
+  0% { background: #fff; transform: scale(1.8); }
+  100% { background: #43a047; transform: scale(1); }
+}
+
+@keyframes vpinfe-capture-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ---------------------------------------------------------------------------
+   The ring that counts a hold.
+
+   Core's, on every theme, while a key or button that has a hold is kept down. Centered
+   because a circle reads the same whichever way the surface is turned. It starts
+   invisible, so a tap never flashes it, and the fill runs for exactly the hold's length
+   (core sets --vpinfe-hold-ms on the element). A theme restyles .vpinfe-hold, or turns
+   it off with hold_ring.enabled and draws its own.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-hold {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: clamp(4rem, 14vmin, 9rem);
+  height: clamp(4rem, 14vmin, 9rem);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2147483646;      /* over any overlay, under a confirm */
+  opacity: 0;
+  animation: vpinfe-hold-appear 120ms ease-out 250ms forwards;
+}
+
+.vpinfe-hold svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.vpinfe-hold-track,
+.vpinfe-hold-fill {
+  fill: rgba(20, 20, 24, 0.88);
+  stroke-width: 4;
+}
+
+.vpinfe-hold-track {
+  stroke: rgba(255, 255, 255, 0.25);
+}
+
+.vpinfe-hold-fill {
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: vpinfe-hold-fill var(--vpinfe-hold-ms, 1500ms) linear forwards;
+}
+
+@keyframes vpinfe-hold-appear {
+  to { opacity: 1; }
+}
+
+@keyframes vpinfe-hold-fill {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   The spinner shown while a game starts.
+
+   Core's, in every window of every theme from contract 2, from TableLaunching until the
+   table is running. Centered and above the page but below the hold ring and a confirm.
+   A theme restyles .vpinfe-launch-indicator (and .vpinfe-launch-spinner inside it), or
+   turns it off with launch_indicator.enabled and draws its own.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-launch-indicator {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 2147483645;
+  opacity: 0;
+  animation: vpinfe-launch-appear 180ms ease-out forwards;
+}
+
+.vpinfe-launch-spinner {
+  width: clamp(3rem, 12vmin, 8rem);
+  height: clamp(3rem, 12vmin, 8rem);
+  border: 0.4rem solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: vpinfe-launch-spin 900ms linear infinite;
+}
+
+@keyframes vpinfe-launch-appear {
+  to { opacity: 1; }
+}
+
+@keyframes vpinfe-launch-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   The loading screen (core_loading_screen): the game's Loading Video or its Playfield
+   picture over the controller window while a game starts. Above the page, below the
+   spinner. A theme restyles .vpinfe-loading-screen or turns it off with
+   loading_screen.enabled.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-loading-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  pointer-events: none;
+  z-index: 2147483643;
+}
+
+.vpinfe-loading-screen > video,
+.vpinfe-loading-screen > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ---------------------------------------------------------------------------
+   A recording shown for a decision, on the screen it belongs to.
+
+   The window whose screen it is plays it over everything the theme drew; the
+   controller says which it is and what the buttons do, over its own screen dimmed.
+   The surface turns like .vpinfe-upright, and a playfield file turns inside it the
+   way core turns playfield art.
+   --------------------------------------------------------------------------- */
+
+.vpinfe-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483644;      /* under the recording line, the notice and the confirm */
+  background: rgba(0, 0, 0, 0.82);
+  font-family: sans-serif;
+  color: #fff;
+}
+
+.vpinfe-preview[data-shows="media"] {
+  background: #000;
+}
+
+.vpinfe-preview-surface {
+  --vpinfe-preview-w: 100vw;
+  --vpinfe-preview-h: 100vh;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--vpinfe-preview-w);
+  height: var(--vpinfe-preview-h);
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+}
+
+.vpinfe-preview-surface[data-upright="90"],
+.vpinfe-preview-surface[data-upright="270"] {
+  --vpinfe-preview-w: 100vh;
+  --vpinfe-preview-h: 100vw;
+}
+
+.vpinfe-preview-media {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--vpinfe-preview-w);
+  height: var(--vpinfe-preview-h);
+  object-fit: contain;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+}
+
+.vpinfe-preview-media[data-turned="true"] {
+  width: var(--vpinfe-preview-h);
+  height: var(--vpinfe-preview-w);
+}
+
+.vpinfe-preview-missing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  font-size: clamp(1.5rem, 6vmin, 4rem);
+  opacity: 0.6;
+}
+
+.vpinfe-preview-bar {
+  position: absolute;
+  top: 4vmin;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.7em 1.4em;
+  border-radius: 1rem;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  text-align: center;
+}
+
+.vpinfe-preview-title {
+  margin: 0;
+  font-size: clamp(1.2rem, 3.6vmin, 2.8rem);
+  white-space: nowrap;
+}
+
+.vpinfe-preview-hint {
+  margin: 0.4em 0 0;
+  font-size: clamp(0.9rem, 2.2vmin, 1.6rem);
+  opacity: 0.75;
+}
+
+.vpinfe-preview-tag {
+  position: absolute;
+  top: 3vmin;
+  right: 3vmin;
+  padding: 0.4em 1em;
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: clamp(1rem, 3vmin, 2.2rem);
+}
+
+.vpinfe-preview-tag .vpinfe-preview-title {
+  font-size: inherit;
+}

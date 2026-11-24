@@ -1,0 +1,8 @@
+{
+  "name": "machine_page",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/machine_page",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Game Notes",
+  "description": "Keeps a note for each game and shows a table's version on its panel.",
+  "group.game.title": "Game Notes",
+  "group.table.title": "This Table",
+  "group.about": "Game",
+  "group.note": "Note",
+  "group.version": "Version",
+  "group.file": "File"
+}

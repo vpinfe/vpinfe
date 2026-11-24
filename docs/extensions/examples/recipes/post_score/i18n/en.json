@@ -1,0 +1,17 @@
+{
+  "name": "Post Score",
+  "description": "Checks a key against Example Scores, then posts a score to it.",
+  "settings.site.label": "Site",
+  "action.post.label": "Post a Score",
+  "dialog.key.title": "Sign In",
+  "dialog.key.help": "The practice site's key is practice-key",
+  "dialog.key": "Key",
+  "dialog.key.refused": "The site did not accept that key",
+  "dialog.score.title": "The Score",
+  "dialog.player": "Player",
+  "dialog.table": "Table",
+  "dialog.points": "Score",
+  "dialog.sure.title": "Post this score?",
+  "dialog.sure.confirm": "Post",
+  "dialog.posted": "Posted a score for {table}"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "tool_link",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/tool_link",
+  "requires_platform": 1,
+  "capabilities": ["config:own", "ui:mount"]
+}

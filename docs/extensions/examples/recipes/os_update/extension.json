@@ -1,0 +1,11 @@
+{
+  "name": "os_update",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/os_update",
+  "requires_platform": 1,
+  "platforms": ["vpinos"],
+  "scopes": ["system:admin"],
+  "capabilities": ["os:updates", "ui:mount"],
+  "tiers": ["protected"]
+}

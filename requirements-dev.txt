@@ -1,0 +1,8 @@
+# Development dependencies. Not needed to run VPinFE, never imported, and not bundled
+# into a build - they exist so a checkout can run the same checks CI runs.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+# Lint and type checking. Rules and the advisory/blocking split are in docs/conventions.md.
+ruff==0.16.5
+mypy==2.3.1

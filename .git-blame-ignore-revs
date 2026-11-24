@@ -1,0 +1,77 @@
+# Commits that renamed things without changing them.
+#
+# 3.0 aligned VPinFE's vocabulary with VPS: the machine is a game, the .vpx is a
+# table, and the main screen is the playfield. That touched ~150 files and rewrote
+# every comment that named the old concepts, which buries the real authorship of
+# almost every line in the tree.
+#
+# Nothing listed here changed behavior. Bug fixes found during the rename are
+# deliberately absent - those are real changes and blame should point at them.
+#
+# GitHub honors this file automatically. Locally:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Identifier renames - the three-way swap
+169a0aefe4408e0bed908105086884278afd3f5a  # tables: call the playfield the playfield
+988b4ce2ef5dcf1017e9f483b0575f81523de872  # tables: a table folder is a game folder
+7ca0b1cfe05cd7360595c57f3e33a2855b9d1cc8  # tables: the Table object is a Game
+0d2e7c5324ea825bf3e145fcee6896636088ac35  # tables: a table is a game
+c34368473dcd4d2e42eae70a961bee63eb119a19  # tables: finish the table-to-game rename in the compounds
+fdd4560890cfd586d2eef2566160dec04ffcc88d  # tables: a game file is a table
+181c52442611c4a17a246c06783bb6bf9508b7e7  # manager: the row keys say game too
+5ddb8a81fe0cbd302be89b612b00702b60a7f8eb  # manager: ui.table is NiceGUI's, not ours
+6b0a9049672e7283bf24057ae6546509256073b7  # manager: the ui.table is NiceGUI's, not a game
+0ac358a19013d56da0ead9a9fa0158ebab049bd2  # httpapi: the scopes say games, like the paths they open
+1a0de14a55d9624ad44080e91701f4ed07c0d3be  # docs, httpapi: a build is a table
+cb1921af32b105acfec7c373d2ca2db276905d27  # vocab: a game file is a table, in the places that still said so
+e92a6464c786f982b580786c848103afe2a5e172  # vocab: the last four names that no longer exist
+
+# Module and file moves
+002194bdcbdb40df8a2537734d42fb25a89114c5  # tables: move the modules that name the machine
+b6897c7d7f24d09708e482988d2eaabdfd7704fa  # tests: name the test files after the modules they test
+f33b619b2e87a33c43cfbf293f4eb001e83f7f85  # manager: move the stylesheet the games page actually asks for
+
+# Prose regenerated to the new vocabulary - comments and docs only
+90e0e95a6a1346ec0ee9c1ccd9e21d37bdf3c95d  # games: the log messages say game too
+73df370089a22935e339cdc450a65e087cd62cb6  # manager: the pages say game and table the way VPS does
+78c8d8aa81bec29f639568a885ff94ad7f13aec7  # games: the prose says game and table the way VPS does
+66c6895e6ced641d47eb521de2a5926e59a23ab8  # httpapi: the API prose says game and table the way VPS does
+04dacb1abcfef7dc132af7d9d13ca2e24c10f6ed  # manager: the service prose says game and table the way VPS does
+20850d62b2f8f699a41f867feba0d6b7a9d79f35  # common: the host, online and shared prose says game the way VPS does
+272c8d8cfc922a9e6d272a6176dc6adf8bf51351  # frontend: the frontend prose says game and table the way VPS does
+83608d856132a70688763976b94e2c23631f34f7  # tests: the test prose says game and table the way VPS does
+2bf5062678964e263778a35e7270d2372dab2719  # vocab: the three error messages a user reads
+ecca261532705b9f46e5f41f0138fb529b44ece8  # docs: the common, manager and media docs say game and table like VPS
+1c856bfa2aada45a30fd6ee55feb46ebe1f7901c  # docs: the API doc describes the API that exists
+f27f12080bfaa4d5c774ed4a3121a751650ffc79  # docs: the conventions, frontend and details docs say game and table like VPS
+6e45cf733c7be60a9db2cc7626b17eee577e998a  # docs: the theme doc describes the contract that exists
+cab4dab6023a4d798294383e9f23c7d81b0c121c  # docs: the ledger describes 3.0 in 3.0's words
+5ac572252b2fa752d051668e7228a419c4e8d372  # docs: the intermediate names are dead too
+43c542826d030f5a7a71305657a93f7407bba098  # cli, docs: there is no meta.ini
+
+# Manager UI wording, applied then reverted - both sides cancel
+1e921138cc5a9acfedc8306d6429d307c522c787  # manager: the words on screen say game
+c6f5a5dc2bd02a4818ec1f6040f76a9f69801f54  # Revert "manager: the words on screen say game"
+62dd67991ec3ca0474d12793279960ea517a0d8a  # manager: revert the rest of the UI wording, from 1649138
+
+# Module names that claimed a specificity they did not have
+b4b95b9aa698a2b845baa4267cf9385b277ff2b5  # collections: the store is not VPX's, so stop naming it that
+7095668e91ecceeb45187cd1484635f713fe4e69  # media: the module declares kinds, so call it media_specs
+c16a5058170d14fe9288434f66bbe720c2ddeb84  # repo: module names follow the convention they are held to
+d41831b93acdfed5ff0cf8c4f931d15c09f58037  # config: the store is named for what it stores, not how
+
+# The four naming judgement calls, settled 2026-08-05
+7abbfa10f5fa09af7d3ab140e32e4cec10b2b41e  # info: MetaConfig's camelCase API is snake_case
+
+# Whitespace only - no line changed except its indentation
+b007dbc431994c0d68e9ef6e1e63bee4860b7766  # config: the last tab-indented file uses spaces
+
+# player is device, and player goes back to meaning a person - 2026-08-19
+a9e021054380af8712c888f1d889f494d5c3b705  # vocab: device is the machine you play on, and nothing else
+38e086b2245dc2f8b652fa3b8df96019e6f0ba88  # vocab: the names a device is known by outside this process
+9898798bdc20d0e292ef529861ce2514f0d8944c  # vocab: the modules a device is served by
+8508219c5a570b6a59fbcd5232763d8bba6eb9cb  # vocab: vpin.endpoints.player is vpin.endpoints.device
+ac97ee8dba37b6b04496a92d64d3da0da2f02b9b  # vocab: the identifiers, and the prose that reads with them
+e46b4f382c7ddb6f118965384908054f82d43d10  # vocab: the tests say device where they mean the machine
+9ba0f954ed51af43fa3f3108faa36d6468887a60  # docs: the written record says device too

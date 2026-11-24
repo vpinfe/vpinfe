@@ -1,0 +1,9 @@
+{
+  "name": "weekend_picks",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/weekend_picks",
+  "requires_platform": 1,
+  "scopes": ["games:read", "collections:read", "collections:write"],
+  "capabilities": ["config:own", "ui:mount"]
+}

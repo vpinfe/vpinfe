@@ -1,0 +1,16 @@
+{
+  "name": "OS Update",
+  "description": "Installs the operating system's updates on a VPinOS cabinet, after asking.",
+  "action.updates.label": "System Updates",
+  "action.restart.label": "Restart",
+  "dialog.waiting": "Updates Waiting",
+  "dialog.will": "This Will",
+  "dialog.install": "Install",
+  "dialog.no_helper": "This device has no system helper",
+  "dialog.reboot": "Restart this device",
+  "dialog.restart": "Restart VPinFE",
+  "dialog.restart_now": "Restart",
+  "dialog.restarting": "Restarting now",
+  "need.restart.label": "Restart to finish the updates",
+  "need.restart.says": "The updates are installed and take effect after a restart"
+}

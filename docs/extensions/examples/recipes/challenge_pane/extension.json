@@ -1,0 +1,8 @@
+{
+  "name": "challenge_pane",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/challenge_pane",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

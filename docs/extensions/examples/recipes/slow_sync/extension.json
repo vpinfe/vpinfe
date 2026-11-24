@@ -1,0 +1,8 @@
+{
+  "name": "slow_sync",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/slow_sync",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

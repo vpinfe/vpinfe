@@ -1,0 +1,17 @@
+{
+  "name": "Weekly Board",
+  "description": "Lists the weekly challenges, with a state, tags, a link and a picture for each.",
+  "list.board.title": "Weekly Board",
+  "list.board.column.name.header": "Challenge",
+  "list.board.column.status.header": "Status",
+  "list.board.column.status.state.open": "Open",
+  "list.board.column.status.state.open.why": "Scores are being taken",
+  "list.board.column.status.state.closing": "Closing",
+  "list.board.column.status.state.closing.why": "Ends within a day",
+  "list.board.column.status.state.closed": "Closed",
+  "list.board.column.status.state.cancelled": "Cancelled",
+  "list.board.column.status.state.planned": "Planned",
+  "list.board.column.tags.header": "Tags",
+  "list.board.column.page.header": "Rules",
+  "list.board.column.art.header": "Picture"
+}

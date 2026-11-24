@@ -1,0 +1,6 @@
+{
+  "name": "Player Handle",
+  "description": "Keeps a handle and a key for each player.",
+  "account.handle": "Handle",
+  "account.key": "Key"
+}

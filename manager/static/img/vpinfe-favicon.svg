@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="VPinFE">
+  <defs>
+    <linearGradient id="vpf-s" x1="0" y1="20" x2="0" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffdc0a"/>
+      <stop offset=".36" stop-color="#fe7a3f"/>
+      <stop offset=".70" stop-color="#fb1a68"/>
+      <stop offset="1" stop-color="#e0008c"/>
+    </linearGradient>
+    <radialGradient id="vpf-p" cx=".34" cy=".26" r=".92">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".34" stop-color="#a8e0ff"/>
+      <stop offset=".70" stop-color="#1e63c0"/>
+      <stop offset="1" stop-color="#0b1030"/>
+    </radialGradient>
+    <clipPath id="vpf-slats">
+      <rect x="24" y="20" width="80" height="26"/>
+      <rect x="24" y="56" width="80" height="14"/>
+      <rect x="24" y="78" width="80" height="8"/>
+    </clipPath>
+    <clipPath id="vpf-shape">
+      <rect x="24" y="18" width="80" height="48"/>
+      <rect x="32" y="66" width="64" height="22"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#vpf-slats)"><g clip-path="url(#vpf-shape)">
+    <circle cx="64" cy="54" r="34" fill="url(#vpf-s)"/>
+  </g></g>
+  <path d="M5 30 H123 L64 118 Z" fill="none" stroke="#ff2ea6" stroke-width="11" stroke-linejoin="round"/>
+  <circle cx="64" cy="94" r="18" fill="url(#vpf-p)"/>
+</svg>

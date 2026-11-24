@@ -1,0 +1,9 @@
+{
+  "name": "next_player_note",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/next_player_note",
+  "requires_platform": 1,
+  "capabilities": ["config:own", "ui:mount"],
+  "play": ["section:note", "action:clear"]
+}

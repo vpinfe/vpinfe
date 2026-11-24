@@ -1,0 +1,5 @@
+{
+  "name": "Play Log",
+  "description": "Writes a line to the log each time a game ends.",
+  "log.played": {"one": "{game} was played for a minute", "other": "{game} was played for {count} minutes"}
+}

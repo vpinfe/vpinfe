@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Gamepad Controlled Menu</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <div id="menu-container">
+    <div class="menu-title" id="menu-heading" hidden></div>
+    <ul class="menu" id="menu">
+      <li class="menu-item" id="rating-item" data-i18n="word.rating">Rating</li>
+      <li class="menu-item" id="player-item" style="display: none;"></li>
+      <li class="menu-item" id="record-item" style="display: none;"></li>
+      <li class="menu-item" id="audio-item" data-i18n="frontend.mainmenu.frontend_audio_2">Frontend Audio: On</li>
+      <li class="menu-item" id="buildmeta-item" data-i18n="frontend.mainmenu.build_metadata">Build Metadata</li>
+      <li class="menu-item" id="shutdown-item" data-i18n="frontend.mainmenu.shutdown">Shutdown</li>
+      <li class="menu-item" id="quit-item" data-i18n="frontend.mainmenu.quit">Quit</li>
+    </ul>
+    <p class="menu-note" id="menu-note" hidden></p>
+    <div id="menu-qr-panels" aria-live="polite" hidden>
+      <div class="menu-qr-panel" id="manager-qr-panel" hidden>
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.manager">Manager</div>
+        <div class="menu-qr-row">
+          <div class="menu-qr-code" id="manager-qr-code" aria-label="QR code for the Manager"></div>
+          <div class="menu-qr-address" id="manager-address"></div>
+        </div>
+      </div>
+      <div class="menu-qr-panel" id="remote-qr-panel">
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.remote">Remote Control</div>
+        <div class="menu-qr-code" id="remote-qr-code" aria-label="QR code for the remote control"></div>
+      </div>
+      <div class="menu-qr-panel" id="join-qr-panel">
+        <div class="menu-qr-label" data-i18n="frontend.mainmenu.join">Join as Player</div>
+        <div class="menu-qr-code" id="join-qr-code" aria-label="QR code for the Remote's Join screen"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Build Metadata Overlay -->
+  <div id="buildmeta-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; padding: 3vh; border-radius: 1vh; min-width: 40vw;">
+      <div id="buildmeta-options" style="display: block;">
+        <h2 style="margin: 0 0 2vh 0; font-size: 3vh;" data-i18n="frontend.mainmenu.metadata_menu">Build Metadata Options</h2>
+        <div style="margin-bottom: 2vh;">
+          <label style="display: flex; align-items: center; margin-bottom: 1.5vh; cursor: pointer;">
+            <input type="checkbox" id="update-all-check" style="margin-right: 1vh; width: 2vh; height: 2vh;">
+            <div>
+              <div style="font-size: 2.2vh; font-weight: bold;" data-i18n="frontend.mainmenu.rematch">Match Every Game Again</div>
+              <div style="font-size: 1.6vh; color: #999;" data-i18n="frontend.mainmenu.rematch.help">Each game is matched from its folder name. Matches you picked stay.</div>
+            </div>
+          </label>
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="download-media-check" checked style="margin-right: 1vh; width: 2vh; height: 2vh;">
+            <div>
+              <div style="font-size: 2.2vh; font-weight: bold;" data-i18n="frontend.mainmenu.download_media">Download Media</div>
+              <div style="font-size: 1.6vh; color: #999;" data-i18n="frontend.mainmenu.download_media.help">Get media from VPinMediaDB. Media you added stays.</div>
+            </div>
+          </label>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 1vh; margin-top: 3vh;">
+          <button id="buildmeta-cancel" style="padding: 1vh 2vh; background: #444; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh;" data-i18n="word.cancel">Cancel</button>
+          <button id="buildmeta-start" style="padding: 1vh 2vh; background: #2196F3; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh;" data-i18n="frontend.mainmenu.start_build">Start Build</button>
+        </div>
+      </div>
+      <div id="buildmeta-progress" style="display: none;">
+        <h2 style="margin: 0 0 2vh 0; font-size: 3vh;" data-i18n="frontend.mainmenu.building_metadata">Building Metadata</h2>
+        <div style="background: #333; border-radius: 0.5vh; height: 2vh; margin-bottom: 1vh; overflow: hidden;">
+          <div id="progress-bar" style="background: #2196F3; height: 100%; width: 0%; transition: width 0.3s;"></div>
+        </div>
+        <div id="progress-text" style="font-size: 1.8vh; color: #ccc; margin-bottom: 2vh;" data-i18n="frontend.mainmenu.starting">Starting...</div>
+        <div id="log-container" style="background: #111; border-radius: 0.5vh; padding: 1vh; max-height: 30vh; overflow-y: auto; font-family: monospace; font-size: 1.4vh; color: #0f0;">
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 2vh;">
+          <button id="buildmeta-close" style="padding: 1vh 2vh; background: #444; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh; display: none;" data-i18n="word.close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rating Overlay -->
+  <div id="rating-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; padding: 3vh; border-radius: 1vh; min-width: 40vw;">
+      <h2 style="margin: 0 0 2vh 0; font-size: 3vh;" data-i18n="frontend.mainmenu.table_rating">Table Rating</h2>
+      <div id="rating-for-text" hidden style="font-size: 1.8vh; color: #ffd84d; margin-bottom: 1vh;"></div>
+      <div id="rating-current-text" style="font-size: 2vh; color: #ccc; margin-bottom: 2vh;"></div>
+      <div id="rating-stars-row" style="display: flex; justify-content: center; margin-bottom: 2vh;"></div>
+      <div style="display: flex; justify-content: flex-end; gap: 1vh;">
+        <button id="rating-clear" style="padding: 1vh 2vh; background: #555; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh;" data-i18n="word.clear">Clear</button>
+        <button id="rating-cancel" style="padding: 1vh 2vh; background: #444; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh;" data-i18n="word.cancel">Cancel</button>
+        <button id="rating-save" style="padding: 1vh 2vh; background: #2196F3; border: none; color: #fff; border-radius: 0.5vh; cursor: pointer; font-size: 2vh;" data-i18n="word.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+    <script src="./mainmenu.js"></script>
+</body>
+
+</html>

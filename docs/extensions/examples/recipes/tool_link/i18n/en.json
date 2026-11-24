@@ -1,0 +1,9 @@
+{
+  "name": "Tool Link",
+  "description": "Links to a hardware tool's own web page, and to its manual.",
+  "settings.port.label": "Port",
+  "settings.port.help": "The port the tool's page answers on",
+  "link.console.label": "Tool Console",
+  "link.console.tip": "The tool's own page, in a new tab",
+  "link.manual.label": "Manual"
+}

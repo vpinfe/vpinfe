@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VPinFE Backglass</title>
+  <link rel="stylesheet" href="/core/common/vpinfe-style.css">
+  <script src="/core/common/vpinfe-core.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+    .stage img, .stage video { width: 100%; height: 100%; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <div class="stage" data-vpin-media></div>
+</body>
+</html>

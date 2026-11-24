@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Fetching the libdmdutil binaries a build needs. Run by CI, not by the app."""
+
 import argparse
 import hashlib
 import json
@@ -179,7 +181,7 @@ def main() -> int:
     parser.add_argument('--repo', required=True, help='GitHub repo owner/name')
     parser.add_argument('--version', default='latest', help='Release tag, e.g. v1.0.1, or "latest"')
     parser.add_argument('--triplet', required=True, help='Manifest triplet, e.g. linux-x64')
-    parser.add_argument('--outdir', default='third-party/libdmdutil', help='Output directory')
+    parser.add_argument('--outdir', default='third_party/libdmdutil', help='Output directory')
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix='vpinfe-libdmdutil-') as td:

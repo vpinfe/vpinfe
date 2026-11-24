@@ -2,9 +2,81 @@
 /vvv
 *.ini
 *.log
+
+# The same rule as the .json one below, for the same reason: config is .ini and the
+# fixtures we mean to keep are the exception. This one is a source library's own config,
+# in the UTF-16 it is really written in - the encoding is half of what the test is for.
+!tests/fixtures/pinballx/Config/*.ini
+
+# Config, logs and caches are JSON, and there are far more of those than there are
+# JSON files we mean to keep - so the rule is exclude-then-name-the-exceptions. A
+# committed .json needs a negation below, in the same commit that adds it: forgetting
+# one is silent, green locally and missing on a clean checkout.
 *.json
-!common/resources/roms.json
-third-party/
+
+# The translation catalogs, and the hashes that tell a translator which of their
+# entries were written against English that has since moved. Shipped: without these
+# every label in the app renders as its own key. An app keeps its own beside it.
+!common/i18n/catalogs/*.json
+!apps/*/i18n/*.json
+
+# The parity gate's committed master snapshot - see docs/compatibility-3.0.md
+!tests/fixtures/parity_baseline_master.json
+
+# The DMG window the Mac signing layer hands over with the .app.
+!packaging/dmg-layout.json
+
+# The GNOME Shell add-on's description, copied into a person's folder with its script.
+!common/host/static/gnome-shell/*/metadata.json
+
+# The theme payload the JavaScript tests read. Committed on purpose: it is the only
+# thing tying tests/js/ to what Python actually builds.
+!tests/fixtures/theme_payload.json
+
+# The defaults a new install writes, frozen outside the schema. The outside witness
+# that keeps config_schema honest, since the store now reads its defaults from it.
+!tests/fixtures/config_defaults.json
+
+# Every config name we have ever written. Frozen outside the schema on purpose: reading
+# it from the schema would delete the assertion along with the alias it guards.
+!tests/fixtures/config_legacy_names.json
+
+# What each desktop prints about its screens, one file per case, read by the display probes'
+# parsers.
+!tests/fixtures/displays/**/*.json
+
+# The labels VPX writes into its ini, the settings a person picks from in a check that
+# no two read the same.
+!tests/fixtures/vpx_labels.json
+
+# The theme the render smoke test drives. Its manifest declares the contract and the
+# windows, so without this the harness is a contract 1 theme and the test asserts nothing.
+!tests/fixtures/theme-harness/*.json
+
+# A fixture extension's manifest. One per fixture directory.
+!tests/fixtures/extensions/*/extension.json
+!tests/fixtures/community/*/extension.json
+!tests/fixtures/community/*/i18n/en.json
+
+# A guide recipe is a whole extension, and the cookbook tells a reader to run it.
+!docs/extensions/examples/recipes/*/extension.json
+!docs/extensions/examples/recipes/*/i18n/en.json
+
+# A lesson's extension is the same, one folder deeper, inside the folder named for the lesson.
+!docs/extensions/examples/scores/*/example_scores/extension.json
+!docs/extensions/examples/scores/*/example_scores/i18n/en.json
+
+# The included extensions are not part of this repository: each is its own, and a
+# checkout gets them cloned or linked in here (scripts/fetch_extensions.py at build
+# time, the clone steps of the test workflow, the setup of a development tree).
+/extensions/
+
+# Declares the frontend test runner, beside the tests it runs. Named in full: a bare
+# package.json would un-ignore one anywhere in the tree.
+!tests/js/package.json
+
+# DOF and libdmdutil, fetched by scripts/ at build time and never committed.
+third_party/
 
 # PyInstaller build directories
 build/
@@ -13,4 +85,23 @@ dist/
 # Per-developer assistant and editor config, never the project's
 .claude/
 .codex
+.vscode/
+.idea/
 *.local.md
+.playwright-mcp/
+
+# Virtual environments
+.venv/
+venv/
+.python-version
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# macOS folder metadata
+.DS_Store
+
+# uv's resolved lockfile. Local tooling output - the project pins nothing through it.
+uv.lock

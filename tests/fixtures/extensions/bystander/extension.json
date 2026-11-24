@@ -1,0 +1,9 @@
+{
+  "name": "bystander",
+  "display_name": "Bystander",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/bystander",
+  "description": "Does nothing, so that what happens to its neighbor is visible.",
+  "requires_platform": 1
+}

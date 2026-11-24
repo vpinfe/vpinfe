@@ -1,0 +1,12 @@
+{
+  "name": "sample",
+  "display_name": "Sample",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/sample",
+  "description": "Exercises every part of the extension contract and nothing real.",
+  "requires_platform": 1,
+  "scopes": ["games:read", "players:read"],
+  "capabilities": ["config:own", "ui:mount"],
+  "events": ["noticed"]
+}

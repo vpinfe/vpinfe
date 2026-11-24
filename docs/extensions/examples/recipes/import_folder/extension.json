@@ -1,0 +1,9 @@
+{
+  "name": "import_folder",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/import_folder",
+  "requires_platform": 1,
+  "scopes": ["uploads:write"],
+  "capabilities": ["config:own", "fs:read", "ui:mount"]
+}

@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Collection Menu</title>
+  <style>
+    html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: rgba(0, 0, 0, 0);
+    color: #9ed0ff;
+    font-family: sans-serif;
+    font-size: clamp(7px, min(1.35vh, 0.9vw), 18px);
+    overflow: hidden;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #menu-container {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    transform-origin: center center;
+    background-image: url('./collectionmenu-frame.png');
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    box-sizing: border-box;
+    padding: 18vh 13.5vw 5.5vh;
+    overflow: hidden;
+  }
+
+    .menu-title {
+      font-size: 3.75vh;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 1vh;
+      padding: 1vh;
+      color: #fff;
+    }
+
+    ul.menu {
+      list-style: none;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: clamp(3px, 0.45em, 8px);
+      margin: 0;
+      overflow: hidden;
+    }
+
+    li.menu-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(9ch, 34%);
+      align-items: center;
+      column-gap: clamp(6px, 1.2em, 18px);
+      min-height: 0;
+      padding: clamp(3px, 0.52em, 9px) clamp(6px, 0.8em, 14px);
+      margin-bottom: clamp(3px, 0.34em, 7px);
+      background-color: #222;
+      border-radius: 0.5vh;
+      cursor: pointer;
+      position: relative;
+      font-size: clamp(10px, 1.4em, 21px);
+      line-height: 1.05;
+      color: #9ed0ff;
+    }
+
+    li.menu-item.selected {
+      background-color: #444;
+    }
+
+    li.menu-item.filter-separator {
+      margin-top: clamp(4px, 0.8em, 14px);
+    }
+
+    li.menu-item.action-separator,
+    li.menu-item.action-separator[hidden] + li.menu-item {
+      margin-top: clamp(4px, 0.8em, 14px);
+    }
+
+    li.menu-item[hidden] {
+      display: none;
+    }
+
+    .dropdown-label {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dropdown-value {
+      display: block;
+      font-weight: bold;
+      color: #b8e0ff;
+      min-width: 0;
+      max-width: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .popup {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #333;
+      border: 1px solid #555;
+      z-index: 1000;
+      width: 100%;
+      max-height: min(56vh, 520px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-size: clamp(10px, 1.4em, 21px);
+    }
+
+    .popup-option {
+      padding: 0.45em 0.8em;
+    }
+
+    .popup-option.selected {
+      background: #666;
+    }
+
+    #overlay-root {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    #overlay-root.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .table-count {
+      flex: 0 0 auto;
+      text-align: center;
+      font-size: clamp(9px, 1.1em, 17px);
+      padding: clamp(3px, 0.45em, 8px);
+      margin-top: clamp(3px, 0.45em, 8px);
+      color: #aaa;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="menu-container">
+    <ul class="menu" id="menu">
+      <li class="menu-item" id="collection-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.collections">Collections:</span>
+        <span class="dropdown-value" id="collection-value" data-i18n="frontend.collectionmenu.all_games">All Games</span>
+      </li>
+      <li class="menu-item filter-separator" id="letter-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.starting_letter">Starting Letter:</span>
+        <span class="dropdown-value" id="letter-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="theme-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.theme">Theme:</span>
+        <span class="dropdown-value" id="theme-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="type-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.type">Type:</span>
+        <span class="dropdown-value" id="type-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="manufacturer-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.manufacturer">Manufacturer:</span>
+        <span class="dropdown-value" id="manufacturer-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="year-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.year_2">Year:</span>
+        <span class="dropdown-value" id="year-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="rating-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.rating_2">Rating:</span>
+        <span class="dropdown-value" id="rating-value" data-i18n="word.all">All</span>
+      </li>
+      <li class="menu-item" id="ratingmode-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.rating_mode">Rating Mode:</span>
+        <span class="dropdown-value" id="ratingmode-value" data-i18n="frontend.collectionmenu.exact">Exact</span>
+      </li>
+      <li class="menu-item" id="sortby-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.sort">Sort By:</span>
+        <span class="dropdown-value" id="sortby-value" data-i18n="frontend.collectionmenu.title">Title</span>
+      </li>
+      <li class="menu-item" id="orderby-item">
+        <span class="dropdown-label" data-i18n="frontend.collectionmenu.order">Order By:</span>
+        <span class="dropdown-value" id="orderby-value" data-i18n="frontend.collectionmenu.ascending">Ascending</span>
+      </li>
+      <li class="menu-item action-separator" id="save-filter-item" data-i18n="frontend.collectionmenu.save_menu" hidden>Save as Collection...</li>
+      <li class="menu-item" id="close-item" data-i18n="word.close">Close</li>
+    </ul>
+
+    <div class="table-count" id="table-count"></div>
+    <!-- What a page press will do here. The sort decides the groups, so this changes
+         with the sort above rather than being a setting of its own. -->
+    <div class="table-count" id="paging-state"></div>
+    <div class="table-count" id="menu-message"></div>
+
+    <!-- Popup for dropdown -->
+    <div id="dropdown-popup" class="popup" style="display: none;"></div>
+
+    <!-- Dialog for saving filters -->
+    <div id="save-filter-dialog" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; border: 2px solid #555; padding: 1.5vh 2vw; z-index: 2000; border-radius: 0.5vh;">
+      <div style="font-size: 2.82vh; margin-bottom: 1vh;" data-i18n="frontend.collectionmenu.save_title">Save as Collection</div>
+      <input type="text" id="filter-name-input" style="width: 100%; padding: 0.5vh; font-size: 2.34vh; background: #333; color: #fff; border: 1px solid #555; border-radius: 0.25vh; margin-bottom: 1vh;">
+      <div style="display: flex; gap: 1vw;">
+        <button id="save-filter-btn" style="flex: 1; padding: 0.5vh; font-size: 2.34vh; background: #444; color: #fff; border: 1px solid #666; border-radius: 0.25vh; cursor: pointer;" data-i18n="word.save">Save</button>
+        <button id="cancel-save-btn" style="flex: 1; padding: 0.5vh; font-size: 2.34vh; background: #333; color: #fff; border: 1px solid #555; border-radius: 0.25vh; cursor: pointer;" data-i18n="word.cancel">Cancel</button>
+      </div>
+      <div id="save-message" style="margin-top: 0.75vh; font-size: 1.88vh; text-align: center;"></div>
+    </div>
+  </div>
+
+  <script>
+
+// The overlay has no core of its own. The parent hands it `__vpinWords` when the frame
+// is built; until then - and on any install with no catalog - the English passed here
+// is what shows.
+function t(key, english, params) {
+  const words = window.__vpinWords;
+  const form = (entry) => entry && typeof entry === 'object'
+    ? (Math.abs(Number(params && params.count)) === 1 && entry.one) || entry.other
+    : entry;
+  const said = form(words && words[key]) || form(english);
+  return params ? said.replace(/\{(\w+)(:n)?\}/g, (whole, name, spec) => {
+    if (params[name] === undefined) return whole;
+    return spec && window.__vpinNumber ? window.__vpinNumber(params[name]) : params[name];
+  }) : said;
+}
+    let rotationAngle = 0; // starting angle
+    // Two ordered lists with a cursor, one nested in the other, so both are core's list
+    // rather than two more copies of `(i +- 1 + n) % n`.
+    let rows = null;
+    let menuItems = [];
+    let dropdown = null;
+    let dropdownOpen = false;
+    let currentDropdownType = null;
+
+    // Filter data
+    let collections = ['None'];
+    let letters = ['All'];
+    let themes = ['All'];
+    let types = ['All'];
+    let manufacturers = ['All'];
+    let years = ['All'];
+    // A rule names a step of half a star, 1 to 10, the scale a game is rated on.
+    let ratings = ['All', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    let ratingModes = ['Exact', 'Or Higher'];
+    // The orders a collection can carry, in the same order and with the same labels the
+    // Manager offers. This used to be the five 2.x sort names, which could not express
+    // year, rating or play time - so a collection ordered by one of those showed as
+    // 'Alpha' here and could not be chosen at all.
+    let sortOptions = ['title', 'year', 'added', 'last_played', 'play_count',
+                       'play_time_seconds', 'rating'];
+    const SORT_LABELS = {
+      title: 'Title', year: 'Year', added: 'Date Added', last_played: 'Last Played',
+      play_count: 'Play Count', play_time_seconds: 'Play Time', rating: 'Rating',
+      // Not offered, but a curated collection reports it and the label has to say so.
+      manual: 'Custom Order',
+    };
+    // The words for the tokens the filters are written in. `All` and `None` go to the
+    // API as they are - they mean "no filter" - so the token stays and only the label
+    // moves. English here is the fallback when the catalog has not loaded.
+    const WORD_KEYS = {
+      'All': 'word.all',
+      'Exact': 'frontend.collectionmenu.exact',
+      'Or Higher': 'frontend.collectionmenu.higher',
+      'Ascending': 'frontend.collectionmenu.ascending',
+      'Descending': 'frontend.collectionmenu.descending',
+      'Title': 'frontend.collectionmenu.title', 'Year': 'frontend.collectionmenu.year_2',
+      'Date Added': 'frontend.collectionmenu.date_added',
+      'Last Played': 'frontend.collectionmenu.last_played',
+      'Play Count': 'frontend.collectionmenu.play_count',
+      'Play Time': 'frontend.collectionmenu.play_time',
+      'Rating': 'frontend.collectionmenu.rating_2',
+      'Custom Order': 'frontend.collectionmenu.custom_order',
+      'letter': 'frontend.collectionmenu.letter',
+      'year': 'frontend.collectionmenu.year_2',
+      'rating': 'frontend.collectionmenu.rating_2',
+    };
+    const word = (said) => WORD_KEYS[said] ? t(WORD_KEYS[said], said) : said;
+    const sortLabel = (token) => word(SORT_LABELS[token] || token);
+    // Tokens with labels, for the same reason the sorts above are: the value stored and
+    // the value shown were the same string, so the display spelling was the vocabulary.
+    let orderOptions = ['asc', 'desc'];
+    const DIRECTION_LABELS = { asc: 'Ascending', desc: 'Descending' };
+    // Which dropdowns show something other than their stored value. The popup renders
+    // the raw option, so without this the sort list reads `play_time_seconds`.
+    const OPTION_LABELS = { sortby: SORT_LABELS, orderby: DIRECTION_LABELS };
+    // The stars a step reads as: 1 is a half star, 7 is three and a half.
+    const starLabel = (step) => {
+      const halves = Number(step);
+      if (!halves) return step;
+      return (halves >> 1 || '') + (halves % 2 ? '\u00bd' : '');
+    };
+    const ratingLabel = (token) => (token === 'All' ? word(token) : starLabel(token));
+    const optionLabel = (type, value) => type === 'collection'
+      ? collectionLabel(value)
+      : type === 'rating' ? ratingLabel(value)
+      : word((OPTION_LABELS[type] || {})[value] || value);
+    const directionLabel = (token) => word(DIRECTION_LABELS[token] || token);
+    // `None` is the token the menu sends for the whole library. Every other entry is a
+    // collection's own name, which no catalog translates.
+    const collectionLabel = (name) =>
+      name === 'None' ? t('frontend.collectionmenu.all_games', 'All Games') : name;
+
+    // Current selections
+    let collectionIndex = 0;
+    let letterIndex = 0;
+    let themeIndex = 0;
+    let typeIndex = 0;
+    let manufacturerIndex = 0;
+    let yearIndex = 0;
+    let ratingIndex = 0;
+    let ratingModeIndex = 0;
+    let sortByIndex = 0;
+    let orderByIndex = 0;
+    let filterDisplayOverrides = {};
+
+    function setFilterDisplayOverrides(filterState = {}) {
+      filterDisplayOverrides = {
+        letter: filterState.letter || 'All',
+        theme: filterState.theme || 'All',
+        type: filterState.type || 'All',
+        manufacturer: filterState.manufacturer || 'All',
+        year: filterState.year || 'All',
+        rating: String(filterState.rating || 'All'),
+        ratingmode: filterState.rating_or_higher ? 'Or Higher' : 'Exact',
+        sortby: filterState.sort || sortOptions[sortByIndex] || 'title',
+        orderby: filterState.order || orderOptions[orderByIndex],
+      };
+    }
+
+    function clearFilterDisplayOverrides() {
+      filterDisplayOverrides = {};
+    }
+
+    async function init() {
+      collections = collections.concat(await window.parent.vpin.call('get_collections'));
+      letters = letters.concat(await window.parent.vpin.call('get_filter_letters'));
+      themes = themes.concat(await window.parent.vpin.call('get_filter_themes'));
+      types = types.concat(await window.parent.vpin.call('get_filter_types'));
+      manufacturers = manufacturers.concat(await window.parent.vpin.call('get_filter_manufacturers'));
+      years = years.concat(await window.parent.vpin.call('get_filter_years'));
+
+      // Get current collection and set index
+      const currentCollection = await window.parent.vpin.call('get_current_collection');
+      collectionIndex = collections.indexOf(currentCollection);
+      if (collectionIndex === -1) collectionIndex = 0; // fallback to None
+
+      // Get current filter state and set indices
+      const currentFilters = await window.parent.vpin.callInternal('get_current_filter_state');
+      letterIndex = letters.indexOf(currentFilters.letter || 'All');
+      if (letterIndex === -1) letterIndex = 0;
+      themeIndex = themes.indexOf(currentFilters.theme || 'All');
+      if (themeIndex === -1) themeIndex = 0;
+      typeIndex = types.indexOf(currentFilters.type || 'All');
+      if (typeIndex === -1) typeIndex = 0;
+      manufacturerIndex = manufacturers.indexOf(currentFilters.manufacturer || 'All');
+      if (manufacturerIndex === -1) manufacturerIndex = 0;
+      yearIndex = years.indexOf(currentFilters.year || 'All');
+      if (yearIndex === -1) yearIndex = 0;
+      ratingIndex = ratings.indexOf(String(currentFilters.rating || 'All'));
+      if (ratingIndex === -1) ratingIndex = 0;
+      ratingModeIndex = currentFilters.rating_or_higher ? 1 : 0;
+      if (ratings[ratingIndex] === 'All') ratingModeIndex = 0;
+
+      // Get current sort state
+      const currentSort = await window.parent.vpin.callInternal('get_current_sort_state');
+      sortByIndex = sortOptions.indexOf(currentSort);
+      if (sortByIndex === -1) sortByIndex = 0;
+      const currentOrder = await window.parent.vpin.callInternal('get_current_order_state');
+      orderByIndex = orderOptions.indexOf(currentOrder);
+      if (orderByIndex === -1) orderByIndex = 0;
+
+      if (currentCollection && currentCollection !== 'None') {
+        setFilterDisplayOverrides({
+          ...currentFilters,
+          sort: currentSort || sortOptions[0],
+          order: currentOrder || orderOptions[0],
+        });
+      }
+
+      window.parent.vpin.call("console_out", "Collection menu filters loaded");
+    }
+
+    window.parent.vpin.registerOverlayHandler("collectionMenu", handleInput);
+
+    // Keyboard input is core's, on this window as well as the parent's - see
+    // #listenForKeysIn in vpinfe-core.js. This file used to carry its own hardcoded
+    // map, which only ran when focus happened to be in here and could not be configured.
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (message.event === "reset state") {
+        if (rows) rows.moveTo(0);
+        dropdownOpen = false;
+        say('');
+        updateMenu();
+      }
+    });
+
+    window.addEventListener("DOMContentLoaded", () => {
+      rotateMenu(rotationAngle); // apply initial rotation
+    });
+
+    function rotateMenu(degrees) {
+      rotationAngle = degrees;
+      document.getElementById('menu-container').style.transform =
+        `rotate(${rotationAngle}deg)`;
+    }
+
+    function handleInput(input) {
+      if (releaseInputMode) {
+        if (input === "select") saveCurrentFilter();
+        else if (input === "back") closeSaveFilterDialog();
+        return;
+      }
+      if (dropdownOpen) {
+        switch (input) {
+          case "page_previous":
+          case "previous":
+            dropdown.moveBy(-1);
+            updateDropdownPopup();
+            break;
+          case "page_next":
+          case "next":
+            dropdown.moveBy(1);
+            updateDropdownPopup();
+            break;
+          case "select":
+            applyDropdownSelection();
+            closeDropdown();
+            break;
+          case "back":
+            closeDropdown();
+            break;
+        }
+        return;
+      }
+
+      switch (input) {
+        case "page_previous":
+        case "previous":
+          rows.moveBy(-1);
+          break;
+        case "page_next":
+        case "next":
+          rows.moveBy(1);
+          break;
+        case "select":
+          const selectedItem = rows.current;
+          if (selectedItem.id === 'collection-item') {
+            openDropdown(selectedItem, 'collection');
+          } else if (selectedItem.id === 'letter-item') {
+            openDropdown(selectedItem, 'letter');
+          } else if (selectedItem.id === 'theme-item') {
+            openDropdown(selectedItem, 'theme');
+          } else if (selectedItem.id === 'type-item') {
+            openDropdown(selectedItem, 'type');
+          } else if (selectedItem.id === 'manufacturer-item') {
+            openDropdown(selectedItem, 'manufacturer');
+          } else if (selectedItem.id === 'year-item') {
+            openDropdown(selectedItem, 'year');
+          } else if (selectedItem.id === 'rating-item') {
+            openDropdown(selectedItem, 'rating');
+          } else if (selectedItem.id === 'ratingmode-item') {
+            openDropdown(selectedItem, 'ratingmode');
+          } else if (selectedItem.id === 'sortby-item') {
+            openDropdown(selectedItem, 'sortby');
+          } else if (selectedItem.id === 'orderby-item') {
+            openDropdown(selectedItem, 'orderby');
+          } else if (selectedItem.id === 'save-filter-item') {
+            if (onCabinet()) keepAsCollection();
+            else openSaveFilterDialog();
+          } else if (selectedItem.id === 'close-item') {
+            window.parent.vpin.toggleOverlay("collectionMenu");
+          }
+          break;
+        case "back":
+        case "menu":
+        case "collection_menu":
+          window.parent.vpin.toggleOverlay("collectionMenu");
+          break;
+      }
+      updateMenu();
+    }
+
+    async function updatePagingState() {
+      const state = await window.parent.vpin.callInternal('get_paging_state');
+      if (!state) return;
+      document.getElementById('paging-state').textContent = state.group === 'sort'
+        ? t('frontend.collectionmenu.pages', 'Pages by {kind}',
+            { kind: word(state.kind) })
+        : t('frontend.collectionmenu.pages_time', 'Pages {size} at a time',
+            { size: state.size });
+    }
+
+    function showCount(count) {
+      document.getElementById('table-count').textContent =
+        t('frontend.collectionmenu.games', { one: '{count} game', other: '{count} games' },
+          { count });
+    }
+
+    function updateTableCount() {
+      showCount(window.parent.vpin.tableData ? window.parent.vpin.tableData.length : 0);
+    }
+
+    function onCabinet() {
+      const layout = window.parent.vpin.layout;
+      return !!(layout && layout.cabinet);
+    }
+
+    function say(text, failed = false) {
+      const line = document.getElementById('menu-message');
+      line.textContent = text;
+      line.style.color = failed ? '#f88' : '';
+    }
+
+    function nameForChoices() {
+      const parts = [];
+      if (letterIndex > 0) {
+        parts.push(t('frontend.collectionmenu.named_starting_with', 'Starting with {letter}',
+                     { letter: letters[letterIndex] }));
+      }
+      for (const [values, index] of [[themes, themeIndex], [types, typeIndex],
+                                     [manufacturers, manufacturerIndex], [years, yearIndex]]) {
+        if (index > 0) parts.push(word(values[index]));
+      }
+      if (ratingIndex > 0) {
+        const halves = Number(ratings[ratingIndex]);
+        const floor = ratingModes[ratingModeIndex] === 'Or Higher';
+        if (halves % 2) {
+          const count = starLabel(halves);
+          parts.push(floor
+            ? t('frontend.collectionmenu.named_halves_plus', '{count}+ Stars', { count })
+            : t('frontend.collectionmenu.named_halves', '{count} Stars', { count }));
+        } else {
+          const count = halves / 2;
+          parts.push(floor
+            ? t('frontend.collectionmenu.named_stars_plus', '{count}+ Stars', { count })
+            : t('frontend.collectionmenu.named_stars',
+                { one: '{count} Star', other: '{count} Stars' }, { count }));
+        }
+      }
+      if (!parts.length) {
+        parts.push(t('frontend.collectionmenu.named_by_sort', 'By {sort}',
+                     { sort: sortLabel(sortOptions[sortByIndex]) }));
+        if (orderByIndex > 0) parts.push(directionLabel(orderOptions[orderByIndex]));
+      }
+      return parts.join(t('frontend.collectionmenu.list_join', ', '));
+    }
+
+    async function showAsCurrent(name) {
+      await window.parent.vpin.call("set_tables_by_collection", name);
+      collections = ['None'].concat(await window.parent.vpin.call('get_collections'));
+      collectionIndex = Math.max(0, collections.indexOf(name));
+      updateMenu();
+    }
+
+    async function keepAsCollection() {
+      const chosen = getSelectedFilterValues();
+      const result = await window.parent.vpin.callInternal("keep_filter_collection",
+        nameForChoices(), chosen.letter, chosen.theme, chosen.type, chosen.manufacturer,
+        chosen.year, sortOptions[sortByIndex], chosen.rating, chosen.rating_or_higher,
+        orderOptions[orderByIndex]);
+      if (!result || !result.success) {
+        say(result ? result.message : '', true);
+        return;
+      }
+      say(result.already
+        ? t('frontend.collectionmenu.save_exists', 'Already saved as {name}',
+            { name: result.name })
+        : t('frontend.collectionmenu.saved_as', 'Saved as {name}', { name: result.name }));
+      await showAsCurrent(result.name);
+    }
+
+    function somethingChosen() {
+      return [letterIndex, themeIndex, typeIndex, manufacturerIndex, yearIndex,
+              ratingIndex, sortByIndex, orderByIndex].some((index) => index > 0);
+    }
+
+    function updateMenu() {
+      const current = rows.current;
+      const save = document.getElementById('save-filter-item');
+      save.hidden = !somethingChosen();
+      save.dataset.i18n = onCabinet() ? 'frontend.collectionmenu.save_confirm'
+        : 'frontend.collectionmenu.save_menu';
+      save.textContent = t(save.dataset.i18n,
+                           onCabinet() ? 'Save as Collection' : 'Save as Collection...');
+      rows.items = menuItems.filter((item) => !item.hidden);
+      rows.moveTo(Math.max(0, rows.items.indexOf(current)));
+      rows.items.forEach((item, i) => {
+        item.classList.toggle('selected', i === rows.cursor);
+      });
+
+      document.getElementById('collection-value').textContent = collectionLabel(collections[collectionIndex]);
+      document.getElementById('letter-value').textContent = word(filterDisplayOverrides.letter || letters[letterIndex]);
+      document.getElementById('theme-value').textContent = word(filterDisplayOverrides.theme || themes[themeIndex]);
+      document.getElementById('type-value').textContent = word(filterDisplayOverrides.type || types[typeIndex]);
+      document.getElementById('manufacturer-value').textContent = word(filterDisplayOverrides.manufacturer || manufacturers[manufacturerIndex]);
+      document.getElementById('year-value').textContent = word(filterDisplayOverrides.year || years[yearIndex]);
+      document.getElementById('rating-value').textContent = ratingLabel(filterDisplayOverrides.rating || ratings[ratingIndex]);
+      document.getElementById('ratingmode-value').textContent = word(filterDisplayOverrides.ratingmode || ratingModes[ratingModeIndex]);
+      document.getElementById('sortby-value').textContent =
+        sortLabel(filterDisplayOverrides.sortby || sortOptions[sortByIndex]);
+      document.getElementById('orderby-value').textContent =
+        directionLabel(filterDisplayOverrides.orderby || orderOptions[orderByIndex]);
+
+      updateTableCount();
+      updatePagingState();
+    }
+
+    window.__vpinWordsChanged = () => {
+      if (rows) updateMenu();
+    };
+
+    function normalizeRatingMode() {
+      if (ratings[ratingIndex] === 'All') {
+        ratingModeIndex = 0;
+      }
+    }
+
+    function getSelectedFilterValues() {
+      normalizeRatingMode();
+      const ratingValue = ratings[ratingIndex] === "All" ? "All" : ratings[ratingIndex];
+      const ratingOrHigher = ratingValue !== "All" && ratingModes[ratingModeIndex] === 'Or Higher';
+      return {
+        letter: letters[letterIndex] === "All" ? "All" : letters[letterIndex],
+        theme: themes[themeIndex] === "All" ? "All" : themes[themeIndex],
+        type: types[typeIndex] === "All" ? "All" : types[typeIndex],
+        manufacturer: manufacturers[manufacturerIndex] === "All" ? "All" : manufacturers[manufacturerIndex],
+        year: years[yearIndex] === "All" ? "All" : years[yearIndex],
+        rating: ratingValue,
+        rating_or_higher: ratingOrHigher
+      };
+    }
+
+    async function applyCurrentFiltersAndBroadcast() {
+      clearFilterDisplayOverrides();
+      const filters = getSelectedFilterValues();
+      const count = await window.parent.vpin.callInternal(
+        "apply_filters",
+        filters.letter,
+        filters.theme,
+        filters.type,
+        filters.manufacturer,
+        filters.year,
+        filters.rating,
+        filters.rating_or_higher
+      );
+      await window.parent.vpin.callInternal("apply_sort", sortOptions[sortByIndex], orderOptions[orderByIndex]);
+      window.parent.vpin.sendMessageToAllWindowsIncSelf({
+        type: "TableDataChange",
+        index: 0,
+        filters,
+        sort: sortOptions[sortByIndex],
+        order: orderOptions[orderByIndex]
+      });
+      return count;
+    }
+
+    function getCurrentDropdownOptions() {
+      switch (currentDropdownType) {
+        case 'collection': return collections;
+        case 'letter': return letters;
+        case 'theme': return themes;
+        case 'type': return types;
+        case 'manufacturer': return manufacturers;
+        case 'year': return years;
+        case 'rating': return ratings;
+        case 'ratingmode': return ratingModes;
+        case 'sortby': return sortOptions;
+        case 'orderby': return orderOptions;
+        default: return [];
+      }
+    }
+
+    function getCurrentIndex() {
+      switch (currentDropdownType) {
+        case 'collection': return collectionIndex;
+        case 'letter': return letterIndex;
+        case 'theme': return themeIndex;
+        case 'type': return typeIndex;
+        case 'manufacturer': return manufacturerIndex;
+        case 'year': return yearIndex;
+        case 'rating': return ratingIndex;
+        case 'ratingmode': return ratingModeIndex;
+        case 'sortby': return sortByIndex;
+        case 'orderby': return orderByIndex;
+        default: return 0;
+      }
+    }
+
+    function openDropdown(targetItem, dropdownType) {
+      dropdownOpen = true;
+      currentDropdownType = dropdownType;
+      // Built here because the options are computed per open, and the cursor starts on
+      // whatever is currently chosen - clamped, since a stored value can outlive its list.
+      dropdown = window.parent.vpin.createList(getCurrentDropdownOptions());
+      dropdown.moveTo(getCurrentIndex());
+
+      const popup = document.getElementById('dropdown-popup');
+      popup.style.display = 'block';
+      popup.style.top = (targetItem.offsetTop + targetItem.offsetHeight) + 'px';
+      popup.style.left = targetItem.offsetLeft + 'px';
+      popup.style.width = targetItem.offsetWidth + 'px';
+
+      updateDropdownPopup();
+    }
+
+    function updateDropdownPopup() {
+      const popup = document.getElementById('dropdown-popup');
+      popup.innerHTML = '';
+      // The list core is holding, not a fresh call: the cursor below indexes into it,
+      // and two sources for one list is what this abstraction exists to stop.
+      dropdown.items.forEach((option, i) => {
+        const div = document.createElement('div');
+        div.className = 'popup-option' + (i === dropdown.cursor ? ' selected' : '');
+        div.textContent = optionLabel(currentDropdownType, option);
+        popup.appendChild(div);
+      });
+
+      // Scroll selected item into view
+      const selectedElement = popup.querySelector('.popup-option.selected');
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    async function applyDropdownSelection() {
+      const selectedValue = dropdown.current;
+
+      switch (currentDropdownType) {
+        case 'collection':
+          collectionIndex = dropdown.cursor;
+          clearFilterDisplayOverrides();
+
+          if (selectedValue == "None") {
+            letterIndex = 0;
+            themeIndex = 0;
+            typeIndex = 0;
+            manufacturerIndex = 0;
+            yearIndex = 0;
+            ratingIndex = 0;
+            ratingModeIndex = 0;
+            sortByIndex = 0;
+            orderByIndex = 0;
+
+            await window.parent.vpin.call("get_tables", true);
+            window.parent.vpin.sendMessageToAllWindowsIncSelf({
+              type: "TableDataChange",
+              index: 0,
+              collection: "None"
+            });
+          } else {
+            await window.parent.vpin.call("set_tables_by_collection", selectedValue);
+            await window.parent.vpin.call("get_tables");
+
+            const filterState = await window.parent.vpin.callInternal("get_current_filter_state");
+            const sortState = await window.parent.vpin.callInternal("get_current_sort_state");
+            const orderState = await window.parent.vpin.callInternal("get_current_order_state");
+
+            if (filterState && filterState.letter !== null) {
+              letterIndex = letters.indexOf(filterState.letter);
+              themeIndex = themes.indexOf(filterState.theme);
+              typeIndex = types.indexOf(filterState.type);
+              manufacturerIndex = manufacturers.indexOf(filterState.manufacturer);
+              yearIndex = years.indexOf(filterState.year);
+              ratingIndex = ratings.indexOf(String(filterState.rating || 'All'));
+              ratingModeIndex = filterState.rating_or_higher ? 1 : 0;
+
+              if (letterIndex === -1) letterIndex = 0;
+              if (themeIndex === -1) themeIndex = 0;
+              if (typeIndex === -1) typeIndex = 0;
+              if (manufacturerIndex === -1) manufacturerIndex = 0;
+              if (yearIndex === -1) yearIndex = 0;
+              if (ratingIndex === -1) ratingIndex = 0;
+              normalizeRatingMode();
+              if (sortState) {
+                const sortIdx = sortOptions.indexOf(sortState);
+                if (sortIdx !== -1) {
+                  sortByIndex = sortIdx;
+                }
+              }
+              if (orderState) {
+                const orderIdx = orderOptions.indexOf(orderState);
+                if (orderIdx !== -1) {
+                  orderByIndex = orderIdx;
+                }
+              }
+              setFilterDisplayOverrides({
+                ...filterState,
+                sort: sortState || sortOptions[0],
+                order: orderState || orderOptions[0],
+              });
+              window.parent.vpin.sendMessageToAllWindowsIncSelf({
+                type: "TableDataChange",
+                index: 0,
+                collection: selectedValue
+              });
+            } else {
+              letterIndex = 0;
+              themeIndex = 0;
+              typeIndex = 0;
+              manufacturerIndex = 0;
+              yearIndex = 0;
+              ratingIndex = 0;
+              ratingModeIndex = 0;
+              sortByIndex = 0;
+              orderByIndex = 0;
+
+              window.parent.vpin.sendMessageToAllWindowsIncSelf({
+                type: "TableDataChange",
+                index: 0,
+                collection: selectedValue
+              });
+            }
+          }
+          updateMenu();
+          window.parent.vpin.toggleOverlay("collectionMenu");
+          break;
+
+        case 'letter':
+          letterIndex = dropdown.cursor;
+          collectionIndex = 0;
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'theme':
+          themeIndex = dropdown.cursor;
+          collectionIndex = 0;
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'type':
+          typeIndex = dropdown.cursor;
+          collectionIndex = 0;
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'manufacturer':
+          manufacturerIndex = dropdown.cursor;
+          collectionIndex = 0;
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'year':
+          yearIndex = dropdown.cursor;
+          collectionIndex = 0;
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'rating':
+          ratingIndex = dropdown.cursor;
+          collectionIndex = 0;
+          normalizeRatingMode();
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'ratingmode':
+          ratingModeIndex = dropdown.cursor;
+          collectionIndex = 0;
+          normalizeRatingMode();
+          showCount(await applyCurrentFiltersAndBroadcast());
+          break;
+
+        case 'sortby':
+          sortByIndex = dropdown.cursor;
+          if (collectionIndex !== 0) {
+            filterDisplayOverrides.sortby = sortOptions[sortByIndex];
+          }
+          const sortCount = await window.parent.vpin.callInternal("apply_sort", sortOptions[sortByIndex], orderOptions[orderByIndex]);
+          window.parent.vpin.sendMessageToAllWindowsIncSelf({
+            type: "TableDataChange",
+            index: 0,
+            sort: sortOptions[sortByIndex],
+            order: orderOptions[orderByIndex]
+          });
+          showCount(sortCount);
+          break;
+
+        case 'orderby':
+          orderByIndex = dropdown.cursor;
+          if (collectionIndex !== 0) {
+            filterDisplayOverrides.orderby = orderOptions[orderByIndex];
+          }
+          const orderCount = await window.parent.vpin.callInternal("apply_sort", sortOptions[sortByIndex], orderOptions[orderByIndex]);
+          window.parent.vpin.sendMessageToAllWindowsIncSelf({
+            type: "TableDataChange",
+            index: 0,
+            sort: sortOptions[sortByIndex],
+            order: orderOptions[orderByIndex]
+          });
+          showCount(orderCount);
+          break;
+      }
+
+      window.parent.vpin.call("console_out", `Filter applied: ${currentDropdownType} = ${selectedValue}`);
+    }
+
+    function closeDropdown() {
+      dropdownOpen = false;
+      document.getElementById('dropdown-popup').style.display = 'none';
+      updateMenu();
+    }
+
+    // Held while the dialog is up, so the mode can be popped exactly once.
+    let releaseInputMode = null;
+
+    function openSaveFilterDialog() {
+      const dialog = document.getElementById('save-filter-dialog');
+      const input = document.getElementById('filter-name-input');
+      const message = document.getElementById('save-message');
+
+      input.value = nameForChoices();
+      input.placeholder = t('frontend.collectionmenu.name_collection', 'Name the collection');
+      message.textContent = '';
+      dialog.style.display = 'block';
+      input.focus();
+      input.select();
+      // Typing owns the keys now. Without this the menu behind the dialog kept
+      // driving on the arrows, and Enter fired select and opened a dropdown instead
+      // of reaching the field - so the dialog could not be completed from a cabinet.
+      releaseInputMode = window.parent.vpin.pushInputMode('text');
+    }
+
+    function closeSaveFilterDialog() {
+      const dialog = document.getElementById('save-filter-dialog');
+      dialog.style.display = 'none';
+      if (releaseInputMode) releaseInputMode();
+      releaseInputMode = null;
+    }
+
+    async function saveCurrentFilter() {
+      const input = document.getElementById('filter-name-input');
+      const message = document.getElementById('save-message');
+      const filterName = input.value.trim();
+
+      if (!filterName) {
+        message.textContent =
+          t('frontend.collectionmenu.name_collection', 'Name the collection');
+        message.style.color = '#f88';
+        return;
+      }
+
+      const selectedFilters = getSelectedFilterValues();
+
+      // Save the filter
+      const result = await window.parent.vpin.call("save_filter_collection",
+        filterName,
+        selectedFilters.letter,
+        selectedFilters.theme,
+        selectedFilters.type,
+        selectedFilters.manufacturer,
+        selectedFilters.year,
+        sortOptions[sortByIndex],
+        selectedFilters.rating,
+        selectedFilters.rating_or_higher,
+        orderOptions[orderByIndex]
+      );
+
+      if (result.success) {
+        message.textContent =
+          t('frontend.collectionmenu.saved_as', 'Saved as {name}', { name: filterName });
+        message.style.color = '#8f8';
+        await showAsCurrent(filterName);
+
+        // Close dialog after 2 seconds
+        setTimeout(() => {
+          closeSaveFilterDialog();
+        }, 2000);
+      } else {
+        message.textContent = result.message;
+        message.style.color = '#f88';
+      }
+    }
+
+    window.onload = async () => {
+      await init();
+      menuItems = Array.from(document.querySelectorAll('.menu-item'));
+      rows = window.parent.vpin.createList(menuItems.slice());
+      updateMenu();
+
+      // Set up save filter dialog buttons
+      document.getElementById('save-filter-btn').addEventListener('click', saveCurrentFilter);
+      document.getElementById('cancel-save-btn').addEventListener('click', closeSaveFilterDialog);
+
+      // Allow Enter key to save
+      document.getElementById('filter-name-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          saveCurrentFilter();
+        }
+      });
+    };
+  </script>
+</body>
+
+</html>

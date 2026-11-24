@@ -1,0 +1,5 @@
+{
+  "name": "Example Scores",
+  "description": "Lists, flags, removes and posts the scores on Example Scores.",
+  "log.started": "Example Scores started"
+}

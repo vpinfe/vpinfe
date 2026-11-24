@@ -2,12 +2,19 @@ name: Tests
 
 on:
   push:
-    branches: [ master, platform ]
+    branches: [ master, vpinfe-3.0, publish ]
   pull_request:
-    branches: [ master, platform ]
+    branches: [ master, vpinfe-3.0 ]
+
+# One run per branch. A second push supersedes the first rather than queueing behind
+# it - a tag run is exempt, because cancelling one halfway leaves a partial release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   test:
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -17,6 +24,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # Each included extension is a repository of its own, and its tests are run here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -30,6 +42,69 @@ jobs:
           pip install -r requirements.txt
 
       # The suite doesn't need the DOF/libdmdutil bundles or Chromium the build
-      # job fetches, so this stays a fast check that runs on its own.
+      # job fetches, so this stays a fast check that runs on its own. The
+      # browser-driven tests skip here for that reason: what they cover statically is
+      # covered by tests/invariants, and they run on a developer machine and before a
+      # release. VPINFE_BROWSER_TESTS=1 turns them on if a runner ever provides one.
       - name: Run tests
-        run: python -m unittest discover tests
+        run: python -m tests -j 4
+
+      # vpinfe-core.js is the largest single piece of theme-facing code and had no
+      # tests at all until these. Node's built-in runner, so there is nothing to
+      # install: the repo has no JavaScript dependencies and should not gain any.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The manifest lives beside the tests, not at the repo root - node resolves
+      # "type": "module" from the nearest package.json walking up from a test file.
+      - name: Run frontend tests
+        run: npm test
+        working-directory: tests/js
+
+  # A frozen build carries its own 3.14. A source checkout uses whatever the machine has,
+  # and the Debian a cabinet runs ships 3.13 - where annotations are evaluated where they
+  # are written rather than lazily. tests/invariants/test_annotations_are_deferred.py
+  # catches the cause; this catches anything else that only shows up on the older one.
+  imports-on-oldest:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Each included extension is a repository of its own, and its code is imported here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import every module
+        run: |
+          python - <<'PY'
+          import importlib, pathlib, sys
+          failed = []
+          for package in ("apps", "common", "manager", "extensions", "frontend", "httpapi"):
+              for path in sorted(pathlib.Path(package).rglob("*.py")):
+                  # An extension's tests need the test dependencies, which this job leaves out.
+                  if package == "extensions" and path.parts[2:3] == ("tests",):
+                      continue
+                  name =".".join(path.with_suffix("").parts)
+                  if name.endswith(".__init__"):
+                      name = name[: -len(".__init__")]
+                  try:
+                      importlib.import_module(name)
+                  except Exception as exc:
+                      failed.append(f"{name}: {type(exc).__name__}: {exc}")
+          for one in failed:
+              print(one)
+          sys.exit(1 if failed else 0)
+          PY

@@ -1,0 +1,12 @@
+{
+  "name": "Weekend Picks",
+  "description": "Adds the games chosen in the Games grid to a collection, and takes them out again.",
+  "settings.collection.label": "Collection",
+  "settings.collection.help": "The collection the picks go in, made the first time a game is picked",
+  "verb.game.pick.label": "Add to Picks",
+  "verb.game.pick.tip": "Put these games in the picks collection",
+  "verb.game.unpick.label": "Take Out of Picks",
+  "collection.about": "Games picked for the weekend",
+  "message.holds": "{name} now holds {count}",
+  "message.none": "There is no collection called {name} yet"
+}

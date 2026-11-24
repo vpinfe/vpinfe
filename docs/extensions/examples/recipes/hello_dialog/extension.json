@@ -1,0 +1,8 @@
+{
+  "name": "hello_dialog",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/hello_dialog",
+  "requires_platform": 1,
+  "capabilities": ["ui:mount"]
+}

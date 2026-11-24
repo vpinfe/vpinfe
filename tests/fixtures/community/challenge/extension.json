@@ -1,0 +1,11 @@
+{
+  "name": "challenge",
+  "display_name": "Challenge",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/challenge",
+  "description": "Two Community lists that derive tags and two that rank, each pair one by machine and one by release.",
+  "requires_platform": 1,
+  "scopes": ["games:read"],
+  "capabilities": ["config:own", "ui:mount"]
+}

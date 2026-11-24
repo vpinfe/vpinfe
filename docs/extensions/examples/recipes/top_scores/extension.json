@@ -1,0 +1,8 @@
+{
+  "name": "top_scores",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/top_scores",
+  "requires_platform": 1,
+  "capabilities": ["config:own", "net:outbound", "ui:mount"]
+}

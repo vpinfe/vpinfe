@@ -1,0 +1,13 @@
+{
+  "name": "Review Queue",
+  "description": "Asks on Overview for the scores flagged on Example Scores, and lists them.",
+  "settings.site.label": "Site",
+  "settings.key.label": "Key",
+  "error.refused": "The site did not accept the key",
+  "list.queue.title": "Flagged Scores",
+  "list.queue.column.player.header": "Player",
+  "list.queue.column.table.header": "Table",
+  "list.queue.column.score.header": "Score",
+  "need.to_review.label": {"one": "{count} flagged score to review", "other": "{count} flagged scores to review"},
+  "need.to_review.says": "Flagged on Example Scores"
+}

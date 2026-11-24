@@ -1,0 +1,9 @@
+{
+  "name": "vpinos_only",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "source": "https://github.com/example/vpinos_only",
+  "requires_platform": 1,
+  "platforms": ["vpinos"],
+  "capabilities": ["config:own", "ui:mount"]
+}

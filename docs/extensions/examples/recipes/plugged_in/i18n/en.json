@@ -1,0 +1,16 @@
+{
+  "name": "Plugged In",
+  "description": "Lists the USB devices, serial ports and displays attached to this device, and whether VPinFE may open each.",
+  "list.devices.title": "Plugged In",
+  "list.devices.column.name.header": "Device",
+  "list.devices.column.kind.header": "Kind",
+  "list.devices.column.kind.state.usb": "USB",
+  "list.devices.column.kind.state.serial": "Serial Port",
+  "list.devices.column.kind.state.display": "Display",
+  "list.devices.column.ids.header": "Vendor and Product",
+  "list.devices.column.access.header": "Can Open",
+  "list.devices.column.access.state.yes": "Yes",
+  "list.devices.column.access.state.no": "No",
+  "list.devices.column.access.state.no.why": "VPinFE may not open this device",
+  "list.devices.column.access.state.unknown": "Not Known"
+}

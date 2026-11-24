@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LIBDMDUTIL_REPO="${LIBDMDUTIL_REPO:-superhac/libdmdutil-python}"
+LIBDMDUTIL_REPO="${LIBDMDUTIL_REPO:-vpinfe/libdmdutil-python}"
 LIBDMDUTIL_VERSION="${LIBDMDUTIL_VERSION:-latest}"
 
 if [[ "${1:-}" != "" ]]; then
@@ -22,6 +22,6 @@ python3 scripts/fetch_libdmdutil_bundle.py \
   --repo "${LIBDMDUTIL_REPO}" \
   --version "${LIBDMDUTIL_VERSION}" \
   --triplet "${LIBDMDUTIL_TRIPLET}" \
-  --outdir "third-party/libdmdutil"
+  --outdir "third_party/libdmdutil"
 
-echo "Installed libdmdutil bundle for ${LIBDMDUTIL_TRIPLET} at third-party/libdmdutil"
+echo "Installed libdmdutil bundle for ${LIBDMDUTIL_TRIPLET} at third_party/libdmdutil"

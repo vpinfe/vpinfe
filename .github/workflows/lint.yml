@@ -1,0 +1,100 @@
+name: Lint
+
+on:
+  push:
+    branches: [ master, vpinfe-3.0, publish ]
+  pull_request:
+    branches: [ master, vpinfe-3.0 ]
+
+# A tag run is exempt: cancelling one halfway leaves a partial release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  ruff:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Each included extension is a repository of its own, and its code is checked here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install ruff
+        run: pip install -r requirements-dev.txt
+
+      # The advisory/blocking split is in docs/conventions.md.
+      - name: Lint the whole tree (advisory)
+        continue-on-error: true
+        run: ruff check . --output-format=github --statistics
+
+      - name: Lint everywhere we write Python (blocking)
+        run: |
+          ruff check tests/ apps/ common/ manager/ extensions/ frontend/ httpapi/ \
+            cli.py main.py --output-format=github
+
+      # A text read or write with no encoding is the host's code page on Windows. The rule
+      # is preview-only, and --preview on the main run would also turn on every other
+      # preview rule.
+      - name: Text I/O names its encoding (blocking)
+        run: |
+          ruff check --preview --select PLW1514 tests/ apps/ common/ manager/ extensions/ \
+            frontend/ httpapi/ cli.py main.py --output-format=github
+
+      # -M5% so a file that moved packages and was rewritten is seen as the move it is.
+      # Git's default 50% returns it as added, which judges old code by the new-file rule.
+      - name: Lint newly added files (blocking)
+        if: github.event_name == 'pull_request'
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          added=$(git diff -M5% --diff-filter=A --name-only "$base"...HEAD -- '*.py')
+          if [ -z "$added" ]; then
+            echo "No new Python files in this PR."
+            exit 0
+          fi
+          echo "Checking newly added files:"
+          echo "$added" | sed 's/^/  /'
+          ruff check --output-format=github $added
+
+  mypy:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Each included extension is a repository of its own, and its code is checked here
+      # with the rest.
+      - name: Clone the included extensions
+        uses: ./.github/actions/clone-extensions
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # Packages, flags and exclusions all live in pyproject.toml, so this run and a
+      # local one cannot disagree. All six are at zero, so this is the gate: a package
+      # that reaches zero and is not held there goes back.
+      - name: Type check (blocking)
+        run: mypy
+
+      # follow-imports=silent, or naming a package also reports everything it imports.
+      # Kept beside the run above so the API surface still fails on its own account
+      # rather than inside a whole-tree result.
+      - name: Type check the API surface (blocking)
+        run: mypy --follow-imports=silent httpapi

@@ -1,0 +1,315 @@
+# What `python -m tests --affected` runs for files that imports cannot connect to a test:
+# data files that are read, not imported, and the browser drives, which start the app in a
+# subprocess. `paths` are globs on repo-relative file names (`*` crosses folders); `tests` are
+# files under tests/, or under `extensions/<name>/tests/` for an extension's own (left out
+# when that clone is not in `extensions/`). The invariants always run and need no entry. A file matching no area
+# here and reached by no import selects the whole suite.
+#
+# Every module that opens a BrowserSession appears in at least one area
+# (tests/invariants/test_affected.py). A drive appears under every area it exercises, so a
+# change there runs it. The last area is the floor for anything that boots the app.
+# A file read by a test but not imported by it belongs here too: the guides, the theme docs,
+# the catalogs and the Node tests.
+
+# Prose nothing reads but the invariants, which always run.
+[[area]]
+paths = ["docs/*", "*.md"]
+tests = []
+
+# The theme docs, whose examples the Node tests run, and the extension guide, whose lessons
+# are executed.
+[[area]]
+paths = ["docs/theme.md", "docs/theme-contract-1.md", "docs/compatibility-3.0.md"]
+tests = ["tests/js/test_frontend_suite.py"]
+
+[[area]]
+paths = ["docs/extensions/*"]
+tests = [
+  "tests/extensions/test_guide.py",
+  "tests/extensions/test_os_channel.py",
+  "tests/extensions/test_tiers.py",
+]
+
+# What each desktop prints about its screens, which the display probes' tests read, and the
+# script that records it.
+[[area]]
+paths = ["tests/fixtures/displays/*", "scripts/capture-display-fixtures.sh"]
+tests = [
+  "tests/supportpackage/test_display_compare.py",
+  "tests/supportpackage/test_display_probes.py",
+  "tests/supportpackage/test_display_section.py",
+]
+
+# The Mac signing request, which the invariants load by path rather than import.
+[[area]]
+paths = ["scripts/mac_signing.py"]
+tests = ["tests/invariants/test_mac_signing_outcomes.py"]
+
+# The list of test modules that predate the rule that a module says what it protects.
+[[area]]
+paths = ["tests/protects_baseline.txt"]
+tests = ["tests/invariants/test_a_new_test_module_says_what_it_protects.py"]
+
+# The Node tests and the files they load.
+[[area]]
+paths = ["tests/js/*"]
+tests = ["tests/js/test_frontend_suite.py"]
+
+[[area]]
+paths = ["common/i18n/catalogs/*"]
+tests = [
+  "tests/js/test_frontend_suite.py",
+  "tests/config/test_i18n_script.py",
+  "tests/extensions/test_catalogs.py",
+  "tests/host/test_about.py",
+  "tests/theming/test_pseudo_locale.py",
+  "tests/theming/test_theme_locales_drive.py",
+]
+
+# The Manager's shared widgets, dialogs and shell.
+[[area]]
+paths = ["manager/kit/*", "manager/page.py", "manager/edit_page.py", "manager/static/*"]
+tests = [
+  "tests/manager/test_a_select_leaves_room_for_reset.py",
+  "tests/manager/test_external_link_keeps_browser_menu.py",
+  "tests/manager/test_open_links_in.py",
+  "tests/theming/test_a_failed_script_load_drive.py",
+  "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
+  "tests/theming/test_dialogs_back_drive.py",
+  "tests/theming/test_drop_pictures_drive.py",
+  "tests/theming/test_drop_sheet_drive.py",
+  "tests/theming/test_drop_targets_drive.py",
+  "tests/theming/test_escape_in_dialogs_drive.py",
+  "tests/theming/test_folder_picker_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
+  "tests/theming/test_manager_pages_drive.py",
+  "tests/theming/test_panel_pages_stack_drive.py",
+  "tests/theming/test_primary_nav_drive.py",
+  "tests/theming/test_pseudo_locale.py",
+  "tests/theming/test_remote_stars_drive.py",
+  "tests/theming/test_setup_back_drive.py",
+  "tests/theming/test_setup_first_run_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
+  "tests/theming/test_source_picker_drive.py",
+  "tests/theming/test_support_dialog_drive.py",
+  "tests/theming/test_which_game_drive.py",
+]
+
+# Library: the grids, panels, collections and their rows.
+[[area]]
+paths = ["manager/library/*", "manager/workbench/*", "common/games/*", "common/media/*"]
+tests = [
+  "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
+  "tests/theming/test_collection_adds_drive.py",
+  "tests/theming/test_collection_panel_drive.py",
+  "tests/theming/test_discovery_shelves_drive.py",
+  "tests/theming/test_drop_pictures_drive.py",
+  "tests/theming/test_drop_sheet_drive.py",
+  "tests/theming/test_drop_targets_drive.py",
+  "tests/theming/test_extension_rail_drive.py",
+  "tests/theming/test_grid_layout_drive.py",
+  "tests/theming/test_grid_selection_drive.py",
+  "tests/theming/test_list_columns_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
+  "tests/theming/test_source_picker_drive.py",
+  "tests/theming/test_manager_pages_drive.py",
+  "tests/theming/test_media_fill_drive.py",
+  "tests/theming/test_pane_reopen_drive.py",
+  "tests/theming/test_private_drive.py",
+  "tests/theming/test_record_lines_drive.py",
+  "tests/theming/test_row_drag_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
+  "tests/theming/test_stale_view_drive.py",
+  "tests/theming/test_table_all_settings_drive.py",
+  "tests/theming/test_vpx_settings_in_place_drive.py",
+  "tests/theming/test_which_game_drive.py",
+]
+
+# The Visual Pinball settings catalog and the scripts that generate and check it.
+[[area]]
+paths = [
+  "apps/vpx/i18n/*",
+  "apps/vpx/setting_declarations.py",
+  "scripts/fetch_vpx_setting_types.py",
+  "scripts/vpx_ini_drift.py",
+]
+tests = [
+  "tests/apps/test_vpx_build.py",
+  "tests/apps/test_vpx_config.py",
+  "tests/apps/test_vpx_ini_drift.py",
+  "tests/apps/test_vpx_setting_types.py",
+  "tests/config/test_i18n_script.py",
+  "tests/theming/test_pseudo_locale.py",
+  "tests/theming/test_vpx_settings_in_place_drive.py",
+]
+
+# Setup and its wizard.
+[[area]]
+paths = ["manager/setup/*", "common/uploads/*", "extensions/library_importer/*"]
+tests = [
+  "extensions/library_importer/tests/test_import_a_library_drive.py",
+  "tests/theming/test_setup_back_drive.py",
+  "tests/theming/test_setup_controls_drive.py",
+  "tests/theming/test_setup_first_run_drive.py",
+  "extensions/library_importer/tests/test_setup_tables_drive.py",
+  "tests/theming/test_shape_suggestion_drive.py",
+]
+
+# Settings pages: folders, input, VPX settings.
+[[area]]
+paths = ["manager/settings/*", "common/settings/*", "common/config/*", "common/backups/*"]
+tests = [
+  "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
+  "tests/theming/test_discovery_shelves_drive.py",
+  "tests/theming/test_feature_switch_applies_live_drive.py",
+  "tests/theming/test_folders_page_drive.py",
+  "extensions/library_importer/tests/test_import_a_library_drive.py",
+  "tests/theming/test_input_relay_drive.py",
+  "tests/theming/test_input_table_drive.py",
+  "extensions/library_importer/tests/test_manager_back_button_drive.py",
+  "tests/theming/test_manager_pages_drive.py",
+  "tests/theming/test_setup_controls_drive.py",
+  "tests/theming/test_vpx_settings_in_place_drive.py",
+]
+
+# The frozen defaults the schema is compared with.
+[[area]]
+paths = ["tests/fixtures/config_defaults.json"]
+tests = ["tests/config/test_config_schema.py"]
+
+# Overview's Needs You rows, and the folder lists they open.
+[[area]]
+paths = ["manager/overview/*", "manager/settings/sections.py"]
+tests = ["tests/theming/test_needs_folder_list_drive.py"]
+
+# Logs and the other system pages.
+[[area]]
+paths = ["manager/system/*"]
+tests = ["tests/theming/test_a_value_change_keeps_the_panel_drive.py"]
+
+# The support package: what it gathers and cleans, and the dialog that makes it.
+[[area]]
+paths = ["common/support/*", "manager/system/support*.py", "httpapi/support.py",
+         "common/host/frontend_browser.py", "common/host/frontend_windows.py"]
+tests = [
+  "tests/theming/test_frontend_reports_drive.py",
+  "tests/theming/test_support_dialog_drive.py",
+]
+
+# Sign-in and the asks a program makes of a signed-in person.
+[[area]]
+paths = ["manager/security/*", "common/security/*"]
+tests = [
+  "tests/theming/test_manager_ask_first_drive.py",
+  "tests/theming/test_manager_sign_in_notice_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
+  "tests/theming/test_sign_in_drive.py",
+]
+
+# Devices, their windows and the channel to them.
+[[area]]
+paths = ["manager/devices/*", "common/devices/*", "common/host/*", "common/runtime/*"]
+tests = [
+  "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
+  "tests/theming/test_browser_probe_drive.py",
+  "tests/theming/test_device_channel_identity.py",
+  "tests/theming/test_device_channel_origin.py",
+  "tests/theming/test_device_panel_reach_drive.py",
+  "tests/theming/test_late_window_drive.py",
+  "tests/theming/test_remote_target_drive.py",
+  "tests/theming/test_separation.py",
+]
+
+# The Remote, which is a phone-width page of its own.
+[[area]]
+paths = ["manager/remote/*"]
+tests = [
+  "tests/theming/test_join_redirect_drive.py",
+  "tests/theming/test_remote_controls_drive.py",
+  "tests/theming/test_remote_games_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
+  "tests/theming/test_remote_shell_drive.py",
+  "tests/theming/test_remote_stars_drive.py",
+  "tests/theming/test_remote_target_drive.py",
+]
+
+# Players, and the frontend pages that list them.
+[[area]]
+paths = ["manager/frontend/*", "common/players/*"]
+tests = [
+  "tests/theming/test_player_picture_service_drive.py",
+  "extensions/vpinplay/tests/test_players_drive.py",
+  "extensions/vpinplay/tests/test_remote_players_drive.py",
+]
+
+# Extensions, the host that runs them, and VPinPlay.
+[[area]]
+paths = ["common/extensions/*", "manager/extensions/*", "extensions/vpinplay/*"]
+tests = [
+  "tests/extensions/test_links.py",
+  "tests/theming/test_a_value_change_keeps_the_panel_drive.py",
+  "tests/theming/test_extension_rail_drive.py",
+  "extensions/vpinplay/tests/test_community_menu_drive.py",
+  "extensions/vpinplay/tests/test_players_drive.py",
+  "tests/theming/test_separation.py",
+]
+
+# The rotation check's test card, its window, and the Manager panel that opens it.
+[[area]]
+paths = [
+  "frontend/screen_card.py",
+  "frontend/screen_numbers.py",
+  "manager/settings/screens_picture.py",
+  "manager/settings/displays.py",
+]
+tests = [
+  "tests/manager/test_displays.py",
+  "tests/manager/test_screens_picture.py",
+  "tests/theming/test_screen_card.py",
+]
+
+# The frontend: what core draws, themes, and the wheel.
+[[area]]
+paths = ["frontend/*", "common/online/*"]
+tests = [
+  "tests/js/test_frontend_suite.py",
+  "tests/theming/test_attract_drive.py",
+  "tests/theming/test_browser_probe_drive.py",
+  "tests/theming/test_core_defaults_drive.py",
+  "tests/theming/test_core_playfield_media_drive.py",
+  "tests/theming/test_core_topper_drive.py",
+  "tests/theming/test_frontend_reports_drive.py",
+  "tests/theming/test_late_window_drive.py",
+  "tests/theming/test_loading_screen_drive.py",
+  "tests/theming/test_picker_index_drive.py",
+  "tests/theming/test_render_smoke.py",
+  "tests/theming/test_theme_locales_drive.py",
+]
+
+# The HTTP API, which the Manager, the frontend and the Remote all call.
+[[area]]
+paths = ["httpapi/*"]
+tests = [
+  "tests/theming/test_remote_target_drive.py",
+  "tests/theming/test_render_smoke.py",
+  "tests/theming/test_separation.py",
+  "tests/theming/test_sign_in_drive.py",
+]
+
+# The count of lines naming Visual Pinball outside apps/, which reads these folders as text
+# and imports nothing from them.
+[[area]]
+floor = true
+paths = ["common/*", "httpapi/*", "manager/*", "frontend/*"]
+tests = ["tests/apps/test_vpx_surface.py"]
+
+# Anything that boots the app: a change anywhere in it adds a Manager drive, a grid drive and
+# the wizard's. `floor` adds these tests without accounting for the file, so a module nothing
+# else reaches still selects the whole suite.
+[[area]]
+floor = true
+paths = ["main.py", "common/*", "httpapi/*", "manager/*", "frontend/*", "apps/*"]
+tests = [
+  "tests/theming/test_grid_selection_drive.py",
+  "tests/theming/test_pane_reopen_drive.py",
+]

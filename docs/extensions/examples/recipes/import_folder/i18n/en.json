@@ -1,0 +1,10 @@
+{
+  "name": "Import Folder",
+  "description": "Imports a folder of downloaded files into the library as a new game.",
+  "settings.folder.label": "Folder",
+  "settings.folder.help": "The folder whose files are imported",
+  "action.import_folder.label": "Import the Folder",
+  "dialog.no_folder": "Choose a folder in the extension's settings first",
+  "dialog.nothing": "Nothing in that folder can be imported",
+  "dialog.confirm": "Import"
+}

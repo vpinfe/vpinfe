@@ -1,0 +1,9 @@
+{
+  "name": "Secret Key",
+  "description": "Keeps a key out of sight, set from a setting or from a dialog.",
+  "settings.key.label": "Key",
+  "action.connect.label": "Enter the Key",
+  "dialog.key": "Key",
+  "dialog.saved": "Saved the key",
+  "dialog.kept": "Kept the key as it was"
+}

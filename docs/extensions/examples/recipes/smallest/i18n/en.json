@@ -1,0 +1,5 @@
+{
+  "name": "Smallest",
+  "description": "The least an extension can be: one setting.",
+  "settings.greeting.label": "Greeting"
+}

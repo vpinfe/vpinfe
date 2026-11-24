@@ -2,39 +2,63 @@ name: Build VPinFE (Cross-Platform)
 
 on:
   push:
-    branches: [ master, vpinfe-2.0, platform ]
+    branches: [ master, vpinfe-2.0, vpinfe-3.0 ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ master, vpinfe-2.0, platform ]
+    branches: [ master, vpinfe-2.0, vpinfe-3.0 ]
+  # Run the build by hand, on any branch, from the Actions tab. Nothing about the
+  # packaging is exercised by the test suite - a wrong --add-data path is a missing
+  # splash in a release artifact, not a red test - so being able to produce real
+  # artifacts on all three runners without pushing a tag is how that gets checked.
+  # The release jobs refuse to run this way; see their conditions.
+  workflow_dispatch:
+    inputs:
+      sign_mac:
+        description: Have the Mac builds signed and notarized (the result stays a run artifact, never a release)
+        type: boolean
+        default: false
 
+# Each job asks for what it needs; the publishing job is the only one that writes.
 permissions:
-  contents: write
+  contents: read
+
+# One run per branch. A second push supersedes the first rather than queueing behind
+# it - a tag run is exempt, because cancelling one halfway leaves a partial release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build:
+    timeout-minutes: 30
+    # id-token and attestations are for the Mac signing layer: the signing repository trusts
+    # a build only if it can prove it came from this workflow. See request-mac-signing.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
+      # The same test as request-mac-signing's `if`. True only when that job will run, so a
+      # branch push or a pull request uploads and attests nothing.
+      MAC_SIGN_REQUESTED: ${{ (vars.MAC_SIGNING || '1') != '0' && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.sign_mac)) }}
       DOF_VERSION: latest
-      DOF_REPO: superhac/libdof-python
+      DOF_REPO: vpinfe/libdof-python
       DMDUTIL_VERSION: latest
-      DMDUTIL_REPO: superhac/libdmdutil-python
+      DMDUTIL_REPO: vpinfe/libdmdutil-python
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        # Both Linux jobs are pinned to Ubuntu 24.04. PyInstaller bundles the build
+        # machine's system libraries, so the glibc on the runner is the glibc a user
+        # needs. ubuntu-latest moved to a newer release and took the x64 build with it.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Ensure fetch scripts are executable
-        if: runner.os != 'Windows'
-        run: |
-          chmod +x scripts/fetch_dof_bundle.sh
-          chmod +x scripts/fetch_libdmdutil_bundle.sh
-        shell: bash
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -62,25 +86,25 @@ jobs:
           fi
         shell: bash
 
-      - name: Set app version from tag/commit
+      - name: Set VPinFE version from tag/commit
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            APP_VERSION="${GITHUB_REF_NAME}"
+            VPINFE_VERSION="${GITHUB_REF_NAME}"
           else
-            APP_VERSION="dev-${GITHUB_SHA::7}"
+            VPINFE_VERSION="dev-${GITHUB_SHA::7}"
           fi
 
           printf '%s\n' \
             '"""Build/version metadata for VPinFE."""' \
             '' \
-            "APP_VERSION = \"${APP_VERSION}\"" \
+            "VPINFE_VERSION = \"${VPINFE_VERSION}\"" \
             '' \
             'def get_version() -> str:' \
-            '    return APP_VERSION' \
-            > common/app_version.py
+            '    return VPINFE_VERSION' \
+            > common/vpinfe_version.py
 
-          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
-          echo "Using app version: ${APP_VERSION}"
+          echo "VPINFE_VERSION=${VPINFE_VERSION}" >> "$GITHUB_ENV"
+          echo "Using VPinFE version: ${VPINFE_VERSION}"
         shell: bash
 
       - name: Fetch DOF bundle
@@ -91,7 +115,7 @@ jobs:
             --repo "${DOF_REPO}" \
             --version "${DOF_VERSION}" \
             --triplet "${DOF_TRIPLET}" \
-            --outdir third-party/dof
+            --outdir third_party/dof
         shell: bash
 
       - name: Fetch libdmdutil bundle
@@ -102,14 +126,19 @@ jobs:
             --repo "${DMDUTIL_REPO}" \
             --version "${DMDUTIL_VERSION}" \
             --triplet "${DOF_TRIPLET}" \
-            --outdir third-party/libdmdutil
+            --outdir third_party/libdmdutil
         shell: bash
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          pip install -r requirements.txt -r requirements-build.txt
+
+      # The included extensions live in their own repositories. This puts the version the
+      # Extension List names under extensions/, where the spec fingerprints and ships it,
+      # and fails the build rather than ship without one.
+      - name: Fetch the included extensions
+        run: python scripts/fetch_extensions.py
 
       - name: Create Chromium directories (Linux/macOS)
         if: runner.os != 'Windows'
@@ -122,83 +151,67 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path chromium\linux,chromium\windows,chromium\mac
 
+      # All four downloads below are ungoogled-chromium 152.0.7977.82. Its builds carry the
+      # proprietary codecs, so H.264 and AAC video plays in the bundled browser. Keep the four
+      # on one version when bumping: a theme is written against what the bundled browser
+      # supports, and a capability that exists on one platform and not another is invisible
+      # to whoever wrote it. The release tags differ by platform (the Linux builds end -1, the
+      # Windows and macOS builds -1.1) but the browser inside is the same.
       - name: Download Linux Chromium
         if: runner.os == 'Linux' && runner.arch == 'X64'
         run: |
-          wget -O chromium/linux/chrome.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F1568190%2Fchrome-linux.zip?generation=1768270474193258&alt=media"
-          unzip -q chromium/linux/chrome.zip -d chromium/linux
-          mv chromium/linux/chrome-linux chromium/linux/chrome
+          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/152.0.7977.82-1/ungoogled-chromium-152.0.7977.82-1-x86_64_linux.tar.xz"
+          tar xvf chromium/linux/chrome.tar.xz -C chromium/linux/
+          mv chromium/linux/ungoogled-chromium-152.0.7977.82-1-x86_64_linux chromium/linux/chrome
           chmod +x chromium/linux/chrome/chrome
 
       - name: Download ARM Linux Chromium
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: |
-          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/144.0.7559.109-1/ungoogled-chromium-144.0.7559.109-1-arm64_linux.tar.xz"
+          wget -O chromium/linux/chrome.tar.xz "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux/releases/download/152.0.7977.82-1/ungoogled-chromium-152.0.7977.82-1-arm64_linux.tar.xz"
           tar xvf chromium/linux/chrome.tar.xz -C chromium/linux/
-          mv chromium/linux/ungoogled-chromium-144.0.7559.109-1-arm64_linux chromium/linux/chrome
+          mv chromium/linux/ungoogled-chromium-152.0.7977.82-1-arm64_linux chromium/linux/chrome
           chmod +x chromium/linux/chrome/chrome
 
       - name: Download Windows Chromium
         if: runner.os == 'Windows'
         run: |
-          pwsh -Command "Invoke-WebRequest -Uri 'https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Win_x64%2F1568195%2Fchrome-win.zip?generation=1768274160162696&alt=media' -OutFile 'chromium/windows/chrome.zip' -UseBasicParsing"
+          pwsh -Command "Invoke-WebRequest -Uri 'https://github.com/ungoogled-software/ungoogled-chromium-windows/releases/download/152.0.7977.82-1.1/ungoogled-chromium_152.0.7977.82-1.1_windows_x64.zip' -OutFile 'chromium/windows/chrome.zip' -UseBasicParsing"
           pwsh -Command "Expand-Archive -Path 'chromium/windows/chrome.zip' -DestinationPath 'chromium/windows'"
+          pwsh -Command "Rename-Item -Path 'chromium/windows/ungoogled-chromium_152.0.7977.82-1.1_windows_x64' -NewName 'chrome-win'"
           pwsh -Command "Remove-Item 'chromium/windows/chrome.zip'"
 
       - name: Download Mac Chromium
         if: runner.os == 'macOS'
         run: |
           mkdir -p chromium
-          curl -L -o chrome-mac.zip "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Mac_Arm%2F1582847%2Fchrome-mac.zip?generation=1770766943434586&alt=media"
-          unzip -q chrome-mac.zip
-          mv chrome-mac/Chromium.app chromium/Chromium.app
-          rm -rf chrome-mac chrome-mac.zip
+          curl -L -o chrome-mac.dmg "https://github.com/ungoogled-software/ungoogled-chromium-macos/releases/download/152.0.7977.82-1.1/ungoogled-chromium_152.0.7977.82-1.1_arm64-macos.dmg"
+          hdiutil attach chrome-mac.dmg -mountpoint chrome-mac-volume -nobrowse -quiet
+          cp -R chrome-mac-volume/Chromium.app chromium/Chromium.app
+          hdiutil detach chrome-mac-volume -quiet
+          rm -f chrome-mac.dmg
 
+      # What ships is packaging/vpinfe.spec, not flags here. See its docstring.
       - name: Build app with PyInstaller
-        run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            pyinstaller --onedir --noconfirm --name vpinfe \
-              --add-data "web:web" \
-              --add-data "managerui/static:managerui/static" \
-              --add-data "third-party/dof:third-party/dof" \
-              --add-data "third-party/libdmdutil:third-party/libdmdutil" \
-              --add-data "chromium/linux/chrome:chromium/linux/chrome" \
-              --hidden-import pynput.keyboard._xorg \
-              --hidden-import pynput.mouse._xorg \
-              main.py
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            pyinstaller --onedir --noconfirm --name vpinfe \
-              --add-data "web;web" \
-              --add-data "managerui/static;managerui/static" \
-              --add-data "third-party/dof;third-party/dof" \
-              --add-data "third-party/libdmdutil;third-party/libdmdutil" \
-              --add-data "chromium/windows;chromium/windows" \
-              main.py
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            pyinstaller --windowed -i icon/VPinFE.icns --osx-bundle-identifier com.vpinfe.main --noconfirm --name VPinFE \
-              --add-data "web:web" \
-              --add-data "managerui/static:managerui/static" \
-              --add-data "third-party/dof:third-party/dof" \
-              --add-data "third-party/libdmdutil:third-party/libdmdutil" \
-              main.py
-            mkdir -p dist/VPinFE.app/Contents/Frameworks/chromium
-            cp -R chromium/Chromium.app dist/VPinFE.app/Contents/Frameworks/chromium/Chromium.app
-            chmod +x dist/VPinFE.app/Contents/Frameworks/chromium/Chromium.app/Contents/MacOS/Chromium
-            rm -rf dist/vpinfe
-          fi
+        run: pyinstaller packaging/vpinfe.spec
         shell: bash
 
-      - name: Ad-hoc sign the app (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          codesign --force --deep --sign - dist/VPinFE.app
-          codesign --verify --verbose dist/VPinFE.app
+      # 2.38 is what libdof-python and libdmdutil-python build against. A bundled library
+      # that needs more would stop the DOF library loading on an older Linux.
+      - name: Check the glibc the Linux build needs
+        if: runner.os == 'Linux'
+        run: python3 scripts/max_glibc.py dist/vpinfe --limit 2.38
         shell: bash
 
-      - name: Remove extended attributes (macOS)
+      - name: Bundle Chromium into the .app (macOS)
         if: runner.os == 'macOS'
         run: |
-          sudo xattr -rc dist
+          # Not --add-data: an .app copied that way loses its executable bit and the
+          # symlinks inside it, and will not launch.
+          mkdir -p dist/VPinFE.app/Contents/Frameworks/chromium
+          cp -R chromium/Chromium.app dist/VPinFE.app/Contents/Frameworks/chromium/Chromium.app
+          chmod +x dist/VPinFE.app/Contents/Frameworks/chromium/Chromium.app/Contents/MacOS/Chromium
+          rm -rf dist/VPinFE
         shell: bash
 
       - name: Install create-dmg
@@ -208,13 +221,46 @@ jobs:
         env:
           HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
 
-      - name: Package as DMG (macOS)
+      # Strip the quarantine and Finder attributes a runner leaves behind, sign, and wrap
+      # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
+      # copied out of its DMG carries Finder info, which codesign refuses to sign over.
+      # Identical for the full and slim builds, so it is written once and run twice.
+      - name: Strip Finder attributes (macOS)
+        if: runner.os == 'macOS'
+        run: sudo xattr -rc dist
+        shell: bash
+
+      # The signing layer takes the .app as it is here, before the ad-hoc signature below.
+      # The DMG window comes from packaging/dmg-layout.json; the flags in the two create-dmg
+      # steps below spell out the same values, so change them together.
+      - name: Hand the full build to Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        run: python scripts/mac_signing.py prepare-input --app dist/VPinFE.app --out mac-sign-input/full
+        shell: bash
+
+      - name: Upload the full build for Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: mac-sign-input-full
+          path: mac-sign-input/full
+          retention-days: 7
+
+      - name: Attest the full build (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true' && github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: mac-sign-input/full/VPinFE.app.zip
+
+      - name: Package the .app as an ad-hoc signed DMG (macOS)
         if: runner.os == 'macOS'
         run: |
+          codesign --force --deep --sign - dist/VPinFE.app
+          codesign --verify --verbose dist/VPinFE.app
           create-dmg \
             --volname "VPinFE" \
-            --volicon "icon/VPinFE.icns" \
-            --background "icon/DMG_background.png" \
+            --volicon "packaging/VPinFE.icns" \
+            --background "packaging/DMG_background.png" \
             --window-pos 200 120 \
             --window-size 610 475 \
             --icon-size 100 \
@@ -227,7 +273,7 @@ jobs:
 
       - name: Copy Windows launcher
         if: runner.os == 'Windows'
-        run: cp vpinfe.bat dist/vpinfe/
+        run: cp packaging/vpinfe.bat dist/vpinfe/
         shell: bash
 
       - name: Upload full build artifact (macOS)
@@ -236,6 +282,7 @@ jobs:
         with:
           name: build-macos-arm64
           path: dist/VPinFE.dmg
+          retention-days: 30
 
       - name: Upload full build artifact (Linux)
         if: runner.os == 'Linux'
@@ -243,6 +290,7 @@ jobs:
         with:
           name: build-linux-${{ runner.arch == 'X64' && 'x64' || 'arm64' }}
           path: dist/
+          retention-days: 30
 
       - name: Upload full build artifact (Windows)
         if: runner.os == 'Windows'
@@ -250,19 +298,20 @@ jobs:
         with:
           name: build-win-x64
           path: dist/
+          retention-days: 30
 
-      - name: Build slim app with PyInstaller (Linux)
-        if: runner.os == 'Linux'
+      # The same spec, minus Chromium. One step for all three platforms.
+      - name: Build slim app with PyInstaller
+        env:
+          VPINFE_SLIM: "1"
         run: |
           rm -rf build dist
-          pyinstaller --onedir --noconfirm --name vpinfe \
-            --add-data "web:web" \
-            --add-data "managerui/static:managerui/static" \
-            --add-data "third-party/dof:third-party/dof" \
-            --add-data "third-party/libdmdutil:third-party/libdmdutil" \
-            --hidden-import pynput.keyboard._xorg \
-            --hidden-import pynput.mouse._xorg \
-            main.py
+          pyinstaller packaging/vpinfe.spec
+          # On macOS the spec produces both the COLLECT directory and the .app that
+          # wraps it. Only the .app is shipped; leaving the directory doubles the DMG.
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            rm -rf dist/VPinFE
+          fi
         shell: bash
 
       - name: Upload slim build artifact (Linux)
@@ -271,21 +320,11 @@ jobs:
         with:
           name: build-linux-${{ runner.arch == 'X64' && 'x64' || 'arm64' }}-slim
           path: dist/
-
-      - name: Build slim app with PyInstaller (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-          pyinstaller --onedir --noconfirm --name vpinfe `
-            --add-data "web;web" `
-            --add-data "managerui/static;managerui/static" `
-            --add-data "third-party/dof;third-party/dof" `
-            --add-data "third-party/libdmdutil;third-party/libdmdutil" `
-            main.py
+          retention-days: 30
 
       - name: Copy Windows launcher (slim)
         if: runner.os == 'Windows'
-        run: cp vpinfe.bat dist/vpinfe/
+        run: cp packaging/vpinfe.bat dist/vpinfe/
         shell: bash
 
       - name: Upload slim build artifact (Windows)
@@ -294,40 +333,46 @@ jobs:
         with:
           name: build-win-x64-slim
           path: dist/
+          retention-days: 30
 
-      - name: Build slim app with PyInstaller (macOS)
+
+      # Strip the quarantine and Finder attributes a runner leaves behind, sign, and wrap
+      # the .app in the DMG a user actually downloads. The strip comes first: the Chromium
+      # copied out of its DMG carries Finder info, which codesign refuses to sign over.
+      # Identical for the full and slim builds, so it is written once and run twice.
+      - name: Strip Finder attributes (macOS Slim)
         if: runner.os == 'macOS'
-        run: |
-          rm -rf build dist
-          pyinstaller --windowed -i icon/VPinFE.icns --osx-bundle-identifier com.vpinfe.main --noconfirm --name VPinFE \
-            --add-data "web:web" \
-            --add-data "managerui/static:managerui/static" \
-            --add-data "third-party/dof:third-party/dof" \
-            --add-data "third-party/libdmdutil:third-party/libdmdutil" \
-            main.py
-          rm -rf dist/vpinfe
+        run: sudo xattr -rc dist
         shell: bash
 
-      - name: Ad-hoc sign the app (macOS Slim)
+      - name: Hand the slim build to Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        run: python scripts/mac_signing.py prepare-input --app dist/VPinFE.app --out mac-sign-input/slim
+        shell: bash
+
+      - name: Upload the slim build for Mac signing (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: mac-sign-input-slim
+          path: mac-sign-input/slim
+          retention-days: 7
+
+      - name: Attest the slim build (macOS)
+        if: runner.os == 'macOS' && env.MAC_SIGN_REQUESTED == 'true' && github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: mac-sign-input/slim/VPinFE.app.zip
+
+      - name: Package the .app as an ad-hoc signed DMG (macOS Slim)
         if: runner.os == 'macOS'
         run: |
           codesign --force --deep --sign - dist/VPinFE.app
           codesign --verify --verbose dist/VPinFE.app
-        shell: bash
-
-      - name: Remove extended attributes (macOS Slim)
-        if: runner.os == 'macOS'
-        run: |
-          sudo xattr -rc dist
-        shell: bash
-
-      - name: Package as DMG (macOS Slim)
-        if: runner.os == 'macOS'
-        run: |
           create-dmg \
             --volname "VPinFE" \
-            --volicon "icon/VPinFE.icns" \
-            --background "icon/DMG_background.png" \
+            --volicon "packaging/VPinFE.icns" \
+            --background "packaging/DMG_background.png" \
             --window-pos 200 120 \
             --window-size 610 475 \
             --icon-size 100 \
@@ -344,10 +389,44 @@ jobs:
         with:
           name: build-macos-arm64-slim
           path: dist/VPinFE.dmg
+          retention-days: 30
+
+  # Mac signing is an optional layer: a separate signing repository signs and notarizes the two
+  # Mac builds and this workflow checks what comes back (see mac-signing.yml). It runs for a
+  # pushed tag, or a hand-started run that ticks sign_mac, and never for a pull request.
+  #
+  # A rejection fails this job, so release_bundle and publish_release do not run and nothing
+  # is published. If signing is withdrawn the job succeeds and the release goes out with the
+  # ad-hoc signed Mac builds, loudly marked unsigned.
+  #
+  # Safe to remove: delete this job, mac-signing.yml, the secrets MAC_SIGNING_TOKEN and
+  # MAC_SIGNING_REPO and the variable MAC_SIGNING, and undo the Mac signing
+  # parts of release_bundle and publish_release described in docs/mac-signing.md.
+  # To skip signing without removing anything, set the repository variable MAC_SIGNING to 0.
+  # Set the repository secret MAC_SIGNING_REPO to the signing repository (owner/name).
+  request-mac-signing:
+    needs: build
+    if: (vars.MAC_SIGNING || '1') != '0' && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.sign_mac))
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/mac-signing.yml
+    with:
+      mode: ${{ github.event_name == 'push' && 'release' || 'dev' }}
+      tag: ${{ github.event_name == 'push' && github.ref_name || '-' }}
+    secrets:
+      MAC_SIGNING_TOKEN: ${{ secrets.MAC_SIGNING_TOKEN }}
+      MAC_SIGNING_REPO: ${{ secrets.MAC_SIGNING_REPO }}
 
   release_bundle:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    timeout-minutes: 15
+    # A hand-started run never releases, whatever it was started against - a tag can be
+    # dispatched as readily as a branch, and "it only publishes on a tag push" should be
+    # true by construction rather than by reading the ref. It also needs the build, and
+    # either a signing request that did not fail or none at all: a rejected request must
+    # stop the release, a skipped one (signing off) must not.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch' && needs.build.result == 'success' && (needs.request-mac-signing.result == 'success' || needs.request-mac-signing.result == 'skipped') }}
+    needs: [build, request-mac-signing]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -370,6 +449,9 @@ jobs:
             triplet: macos-arm64-slim
 
     steps:
+      # When signing succeeded the signing workflow has already replaced the Mac artifacts with
+      # the signed builds, so the same names are read either way. Both hold a VPinFE.dmg, so
+      # the zip below is made the same way and keeps its name.
       - name: Download build artifact
         uses: actions/download-artifact@v8
         with:
@@ -401,9 +483,17 @@ jobs:
           path: release/vpinfe-${{ github.ref_name }}-${{ matrix.triplet }}.zip
 
   publish_release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: release_bundle
+    timeout-minutes: 15
+    # release_bundle only runs when nothing was rejected, so its success is the gate.
+    # request-mac-signing is listed to read its result; it may have been skipped.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch' && needs.release_bundle.result == 'success' }}
+    needs: [release_bundle, request-mac-signing]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
+    env:
+      MAC_SIGNED: ${{ needs.request-mac-signing.outputs.signed == 'true' }}
+      DISABLE_MSG: 'Set the repository variable MAC_SIGNING to 0 to skip signing, or follow "Remove Mac signing" to remove it permanently.'
 
     steps:
       - name: Checkout repository
@@ -426,9 +516,11 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           tag = "${{ github.ref_name }}"
+          mac_signed = os.environ["MAC_SIGNED"] == "true"
           release_dir = Path("release")
           assets = {}
 
@@ -441,6 +533,8 @@ jobs:
                   "file": name,
                   "sha256": sha,
               }
+              if triplet.startswith("macos-"):
+                  assets[triplet]["mac_signed"] = mac_signed
 
           manifest = {
               "version": tag,
@@ -453,6 +547,32 @@ jobs:
           )
           PY
 
+      # The notes are published from a copy so an unsigned release can say so without
+      # touching RELEASE_NOTES.md in the tree.
+      - name: Prepare the release notes
+        env:
+          SIGN_RESULT: ${{ needs.request-mac-signing.result }}
+          SIGN_REASON: ${{ needs.request-mac-signing.outputs.reason }}
+        run: |
+          cp RELEASE_NOTES.md release-notes.txt
+          if [[ "$MAC_SIGNED" != "true" ]]; then
+            if [[ "$SIGN_RESULT" == "skipped" ]]; then
+              reason="Mac signing is switched off by the repository variable MAC_SIGNING"
+            else
+              reason="${SIGN_REASON:-signing did not return a signed build}"
+            fi
+            echo "::warning title=Mac builds in this release are unsigned::${reason}. ${DISABLE_MSG}"
+            {
+              echo "### Mac builds in this release are unsigned"
+              echo
+              echo "${reason}."
+              echo
+              echo "${DISABLE_MSG}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '\n%s\n' "Mac builds in this release are unsigned" >> release-notes.txt
+          fi
+        shell: bash
+
       - name: Publish GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -463,11 +583,20 @@ jobs:
             release/manifest.json
           )
 
+          # A tag with a suffix (-beta.N, -rc.N) publishes as a prerelease. The
+          # in-app updater on the stable channel asks /releases/latest, which
+          # GitHub defines as the newest non-prerelease, so only installs set to
+          # the beta channel are offered these.
+          flags=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md
+            gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.txt "${flags[@]}"
             gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
           else
             gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
-              --notes-file RELEASE_NOTES.md \
-              --verify-tag
+              --notes-file release-notes.txt \
+              --verify-tag "${flags[@]}"
           fi
