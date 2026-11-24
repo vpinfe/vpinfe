@@ -32,6 +32,7 @@ VENDORED: set[str] = set()
 PLATFORM_ONLY = {
     "AppKit",     # PyObjC, macOS window geometry
     "Quartz",     # PyObjC, macOS key codes
+    "CoreFoundation",  # PyObjC, the macOS keyboard-shortcut preferences
     "objc",
     "Xlib",       # python-xlib, which pynput brings on Linux: X11 window hand-over
     "win32api", "win32con", "win32gui", "winreg",

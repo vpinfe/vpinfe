@@ -6,7 +6,8 @@ the table and goes on running; it watches the table's windows, asks the system w
 the keyboard, and hands it to the table's playfield when something else has it.
 
 Each system has one backend of three calls (list the windows, say who has the keyboard,
-give a window the keyboard); everything else is here. A system with no backend is
+give a window the keyboard), and macOS adds the calls that put the keyboard back on a
+playfield that lost it; everything else is here. A system with no backend is
 watched for nothing and logged once.
 """
 
@@ -18,9 +19,10 @@ import platform
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 import psutil
 
@@ -43,15 +45,23 @@ LATE_POLL_SECONDS = 1.0
 STUCK_SECONDS = 1.5
 BOUNCE_SECONDS = 0.5
 RESUME_SECONDS = 2.5
+# Putting the keyboard back on the playfield from outside (macOS). The window after
+# "Startup done" in which a pause counts, the wait before a step and after it, and how
+# many presses go before the click.
+BACK_WITHIN_SECONDS = 5.0
+BACK_SECONDS = 0.3
+BACK_PRESSES = 3
 
 
 @dataclass(frozen=True)
 class Window:
-    """A top-level window as the system describes it. `handle` is the system's own."""
+    """A top-level window as the system describes it. `handle` is the system's own.
+    `bounds` is left, top, width and height on the whole desktop, where the system says."""
 
     handle: int | str
     pid: int
     title: str
+    bounds: tuple[float, float, float, float] | None = field(default=None, compare=False)
 
 
 class Backend(Protocol):
@@ -65,7 +75,9 @@ class Backend(Protocol):
 
     def holder(self) -> Window | None:
         """The window that has the keyboard, or None where no window has it. The desktop
-        and the taskbar are not windows of a program, so they answer None."""
+        and the taskbar are not windows of a program, so they answer None. macOS names the
+        program in front instead, so a program with no window answers a window with no
+        bounds, and raises where it cannot say."""
         ...
 
     def hand_over(self, window: Window) -> str:
@@ -78,13 +90,14 @@ def on_wayland(env: Mapping[str, str]) -> bool:
     return env.get("XDG_SESSION_TYPE") == "wayland" or bool(env.get("WAYLAND_DISPLAY"))
 
 
-def backend_for_this_system() -> Backend | None:
+def backend_for_this_system(ini_config: Any = None) -> Backend | None:
     if sys.platform == "win32":
         from common.host.front_windows import WindowsBackend
         return WindowsBackend()
     if sys.platform == "darwin":
-        from common.host.front_macos import MacBackend
-        return MacBackend()
+        from common.host.front_macos import MacBackend, playfield_area_of
+        return MacBackend(
+            playfield_area=None if ini_config is None else playfield_area_of(ini_config))
     if sys.platform.startswith("linux"):
         from common.host import front_linux
         try:
@@ -146,7 +159,9 @@ class Watch:
     VPinFE and not the table having the keyboard is the person's doing, or the
     system's, and is left alone. Where the system's answer can be wrong (Windows), a
     table that has the keyboard but still says it is paused is given it through one of
-    VPinFE's windows.
+    VPinFE's windows. Where any window of the table will do (macOS), the table's program
+    holding the keyboard ends the hand-over, and a table that pauses just after it starts
+    has the keyboard put back on its playfield.
     """
 
     def __init__(self, backend: Backend | None, root_pid: int, *,
@@ -189,7 +204,9 @@ class Watch:
         self._tries = 0
         self._pause_lines = 0
         self._resumed = False
+        self._lost = False
         self._last_holder: Window | None = None
+        self._back_tried = False
 
     # -- running ------------------------------------------------------------
 
@@ -217,6 +234,14 @@ class Watch:
     def note_resume_line(self) -> None:
         """The table has run: a pause after this is not the one it opened with."""
         self._resumed = True
+        self._lost = False
+
+    def note_focus_lost(self) -> None:
+        """The table paused because its playfield lost the keyboard, not because the
+        person paused it."""
+        self._lost = True
+        if getattr(self._backend, "press_next_window", None) is not None:
+            self.nudge()
 
     def note_startup_done(self) -> None:
         if self._startup_at is None:
@@ -355,14 +380,16 @@ class Watch:
             if self._wait(POLL_SECONDS):
                 return
 
-    def _holder(self) -> Window | None:
+    def _holder(self, *, fresh: bool = False) -> Window | None:
+        """Who has the keyboard now. `fresh` skips any answer the backend keeps for a moment."""
         assert self._backend is not None
+        ask = getattr(self._backend, "fresh_holder", None) if fresh else None
         try:
-            holder = self._backend.holder()
+            holder = (ask or self._backend.holder)()
         except Exception as exc:
             self._say("holder-error", why(exc),
                       "Table focus: could not ask who has the keyboard: %s")
-            return self._last_holder
+            return None if fresh else self._last_holder
         self._last_holder = holder
         return holder
 
@@ -385,7 +412,16 @@ class Watch:
             return False
         return self._paused() and not self._pause_asked()
 
+    def _program_is_enough(self, holder: Window | None) -> bool:
+        """On a system that activates programs, not windows, the table's program holding
+        the keyboard is as far as a hand-over goes; a pause there is `_bring_back`'s."""
+        if holder is None or holder.pid not in self._accepted:
+            return False
+        return bool(getattr(self._backend, "any_table_window_will_do", False))
+
     def _fine(self, holder: Window | None) -> bool:
+        if self._program_is_enough(holder):
+            return True
         return self._passes(holder) and not self._stuck(holder)
 
     def _who(self, holder: Window | None) -> str:
@@ -432,6 +468,8 @@ class Watch:
             return
         holder = self._holder()
         self._note_holder(holder)
+        if self._bring_back(holder):
+            return
         extra, self._extra = self._extra, False
         if self._fine(holder):
             if self._held_at is None:
@@ -454,15 +492,99 @@ class Watch:
             return
         self._round()
 
+    def _bring_back(self, holder: Window | None) -> bool:
+        """Puts the keyboard back on the playfield of a table that paused just after
+        "Startup done" while its own program is in front: the next-window shortcut up to
+        BACK_PRESSES times, then a click on the playfield, each step followed by a wait for
+        the table to say it ran. The click goes first where the shortcut is off. A table
+        that resumed and paused again acts only on a lost-focus line; one that never
+        resumed acts once STUCK_SECONDS have passed. One go for each launch. True when it
+        ran, so the caller looks again."""
+        backend = self._backend
+        press = getattr(backend, "press_next_window", None)
+        if (press is None or self._back_tried or not self._paused()
+                or self._pause_asked() or self._who(holder) != "table"):
+            return False
+        if self._startup_at is None:
+            return False
+        since = self._clock() - self._startup_at
+        if since > BACK_WITHIN_SECONDS:
+            return False
+        if self._resumed and not self._lost:
+            return False
+        if not self._resumed and since < STUCK_SECONDS:
+            return False
+        shortcut_on = backend.next_window_shortcut() is not None  # type: ignore[union-attr]
+        queue = deque(["press"] * BACK_PRESSES if shortcut_on else [])
+        queue.append("click")
+        sent: list[str] = []
+        told: set[str] = set()
+        reason = "the table never said it ran"
+        tried = False
+        while queue and self._paused():
+            step = queue.popleft()
+            if self._pause(BACK_SECONDS):
+                return True
+            if not self._paused():
+                break
+            if self._pause_asked():
+                reason = "the pause was asked for"
+                break
+            if self._who(self._holder(fresh=True)) != "table":
+                reason = "its program is no longer in front, or could not be asked"
+                break
+            if not tried:
+                tried = True
+                self._back_tried = True
+                logger.info("Table focus: the table paused just after it started, with its own "
+                            "program in front, putting the keyboard back on the "
+                            "playfield with %s",
+                            "the next-window shortcut" if shortcut_on
+                            else "a click, the shortcut being off")
+            refused = self._back_step(step)
+            if refused:
+                reason = refused
+                if refused not in told:
+                    told.add(refused)
+                    logger.warning("Table focus: %s did not go: %s",
+                                   "the shortcut" if step == "press" else "the click", refused)
+                if step == "press":
+                    queue = deque(["click"])
+                    continue
+                break
+            sent.append(step)
+            if self._pause(BACK_SECONDS):
+                return True
+        if not tried:
+            return False
+        done = f"{sent.count('press')} press(es) of the shortcut, {sent.count('click')} click(s)"
+        if not self._paused():
+            logger.info("Table focus: the table ran after %s", done)
+        else:
+            logger.warning("Table focus: nothing brought the table back after %s: %s",
+                           done, reason)
+        return True
+
+    def _back_step(self, step: str) -> str:
+        backend = self._backend
+        assert backend is not None
+        try:
+            if step == "press":
+                return backend.press_next_window()  # type: ignore[attr-defined, no-any-return]
+            return backend.click_playfield(  # type: ignore[attr-defined, no-any-return]
+                [one for one in backend.windows() if one.pid in self._accepted])
+        except Exception as exc:
+            return why(exc)
+
     def _round(self) -> None:
         assert self._backend is not None and self._target is not None
         for index, gap in enumerate((0.0, *GAPS)):
             if gap and self._pause(gap):
                 return
-            if index:
-                if self._pick() is None:
-                    return
-                holder = self._holder()
+            if index and self._pick() is None:
+                return
+            if index or getattr(self._backend, "fresh_holder", None) is not None:
+                holder = self._holder(fresh=True)
                 self._note_holder(holder)
                 if self._fine(holder):
                     return
@@ -473,7 +595,7 @@ class Watch:
                                     kind="other")
                     return
             self._tries += 1
-            stuck = self._stuck(self._holder())
+            stuck = self._stuck(self._holder(fresh=True))
             try:
                 refused = self._give(stuck)
             except Exception as exc:
@@ -486,7 +608,7 @@ class Watch:
                                index + 1, TRIES, refused)
             if self._pause(RESUME_SECONDS if stuck else SETTLE_SECONDS):
                 return
-            holder = self._holder()
+            holder = self._holder(fresh=True)
             if self._fine(holder):
                 self._note_holder(holder)
                 logger.info("Table focus: try %d of %d passed", index + 1, TRIES)
@@ -551,13 +673,13 @@ _active: Watch | None = None
 _active_lock = threading.Lock()
 
 
-def watch_launch(root_pid: int, *, titles: Iterable[str] = (),
+def watch_launch(root_pid: int, *, ini_config: Any, titles: Iterable[str] = (),
                  on_window: Callable[[], object] | None = None,
                  pause_asked: Callable[[], bool] | None = None,
                  paused: Callable[[], bool] | None = None) -> Watch:
     """Start watching a table that has just been started."""
     logger.info("Table focus: watching a table on %s", describe_system())
-    watch = Watch(backend_for_this_system(), root_pid, titles=titles,
+    watch = Watch(backend_for_this_system(ini_config), root_pid, titles=titles,
                   on_window=on_window, pause_asked=pause_asked, paused=paused)
     global _active
     with _active_lock:

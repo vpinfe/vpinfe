@@ -14,6 +14,8 @@ logger = logging.getLogger("vpinfe.apps.vpx.pause")
 # `Player::SetPlayState` writes these as the game stops and starts again.
 PAUSED_MARKER = "Pausing Game"
 RESUMED_MARKER = "Unpausing Game"
+# `Player::OnFocusChanged` writes this beside the pause when another window takes the keyboard.
+FOCUS_LOST_MARKER = "Playfield window lost focus"
 
 # What VPX pauses on where its settings file maps nothing to Pause.
 DEFAULT_KEY = "KeyP"
@@ -22,6 +24,7 @@ DEFAULT_KEY = "KeyP"
 class VPXPause:
     paused_marker = PAUSED_MARKER
     resumed_marker = RESUMED_MARKER
+    focus_lost_marker = FOCUS_LOST_MARKER
 
     def key(self, settings: Mapping[str, Any]) -> str:
         """`settings` is the launcher's: its `ini_path`, or VPX's own file where it has

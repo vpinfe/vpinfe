@@ -366,6 +366,9 @@ class _Heard:
             launch_state.set_paused(True)
             if watcher is not None:
                 watcher.note_pause_line()
+        marker = getattr(pause, "focus_lost_marker", "") if pause is not None else ""
+        if marker and marker in line and watcher is not None:
+            watcher.note_focus_lost()
 
 
 def _playfield_titles(launcher: launchers.Launcher) -> tuple[str, ...]:
@@ -669,7 +672,7 @@ def launch_game(game: Game, ini_config: ConfigStore, *, source: str,
             if not capturing:
                 try:
                     watch = front.watch_launch(
-                        process.pid, titles=_playfield_titles(launcher),
+                        process.pid, ini_config=ini_config, titles=_playfield_titles(launcher),
                         on_window=heard.mark_running, pause_asked=launch_state.pause_asked,
                         paused=lambda: launch_state.current().paused)
                 except Exception:
