@@ -229,5 +229,80 @@ class Standing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(standing.await_count, 2)
 
 
+class _Library:
+    """What `_add` and `duplicate` read and write, with every call recorded."""
+
+    def __init__(self) -> None:
+        self.put_launcher = Mock()
+        self.launchers = Mock(return_value={"launchers": []})
+        self.launcher_settings_file_places = Mock(return_value=[])
+        self.folders = Mock()
+
+
+async def _inline(callback: Any, *args: Any, **kwargs: Any) -> Any:
+    return callback(*args, **kwargs)
+
+
+class AppsWithoutASettingsFile(unittest.IsolatedAsyncioTestCase):
+    """A Generic launcher is refused its settings file, so Add must not ask for one."""
+
+    async def _asked(self, call: Any, *, confirm: bool = True,
+                     ) -> tuple[_Library, dict[str, Any], Any]:
+        library = _Library()
+        seen: dict[str, Any] = {}
+
+        async def ask_name(_title: str, _answer: str, _names: list[str], write: Any,
+                           **kwargs: Any) -> bool:
+            seen.update(kwargs)
+            chosen = kwargs["choosing"](lambda: "Mine") if kwargs["choosing"] else None
+            if not confirm:
+                return False
+            return bool(await write("Mine", {"bin_path": "/x/fp"}, chosen))
+
+        with patch("manager.kit.on_page.ui"), \
+                patch.object(launchers, "ask_name", ask_name), \
+                patch.object(launchers.offload, "io", _inline), \
+                patch.object(launchers, "_open", AsyncMock()):
+            await call(library)
+        return library, seen, None
+
+    async def test_add_draws_no_settings_file_choice_and_stores_the_launcher(self) -> None:
+        app = {"id": "generic", "name": "Generic", "has_config": False,
+               "fields": [{"key": "bin_path", "label": "Program", "path": "exe"}]}
+
+        library, seen, _ = await self._asked(
+            lambda lib: launchers._add(lib, {}, Mock(), app))
+
+        self.assertIsNone(seen["choosing"])
+        library.launcher_settings_file_places.assert_not_called()
+        library.put_launcher.assert_called_once()
+        body = library.put_launcher.call_args.args[1]
+        self.assertEqual((body["app"], body["display_name"], body["settings"]),
+                         ("generic", "Mine", {"bin_path": "/x/fp"}))
+
+    async def test_add_still_asks_where_an_apps_settings_come_from_when_it_keeps_a_file(
+            self) -> None:
+        app = {"id": "vpx", "name": "Visual Pinball X", "has_config": True, "fields": []}
+
+        library, seen, _ = await self._asked(
+            lambda lib: launchers._add(lib, {}, Mock(), app), confirm=False)
+
+        self.assertIsNotNone(seen["choosing"])
+        library.launcher_settings_file_places.assert_called_once()
+
+    async def test_duplicate_of_such_a_launcher_asks_nothing_about_a_file_either(self) -> None:
+        original = {"launcher_id": "wrap", "app": "generic", "app_name": "Generic",
+                    "display_name": "Wrap", "enabled": True, "has_config": False,
+                    "settings": {"bin_path": "/x/fp"}}
+
+        library, seen, _ = await self._asked(
+            lambda lib: launchers.duplicate(lib, {}, Mock(), [original]))
+
+        self.assertIsNone(seen["choosing"])
+        body = library.put_launcher.call_args.args[1]
+        self.assertEqual((body["display_name"], body["owns_ini"]), ("Mine", False))
+        self.assertNotEqual(library.put_launcher.call_args.args[0], "wrap")
+
+
 if __name__ == "__main__":
     unittest.main()
