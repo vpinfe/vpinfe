@@ -71,7 +71,8 @@ _FIELDS = (
 # Media selects a game, a table and a slot the same way the other two do - a row there
 # is one game's slot - so leaving it out would drop the whole selection in silence.
 _PANEL = ("games", "tables", "media", "assets")
-_ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": (*_PANEL, "extensions"), "slot": _PANEL,
+_ONLY_ON = {"game": _PANEL, "table": _PANEL, "section": (*_PANEL, "extensions", "launchers"),
+            "slot": _PANEL,
             "file": ("media", "assets"),
             "page": ("settings",), "log": ("logs",), "tab": ("discovery",),
             "collection": ("collections", "games"),
