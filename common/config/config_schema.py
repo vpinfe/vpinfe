@@ -1035,13 +1035,6 @@ CONFIG_OPTIONS: tuple[ConfigOption, ...] = (
             type="string",
             default="",
         ),
-        # Read at each launch by `common/host/front.py` and `frontend/play_events.py`.
-        ConfigOption(
-            "experimental_table_focus",
-            group=setting_groups.LAUNCH,
-            type="bool",
-            default="false",
-        ),
     ),
     *in_section(
         "themes",

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -20,7 +19,7 @@ from common.config.config_access import (
 )
 from common.devices import serving
 from common.extensions.store import get_extension_store
-from common.host import addresses, front
+from common.host import addresses
 from common.media import launch_media, theme_loading
 from common.security import access_keys
 from common.values import is_truthy
@@ -116,16 +115,9 @@ def _sound_rungs(config: ConfigSource) -> list[dict[str, Any]]:
 def get_loading_screen_config(config: ConfigSource) -> dict[str, Any]:
     """What the person set for the loading screen and the launch audio, as core reads it at
     each launch: the order of things to try, the first that has something being used.
-
-    On Windows without Experimental Table Focus the windows are minimized for the launch,
-    so nothing of the screen can be seen there: it is the spinner and the launch audio is
-    off, which is what core did before the screen existed.
     """
-    if sys.platform == "win32" and not front.enabled(config):
-        mode, rungs, audio = "spinner", [], []
-    else:
-        mode, rungs = _screen_rungs(config)
-        audio = _sound_rungs(config)
+    mode, rungs = _screen_rungs(config)
+    audio = _sound_rungs(config)
     ends = cfg_get(config, "behavior", loading_choices.ENDS_KEY, "stop").strip().lower()
     return {"mode": mode, "repeat": ends == "repeat", "rungs": rungs, "audio": audio}
 

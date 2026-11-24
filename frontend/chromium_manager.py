@@ -554,8 +554,6 @@ class ChromiumManager:
         # reading their going as a person closing a window.
         self._lock = threading.RLock()
         self._generation = 0
-        # Windows only: [(window_name, hwnd)] awaiting restore.
-        self._minimized_hwnds: list[tuple[str, int]] = []
         self._controller = ""
         sweep_stale_profiles()
 
@@ -790,87 +788,34 @@ class ChromiumManager:
         except Exception:
             logger.exception("macOS re-activation failed")
 
-    def _win_find_our_hwnds(self) -> list[tuple[str, int]]:
-        """Windows: top-level HWNDs belonging to our Chromium browser processes.
-
-        Chromium's browser process owns the visible kiosk window, so matching on
-        the PIDs we spawned is enough; the backend leaves out the invisible helper
-        windows (message pumps, IME) that share those PIDs.
-        """
+    def give_controller_keyboard(self) -> bool:
+        """Windows: after the table has gone, give the controller window the keyboard when
+        some other window was next in line. Does nothing when the controller already has it."""
         if sys.platform != "win32":
-            return []
+            return False
         from common.host import front
 
         backend = front.backend_for_this_system()
         if backend is None:
-            return []
+            return False
         pids = {
             proc.pid: window_name
             for window_name, proc, _, _ in self._processes
             if proc.poll() is None
         }
-        return [(pids[window.pid], int(window.handle))
-                for window in backend.windows() if window.pid in pids]
-
-    def minimize_all_windows(self) -> int:
-        """Windows: minimize our kiosk windows so VPX comes up as the foreground app.
-
-        VPX pauses itself whenever its player window lacks focus, and Windows'
-        foreground lock stops a background launcher from handing focus over. Taking
-        our windows off the desktop before VPX starts sidesteps that entirely: VPX
-        becomes the natural foreground window and never pauses. Restored by
-        restore_all_windows() once the table exits.
-        """
-        if sys.platform != "win32":
-            return 0
-
-        self._minimized_hwnds = []
-        try:
-            import ctypes
-
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            SW_MINIMIZE = 6  # noqa: N806 - Win32's own name
-            for window_name, hwnd in self._win_find_our_hwnds():
-                user32.ShowWindow(hwnd, SW_MINIMIZE)
-                self._minimized_hwnds.append((window_name, hwnd))
-            logger.info("Windows: minimized %s frontend windows for launch",
-                    len(self._minimized_hwnds))
-        except Exception:
-            logger.exception("Windows minimize failed")
-
-        return len(self._minimized_hwnds)
-
-    def restore_all_windows(self) -> int:
-        """Windows: restore the kiosk windows minimized by minimize_all_windows().
-
-        Safe to call more than once, and a no-op if nothing was minimized. The
-        controller is restored last so it ends up on top and holding focus.
-        """
-        if sys.platform != "win32":
-            return 0
-
-        minimized, self._minimized_hwnds = getattr(self, "_minimized_hwnds", []), []
-        if not minimized:
-            return 0
-
-        restored = 0
-        try:
-            import ctypes
-
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            SW_RESTORE = 9  # noqa: N806 - Win32's own name
-            # Controller last: whichever window is restored last wins the foreground.
-            ordered = sorted(minimized, key=lambda item: item[0] == self._controller)
-            for window_name, hwnd in ordered:
-                user32.ShowWindow(hwnd, SW_RESTORE)
-                restored += 1
-                if window_name == self._controller:
-                    user32.SetForegroundWindow(hwnd)
-            logger.info("Windows: restored %s frontend windows after launch", restored)
-        except Exception:
-            logger.exception("Windows restore failed")
-
-        return restored
+        controller = next((one for one in backend.windows()
+                           if pids.get(one.pid) == self._controller), None)
+        if controller is None:
+            return False
+        holder = backend.holder()
+        if holder is not None and holder.handle == controller.handle:
+            return True
+        refusal = backend.hand_over(controller)
+        if refusal:
+            logger.warning("Windows: the controller window was not given the keyboard: %s",
+                           refusal)
+            return False
+        return True
 
     @staticmethod
     def _get_descendant_pids(pid: int) -> list[int]:

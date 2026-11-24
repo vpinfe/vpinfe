@@ -10,7 +10,6 @@
     "attract_order": "random",
     "attract_step_time": "8",
     "confirm": "false",
-    "experimental_table_focus": "false",
     "hide_quit_button": "false",
     "launch_audio": "table",
     "launch_audio_fallback": "silence",

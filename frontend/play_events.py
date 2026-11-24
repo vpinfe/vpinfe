@@ -20,7 +20,7 @@ from common import events
 from common.config.config_access import cfg_bool
 from common.config.config_store import ConfigStore
 from common.games.game import GameRecord
-from common.host import front, launch_state
+from common.host import launch_state
 from common.players import player_pictures
 from frontend import config_api
 from frontend.last_game import save_last_launched
@@ -91,16 +91,6 @@ def on_launching(*, game: GameRecord | None = None, table_id: str = "",
     if _ini_config is not None:
         launching["loading_screen"] = config_api.get_loading_screen_config(_ini_config)
     _broadcast(launching)
-    if (sys.platform == "win32" and _browser is not None
-            and not front.enabled(_ini_config)):
-        # VPX pauses whenever its player window loses focus, and Windows will not let a
-        # process hand the foreground to one it spawned - so a table came up paused until
-        # the user alt-tabbed. Out of the way, and VPX takes the foreground itself. With
-        # Experimental Table Focus on, the hand-over does this instead.
-        try:
-            _browser.minimize_all_windows()
-        except Exception:
-            logger.exception("Could not get the frontend windows out of VPX's way")
 
 
 def on_launched(**_payload: Any) -> None:
@@ -117,12 +107,10 @@ def on_exited(**_payload: Any) -> None:
         except Exception:
             logger.exception("Could not bring the frontend windows back to the front")
     if sys.platform == "win32" and _browser is not None:
-        # Reached on every path out, including a launch that failed, so a cabinet with
-        # no keyboard is never left staring at minimized windows.
         try:
-            _browser.restore_all_windows()
+            _browser.give_controller_keyboard()
         except Exception:
-            logger.exception("Could not bring the frontend windows back")
+            logger.exception("Could not give the frontend the keyboard back")
 
 
 def on_play_recorded(**_payload: Any) -> None:

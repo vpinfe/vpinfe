@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from common.extensions import host
+from common.host import front_gnome
 from common.i18n import t
 from common.runtime.jobs import DONE, FAILED
 from common.settings import feature_checks
@@ -232,7 +233,8 @@ class AReadThatFailedIsSaid(unittest.TestCase):
                                  extensions=lambda: [], extension_list=lambda: {},
                                  launchers=lambda: {"launchers": []},
                                  all_media=lambda: [], devices=lambda: [],
-                                 library_policy=lambda: {}, config_values=lambda: {})
+                                 library_policy=lambda: {}, config_values=lambda: {},
+                                 frontend_focus=lambda: "")
         library = Library.__new__(Library)
         library._client = client
 
@@ -949,7 +951,7 @@ class WhatExtensionsAskFor(unittest.TestCase):
             unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [],
             extension_list=lambda: {}, launchers=lambda: {"launchers": []},
             all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
-            config_values=lambda: {})
+            config_values=lambda: {}, frontend_focus=lambda: "")
         library = Library.__new__(Library)
         library._client = client
 
@@ -1031,7 +1033,7 @@ class WhatWaitsToBeAccepted(unittest.TestCase):
             unaccepted_themes=lambda: {"themes": [self.THEME]}, extensions=lambda: [],
             extension_list=lambda: {}, launchers=lambda: {"launchers": []},
             all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
-            config_values=lambda: {})
+            config_values=lambda: {}, frontend_focus=lambda: "")
         for name, value in replaced.items():
             setattr(client, name, value)
         library = Library.__new__(Library)
@@ -1087,7 +1089,7 @@ class WhatProgramsAsk(unittest.TestCase):
                 unaccepted_themes=lambda: {"themes": []}, extensions=lambda: [], asks=asks,
                 extension_list=lambda: {}, launchers=lambda: {"launchers": []},
                 all_media=lambda: [], devices=lambda: [], library_policy=lambda: {},
-                config_values=lambda: {})
+                config_values=lambda: {}, frontend_focus=lambda: "")
             read = Library.__new__(Library)
             read._client = client
             return read
@@ -1292,6 +1294,27 @@ class VisualPinballLoggingOff(unittest.TestCase):
         lib = FakeLibrary(watched={"logging_off": [{"launcher_id": "vpx"}]})
 
         self.assertEqual([needs.LOGGING], keys(needs.collect(lib, {})))
+
+
+class TableFocusOnGnome(unittest.TestCase):
+    def test_a_missing_or_off_add_on_carries_the_act_that_allows_it(self):
+        for state in (front_gnome.MISSING, front_gnome.OFF):
+            with self.subTest(state=state):
+                row = needs.table_focus_row(state)
+
+                self.assertEqual(needs.ALLOW_TABLE_FOCUS, row.fix.key)
+                self.assertEqual((state,), row.token)
+
+    def test_a_state_only_the_person_can_resolve_carries_no_act_and_says_why(self):
+        for state in (front_gnome.SIGN_IN, front_gnome.UNSUPPORTED, front_gnome.BROKEN):
+            with self.subTest(state=state):
+                row = needs.table_focus_row(state)
+
+                self.assertIsNone(row.fix)
+                self.assertNotEqual(t("manager.needs.table_focus.tip"), row.tip)
+
+    def test_nothing_is_drawn_where_the_add_on_is_working_or_gnome_is_not_here(self):
+        self.assertIsNone(needs.table_focus_row(""))
 
 
 if __name__ == "__main__":

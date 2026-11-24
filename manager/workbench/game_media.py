@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -268,7 +267,7 @@ async def _launch_lines(context: dict[str, Any],
     present = {kind: bool((entries.get(kind) or {}).get("present"))
                for kind in launch_lines.READ}
     return launch_lines.lines((values or {}).get("behavior") or {},
-                              launch_lines.theme_in_use(listing or {}), present, sys.platform)
+                              launch_lines.theme_in_use(listing or {}), present)
 
 
 def _kept_kinds(context: dict[str, Any], family: str) -> set[str] | None:

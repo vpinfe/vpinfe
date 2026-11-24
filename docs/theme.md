@@ -1066,9 +1066,8 @@ The screen is a `div.vpinfe-loading-screen` holding a `video` or an `img`, added
 removed again, so a theme restyles it in CSS. Under Off core draws no spinner. A theme that draws
 its own sets `loading_screen.enabled` to `false`, beside those keys: the person's choice is then
 ignored, and the dim and the spinner are as `launch_dim.enabled` and `launch_indicator.enabled`
-say. On Windows the windows are minimized for a launch unless the person turned on Experimental
-Table Focus, so the choice is Spinner there and the launch audio is off. A picture or video that
-cannot be loaded gives way to the next step, so the screen is never left empty.
+say. The windows stay where they are during a launch, so the screen is seen on every system. A
+picture or video that cannot be loaded gives way to the next step, so the screen is never left empty.
 
 ### Quiet While a Game Runs
 

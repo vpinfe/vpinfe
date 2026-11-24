@@ -467,31 +467,49 @@ class WindowRoleTests(unittest.TestCase):
             manager._focus_game_window_mac()
         return activated
 
-    def _restored_on_windows(self, contract: int) -> list[tuple[str, int]]:
-        """What Windows was told, with the controller minimized first."""
-        manager, _events = self._launch(contract)
-        manager._minimized_hwnds = [(name, hwnd) for hwnd, name
-                                    in enumerate(theme_windows.DEFAULT_WINDOWS[contract])]
-        calls: list[tuple[str, int]] = []
-        user32 = types.SimpleNamespace(
-            ShowWindow=lambda hwnd, _how: calls.append(("show", hwnd)),
-            SetForegroundWindow=lambda hwnd: calls.append(("front", hwnd)))
-
-        with (mock.patch.object(sys, "platform", "win32"),
-              mock.patch("ctypes.WinDLL", create=True, return_value=user32)):
-            manager.restore_all_windows()
-        return calls
-
     def test_macos_focuses_the_controller(self) -> None:
         for contract in theme_windows.DEFAULT_WINDOWS:
             with self.subTest(contract=contract):
                 self.assertEqual(self._focused_on_macos(contract), [100])
 
-    def test_windows_restores_the_controller_last_and_brings_it_forward(self) -> None:
-        for contract in theme_windows.DEFAULT_WINDOWS:
-            with self.subTest(contract=contract):
-                self.assertEqual(self._restored_on_windows(contract),
-                                 [("show", 1), ("show", 2), ("show", 0), ("front", 0)])
+    def _keyboard_on_windows(self, held_by: int | None) -> tuple[bool, list[Any]]:
+        """Ask for the controller to have the keyboard, with `held_by` holding it now:
+        the pid of whichever window it is, or None for no window."""
+        from common.host import front
+
+        manager, _events = self._launch(2)
+        manager._controller = "playfield"
+        manager._processes = [
+            (name, mock.Mock(pid=pid, **{"poll.return_value": None}), "", None)
+            for name, pid in (("playfield", 100), ("backglass", 101))]
+        windows = [front.Window(1, 100, "VPinFE"), front.Window(2, 101, "Backglass"),
+                   front.Window(3, 900, "Notepad")]
+        handed: list[Any] = []
+
+        def hand_over(window: Any) -> str:
+            handed.append(window)
+            return ""
+
+        backend = types.SimpleNamespace(
+            windows=lambda: windows,
+            holder=lambda: next((one for one in windows if one.pid == held_by), None),
+            hand_over=hand_over)
+
+        with (mock.patch.object(sys, "platform", "win32"),
+              mock.patch.object(front, "backend_for_this_system", return_value=backend)):
+            return manager.give_controller_keyboard(), handed
+
+    def test_windows_gives_the_controller_the_keyboard_when_another_window_has_it(self) -> None:
+        ok, handed = self._keyboard_on_windows(held_by=900)
+
+        self.assertTrue(ok)
+        self.assertEqual([one.handle for one in handed], [1])
+
+    def test_windows_leaves_the_keyboard_where_the_controller_already_has_it(self) -> None:
+        ok, handed = self._keyboard_on_windows(held_by=100)
+
+        self.assertTrue(ok)
+        self.assertEqual(handed, [])
 
 
 class NoBrowserTests(unittest.TestCase):

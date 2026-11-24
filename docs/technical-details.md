@@ -198,7 +198,6 @@ Runtime state written by VPinFE, not shown as a setting.
 | `launch_audio` | choice (table, theme, mine, off) | `table` | Launch Audio |
 | `launch_audio_fallback` | choice (table, theme, mine, silence) | `silence` | Launch Audio |
 | `launch_audio_file` | string |  | Launch Audio You Choose |
-| `experimental_table_focus` | bool | `false` | Experimental Table Focus |
 
 ### `themes`
 

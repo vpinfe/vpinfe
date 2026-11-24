@@ -20,17 +20,13 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 import psutil
 
-from common.config.config_access import cfg_bool
 from common.failures import why
 
 logger = logging.getLogger("vpinfe.common.host.front")
-
-SECTION = "behavior"
-KEY = "experimental_table_focus"
 
 FIND_SECONDS = 30.0
 POLL_SECONDS = 0.25
@@ -80,11 +76,6 @@ class Backend(Protocol):
 
 def on_wayland(env: Mapping[str, str]) -> bool:
     return env.get("XDG_SESSION_TYPE") == "wayland" or bool(env.get("WAYLAND_DISPLAY"))
-
-
-def enabled(ini_config: Any) -> bool:
-    """Whether the person turned hand-over on. Read at each launch."""
-    return cfg_bool(ini_config, SECTION, KEY, False)
 
 
 def backend_for_this_system() -> Backend | None:
@@ -159,7 +150,7 @@ class Watch:
     """
 
     def __init__(self, backend: Backend | None, root_pid: int, *,
-                 titles: Iterable[str] = (), hand_over_on: bool = False,
+                 titles: Iterable[str] = (),
                  launched_at: float | None = None,
                  on_window: Callable[[], object] | None = None,
                  pause_asked: Callable[[], bool] | None = None,
@@ -171,7 +162,6 @@ class Watch:
         self._root = root_pid
         self._own_root = own_pid if own_pid is not None else os.getpid()
         self._titles = tuple(title for title in titles if title)
-        self._on = hand_over_on
         self._launched_at = launched_at if launched_at is not None else time.time()
         self._on_window = on_window
         self._pause_asked = pause_asked or (lambda: False)
@@ -234,8 +224,7 @@ class Watch:
 
     def request_round(self) -> None:
         """Another try, for a feature that has just given the keyboard away on purpose
-        and is done with it: lifts a give-up and a pause the person asked for, once. It
-        does nothing for a person who has not turned hand-over on."""
+        and is done with it: lifts a give-up and a pause the person asked for, once."""
         self._extra = True
         self.nudge()
 
@@ -388,7 +377,7 @@ class Watch:
         """The table has the keyboard and is still paused from its start: on a system
         whose foreground can be wrong, its own input never heard it gained the focus.
         Never a pause after the table has run, and never one the person asked for."""
-        if not self._on or not getattr(self._backend, "holder_can_be_wrong", False):
+        if not getattr(self._backend, "holder_can_be_wrong", False):
             return False
         if self._resumed or not self._passes(holder):
             return False
@@ -457,9 +446,6 @@ class Watch:
             assert holder is not None
             self._hold_back(f"{_program_of(holder.pid)} has the keyboard, {holder.title!r}, "
                             "which is left alone", holder, kind="other")
-            return
-        if not self._on:
-            self._hold_back("the Experimental Table Focus switch is off", holder)
             return
         if self._pause_asked() and not extra:
             self._hold_back("a pause the person asked for", holder)
@@ -554,9 +540,9 @@ class Watch:
             startup = (f", window appeared {abs(gap):.1f} s "
                        f"{'after' if gap >= 0 else 'before'} startup done")
         logger.info("Table focus summary: %d tries, the table first held the keyboard %s%s, "
-                    "now with %s, %d pause lines from the table, hand-over %s, %.0f s watched",
+                    "now with %s, %d pause lines from the table, %.0f s watched",
                     self._tries, held, startup, self._describe(self._last_holder),
-                    self._pause_lines, "on" if self._on else "off", now - self._started_at)
+                    self._pause_lines, now - self._started_at)
 
 
 # -- the watch of the table that is running -------------------------------------------
@@ -565,15 +551,13 @@ _active: Watch | None = None
 _active_lock = threading.Lock()
 
 
-def watch_launch(root_pid: int, *, ini_config: Any, titles: Iterable[str] = (),
+def watch_launch(root_pid: int, *, titles: Iterable[str] = (),
                  on_window: Callable[[], object] | None = None,
                  pause_asked: Callable[[], bool] | None = None,
                  paused: Callable[[], bool] | None = None) -> Watch:
     """Start watching a table that has just been started."""
-    on = enabled(ini_config)
-    logger.info("Table focus: hand-over is %s, on %s", "on" if on else "off",
-                describe_system())
-    watch = Watch(backend_for_this_system(), root_pid, titles=titles, hand_over_on=on,
+    logger.info("Table focus: watching a table on %s", describe_system())
+    watch = Watch(backend_for_this_system(), root_pid, titles=titles,
                   on_window=on_window, pause_asked=pause_asked, paused=paused)
     global _active
     with _active_lock:
@@ -592,7 +576,7 @@ def finish(watch: Watch) -> None:
 
 def one_more_round() -> None:
     """For a feature that moved the keyboard on purpose and has finished: asks the watch
-    of the table that is running to check once more and, if hand-over is on, give it back."""
+    of the table that is running to check once more and give it back."""
     with _active_lock:
         watch = _active
     if watch is not None:
