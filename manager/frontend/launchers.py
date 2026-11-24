@@ -299,8 +299,8 @@ def standing_option(field: dict[str, Any], app_name: str) -> dict[str, Any]:
 @on_page
 async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], None],
                app: dict) -> None:
-    """A new launcher for an app: its name, the paths the app declares and where its
-    settings come from."""
+    """A new launcher for an app: its name, the paths the app declares and, where the app
+    keeps a settings file, where its settings come from."""
     from common.games import launcher_settings
     from common.games import launchers as model
 
@@ -310,7 +310,9 @@ async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], Non
              if one.get("path") and one["key"] != launcher_settings.KEY]
     made = model.mint_launcher_id()
     fallback = model.free_name(app["name"], names)
-    places = await offload.io(library.launcher_settings_file_places, app["id"], {})
+    keeps_file = bool(app.get("has_config"))
+    places = await offload.io(library.launcher_settings_file_places, app["id"], {}) \
+        if keeps_file else []
 
     def choosing(name: Callable[[], str]) -> file_choice.Choice:
         return file_choice.Choice(library, app=app, held=held, places=places,
@@ -319,8 +321,12 @@ async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], Non
     @on_page
     async def write(name: str, settings: dict[str, str],
                     choice: file_choice.Choice | None) -> bool:
-        assert choice is not None
         shown = name or fallback
+        if choice is None:
+            await offload.io(library.put_launcher, made, {
+                "app": app["id"], "enabled": True, "settings": settings,
+                "display_name": shown})
+            return True
         answer = await choice.apply(made, create={
             "app": app["id"], "enabled": True, "settings": settings, "display_name": shown})
         if answer is None:
@@ -336,7 +342,7 @@ async def _add(library: Library, state: dict[str, Any], redraw: Callable[[], Non
     if await ask_name(t("manager.launchers.new_title", app=app["name"]), t("word.add"),
                       names, write, asked=asked, looking=library.folders, standing=standing,
                       placeholder=t("manager.launchers.name_example", app=app["name"]),
-                      choosing=choosing):
+                      choosing=choosing if keeps_file else None):
         await _open(state, redraw, made)
 
 
@@ -370,8 +376,9 @@ async def duplicate(library: Library, state: dict[str, Any], redraw: Callable[[]
         offered = model.free_name(
             t("manager.launchers.copy_of", name=launcher["display_name"]), names)
         app = {"id": launcher["app"], "name": launcher["app_name"]}
+        keeps_file = bool(launcher.get("has_config"))
         places = await offload.io(library.launcher_settings_file_places, launcher["app"],
-                                  dict(launcher.get("settings") or {}))
+                                  dict(launcher.get("settings") or {})) if keeps_file else []
 
         def choosing(name: Callable[[], str], launcher: dict = launcher, app: dict = app,
                      places: list[dict] = places, offered: str = offered) -> file_choice.Choice:
@@ -383,8 +390,13 @@ async def duplicate(library: Library, state: dict[str, Any], redraw: Callable[[]
         async def write(name: str, _settings: dict[str, str],
                         choice: file_choice.Choice | None, original: dict = launcher,
                         new_id: str = new_id, offered: str = offered) -> bool:
-            assert choice is not None
             shown = name or offered
+            if choice is None:
+                await offload.io(library.put_launcher, new_id,
+                                 {**original, "launcher_id": new_id, "owns_ini": False,
+                                  "display_name": shown})
+                names.append(shown)
+                return True
             answer = await choice.apply(new_id, create={
                 "app": original["app"], "enabled": bool(original.get("enabled", True)),
                 "settings": dict(original.get("settings") or {}), "display_name": shown})
@@ -399,7 +411,7 @@ async def duplicate(library: Library, state: dict[str, Any], redraw: Callable[[]
             t("manager.launchers.duplicate_title", name=launcher["display_name"]),
             t("manager.workbench.duplicate"), names, write, named=offered,
             icon=verbs.DUPLICATE, place=_place(index, len(launchers)),
-            walking=len(launchers) > 1, choosing=choosing)
+            walking=len(launchers) > 1, choosing=choosing if keeps_file else None)
         if answer == walks.STOPPED:
             break
         if answer:
