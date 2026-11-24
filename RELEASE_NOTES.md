@@ -1,5 +1,26 @@
 ## VPinFE Release Notes
 
+### New in beta.5
+
+#### Highlights
+- **Core** - A table starts playing as soon as it opens, on Windows, Mac and Linux, with no paused start and no key press from you. Experimental Table Focus is gone, because it is always on now. (#103)
+- **Core** - Windows: the Loading Screen and Launch Audio you choose play while a table starts, as they already do on Mac and Linux. (#103)
+- **Core** - Windows: VPinFE's screens stay up while a table runs, so they are still there, and ready for your buttons, the moment the table closes. (#107)
+- **Core** - Mac: a table that still starts paused is un-paused by VPinFE, with no key press from you. (#103)
+
+#### Improved
+- **Core** - Mac: Visual Pinball's windows are set to full screen when you set up Visual Pinball, and a choice you already made is left alone. (#114)
+- **Core** - GNOME: when the add-on that hands the table the keyboard isn't working, the Overview says so and offers the fix. (#103)
+- **Manager** - Displays shows launchers that use other screens than VPinFE as one notice, "Visual Pinball is using other screens", with one Match VPinFE button for all of them.
+- **Manager** - Reloading a launcher's page keeps you on the section you were in, and Set on the Launcher's Page opens the right section. (#121)
+
+#### Fixed
+- **Manager** - Choosing a Loading Screen or Launch Audio saves again, instead of saying Could not save that. (#110)
+- **Manager** - A Generic launcher, for an app with no settings file, can be added again. (#127)
+- **Frontend** - A notice no longer stays on your screens after a table closes. They say "VPinFE is quitting" or "This device is rebooting" only when that is happening. (#113)
+- **Core** - The Pinball Primer tutorial opens again for a table that came from a 2.x library. (#109)
+- **Core** - Linux x64: the DOF library loads again on systems with an older glibc, down to 2.38. (#111)
+
 ### New in beta.4
 
 #### Highlights
