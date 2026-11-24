@@ -19,6 +19,7 @@ from typing import Any
 
 from nicegui import ui
 
+from apps.vpx import presentation
 from common.config.config_access import DisplayConfig
 from common.config.path_state import OK as PATH_OK
 from common.failures import why
@@ -257,6 +258,18 @@ async def _write_ini(launcher_id: str, keys: dict[str, str]) -> None:
         await offload.io(ApiClient().write_launcher_config, launcher_id, keys, create=True)
 
 
+async def _full_screen_windows(launcher: Launcher, path: str) -> None:
+    """On a Mac, a program set up for the first time starts with its windows full screen. This
+    is the only time it is written: the settings file is the word on it afterwards."""
+    settings = {"bin_path": path, "ini_path": launcher.value("ini_path")}
+    try:
+        keys = await offload.io(presentation.first_setup_windows, settings)
+        await _write_ini(launcher.launcher_id, keys)
+    except Exception:
+        logger.warning("Could not set the windows full screen for the default launcher",
+                       exc_info=True)
+
+
 async def answer_program(vpx: Vpx, values: dict[str, Any], *, cabinet: bool,
                          write_bgset: bool = True,
                          then: Callable[[str], Awaitable[None]] | None = None) -> str:
@@ -268,7 +281,8 @@ async def answer_program(vpx: Vpx, values: dict[str, Any], *, cabinet: bool,
     if not path:
         return path
     client = ApiClient()
-    if not (vpx.stored and _same(path, vpx.stored)):
+    first_setup = not (vpx.stored and _same(path, vpx.stored))
+    if first_setup:
         launcher_id, body = _launcher_body(vpx, path)
         await offload.io(client.put_launcher, launcher_id, body)
         vpx.launcher = Launcher.from_dict({**body, "launcher_id": launcher_id})
@@ -287,6 +301,10 @@ async def answer_program(vpx: Vpx, values: dict[str, Any], *, cabinet: bool,
             logger.warning("Could not write BGSet for the default launcher", exc_info=True)
     if then is not None:
         await then(vpx.launcher.launcher_id)
+    if first_setup:
+        # After `then`: the screens it assigns are what makes a backglass, Score View or
+        # topper window one that gets a mode.
+        await _full_screen_windows(vpx.launcher, path)
     return path
 
 

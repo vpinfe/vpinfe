@@ -287,7 +287,9 @@ class ProgramStepTests(unittest.TestCase):
     def _answer(self, vpx_state: setup_vpx.Vpx, then: mock.AsyncMock) -> None:
         client = mock.Mock()
         client.launcher_config.return_value = {"values": {}}
-        with mock.patch.object(setup_vpx, "ApiClient", return_value=client):
+        with mock.patch.object(setup_vpx, "ApiClient", return_value=client), \
+             mock.patch.object(setup_vpx.presentation, "first_setup_windows",
+                               return_value={}):
             _ran(setup_vpx.answer_program(vpx_state, {setup_vpx.PROGRAM: "0"}, cabinet=True,
                                           then=then))
 

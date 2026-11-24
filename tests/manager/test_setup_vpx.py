@@ -147,9 +147,12 @@ class AskProgramTests(unittest.TestCase):
 
 class AnswerProgramTests(unittest.TestCase):
     def _answer(self, vpx: setup_vpx.Vpx, values: dict[str, Any], *, cabinet: bool = False,
-                held: dict[str, Any] | None = None) -> mock.Mock:
+                held: dict[str, Any] | None = None,
+                windows: dict[str, str] | None = None) -> mock.Mock:
         client = _client(held)
-        with mock.patch.object(setup_vpx, "ApiClient", return_value=client):
+        with mock.patch.object(setup_vpx, "ApiClient", return_value=client), \
+             mock.patch.object(setup_vpx.presentation, "first_setup_windows",
+                               return_value=windows or {}):
             _ran(setup_vpx.answer_program(vpx, values, cabinet=cabinet))
         return client
 
@@ -164,6 +167,61 @@ class AnswerProgramTests(unittest.TestCase):
         self.assertEqual("Visual Pinball X", body["display_name"])
         self.assertEqual(NEW, vpx.chosen)
         self.assertTrue(vpx.answered)
+
+    def test_a_program_set_up_for_the_first_time_has_its_windows_written_full_screen(
+            self) -> None:
+        vpx = setup_vpx.Vpx(launcher=LAUNCHER, finds=[_one(NEW)], stored=OLD, chosen=OLD)
+        windows = {"Player.PlayfieldFullScreen": "1"}
+
+        client = self._answer(vpx, {setup_vpx.PROGRAM: "0"}, windows=windows)
+
+        client.write_launcher_config.assert_called_once_with("vpx-1", windows, create=True)
+
+    def test_the_windows_are_read_after_the_screens_are_assigned(self) -> None:
+        vpx = setup_vpx.Vpx(launcher=LAUNCHER, finds=[_one(NEW)], stored=OLD, chosen=OLD)
+        order: list[str] = []
+
+        async def then(_launcher_id: str) -> None:
+            order.append("screens")
+
+        def windows(_settings: dict[str, Any]) -> dict[str, str]:
+            order.append("windows")
+            return {}
+
+        with mock.patch.object(setup_vpx, "ApiClient", return_value=_client()), \
+             mock.patch.object(setup_vpx.presentation, "first_setup_windows", windows):
+            _ran(setup_vpx.answer_program(vpx, {setup_vpx.PROGRAM: "0"}, cabinet=True,
+                                          then=then))
+
+        self.assertEqual(["screens", "windows"], order)
+
+    def test_nothing_is_written_where_every_window_has_a_mode(self) -> None:
+        vpx = setup_vpx.Vpx(launcher=LAUNCHER, finds=[_one(NEW)], stored=OLD, chosen=OLD)
+
+        client = self._answer(vpx, {setup_vpx.PROGRAM: "0"})
+
+        client.write_launcher_config.assert_not_called()
+
+    def test_the_program_already_named_is_not_given_its_windows_again(self) -> None:
+        vpx = setup_vpx.Vpx(launcher=LAUNCHER, finds=[_one(OLD)], stored=OLD, chosen=OLD)
+
+        client = self._answer(vpx, {setup_vpx.PROGRAM: "0"},
+                              windows={"Player.PlayfieldFullScreen": "1"})
+
+        client.write_launcher_config.assert_not_called()
+
+    def test_windows_that_cannot_be_written_do_not_stop_the_program_being_set(self) -> None:
+        vpx = setup_vpx.Vpx(launcher=LAUNCHER, finds=[_one(NEW)], stored=OLD, chosen=OLD)
+        client = _client()
+        client.write_launcher_config.side_effect = RuntimeError("no")
+
+        with mock.patch.object(setup_vpx, "ApiClient", return_value=client), \
+             mock.patch.object(setup_vpx.presentation, "first_setup_windows",
+                               return_value={"Player.PlayfieldFullScreen": "1"}), \
+             self.assertLogs("vpinfe.manager.setup.setup_vpx", level="WARNING"):
+            _ran(setup_vpx.answer_program(vpx, {setup_vpx.PROGRAM: "0"}, cabinet=False))
+
+        self.assertEqual(NEW, vpx.chosen)
 
     def test_somewhere_else_takes_the_path_typed(self) -> None:
         vpx = setup_vpx.Vpx(launcher=LAUNCHER, stored=OLD, chosen=OLD)
