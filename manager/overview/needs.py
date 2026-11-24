@@ -12,6 +12,7 @@ from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from common.host import front_gnome
 from common.i18n import t
 from common.security import approvals
 from common.settings import feature_checks
@@ -47,6 +48,7 @@ ASKED = "asked:"
 # A fix VPinFE can do itself, the first entry of the row's menu.
 GET_MEDIA, UPDATE, UPGRADE = "get_media", "update", "upgrade"
 TURN_ON_LOGGING = "turn_on_logging"
+ALLOW_TABLE_FOCUS = "allow_table_focus"
 UPDATE_EXTENSIONS, REINSTALL_EXTENSION, UNINSTALL_EXTENSION, GET_DEPENDENCIES = (
     "update_extensions", "reinstall_extension", "uninstall_extension", "get_dependencies")
 
@@ -383,15 +385,29 @@ def logging_row(held: Any) -> Need | None:
                 token=ids)
 
 
+# What the row says when the add-on is not simply missing or off, and the fix for the two
+# that VPinFE can put right itself.
+_TABLE_FOCUS_WHY = {front_gnome.SIGN_IN: "manager.needs.table_focus.sign_in",
+                    front_gnome.UNSUPPORTED: "manager.needs.table_focus.unsupported",
+                    front_gnome.BROKEN: "manager.needs.table_focus.broken"}
+_TABLE_FOCUS_FIX = {front_gnome.MISSING: "manager.needs.table_focus.allow",
+                    front_gnome.OFF: "manager.needs.table_focus.turn_on"}
+
+
 def table_focus_row(held: str) -> Need | None:
-    """GNOME is not letting VPinFE bring the table forward. The row only points at the
-    line under Experimental Table Focus, which is where it is put right. Dismissed against
-    the state GNOME is in, so a different reason brings the row back."""
+    """GNOME is not letting VPinFE bring the table forward. Where VPinFE can set it right
+    the row carries the act; after it GNOME needs a sign-in, which the row asks for and the
+    install cannot do, because signing out would close the frontend. Dismissed against the
+    state GNOME is in, so a different reason brings the row back."""
     if not held:
         return None
-    return Need(TABLE_FOCUS, t("manager.needs.table_focus"), t("manager.needs.table_focus.tip"),
-                WARM, verbs.HAD_ERRORS,
-                Opens("settings", keys={"settings_page": "frontend.behavior"}),
+    reason = _TABLE_FOCUS_WHY.get(held)
+    fix = _TABLE_FOCUS_FIX.get(held)
+    return Need(TABLE_FOCUS, t("manager.needs.table_focus"),
+                t(reason) if reason else t("manager.needs.table_focus.tip"),
+                WARM, verbs.HAD_ERRORS, Opens(),
+                fix=Fix(ALLOW_TABLE_FOCUS, t(fix), t("manager.needs.table_focus.tip")) if fix
+                else None,
                 token=(held,))
 
 

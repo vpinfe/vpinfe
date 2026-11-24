@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import configparser
 import re
-import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from common import events
-from common.config.config_store import ConfigStore
 from common.host import launch_state
 from frontend import play_events
 from frontend.device_channel import DeviceChannel
@@ -48,65 +46,51 @@ class PlayEventTests(unittest.TestCase):
         if timer is not None:
             timer.join(timeout=5)
 
-    def test_windows_gets_out_of_vpx_s_way_on_launch_and_comes_back(self) -> None:
-        """VPX pauses when its window loses focus, and Windows will not let us hand the
-        foreground to a process we spawned - so the windows move, not the focus."""
-        browser = mock.Mock()
-        with mock.patch.object(play_events, "save_last_launched"), \
-                mock.patch.object(play_events.sys, "platform", "win32"):
-            play_events.register(self.bridge, browser, None)
-            events.emit(events.TABLE_LAUNCHING, game=None, ini_config=None)
-            browser.minimize_all_windows.assert_called_once_with()
-            browser.restore_all_windows.assert_not_called()
+    def test_a_launch_leaves_every_window_where_it_is(self) -> None:
+        """The hand-over gives the keyboard to the table, so no window is minimized."""
+        for system in ("win32", "linux", "darwin"):
+            with self.subTest(system=system):
+                events.clear()
+                play_events.reset_for_tests()
+                browser = mock.Mock()
+                with mock.patch.object(play_events, "save_last_launched"), \
+                        mock.patch.object(play_events.sys, "platform", system):
+                    play_events.register(self.bridge, browser, None)
+                    events.emit(events.TABLE_LAUNCHING, game=None, ini_config=None)
 
-            events.emit(events.TABLE_EXITED)
-            browser.restore_all_windows.assert_called_once_with()
+                self.assertEqual(browser.mock_calls, [])
 
-    def test_with_table_focus_on_the_windows_stay_where_they_are(self) -> None:
-        """The hand-over gives the keyboard to the table, so the windows need not move."""
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        ini = ConfigStore(Path(folder.name) / "vpinfe.json")
-        ini.config.set("behavior", "experimental_table_focus", "true")
-        browser = mock.Mock()
-        with mock.patch.object(play_events, "save_last_launched"), \
-                mock.patch.object(play_events.sys, "platform", "win32"):
-            play_events.register(self.bridge, browser, ini)
-            events.emit(events.TABLE_LAUNCHING, game=None, ini_config=ini)
-
-        browser.minimize_all_windows.assert_not_called()
-
-    def test_the_windows_come_back_even_when_the_launch_failed(self) -> None:
+    def test_windows_gives_the_controller_the_keyboard_when_the_table_has_gone(self) -> None:
         """table.exited is announced on every path out, so a cabinet with no keyboard is
-        never left looking at minimized windows."""
+        never left looking at some other program."""
         browser = mock.Mock()
         with mock.patch.object(play_events, "save_last_launched"), \
                 mock.patch.object(play_events.sys, "platform", "win32"):
             play_events.register(self.bridge, browser, None)
             events.emit(events.TABLE_EXITED)
 
-        browser.restore_all_windows.assert_called_once_with()
+        browser.give_controller_keyboard.assert_called_once_with()
 
-    def test_only_windows_moves_its_windows(self) -> None:
+    def test_only_windows_hands_the_keyboard_back_itself(self) -> None:
         browser = mock.Mock()
         with mock.patch.object(play_events, "save_last_launched"), \
                 mock.patch.object(play_events.sys, "platform", "linux"):
             play_events.register(self.bridge, browser, None)
-            events.emit(events.TABLE_LAUNCHING, game=None, ini_config=None)
             events.emit(events.TABLE_EXITED)
 
-        browser.minimize_all_windows.assert_not_called()
-        browser.restore_all_windows.assert_not_called()
+        browser.give_controller_keyboard.assert_not_called()
 
-    def test_a_browser_that_cannot_minimize_does_not_stop_the_launch(self) -> None:
+    def test_a_browser_that_cannot_hand_the_keyboard_back_does_not_stop_the_exit(self) -> None:
         browser = mock.Mock()
-        browser.minimize_all_windows.side_effect = OSError("no window manager")
+        browser.give_controller_keyboard.side_effect = OSError("no window manager")
         with mock.patch.object(play_events, "save_last_launched"), \
                 mock.patch.object(play_events.sys, "platform", "win32"):
             play_events.register(self.bridge, browser, None)
-            events.emit(events.TABLE_LAUNCHING, game=None, ini_config=None)
+            with self.assertLogs("vpinfe.frontend.play_events", level="ERROR") as logged:
+                events.emit(events.TABLE_EXITED)
 
-        self.assertIn("TableLaunching", self.bridge.messages)
+        browser.give_controller_keyboard.assert_called_once_with()
+        self.assertIn("Could not give the frontend the keyboard back", logged.output[0])
 
     def test_registering_twice_leaves_one_of_each(self) -> None:
         """Three windows share one bridge; registering per window would treble

@@ -7,14 +7,12 @@ plays one file on every table the file shows with a Change button.
 
 Rows that cannot act are disabled where they stand rather than the page being drawn again -
 a redraw puts a long page back at its top. That is the case for all of them while the
-theme draws its own loading screen, for the video ending while no video can play, for
-Launch Audio while Mute Frontend Audio is on, and on Windows, where the frontend is
-minimized at launch unless Experimental Table Focus is on and the screen shows nothing.
+theme draws its own loading screen, for the video ending while no video can play, and for
+Launch Audio while Mute Frontend Audio is on.
 """
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -34,7 +32,6 @@ from manager.library import mediasource
 SECTION = choices.SECTION
 ENDS = choices.ENDS_KEY
 MUTE = "mute_audio"
-FOCUS = "experimental_table_focus"
 
 Write = Callable[[dict[str, dict[str, Any]]], Awaitable[bool]]
 
@@ -200,8 +197,6 @@ class _Pair:
         elif self.sound and choice == choices.SOUND_OFF:
             lines.append(t("manager.loading.silent_line"))
         if which == "main":
-            if not self.sound and owner.hidden_by_windows:
-                lines.append(t("config.behavior.loading_screen.windows"))
             if self.sound and owner.muted:
                 lines.append(t("config.behavior.launch_audio.muted"))
         elif self.can_be_missing(choice):
@@ -360,8 +355,7 @@ class LoadingScreen:
     """What the Launch rows need beyond the schema's own rows."""
 
     def __init__(self, write: Write, library: Any, values: dict, options: list[dict], *,
-                 writable: bool, theme: Theme | None = None,
-                 system: str = sys.platform) -> None:
+                 writable: bool, theme: Theme | None = None) -> None:
         by_key = {one["key"]: one for one in options}
         now = dict(values.get(SECTION) or {})
 
@@ -372,9 +366,7 @@ class LoadingScreen:
         self.library = library
         self.writable = writable
         self.theme = theme or Theme()
-        self.windows = system == "win32"
         self.muted = is_truthy(current(MUTE))
-        self.focus = is_truthy(current(FOCUS))
         self.files = {kind: self._kept(str(current(_FILE_KEYS[kind]) or ""))
                       for kind in launch_media.KINDS}
         screen = choices.screen_or_default(str(current(choices.SCREEN_KEY)))
@@ -389,10 +381,6 @@ class LoadingScreen:
     @staticmethod
     def _kept(name: str) -> str:
         return name if launch_media.path_of(name) else ""
-
-    @property
-    def hidden_by_windows(self) -> bool:
-        return self.windows and not self.focus
 
     # What the page hands to `section_rows`.
 
@@ -422,18 +410,15 @@ class LoadingScreen:
         return [(panel.LEDE, draw)]
 
     def saves(self, key: str, save: Callable[[Any], Any]) -> Callable[[Any], Any]:
-        """The rows others depend on, kept in step with the rows under them."""
-        if key not in (MUTE, FOCUS):
+        """The mute row, kept in step with the rows under it."""
+        if key != MUTE:
             return save
 
         async def saved(now: Any) -> bool:
             done = bool(await save(now))
             if not done:
                 return done
-            if key == MUTE:
-                self.muted = is_truthy(now)
-            else:
-                self.focus = is_truthy(now)
+            self.muted = is_truthy(now)
             self.redraw_below()
             self.relock()
             return done
@@ -459,8 +444,7 @@ class LoadingScreen:
     # Behavior.
 
     def locked(self, sound: bool) -> bool:
-        return (not self.writable or self.theme.own or self.hidden_by_windows
-                or (sound and self.muted))
+        return not self.writable or self.theme.own or (sound and self.muted)
 
     def video_can_play(self) -> bool:
         main, fallback = self.screen.main, self.screen.fallback

@@ -96,10 +96,10 @@ class FrontTests(unittest.TestCase):
             patched.start()
             self.addCleanup(patched.stop)
 
-    def _watch(self, world: World, *, on: bool = True, titles: tuple[str, ...] = TITLES,
+    def _watch(self, world: World, *, titles: tuple[str, ...] = TITLES,
                pause_asked: Callable[[], bool] | None = None,
                on_window: Callable[[], None] | None = None) -> front.Watch:
-        return front.Watch(_Backend(world), GAME, titles=titles, hand_over_on=on,
+        return front.Watch(_Backend(world), GAME, titles=titles,
                            pause_asked=pause_asked, on_window=on_window,
                            clock=lambda: world.now, sleep=world.sleep, own_pid=OWN)
 
@@ -168,7 +168,7 @@ class FrontTests(unittest.TestCase):
         self.assertEqual(world.handed, [])
         self.assertIn("a pause the person asked for", said)
 
-    def _stuck(self, *, wrong: bool = True, on: bool = True, asked: bool = False,
+    def _stuck(self, *, wrong: bool = True, asked: bool = False,
                resumes_after_bounce: bool = True, holder: Window = PLAYFIELD,
                ran: bool = False) -> tuple[World, front.Watch, str]:
         """The table said it is up at 0 s and says it is paused; `ran` is a table that
@@ -185,7 +185,7 @@ class FrontTests(unittest.TestCase):
             return ""
 
         world.hand_over = hand_over  # type: ignore[method-assign]
-        watch = front.Watch(_Backend(world), GAME, titles=TITLES, hand_over_on=on,
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES,
                             pause_asked=lambda: asked, paused=lambda: paused[0],
                             clock=lambda: world.now, sleep=world.sleep, own_pid=OWN)
         watch._backend.holder_can_be_wrong = wrong  # type: ignore[union-attr]
@@ -219,11 +219,6 @@ class FrontTests(unittest.TestCase):
 
         self.assertEqual(world.handed, [])
 
-    def test_with_the_switch_off_a_paused_table_is_not_passed_through_a_window(self) -> None:
-        world, _, _ = self._stuck(on=False)
-
-        self.assertEqual(world.handed, [])
-
     def test_a_pause_after_the_table_has_run_is_not_passed_through_a_window(self) -> None:
         world, _, _ = self._stuck(ran=True)
 
@@ -239,7 +234,7 @@ class FrontTests(unittest.TestCase):
         plain = world.hand_over
         world.hand_over = lambda window: ("Access is denied." if window == KIOSK  # type: ignore[method-assign]
                                           else plain(window))
-        watch = front.Watch(_Backend(world), GAME, titles=TITLES, hand_over_on=True,
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES,
                             paused=lambda: True, clock=lambda: world.now, sleep=world.sleep,
                             own_pid=OWN)
         watch._backend.holder_can_be_wrong = True  # type: ignore[union-attr]
@@ -253,7 +248,7 @@ class FrontTests(unittest.TestCase):
 
     def test_a_pause_in_the_first_moments_after_startup_is_not_yet_a_stuck_table(self) -> None:
         world = World(holder=PLAYFIELD, end=1.0)
-        watch = front.Watch(_Backend(world), GAME, titles=TITLES, hand_over_on=True,
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES,
                             paused=lambda: True, clock=lambda: world.now, sleep=world.sleep,
                             own_pid=OWN)
         watch._backend.holder_can_be_wrong = True  # type: ignore[union-attr]
@@ -265,7 +260,7 @@ class FrontTests(unittest.TestCase):
 
     def test_with_no_vpinfe_window_the_table_is_handed_the_keyboard_alone(self) -> None:
         world = World(holder=PLAYFIELD, windows=[PLAYFIELD, BACKGLASS])
-        watch = front.Watch(_Backend(world), GAME, titles=TITLES, hand_over_on=True,
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES,
                             paused=lambda: True, clock=lambda: world.now, sleep=world.sleep,
                             own_pid=OWN)
         watch._backend.holder_can_be_wrong = True  # type: ignore[union-attr]
@@ -316,16 +311,6 @@ class FrontTests(unittest.TestCase):
         self._run(self._watch(world))
 
         self.assertEqual(world.handed, [PLAYFIELD])
-
-    def test_with_the_switch_off_nothing_is_handed_over_but_it_is_said_why(self) -> None:
-        world = World(holder=KIOSK)
-        appeared = mock.Mock()
-
-        said = self._run(self._watch(world, on=False, on_window=appeared))
-
-        self.assertEqual(world.handed, [])
-        self.assertIn("the Experimental Table Focus switch is off", said)
-        appeared.assert_called_once_with()
 
     def test_the_window_appearing_says_the_table_is_running_once(self) -> None:
         world = World(holder=PLAYFIELD)
@@ -400,7 +385,7 @@ class FrontTests(unittest.TestCase):
             return world.held
 
         backend.holder = holder  # type: ignore[method-assign]
-        watch = front.Watch(backend, GAME, titles=TITLES, hand_over_on=True,
+        watch = front.Watch(backend, GAME, titles=TITLES,
                             clock=lambda: world.now, sleep=world.sleep, own_pid=OWN)
 
         said = self._run(watch)
@@ -447,17 +432,13 @@ class FrontTests(unittest.TestCase):
 
     def test_stopping_ends_a_watch_that_is_waiting(self) -> None:
         world = World(holder=KIOSK, windows=[KIOSK])
-        watch = front.Watch(_Backend(world), GAME, titles=TITLES, hand_over_on=True,
-                            own_pid=OWN)
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES, own_pid=OWN)
         watch.start()
 
         watch.stop()
 
         self.assertFalse(any(one.name == "table-focus" and one.is_alive()
                              for one in threading.enumerate()))
-
-    def test_the_switch_is_off_until_the_person_turns_it_on(self) -> None:
-        self.assertFalse(front.enabled(None))
 
 
 if __name__ == "__main__":

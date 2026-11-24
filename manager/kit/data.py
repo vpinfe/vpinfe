@@ -12,7 +12,7 @@ from typing import Any
 from common.config.labels import field_label
 from common.extensions import host
 from common.games import library_policy, ties
-from common.host import front, front_gnome
+from common.host import front_gnome
 from common.i18n import t
 from common.media import folder_browse
 from common.media.media_specs import MEDIA_SPECS, media_family
@@ -1616,12 +1616,9 @@ class Library:
             and log_is_off(answer)]}, ["logging"] if None in answers else []
 
     def _watch_table_focus(self) -> tuple[dict[str, Any], list[str]]:
-        """Where GNOME is not yet letting VPinFE bring the table forward, with the switch on.
-        A read that fails is reported unread, so a row set aside earlier is kept."""
+        """Where GNOME is not yet letting VPinFE bring the table forward. A read that fails
+        is reported unread, so a row set aside earlier is kept."""
         try:
-            behavior = self._client.config_values().get("behavior") or {}
-            if str(behavior.get(front.KEY)).lower() != "true":
-                return {"table_focus": ""}, []
             state = self._client.frontend_focus()
         except Exception:  # noqa: BLE001 - a desktop that cannot be asked is not Overview's to fail on
             logger.debug("manager: could not read whether GNOME lets the table come forward",

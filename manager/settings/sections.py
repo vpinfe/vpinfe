@@ -551,6 +551,8 @@ def overview(library: Library, registry: list[dict], discovery: dict,
             return _metadata_action(library, state, drawn_again)("upgrade")
         if need.fix.key == needs.TURN_ON_LOGGING:
             return _turn_on_logging(library, need.token, drawn_again)
+        if need.fix.key == needs.ALLOW_TABLE_FOCUS:
+            return _allow_table_focus(library, drawn_again)
         if need.fix.key in EXTENSION_FIXES:
             return _extension_fix(library, need, drawn_again)
         from manager.devices import devices
@@ -686,6 +688,19 @@ async def _turn_on_logging(library: Library, launcher_ids: tuple[str, ...],
         return
     library.forget_watched()
     ui.notify(t("manager.needs.logging.on"), type="positive")
+    then()
+
+
+@on_page
+async def _allow_table_focus(library: Library, then: Callable[[], None]) -> None:
+    """Allows the GNOME add-on that lets VPinFE bring the table forward. The row is read
+    again after it, because GNOME may now want a sign-in."""
+    try:
+        await offload.io(library.allow_frontend_focus)
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+        ui.notify(t("manager.needs.table_focus.failed"), caption=why(exc), type="negative")
+        return
+    library.forget_watched()
     then()
 
 

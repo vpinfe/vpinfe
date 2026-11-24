@@ -64,12 +64,6 @@ class LaunchLinesTests(unittest.TestCase):
         self.assertEqual(choices.ladder("table_video", "spinner"), ["table_video", "spinner"])
         self.assertIn("spinner", found["loading"])
 
-    def test_windows_without_table_focus_says_no_screen_shows(self) -> None:
-        found = launch_lines.lines({}, THEME, TABLE, "win32")
-
-        self.assertEqual(found["loading"], found["loading_image"])
-        self.assertIn("Windows", found["loading"])
-
     def test_muted_audio_says_the_launch_audio_is_off(self) -> None:
         found = launch_lines.lines({"mute_audio": "true"}, THEME, TABLE)
 

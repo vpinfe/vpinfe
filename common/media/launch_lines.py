@@ -21,7 +21,6 @@ LOADING = "loading"
 LOADING_IMAGE = "loading_image"
 PLAYFIELD = "playfield"
 LAUNCH_AUDIO = "audio_launch"
-FOCUS_KEY = "experimental_table_focus"
 MUTE_KEY = "mute_audio"
 # The tiles that carry a line, and the choice that reads each.
 TILES = (LOADING, LOADING_IMAGE, LAUNCH_AUDIO)
@@ -187,22 +186,17 @@ def _sound_line(present: Mapping[str, bool], theme: Theme, behavior: Mapping[str
     return t("manager.launchline.silence", setting=setting)
 
 
-def lines(behavior: Mapping[str, Any], theme: Theme, present: Mapping[str, bool],
-          system: str = "") -> dict[str, str]:
+def lines(behavior: Mapping[str, Any], theme: Theme,
+          present: Mapping[str, bool]) -> dict[str, str]:
     """The line for each of the tiles Loading Video, Loading Image and Launch Audio, "" where
     there is nothing to say. `behavior` is the Behavior settings, `present` says, by kind,
-    whether the game has a file of that kind (`READ` are the kinds it needs), and `system` is
-    `sys.platform`, because a launch on Windows without Experimental Table Focus shows no
-    screen at all."""
+    whether the game has a file of that kind (`READ` are the kinds it needs)."""
     if theme.own:
         own = t("manager.launchline.own", theme=theme.name)
         return {tile: own for tile in TILES}
     found = {LOADING: _screen_line(LOADING, present, theme, behavior),
              LOADING_IMAGE: _screen_line(LOADING_IMAGE, present, theme, behavior),
              LAUNCH_AUDIO: _sound_line(present, theme, behavior)}
-    if system == "win32" and not is_truthy(behavior.get(FOCUS_KEY)):
-        hidden = t("config.behavior.loading_screen.windows")
-        found[LOADING] = found[LOADING_IMAGE] = hidden
     if is_truthy(behavior.get(MUTE_KEY)):
         found[LAUNCH_AUDIO] = t("config.behavior.launch_audio.muted")
     return found
