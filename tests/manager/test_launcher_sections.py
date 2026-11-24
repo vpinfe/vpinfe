@@ -2161,6 +2161,20 @@ class AddressTests(unittest.TestCase):
 
         self.assertNotIn("launcher", address)
 
+    def test_the_open_section_is_in_the_address(self) -> None:
+        address = parse_qs(deeplink.query({"view": "launchers", "launcher": "second-vpx",
+                                           "section": "launcher_all"}))
+
+        self.assertEqual(address["section"], ["launcher_all"])
+
+    def test_the_link_from_a_table_opens_the_launchers_all_settings(self) -> None:
+        with patch.object(all_settings.panel, "link") as link:
+            all_settings._launcher_page_link("second-vpx")
+
+        address = parse_qs(link.call_args.kwargs["to"].split("?", 1)[1])
+        self.assertEqual((address["launcher"], address["section"]),
+                         (["second-vpx"], ["launcher_all"]))
+
     def test_leaving_the_page_lets_go_of_it(self) -> None:
         state = {"view": "launchers", "launcher": "second-vpx", "game": "", "table": ""}
 
