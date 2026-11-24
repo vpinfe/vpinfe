@@ -279,6 +279,31 @@ class PauseTests(LaunchTests):
 
         self.assertEqual(seen, [False, True, False, True, False])
 
+    def test_the_playfield_losing_the_keyboard_is_told_to_the_watch(self) -> None:
+        watch = mock.Mock()
+        with mock.patch.object(launch.front, "watch_launch", return_value=watch), \
+                mock.patch.object(launch.front, "finish"):
+            self._run(popen=lambda cmd, **k: _FakePopen([
+                "Startup done\n", "Pausing Game\n", "Playfield window lost focus.\n"]))
+
+        watch.note_focus_lost.assert_called_once_with()
+
+    def test_a_pause_hook_without_a_focus_lost_line_is_still_heard(self) -> None:
+        seen = []
+        events.subscribe(events.PLAY_STATE_CHANGED,
+                         lambda state, **_: seen.append(state["paused"]))
+        older = types.SimpleNamespace(paused_marker="Pausing Game",
+                                      resumed_marker="Unpausing Game", key=lambda settings: "")
+        watch = mock.Mock()
+        with mock.patch.object(launch.front, "watch_launch", return_value=watch), \
+                mock.patch.object(launch.front, "finish"):
+            self._run(popen=lambda cmd, **k: _FakePopen([
+                "Startup done\n", "Pausing Game\n", "Playfield window lost focus.\n"]),
+                _pause_of=lambda launcher, binary: (older, None))
+
+        self.assertIn(True, seen)
+        watch.note_focus_lost.assert_not_called()
+
     def test_an_app_that_names_log_files_is_heard_from_them_and_not_from_its_output(self) -> None:
         """Lines written to its log after the launch count; ones before it and its output do not."""
         seen = []

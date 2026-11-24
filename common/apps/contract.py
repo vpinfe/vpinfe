@@ -503,11 +503,14 @@ class Capture(Protocol):
 @runtime_checkable
 class Pause(Protocol):
     """How a running entry pauses and resumes itself: the key it listens for, named as a
-    binding names one (`KeyP`), and the lines it writes once it has done either. `key`
-    answers "" where it has none."""
+    binding names one (`KeyP`), the lines it writes once it has done either, and the line
+    it writes when it paused because its playfield lost the keyboard. `key` answers ""
+    where it has none, and `focus_lost_marker` is "" where the app writes no such line;
+    a hook with no such member is read as one."""
 
     paused_marker: str
     resumed_marker: str
+    focus_lost_marker: str
 
     def key(self, settings: Mapping[str, Any]) -> str: ...
 

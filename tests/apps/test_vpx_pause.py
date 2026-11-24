@@ -25,8 +25,9 @@ class VPXPauseTests(unittest.TestCase):
     def test_the_app_says_how_it_pauses(self) -> None:
         self.assertIsInstance(VPX.pause, Pause)
         assert VPX.pause is not None
-        self.assertEqual((VPX.pause.paused_marker, VPX.pause.resumed_marker),
-                         ("Pausing Game", "Unpausing Game"))
+        self.assertEqual((VPX.pause.paused_marker, VPX.pause.resumed_marker,
+                          VPX.pause.focus_lost_marker),
+                         ("Pausing Game", "Unpausing Game", "Playfield window lost focus"))
 
     def test_the_key_is_the_one_its_settings_file_maps_to_pause(self) -> None:
         ini = self._ini("[Input]\nMapping.Pause = Key;72\n")

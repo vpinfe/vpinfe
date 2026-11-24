@@ -127,6 +127,19 @@ class FrontTests(unittest.TestCase):
         self.assertEqual(world.handed, [blank[0]])
         self.assertIn("does not give out window titles", said)
 
+    def test_a_kept_answer_is_not_what_decides_to_hand_the_keyboard_over(self) -> None:
+        """The backend keeps its answer for a moment; the table has taken the keyboard since."""
+        world = World(holder=PLAYFIELD)
+        backend = _Backend(world)
+        backend.holder = lambda: KIOSK  # type: ignore[method-assign]
+        backend.fresh_holder = world.holder  # type: ignore[attr-defined]
+        watch = front.Watch(backend, GAME, titles=TITLES,
+                            clock=lambda: world.now, sleep=world.sleep, own_pid=OWN)
+
+        self._run(watch)
+
+        self.assertEqual(world.handed, [])
+
     def test_the_keyboard_goes_to_the_playfield_when_vpinfe_has_it(self) -> None:
         world = World(holder=KIOSK)
 
@@ -309,6 +322,34 @@ class FrontTests(unittest.TestCase):
         world = World(holder=BACKGLASS)
 
         self._run(self._watch(world))
+
+        self.assertEqual(world.handed, [PLAYFIELD])
+
+    def _score_view_holds(self, *, any_window: bool, paused: bool) -> tuple[World, str]:
+        world = World(holder=PLAYFIELD)
+        world.at(2.0, world.take(BACKGLASS))
+        watch = front.Watch(_Backend(world), GAME, titles=TITLES,
+                            paused=lambda: paused, clock=lambda: world.now,
+                            sleep=world.sleep, own_pid=OWN)
+        watch._backend.any_table_window_will_do = any_window  # type: ignore[union-attr]
+        watch.note_startup_done()
+        return world, self._run(watch)
+
+    def test_a_running_table_with_another_of_its_windows_holding_the_keyboard_is_left_alone(
+            self) -> None:
+        world, said = self._score_view_holds(any_window=True, paused=False)
+
+        self.assertEqual(world.handed, [])
+        self.assertNotIn("gave up", said)
+
+    def test_a_paused_table_with_another_of_its_windows_holding_the_keyboard_is_not_handed_over(
+            self) -> None:
+        world, _ = self._score_view_holds(any_window=True, paused=True)
+
+        self.assertEqual(world.handed, [])
+
+    def test_a_system_that_needs_the_playfield_hands_it_over_even_while_running(self) -> None:
+        world, _ = self._score_view_holds(any_window=False, paused=False)
 
         self.assertEqual(world.handed, [PLAYFIELD])
 
