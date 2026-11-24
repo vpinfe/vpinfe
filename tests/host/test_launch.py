@@ -15,12 +15,12 @@ import types
 import unittest
 from collections.abc import Callable
 from configparser import ConfigParser
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import PurePath
 from typing import Any, cast
 from unittest import mock
 
-from apps.vpx.presentation import VPXPrepare
+from apps.vpx import VPX
 from common import events, mounts
 from common.games import player_records, tables
 from common.games.library_folders import Location, LocationStore
@@ -548,13 +548,15 @@ class PrepareTests(LaunchTests):
     def _prepared(self, source=launch_state.SOURCE_API, fails=False) -> list[dict]:
         said: list[dict] = []
 
-        def before_launch(_self, settings):
-            said.append(dict(settings))
-            if fails:
-                raise OSError("read-only")
+        class Preparing:
+            def before_launch(self, settings):
+                said.append(dict(settings))
+                if fails:
+                    raise OSError("read-only")
 
         started: list[Any] = []
-        with mock.patch.object(VPXPrepare, "before_launch", before_launch):
+        with mock.patch.object(launch.apps, "get",
+                               return_value=replace(VPX, prepare=Preparing())):
             self._run(source=source, popen=_recording_popen(started),
                       _prepare=launch._prepare)
         self.assertEqual(len(started), 1, "the table started")

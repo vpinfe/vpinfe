@@ -1,15 +1,13 @@
-"""Protects: (a, e) a person's Visual Pinball settings file is changed only on a Mac, and only
-where nobody chose a Display Mode: a window they set up themselves stays as they left it.
+"""Protects: (a, e) a person's Visual Pinball settings file is given a Display Mode only on a
+Mac, and only where nobody chose one: a window they set up themselves stays as they left it.
 """
 
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import mock
 
-from apps.vpx import VPX
 from apps.vpx import ini as vini
-from apps.vpx.presentation import VPXPrepare, unset_windows
+from apps.vpx.presentation import first_setup_windows, unset_windows
 
 BLANK = """[Player]
 PlayfieldDisplay =
@@ -39,11 +37,6 @@ TopperFullScreen =
 PLAYFIELD = {"Player.PlayfieldFullScreen": "1"}
 ALL = {**PLAYFIELD, "Backglass.BackglassFullScreen": "1",
        "ScoreView.ScoreViewFullScreen": "1", "Topper.TopperFullScreen": "1"}
-
-
-def _values(path: Path) -> dict[str, str]:
-    parsed = vini.parse(path.read_text(encoding="utf-8"))
-    return {key: one.value for key, one in parsed.settings.items()}
 
 
 class UnsetWindowsTests(unittest.TestCase):
@@ -86,75 +79,35 @@ class UnsetWindowsTests(unittest.TestCase):
         self.assertNotIn("Player.PlayfieldFullScreen", unset_windows(vini.parse(text)))
 
 
-class BeforeLaunchTests(unittest.TestCase):
+class FirstSetupWindowsTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.path = Path(self._tmp.name) / "VPinballX.ini"
         self.settings = {"bin_path": "/opt/vpinball/VPinballX", "ini_path": str(self.path)}
 
-    def _run(self, system: str) -> None:
-        VPXPrepare().before_launch(self.settings, system=system)
-
-    def test_on_a_mac_the_blank_windows_are_set_and_the_original_kept(self) -> None:
+    def test_on_a_mac_the_windows_nobody_set_are_named_and_the_file_is_not_touched(self) -> None:
         self.path.write_text(BLANK, encoding="utf-8")
 
-        self._run("darwin")
+        self.assertEqual(first_setup_windows(self.settings, system="darwin"), ALL)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), BLANK)
 
-        self.assertEqual({key: value for key, value in _values(self.path).items()
-                          if key in ALL}, ALL)
-        kept = list(self.path.parent.glob("VPinballX.ini.vpinfe-*"))
-        self.assertEqual(len(kept), 1)
-        self.assertEqual(kept[0].read_text(encoding="utf-8"), BLANK)
+    def test_a_mode_the_person_chose_is_not_named(self) -> None:
+        self.path.write_text(BLANK.replace("PlayfieldFullScreen =", "PlayfieldFullScreen = 0"),
+                             encoding="utf-8")
 
-    def test_a_second_launch_writes_nothing(self) -> None:
+        self.assertNotIn("Player.PlayfieldFullScreen",
+                         first_setup_windows(self.settings, system="darwin"))
+
+    def test_other_systems_are_given_nothing(self) -> None:
         self.path.write_text(BLANK, encoding="utf-8")
-        self._run("darwin")
-        after_first = self.path.read_text(encoding="utf-8")
 
-        self._run("darwin")
-
-        self.assertEqual(self.path.read_text(encoding="utf-8"), after_first)
-
-    def test_other_systems_are_not_touched(self) -> None:
         for system in ("win32", "linux"):
             with self.subTest(system):
-                self.path.write_text(BLANK, encoding="utf-8")
+                self.assertEqual(first_setup_windows(self.settings, system=system), {})
 
-                self._run(system)
-
-                self.assertEqual(self.path.read_text(encoding="utf-8"), BLANK)
-                self.assertEqual(list(self.path.parent.glob("*.vpinfe-*")), [])
-
-    def test_a_named_settings_file_not_there_yet_is_made_with_the_windows_set(self) -> None:
-        self._run("darwin")
-
-        self.assertEqual(_values(self.path), PLAYFIELD)
-
-    def test_with_no_file_named_the_newest_versions_folder_gets_it(self) -> None:
-        self.settings = {"bin_path": "/opt/vpinball/VPinballX"}
-        base = Path(self._tmp.name) / "VPinballX"
-
-        with mock.patch("apps.vpx.config._machine_folders", return_value=(base, None)):
-            self._run("darwin")
-
-        self.assertEqual(_values(base / "10.8" / "VPinballX.ini"), PLAYFIELD)
-
-    def test_the_other_settings_and_comments_are_left_as_they_were(self) -> None:
-        text = "; Full Screen\n" + BLANK.replace("[Player]", "[Player]\nAAFactor = 2")
-        self.path.write_text(text, encoding="utf-8")
-
-        self._run("darwin")
-
-        written = self.path.read_text(encoding="utf-8")
-        self.assertIn("; Full Screen\n", written)
-        self.assertIn("AAFactor = 2", written)
-        self.assertEqual(_values(self.path)["Player.PlayfieldDisplay"], "")
-
-
-class RegisteredTests(unittest.TestCase):
-    def test_visual_pinball_prepares_its_launch(self) -> None:
-        self.assertIsInstance(VPX.prepare, VPXPrepare)
+    def test_a_settings_file_not_there_yet_still_gets_the_playfield(self) -> None:
+        self.assertEqual(first_setup_windows(self.settings, system="darwin"), PLAYFIELD)
 
 
 if __name__ == "__main__":
