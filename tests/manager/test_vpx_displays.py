@@ -946,7 +946,18 @@ class ApartTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await vpx_displays.apart_rows(
                 self.library, _standing(), HERE, Mock()), [])
 
-    async def test_the_row_is_drawn_under_the_screens_and_match_writes_and_redraws(self) -> None:
+    def _two(self, second: dict[str, str] | None = None, third: bool = False) -> None:
+        """Two launchers, the second with `second` where it differs from the first."""
+        self.library.flat = _flat(Backglass__BackglassDisplay=CVT)
+        ids = ["vpx-1", "vpx-2", *(["vpx-3"] if third else [])]
+        self.library.launchers.return_value = {"launchers": [
+            {"launcher_id": one, "app": "vpx", "enabled": True, "has_config": True,
+             "display_name": f"Launcher {one[-1]}"} for one in ids]}
+        held = {"vpx-2": second} if second is not None else {}
+        self.library.launcher_config_values.side_effect = lambda one: {
+            key: {"value": value} for key, value in (held.get(one) or self.library.flat).items()}
+
+    async def test_the_notice_is_drawn_under_the_screens_and_match_writes_and_redraws(self) -> None:
         self.library.flat = _flat(Backglass__BackglassDisplay=CVT)
         refill = Mock()
         [(kind, draw)] = await vpx_displays.apart_rows(
@@ -962,6 +973,59 @@ class ApartTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.library.write_launcher_config.call_args.args[1]
                          ["Backglass.BackglassDisplay"], DELL)
         refill.assert_called_once_with()
+
+    async def test_launchers_that_differ_the_same_way_share_one_notice_and_one_match(self) -> None:
+        self._two(_flat(Backglass__BackglassDisplay=CVT))
+
+        [(_, draw)] = await vpx_displays.apart_rows(self.library, _standing(), HERE, Mock())
+        with patch.object(vpx_displays.panel, "action") as action, \
+                patch.object(vpx_displays.panel, "link") as link:
+            await press(_drawn, draw)
+
+        self.assertEqual(action.call_count, 1)
+        self.assertEqual([(one.args[0], one.kwargs["to"]) for one in link.call_args_list],
+                         [("Launcher 1", vpx_displays.launcher_displays("vpx-1")),
+                          ("Launcher 2", vpx_displays.launcher_displays("vpx-2"))])
+        await press(action.call_args.args[1])
+        self.assertEqual([one.args[0] for one in self.library.write_launcher_config.call_args_list],
+                         ["vpx-1", "vpx-2"])
+
+    async def test_launchers_that_differ_differently_each_get_a_notice(self) -> None:
+        self._two(_flat(Player__PlayfieldDisplay=LG, Backglass__BackglassDisplay=CVT))
+
+        notices = await vpx_displays.apart_rows(self.library, _standing(), HERE, Mock())
+        with patch.object(vpx_displays.panel, "action") as action:
+            for _, draw in notices:
+                await press(_drawn, draw)
+
+        self.assertEqual(len(vpx_displays.grouped(
+            await vpx_displays.apart(self.library, _standing(), HERE))), 2)
+        self.assertEqual(action.call_count, 2)
+
+    async def test_a_launcher_that_cannot_be_matched_is_named_and_the_rest_still_are(self) -> None:
+        self._two(_flat(Backglass__BackglassDisplay=CVT))
+        [(_, draw)] = await vpx_displays.apart_rows(self.library, _standing(), HERE, Mock())
+        self.library.write_launcher_config.side_effect = [RuntimeError("locked"), None]
+
+        with patch.object(vpx_displays.panel, "action") as action, \
+                patch.object(vpx_displays.Failures, "say") as said, \
+                patch.object(vpx_displays.Failures, "add") as added, \
+                self.assertLogs(vpx_displays.logger, "WARNING"):
+            await press(_drawn, draw)
+            await press(action.call_args.args[1])
+
+        self.assertEqual(self.library.write_launcher_config.call_count, 2)
+        added.assert_called_once()
+        self.assertEqual(added.call_args.args[0], "Launcher 1")
+        said.assert_called_once_with("manager.vpx_displays.follow_failed")
+
+    def test_the_link_goes_to_the_section_the_launcher_draws_its_displays_in(self) -> None:
+        from manager.workbench import all_settings
+
+        address = vpx_displays.launcher_displays("vpx-1")
+
+        self.assertIn(f"section=launcher_{all_settings.CONFIG_GROUP_KEYS[0]}", address)
+        self.assertIn("launcher=vpx-1", address)
 
 
 async def _drawn(draw: Any) -> None:

@@ -528,40 +528,78 @@ async def apart(library: Any, standing: displays.Standing,
     return out
 
 
+@dataclass(frozen=True)
+class ApartGroup:
+    """The launchers that differ from VPinFE in the same way: one notice and one Match."""
+    parts: tuple[str, ...]
+    waiting: tuple[str, ...]
+    launchers: tuple[Apart, ...]
+
+    @property
+    def can_match(self) -> bool:
+        return any(one.can_match for one in self.launchers)
+
+
+def grouped(found: Sequence[Apart]) -> list[ApartGroup]:
+    """`found` by what differs and what waits, in the order each first appears."""
+    keyed: dict[tuple[tuple[str, ...], tuple[str, ...]], list[Apart]] = {}
+    for one in found:
+        keyed.setdefault((one.parts, one.waiting), []).append(one)
+    return [ApartGroup(parts, waiting, tuple(group)) for (parts, waiting), group in keyed.items()]
+
+
+def launcher_displays(launcher_id: str) -> str:
+    """The launcher's own Displays page: its rail section is `launcher_` and the group's key.
+    `deeplink.query` leaves `section` out of a launcher's address, so it is added here."""
+    return "/manager?" + deeplink.query({"view": "launchers", "launcher": launcher_id}) \
+        + "&section=launcher_displays"
+
+
 async def apart_rows(library: Any, standing: displays.Standing, here: Sequence[Screen],
                      refill: Callable[[], None]) -> Entries:
-    """The row under VPinFE's screens for each launcher that disagrees with them, with a
-    Match for it. None where they all agree, or where they cannot be read."""
+    """One notice under VPinFE's screens for each way the launchers differ from them, with
+    a Match that puts all of that group right. None where they all agree, or where they
+    cannot be read."""
     try:
-        found = await apart(library, standing, here)
-    except Exception:  # noqa: BLE001 - the page is drawn without the row
+        found = grouped(await apart(library, standing, here))
+    except Exception:  # noqa: BLE001 - the page is drawn without the notice
         logger.warning("Could not compare the launchers with VPinFE's screens", exc_info=True)
         return []
 
     @on_page
-    async def match(one: Apart) -> None:
-        try:
-            written = await match_launcher(library, one.launcher_id, standing, here)
-        except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
-            ui.notify(t("said.save_failed"), caption=why(exc), type="negative")
-            return
-        say_unnamed(written)
+    async def match(group: ApartGroup) -> None:
+        failed = Failures()
+        unnamed: dict[str, None] = {}
+        for one in group.launchers:
+            try:
+                written = await match_launcher(library, one.launcher_id, standing, here)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not match %s to VPinFE", one.launcher_id, exc_info=True)
+                failed.add(one.name, why(exc))
+                continue
+            unnamed.update(dict.fromkeys(written.unnamed))
+        failed.say("manager.vpx_displays.follow_failed")
+        say_unnamed(vpx.Written({}, tuple(unnamed)))
         refill()
 
     def draw() -> None:
-        for one in found:
+        for group in found:
             with ui.element("div").classes("manager-screens-differs"):
                 with ui.column().classes("gap-0 min-w-0 grow"):
-                    ui.label(t("manager.screens.different")) \
+                    ui.label(t("manager.screens.apart_group")) \
                         .classes("manager-screens-differs-title")
-                    ui.label(t("manager.screens.apart", launcher=one.name,
-                               parts=named(one.parts))).classes("manager-help")
-                    if one.waiting:
+                    ui.label(t("manager.screens.apart_parts", count=len(group.parts),
+                               parts=named(group.parts))).classes("manager-help")
+                    with ui.row().classes("items-center gap-x-3 manager-help"):
+                        ui.label(t("manager.screens.apart_in"))
+                        for one in group.launchers:
+                            panel.link(one.name, to=launcher_displays(one.launcher_id))()
+                    if group.waiting:
                         ui.label(t("manager.screens.match_waits",
-                                   parts=named(one.waiting))).classes("manager-help")
-                panel.action(t("manager.screens.match_vpinfe"), partial(match, one),
+                                   parts=named(group.waiting))).classes("manager-help")
+                panel.action(t("manager.screens.match_vpinfe"), partial(match, group),
                              icon=verbs.REVERT, hint=t("manager.screens.match_vpinfe.help"),
-                             enabled=one.can_match)()
+                             enabled=group.can_match)()
 
     return [(panel.FULL, draw)] if found else []
 
